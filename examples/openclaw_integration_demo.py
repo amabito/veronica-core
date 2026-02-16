@@ -211,10 +211,10 @@ def demo_safe_mode_persistence():
     print(f"\n[VERIFY] State after restart: {state.value}")
 
     if state == VeronicaState.SAFE_MODE:
-        print(f"  ✅ SAFE_MODE persisted - system remains halted")
-        print(f"  ✅ Strategy engine cannot execute until operator clears state")
+        print(f"  [OK] SAFE_MODE persisted - system remains halted")
+        print(f"  [OK] Strategy engine cannot execute until operator clears state")
     else:
-        print(f"  ❌ State not preserved (unexpected)")
+        print(f"  [NG] State not preserved (unexpected)")
 
     # Try to execute (should be blocked)
     print(f"\n[TEST] Attempting execution in SAFE_MODE...")

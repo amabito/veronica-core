@@ -69,11 +69,44 @@ VERONICA follows **hierarchical design** with clear **separation of concerns**:
 - If approved → execute on external system
 - If rejected → circuit breaker activates, preventing runaway execution
 
+### Why This Matters
+
+**Strategy engines can be replaced. Safety layers cannot.**
+
+As your system evolves, you'll swap decision logic, experiment with new models, and optimize for different conditions. But your safety guarantees must remain constant.
+
+VERONICA does not compete with strategy engines — it makes them production-safe:
+- **Decisions evolve** → Swap OpenClaw for custom LLM agents without rewriting safety logic
+- **Safety remains constant** → Circuit breakers, SAFE_MODE, state persistence work regardless of strategy engine
+- **Complementary, not competitive** → Strategy engines focus on decision quality. VERONICA adds execution guardrails.
+
 ## Installation
 
 ```bash
 pip install veronica-core
 ```
+
+## Try the Demo
+
+See VERONICA in action with the OpenClaw integration demo:
+
+```bash
+git clone https://github.com/amabito/veronica-core
+cd veronica-core
+python examples/openclaw_integration_demo.py
+```
+
+**What it demonstrates**:
+- Circuit breaker activation (3 consecutive fails → cooldown)
+- SAFE_MODE persistence (emergency halt → restart → still halted)
+- Strategy/safety separation (swap strategy, keep safety layer)
+
+**Run destruction tests** (proof of guarantees):
+```bash
+python scripts/proof_runner.py
+```
+
+Expected: All 3 tests PASS (SAFE_MODE persistence, SIGKILL survival, SIGINT graceful exit)
 
 ## Quick Start
 
@@ -262,6 +295,8 @@ Proven in polymarket-arbitrage-bot (2026-02-13):
 - **Throughput**: 1000+ req/s with VERONICA guards
 - **State Persistence**: 100% recovery after SIGTERM/SIGINT
 - **Destruction Tests**: All 5 tests passing (kill -9, SIGTERM, normal exit)
+
+**Reproducible metrics**: See [METRICS.md](docs/METRICS.md) for detailed metric definitions and [metrics aggregation script](scripts/metrics_aggregate.py)
 
 ## Development
 
