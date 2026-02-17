@@ -1,54 +1,64 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+.next/
+out/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+build/
 
-# Virtual environments
-venv/
-ENV/
-env/
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Supabase local state
+.supabase/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Cloudflare Worker build cache
+worker/.wrangler/
+worker/dist/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Secrets
-.env
-
-# Runtime state
-.post_state.json
-data/
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # Logs
-logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Archive
-.archive/
+# Python (VeronicaReporter)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.test-venv/
+dist/
+*.whl
+
+# Smoke test (not committed)
+smoke_test.py
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+veronica-events.jsonl
