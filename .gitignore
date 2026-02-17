@@ -39,3 +39,16 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets
+.env
+
+# Runtime state
+.post_state.json
+data/
+
+# Logs
+logs/
+
+# Archive
+.archive/
