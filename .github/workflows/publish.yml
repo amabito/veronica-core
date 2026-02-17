@@ -1,0 +1,80 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (build + check only, no publish)"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  id-token: write  # Required for Trusted Publisher (OIDC)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Check package metadata
+        run: twine check dist/*
+
+      - name: Show package info
+        run: |
+          echo "=== Built artifacts ==="
+          ls -la dist/
+          echo "=== Wheel contents ==="
+          python -c "import zipfile; zf=zipfile.ZipFile(list(__import__('pathlib').Path('dist').glob('*.whl'))[0]); [print(n) for n in sorted(zf.namelist())]"
+          echo "=== Metadata ==="
+          python -c "
+          import zipfile, pathlib
+          whl = list(pathlib.Path('dist').glob('*.whl'))[0]
+          zf = zipfile.ZipFile(whl)
+          meta = [n for n in zf.namelist() if n.endswith('METADATA')][0]
+          lines = zf.read(meta).decode().splitlines()
+          for l in lines:
+              if l.startswith(('Name:', 'Version:', 'Requires-Python:', 'License', 'Classifier')):
+                  print(l)
+          "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

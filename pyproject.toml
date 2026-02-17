@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "veronica-core"
+version = "0.1.0"
+description = "Enforcement hooks for LLM agent runs. Budget limits, concurrency gating, and degradation control."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "amabito" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+keywords = ["llm", "agent", "runtime", "budget", "enforcement", "guardrails"]
+
+[project.urls]
+Repository = "https://github.com/amabito/veronica-core"
+Issues = "https://github.com/amabito/veronica-core/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/veronica"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/veronica"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["veronica"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
