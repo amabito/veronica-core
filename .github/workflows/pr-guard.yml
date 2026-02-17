@@ -1,0 +1,42 @@
+name: pr-guard
+
+on:
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute diff stats
+        run: |
+          BASE=origin/${{ github.base_ref }}
+          git fetch origin ${{ github.base_ref }}
+
+          echo "Diff vs $BASE"
+
+          STATS=$(git diff --numstat $BASE...HEAD)
+          echo "$STATS"
+
+          TOTAL_DELETED=$(echo "$STATS" | awk '{sum+=$2} END{print sum+0}')
+          DELETED_FILES=$(git diff --name-status $BASE...HEAD | awk '$1=="D"{c++} END{print c+0}')
+
+          echo "Deleted lines: $TOTAL_DELETED"
+          echo "Deleted files: $DELETED_FILES"
+
+          if [ "$TOTAL_DELETED" -gt 2000 ]; then
+            echo "::error::Excessive line deletions detected ($TOTAL_DELETED > 2000). This PR deletes too much code."
+            exit 1
+          fi
+
+          if [ "$DELETED_FILES" -gt 20 ]; then
+            echo "::error::Excessive file deletions detected ($DELETED_FILES > 20). This PR removes too many files."
+            exit 1
+          fi
+
+          echo "PR guard passed."

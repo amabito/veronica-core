@@ -1,0 +1,15 @@
+# CODEOWNERS — Protect critical paths from unauthorized changes
+# Requires "Require review from Code Owners" in branch protection settings.
+
+# Protect CI workflows (prevent workflow tampering)
+.github/workflows/*    @amabito
+
+# Protect core enforcement runtime
+src/veronica_core/*    @amabito
+
+# Protect integration layer
+integrations/*         @amabito
+
+# Protect project configuration
+pyproject.toml         @amabito
+CODEOWNERS             @amabito
