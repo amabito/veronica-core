@@ -4,24 +4,28 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "veronica-core"
-version = "0.1.0"
-description = "Production-grade failsafe state machine for autonomous systems (LLM agents, APIs, batch jobs)"
+version = "0.2.0"
+description = "Runtime Policy Control for LLM applications - composable safety constraints"
 authors = [
-    {name = "amabito", email = "amabito@example.com"}
+    {name = "amabito", email = "amabito@users.noreply.github.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["state-machine", "failsafe", "circuit-breaker", "reliability"]
+keywords = ["state-machine", "failsafe", "circuit-breaker", "reliability", "llm", "safety", "execution", "budget", "retry", "agent"]
 
 # Zero external dependencies (stdlib only)
 dependencies = []

@@ -7,12 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-17
+
 ### Added
-- Initial public release of VERONICA Core
-- Proof Pack with 3 destruction test scenarios (PROOF.md)
-- Automated proof runner (proof_runner.py)
-- Comprehensive examples (basic_usage.py, advanced_usage.py, destruction_test.py)
-- Production-ready documentation (README.md, API.md)
+- **Runtime Policy Control** -- composable LLM runtime constraint abstractions
+  - `RuntimePolicy` Protocol (`check(context) -> PolicyDecision`, `reset()`, `policy_type`)
+  - `PolicyContext` dataclass (cost_usd, step_count, entity_id, chain_id, timestamp, metadata)
+  - `PolicyDecision` dataclass (allowed, policy_type, reason, partial_result)
+  - `PolicyPipeline` AND-composition (first denial wins, no override)
+- `CircuitBreaker` -- automatic failure isolation (CLOSED/OPEN/HALF_OPEN)
+  - Configurable failure_threshold and recovery_timeout
+  - Implements RuntimePolicy protocol
+
+### Changed
+- `BudgetEnforcer` now implements `RuntimePolicy` (additive: `check()`, `policy_type`)
+- `AgentStepGuard` now implements `RuntimePolicy` (additive: `check()`, `policy_type`)
+- `RetryContainer` now implements `RuntimePolicy` (additive: `check()`, `reset()`, `policy_type`)
+
+### Migration
+- **Zero breaking changes.** All v0.1 APIs work unchanged.
+- New imports available: `from veronica_core import RuntimePolicy, PolicyContext, PolicyDecision, PolicyPipeline, CircuitBreaker, CircuitState`
+- Existing primitives gain `check()` method without affecting `spend()`, `step()`, or `execute()` behavior
 
 ## [0.1.0] - 2026-02-16
 
@@ -146,11 +161,10 @@ None
 
 ## Future Roadmap
 
-### v0.2.0 (Planned)
+### v0.3.0 (Planned)
+- [ ] LiteLLM integration (RuntimePolicy as callback)
 - [ ] Redis backend for distributed systems
-- [ ] PostgreSQL backend for SQL persistence
 - [ ] Metrics/observability hooks
-- [ ] Circuit breaker pattern extension
 
 ### v1.0.0 (Planned)
 - [ ] Stable API freeze
