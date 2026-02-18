@@ -239,6 +239,8 @@ pytest
 Design and diagrams:
 [docs/v0.4.0-technical-artifacts.md](docs/v0.4.0-technical-artifacts.md)
 
+SafeModeHook is optional and disabled by default.
+
 ---
 
 ## License
