@@ -46,28 +46,21 @@ Not tracing.
 ## Quickstart
 
 ```python
-from veronica.runtime.hooks import RuntimeContext
-from veronica.runtime.events import EventBus
-from veronica.budget.enforcer import BudgetEnforcer, BudgetExceeded
-from veronica.budget.policy import BudgetPolicy, WindowLimit
-from veronica.budget.ledger import BudgetLedger
-from veronica.runtime.models import Labels, Budget
+from veronica_core import VeronicaIntegration, get_veronica_integration
+from veronica_core import ShieldConfig, BudgetWindowHook, TokenBudgetHook
+from veronica_core.shield import SafetyEvent, Decision
 
-# Set a $5 per-minute hard limit
-policy = BudgetPolicy(org_limits=WindowLimit(minute_usd=5.0))
-enforcer = BudgetEnforcer(policy=policy, ledger=BudgetLedger(), bus=EventBus())
-ctx = RuntimeContext(enforcer=enforcer)
-
-run = ctx.create_run(labels=Labels(org="acme"), budget=Budget(limit_usd=5.0))
-session = ctx.create_session(run)
+# Configure shield with budget window (10 calls per minute)
+config = ShieldConfig()
+config.budget_window.enabled = True
+config.budget_window.max_calls = 10
+config.budget_window.window_seconds = 60.0
 
 # Every LLM call passes through VERONICA
-with ctx.llm_call(session, model="gpt-4", labels=Labels(org="acme"), run=run) as step:
-    response = call_your_llm(prompt)
-    step.cost_usd = response.cost
+integration = get_veronica_integration(shield=config)
 ```
 
-If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the provider.
+If the agent spirals, the hook returns `Decision.HALT` **before** the call reaches the provider.
 
 ---
 
@@ -158,48 +151,38 @@ SafetyEvent: BUDGET_WINDOW_EXCEEDED / HALT   / BudgetWindowHook
 
 ---
 
-## Runaway Loop Demo
+## Runaway Loop Demo (veronica_core)
 
 ```bash
 pip install -e .
-python examples/runaway_loop_demo.py
+python examples/budget_degrade_demo.py
 ```
 
 ```python
-# examples/runaway_loop_demo.py
-from veronica.runtime.hooks import RuntimeContext
-from veronica.runtime.events import EventBus
-from veronica.budget.enforcer import BudgetEnforcer, BudgetExceeded
-from veronica.budget.policy import BudgetPolicy, WindowLimit
-from veronica.budget.ledger import BudgetLedger
-from veronica.runtime.models import Labels, Budget
+from veronica_core import ShieldConfig
+from veronica_core.shield import BudgetWindowHook, SafetyEvent, Decision
 
-policy = BudgetPolicy(org_limits=WindowLimit(minute_usd=0.05))
-enforcer = BudgetEnforcer(policy=policy, ledger=BudgetLedger(), bus=EventBus())
-ctx = RuntimeContext(enforcer=enforcer)
-
-labels = Labels(org="demo-org", team="demo-team")
-run = ctx.create_run(labels=labels, budget=Budget(limit_usd=0.10))
-session = ctx.create_session(run)
+# 5 calls per minute hard limit
+hook = BudgetWindowHook(max_calls=5, window_seconds=60.0)
 
 call_count = 0
-try:
-    while True:
-        with ctx.llm_call(session, model="gpt-4", labels=labels, run=run) as step:
-            call_count += 1
-            step.cost_usd = 0.01
-            print(f"Call {call_count}: ${step.cost_usd}")
-except BudgetExceeded as e:
-    print(f"HALTED after {call_count} calls: {e}")
+while True:
+    decision = hook.check_call()
+    if decision == Decision.HALT:
+        print(f"HALTED after {call_count} calls")
+        break
+    call_count += 1
+    print(f"Call {call_count}: {decision.name}")
+    hook.record_call()
 ```
 
 ```
-Call 1: $0.01
-Call 2: $0.01
-Call 3: $0.01
-Call 4: $0.01
-Call 5: $0.01
-HALTED after 5 calls: Budget exceeded: org/demo-org window=minute used=0.050000 limit=0.050000
+Call 1: ALLOW
+Call 2: ALLOW
+Call 3: ALLOW
+Call 4: ALLOW (DEGRADE zone)
+Call 5: ALLOW
+HALTED after 5 calls
 ```
 
 Without VERONICA: infinite retries, $12,000 bill.
@@ -207,20 +190,20 @@ With VERONICA: 5 calls, hard stop, zero damage.
 
 ---
 
-## Full Demo (4 Scenarios)
+## Full Demo (Adaptive Budget)
 
 ```bash
-python -m veronica.demo
+python examples/adaptive_demo.py
 ```
 
-| Scenario | What happens |
-|----------|-------------|
-| `retry_cascade` | Failures escalate degrade level; scheduler rejects overflow |
-| `budget_burn` | Spend crosses 80 / 90 / 100%; run goes DEGRADED then HALTED |
-| `tool_hang` | Tool timeouts trigger blocking; LLM fallback succeeds |
-| `runaway_agent` | Admission control queues then rejects excess calls |
-
-Writes structured events to `veronica-demo-events.jsonl`.
+| Demo | What happens |
+|------|-------------|
+| Basic tighten/loosen | Budget exceeded events reduce ceiling; no events loosen it back |
+| Cooldown window | Rapid adjustments are rate-limited |
+| Direction lock | Prevents premature loosening after tighten |
+| Anomaly spike | Sudden event burst triggers temporary ceiling reduction |
+| Export/import state | Full control state round-trip for observability |
+| Event audit trail | All adjustment decisions recorded as SafetyEvents |
 
 ---
 
@@ -242,32 +225,31 @@ Observability explains the fire.
 
 ## Integration
 
-VERONICA wraps any LLM call pattern. Context manager based.
+VERONICA sits between your agent and the model. Hook-based pipeline.
 
 ```python
-from veronica.runtime.hooks import RuntimeContext
-from veronica.control.controller import DegradeController
-from veronica.scheduler.scheduler import Scheduler
-
-# Full stack: budget + degrade + scheduler
-ctx = RuntimeContext(
-    enforcer=enforcer,
-    controller=DegradeController(),
-    scheduler=Scheduler(),
+from veronica_core import ShieldConfig, VeronicaIntegration
+from veronica_core.shield import (
+    BudgetWindowHook,
+    TokenBudgetHook,
+    AdaptiveBudgetHook,
 )
 
-# Wrap your agent loop
-for task in agent_tasks:
-    try:
-        with ctx.llm_call(session, model="gpt-4", labels=labels, run=run) as step:
-            result = your_agent.execute(task)
-            step.cost_usd = result.cost
-    except (BudgetExceeded, DegradedRejected, SchedulerRejected):
-        # VERONICA blocked the call. Handle gracefully.
-        break
+# Configure all shields declaratively
+config = ShieldConfig()
+config.budget_window.enabled = True
+config.budget_window.max_calls = 100
+config.token_budget.enabled = True
+config.token_budget.max_output_tokens = 50_000
+
+# Or load from YAML/JSON
+config = ShieldConfig.from_yaml("shield.yaml")
+
+# Wire into your agent
+integration = VeronicaIntegration(shield=config)
 ```
 
-Drop-in enforcement layer. No agent code changes required.
+Drop-in enforcement layer. All features opt-in and disabled by default.
 
 ---
 
@@ -292,16 +274,15 @@ VERONICA defines the Enforcement Layer category.
 
 ## Roadmap
 
-**v0.3.x**
-- Agent loop detection improvements
-- Multi-model policy enforcement
-- CLI wrapper for any Python agent
+**v0.8.x**
+- OpenTelemetry export (opt-in SafetyEvent export)
+- Multi-agent coordination (shared budget pools)
+- Webhook notifications on HALT/DEGRADE
 
-**v0.4.x**
-- Docker image
+**v0.9.x**
+- Redis-backed distributed budget enforcement
 - Middleware mode (ASGI/WSGI)
-- OpenTelemetry export (opt-in)
-- Redis-backed distributed scheduler
+- Dashboard for real-time shield status
 
 ---
 
