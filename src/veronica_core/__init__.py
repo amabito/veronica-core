@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 # Core state machine
 from veronica_core.state import (
@@ -67,7 +67,14 @@ from veronica_core.shield.config import (
     CircuitBreakerConfig,
     EgressConfig,
     SecretGuardConfig,
+    BudgetWindowConfig,
+    TokenBudgetConfig,
 )
+from veronica_core.shield.budget_window import BudgetWindowHook
+from veronica_core.shield.token_budget import TokenBudgetHook
+
+# Runtime Policies (v0.4.3 -- opt-in, all features disabled by default)
+from veronica_core.policies.minimal_response import MinimalResponsePolicy
 
 __all__ = [
     # Core
@@ -111,4 +118,11 @@ __all__ = [
     "CircuitBreakerConfig",
     "EgressConfig",
     "SecretGuardConfig",
+    # Execution Shield (v0.4)
+    "BudgetWindowConfig",
+    "BudgetWindowHook",
+    "TokenBudgetConfig",
+    "TokenBudgetHook",
+    # Runtime Policies (v0.4.3)
+    "MinimalResponsePolicy",
 ]

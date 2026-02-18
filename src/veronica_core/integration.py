@@ -21,6 +21,7 @@ from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.token_budget import TokenBudgetHook
+from veronica_core.policies.minimal_response import MinimalResponsePolicy
 
 logger = logging.getLogger(__name__)
 
