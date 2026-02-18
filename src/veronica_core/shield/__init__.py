@@ -1,7 +1,11 @@
 """VERONICA Execution Shield."""
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
-from veronica_core.shield.input_compression import InputCompressionHook
+from veronica_core.shield.input_compression import (
+    Compressor,
+    InputCompressionHook,
+    TemplateCompressor,
+)
 from veronica_core.shield.token_budget import TokenBudgetHook
 from veronica_core.shield.errors import ShieldBlockedError
 from veronica_core.shield.event import SafetyEvent
@@ -29,6 +33,8 @@ __all__ = [
     "SafeModeHook",
     "BudgetWindowHook",
     "TokenBudgetHook",
+    "Compressor",
     "InputCompressionHook",
+    "TemplateCompressor",
     "SafetyEvent",
 ]
