@@ -1,4 +1,5 @@
 """VERONICA Execution Shield."""
+from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.errors import ShieldBlockedError
 from veronica_core.shield.hooks import (
@@ -23,4 +24,5 @@ __all__ = [
     "PreDispatchHook", "EgressBoundaryHook", "RetryBoundaryHook", "BudgetBoundaryHook",
     "NoopPreDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
     "SafeModeHook",
+    "BudgetWindowHook",
 ]
