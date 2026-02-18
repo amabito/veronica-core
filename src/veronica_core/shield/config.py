@@ -136,6 +136,7 @@ class AdaptiveBudgetConfig:
     max_step_pct: float = 0.05
     min_multiplier: float = 0.6
     max_multiplier: float = 1.2
+    direction_lock: bool = True
 
 
 @dataclass
