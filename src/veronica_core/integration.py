@@ -17,6 +17,7 @@ from veronica_core.backends import PersistenceBackend, JSONBackend
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
 from veronica_core.shield.config import ShieldConfig
+from veronica_core.shield.pipeline import ShieldPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,11 @@ class VeronicaIntegration:
 
         # Shield configuration (opt-in, stored only -- no behavior change yet)
         self.shield: Optional[ShieldConfig] = shield
+
+        # Shield pipeline (created when config present; noop hooks = always ALLOW)
+        self._shield_pipeline: Optional[ShieldPipeline] = (
+            ShieldPipeline() if shield is not None else None
+        )
 
         # Load state
         if self.backend:

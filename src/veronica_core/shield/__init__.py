@@ -1,5 +1,6 @@
 """VERONICA Execution Shield."""
 from veronica_core.shield.config import ShieldConfig
+from veronica_core.shield.errors import ShieldBlockedError
 from veronica_core.shield.hooks import (
     BudgetBoundaryHook,
     EgressBoundaryHook,
@@ -12,10 +13,12 @@ from veronica_core.shield.noop import (
     NoopPreDispatchHook,
     NoopRetryBoundaryHook,
 )
+from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.types import Decision, ToolCallContext
 
 __all__ = [
-    "ShieldConfig", "Decision", "ToolCallContext",
+    "ShieldConfig", "ShieldPipeline", "ShieldBlockedError",
+    "Decision", "ToolCallContext",
     "PreDispatchHook", "EgressBoundaryHook", "RetryBoundaryHook", "BudgetBoundaryHook",
     "NoopPreDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
 ]
