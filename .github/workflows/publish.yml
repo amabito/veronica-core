@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Release quality gate
+        run: python tools/release_check.py --mode=release --tag=${{ github.event.release.tag_name }}
+
       - name: Install build tools
         run: python -m pip install --upgrade pip build twine
 
@@ -27,6 +30,18 @@ jobs:
 
       - name: Check distribution
         run: twine check dist/*
+
+      - name: Dry-run install and verify version
+        run: |
+          pip install dist/*.whl
+          INSTALLED=$(python -c "import veronica_core; print(veronica_core.__version__)")
+          EXPECTED="${{ github.event.release.tag_name }}"
+          EXPECTED="${EXPECTED#v}"
+          echo "Installed: $INSTALLED, Expected: $EXPECTED"
+          if [ "$INSTALLED" != "$EXPECTED" ]; then
+            echo "::error::Version mismatch: installed=$INSTALLED expected=$EXPECTED"
+            exit 1
+          fi
 
       - name: Publish to PyPI
         if: "!contains(github.event.release.tag_name, 'rc')"
