@@ -59,6 +59,16 @@ from veronica_core.integration import (
     get_veronica_integration,
 )
 
+# Execution Shield (v0.3 -- opt-in, all features disabled by default)
+from veronica_core.shield import ShieldConfig
+from veronica_core.shield.config import (
+    SafeModeConfig,
+    BudgetConfig,
+    CircuitBreakerConfig,
+    EgressConfig,
+    SecretGuardConfig,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -94,4 +104,11 @@ __all__ = [
     # Integration
     "VeronicaIntegration",
     "get_veronica_integration",
+    # Execution Shield (v0.3)
+    "ShieldConfig",
+    "SafeModeConfig",
+    "BudgetConfig",
+    "CircuitBreakerConfig",
+    "EgressConfig",
+    "SecretGuardConfig",
 ]
