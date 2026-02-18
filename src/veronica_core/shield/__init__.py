@@ -1,4 +1,8 @@
 """VERONICA Execution Shield."""
+from veronica_core.shield.adaptive_budget import (
+    AdaptiveBudgetHook,
+    AdjustmentResult,
+)
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.input_compression import (
@@ -36,5 +40,7 @@ __all__ = [
     "Compressor",
     "InputCompressionHook",
     "TemplateCompressor",
+    "AdaptiveBudgetHook",
+    "AdjustmentResult",
     "SafetyEvent",
 ]

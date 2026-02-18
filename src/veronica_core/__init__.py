@@ -70,10 +70,12 @@ from veronica_core.shield.config import (
     BudgetWindowConfig,
     TokenBudgetConfig,
     InputCompressionConfig,
+    AdaptiveBudgetConfig,
 )
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.token_budget import TokenBudgetHook
 from veronica_core.shield.input_compression import InputCompressionHook
+from veronica_core.shield.adaptive_budget import AdaptiveBudgetHook, AdjustmentResult
 
 # Runtime Policies (v0.4.3 -- opt-in, all features disabled by default)
 from veronica_core.policies.minimal_response import MinimalResponsePolicy
@@ -128,6 +130,10 @@ __all__ = [
     # Input Compression (v0.5.0)
     "InputCompressionConfig",
     "InputCompressionHook",
+    # Adaptive Budget (v0.6.0)
+    "AdaptiveBudgetConfig",
+    "AdaptiveBudgetHook",
+    "AdjustmentResult",
     # Runtime Policies (v0.4.3)
     "MinimalResponsePolicy",
 ]
