@@ -81,6 +81,7 @@ class VeronicaIntegration:
                 pre_dispatch_hook = BudgetWindowHook(
                     max_calls=shield.budget_window.max_calls,
                     window_seconds=shield.budget_window.window_seconds,
+                    degrade_threshold=shield.budget_window.degrade_threshold,
                 )
             else:
                 pre_dispatch_hook = None
