@@ -71,6 +71,37 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 
 ---
 
+## Ship Readiness (v0.4.2)
+
+- [x] BudgetWindow stops runaway execution (ceiling enforced)
+- [x] SafetyEvent records structured evidence for non-ALLOW decisions
+- [x] DEGRADE supported (fallback at threshold, HALT at ceiling)
+- [x] Everything is opt-in & non-breaking (default behavior unchanged)
+
+Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events.
+
+---
+
+## Budget + Degrade Demo (30 seconds)
+
+```bash
+pip install -e .
+python examples/budget_degrade_demo.py
+```
+
+```
+Call  1 / model=gpt-4        -> ALLOW
+Call  2 / model=gpt-4        -> ALLOW
+Call  3 / model=gpt-4        -> ALLOW
+Call  4 / model=gpt-4        -> ALLOW
+Call  5 / model=gpt-4        -> DEGRADE (fallback to gpt-3.5-turbo)
+Call  6 / model=gpt-3.5-turbo -> HALT
+SafetyEvent: BUDGET_WINDOW_EXCEEDED / DEGRADE / BudgetWindowHook
+SafetyEvent: BUDGET_WINDOW_EXCEEDED / HALT   / BudgetWindowHook
+```
+
+---
+
 ## Runaway Loop Demo
 
 ```bash
@@ -228,7 +259,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-113%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-334%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
