@@ -18,6 +18,7 @@ from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
+from veronica_core.shield.input_compression import InputCompressionHook
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.token_budget import TokenBudgetHook
@@ -97,8 +98,22 @@ class VeronicaIntegration:
                 pre_dispatch=pre_dispatch_hook,
                 retry=safe_hook,
             )
+            # InputCompressionHook is NOT a pre-dispatch hook.
+            # It requires the actual prompt text, so callers invoke
+            # check_input() directly.  We store the instance here for
+            # convenient access via the integration object.
+            if shield.input_compression.enabled:
+                self._input_compression_hook: Optional[InputCompressionHook] = (
+                    InputCompressionHook(
+                        compression_threshold_tokens=shield.input_compression.compression_threshold_tokens,
+                        halt_threshold_tokens=shield.input_compression.halt_threshold_tokens,
+                    )
+                )
+            else:
+                self._input_compression_hook = None
         else:
             self._shield_pipeline = None
+            self._input_compression_hook = None
 
         # Load state
         if self.backend:
