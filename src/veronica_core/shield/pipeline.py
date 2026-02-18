@@ -25,6 +25,7 @@ _HOOK_EVENT_TYPES: dict[str, str] = {
     "TokenBudgetHook": "TOKEN_BUDGET_EXCEEDED",
     "InputCompressionHook": "INPUT_TOO_LARGE",
     "AdaptiveBudgetHook": "ADAPTIVE_ADJUSTMENT",
+    "TimeAwarePolicy": "TIME_POLICY_APPLIED",
     "BudgetBoundaryHook": "BUDGET_EXCEEDED",
     "EgressBoundaryHook": "EGRESS_BLOCKED",
     "RetryBoundaryHook": "RETRY_BLOCKED",
