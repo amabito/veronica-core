@@ -71,7 +71,7 @@ class VeronicaIntegration:
 
         # Shield pipeline (created when config present)
         if shield is not None:
-            safe_hook = SafeModeHook() if shield.safe_mode.enabled else None
+            safe_hook = SafeModeHook(enabled=True) if shield.safe_mode.enabled else None
             self._shield_pipeline: Optional[ShieldPipeline] = ShieldPipeline(
                 pre_dispatch=safe_hook,
                 retry=safe_hook,

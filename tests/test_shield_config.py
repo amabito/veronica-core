@@ -5,9 +5,9 @@ import sys
 
 import pytest
 
-from veronica_core.shield import ShieldConfig
 from veronica_core import VeronicaIntegration
 from veronica_core.backends import MemoryBackend
+from veronica_core.shield import ShieldConfig
 
 
 class TestShieldConfig:

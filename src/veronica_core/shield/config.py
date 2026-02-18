@@ -10,7 +10,6 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List
 
 
 @dataclass
@@ -45,7 +44,7 @@ class EgressConfig:
     """Egress allowlist guard (F3). Default-deny outbound HTTP."""
 
     enabled: bool = False
-    allowed_hosts: List[str] = field(default_factory=list)
+    allowed_hosts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -53,7 +52,7 @@ class SecretGuardConfig:
     """Secret-aware outbound guard (F4). Scans outbound payloads for credentials."""
 
     enabled: bool = False
-    patterns: List[str] = field(default_factory=list)
+    patterns: list[str] = field(default_factory=list)
 
 
 @dataclass

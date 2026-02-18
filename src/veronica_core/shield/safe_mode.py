@@ -3,6 +3,10 @@
 When enabled, acts as an emergency kill-switch: blocks all tool
 dispatch (pre-dispatch) and suppresses retries.  When disabled,
 returns ``None`` on every check (no opinion -- defers to pipeline).
+
+Note: SafeMode does NOT block HTTP egress or budget charges.
+Those boundaries require separate hooks (EgressBoundaryHook,
+BudgetBoundaryHook).
 """
 
 from __future__ import annotations

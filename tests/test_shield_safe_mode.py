@@ -19,6 +19,11 @@ class TestSafeModeEnabled:
         hook = SafeModeHook(enabled=True)
         assert hook.before_llm_call(CTX_NO_TOOL) is None
 
+    def test_blocks_empty_tool_name(self):
+        ctx = ToolCallContext(request_id="test", tool_name="")
+        hook = SafeModeHook(enabled=True)
+        assert hook.before_llm_call(ctx) is Decision.HALT
+
     def test_blocks_retry(self):
         hook = SafeModeHook(enabled=True)
         assert hook.on_error(CTX, RuntimeError("boom")) is Decision.HALT
