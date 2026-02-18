@@ -97,9 +97,11 @@ python examples/token_budget_minimal_demo.py
   Tokens used:   70 / 100  -> ALLOW
   Tokens used:   80 / 100  -> DEGRADE  (80% threshold reached)
   Tokens used:   95 / 100  -> DEGRADE
-  Tokens used:  100 / 100  -> HALT     (ceiling reached)
+  Tokens used:  100 / 100  -> HALT  (ceiling reached)
+
   SafetyEvent: TOKEN_BUDGET_EXCEEDED / DEGRADE / TokenBudgetHook
-  SafetyEvent: TOKEN_BUDGET_EXCEEDED / HALT   / TokenBudgetHook
+  SafetyEvent: TOKEN_BUDGET_EXCEEDED / DEGRADE / TokenBudgetHook
+  SafetyEvent: TOKEN_BUDGET_EXCEEDED / HALT    / TokenBudgetHook
 
 --- MinimalResponsePolicy demo ---
   [disabled] system message unchanged: You are a helpful assistant.
@@ -285,7 +287,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-334%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-370%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
