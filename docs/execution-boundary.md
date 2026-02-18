@@ -45,16 +45,16 @@ All three are stopped at the Execution Boundary, not after the fact.
 
 VERONICA implements the Execution Boundary through hook protocols evaluated by `ShieldPipeline`.
 
-**Hook protocols** (`veronica/shield/hooks.py`):
+**Hook protocols** (`veronica_core/shield/hooks.py`):
 
 - `PreDispatchHook`: evaluated before every LLM call dispatch
 - `EgressBoundaryHook`: evaluated when a call is about to exit the local runtime to the provider
 - `RetryBoundaryHook`: evaluated before each retry attempt
 - `BudgetBoundaryHook`: evaluated against current budget state before a call proceeds
 
-**ShieldPipeline** (`veronica/shield/pipeline.py`) evaluates registered hooks in order and returns a `Decision`.
+**ShieldPipeline** (`veronica_core/shield/pipeline.py`) evaluates registered hooks in order and returns a `Decision`.
 
-**Decision enum** (`veronica/shield/models.py`):
+**Decision enum** (`veronica_core/shield/types.py`):
 
 | Decision    | Meaning                                              |
 |-------------|------------------------------------------------------|
@@ -72,11 +72,11 @@ This means adding VERONICA to an existing agent is non-breaking and opt-in by de
 
 ## Where SafeMode Fits
 
-`SafeModeHook` (`veronica/shield/safe_mode.py`) implements both `PreDispatchHook` and `RetryBoundaryHook`.
+`SafeModeHook` (`veronica_core/shield/safe_mode.py`) implements both `PreDispatchHook` and `RetryBoundaryHook`.
 
 - **Enabled**: blocks tool dispatch at `PreDispatchHook` and suppresses all retries at `RetryBoundaryHook`
 - **Disabled**: returns `None` from both hooks, having no effect on pipeline output
-- **Toggle**: manual only (`safe_mode_hook.enable()` / `safe_mode_hook.disable()`); no automatic escalation is implemented yet
+- **Toggle**: manual only via `ShieldConfig(safe_mode=SafeModeConfig(enabled=True))`; no automatic escalation is implemented yet
 
 SafeMode is opt-in and disabled by default.
 Enabling it does not change the hook registration; it changes what the already-registered hook returns.
