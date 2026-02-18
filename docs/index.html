@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VERONICA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #e8e8e8;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    main {
+      max-width: 560px;
+      width: 100%;
+    }
+
+    .label {
+      font-size: 0.70rem;
+      letter-spacing: 0.18em;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 400;
+      color: #aaa;
+      margin-bottom: 2.5rem;
+      letter-spacing: 0.01em;
+    }
+
+    .desc {
+      font-size: 0.875rem;
+      line-height: 1.75;
+      color: #c0c0c0;
+      margin-bottom: 2.5rem;
+      padding-left: 1rem;
+      border-left: 2px solid #2a2a2a;
+    }
+
+    .install {
+      background: #111;
+      border: 1px solid #222;
+      padding: 0.6rem 1rem;
+      font-size: 0.825rem;
+      color: #7ec8a4;
+      margin-bottom: 2.5rem;
+      letter-spacing: 0.02em;
+      user-select: all;
+    }
+
+    nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    nav a {
+      font-size: 0.825rem;
+      color: #666;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: color 0.15s;
+    }
+
+    nav a::before {
+      content: "->";
+      color: #333;
+      flex-shrink: 0;
+    }
+
+    nav a:hover { color: #e8e8e8; }
+
+    footer {
+      margin-top: 3rem;
+      font-size: 0.70rem;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="label">runtime enforcement</p>
+    <h1>VERONICA</h1>
+    <h2>Execution Shield for LLM agents.</h2>
+
+    <p class="desc">
+      VERONICA sits between your application and the LLM provider,
+      evaluating every tool dispatch, retry, egress call, and budget
+      charge against registered hook protocols. Each hook returns a
+      Decision &mdash; ALLOW, RETRY, HALT, DEGRADE, QUARANTINE, or
+      QUEUE &mdash; or defers to the next hook. The default is complete
+      pass-through; existing code is unaffected until you opt in.
+    </p>
+
+    <div class="install">pip install veronica-core</div>
+
+    <nav>
+      <a href="https://github.com/amabito/veronica-core">
+        github.com/amabito/veronica-core
+      </a>
+      <a href="https://pypi.org/project/veronica-core/">
+        pypi.org/project/veronica-core
+      </a>
+      <a href="https://github.com/amabito/veronica-core/discussions/8">
+        v0.4.0 Execution Shield &mdash; design discussion
+      </a>
+    </nav>
+
+    <footer>Apache-2.0 &middot; Python &ge;3.9 &middot; zero runtime dependencies</footer>
+  </main>
+</body>
+</html>
