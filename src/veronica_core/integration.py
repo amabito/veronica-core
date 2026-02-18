@@ -18,6 +18,7 @@ from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.pipeline import ShieldPipeline
+from veronica_core.shield.safe_mode import SafeModeHook
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,18 @@ class VeronicaIntegration:
         # Set up LLM client (optional)
         self.client: LLMClient = client or NullClient()
 
-        # Shield configuration (opt-in, stored only -- no behavior change yet)
+        # Shield configuration (opt-in)
         self.shield: Optional[ShieldConfig] = shield
 
-        # Shield pipeline (created when config present; noop hooks = always ALLOW)
-        self._shield_pipeline: Optional[ShieldPipeline] = (
-            ShieldPipeline() if shield is not None else None
-        )
+        # Shield pipeline (created when config present)
+        if shield is not None:
+            safe_hook = SafeModeHook(enabled=True) if shield.safe_mode.enabled else None
+            self._shield_pipeline: Optional[ShieldPipeline] = ShieldPipeline(
+                pre_dispatch=safe_hook,
+                retry=safe_hook,
+            )
+        else:
+            self._shield_pipeline = None
 
         # Load state
         if self.backend:
