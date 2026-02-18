@@ -309,15 +309,66 @@ function renderScore() {
     }
     app.appendChild(interpretation);
 
+    // Install CTA
+    const installCta = document.createElement('p');
+    installCta.className = 'install-cta';
+    const installCode = document.createElement('code');
+    installCode.textContent = 'pip install veronica-core';
+    installCta.appendChild(installCode);
+    app.appendChild(installCta);
+
+    // Top 3 Risk Areas (Step 2 gaps)
+    const gapQuestions = QUESTIONS.step2.filter(function(q) {
+        return isGap(answers[q.id] || 'unknown');
+    });
+    if (gapQuestions.length > 0) {
+        const riskSection = document.createElement('div');
+        riskSection.className = 'risk-areas';
+
+        const riskTitle = document.createElement('p');
+        riskTitle.className = 'risk-areas-title';
+        riskTitle.textContent = 'Your top risk areas:';
+        riskSection.appendChild(riskTitle);
+
+        const riskList = document.createElement('ul');
+        gapQuestions.slice(0, 3).forEach(function(q) {
+            const item = document.createElement('li');
+            item.textContent = q.text;
+            riskList.appendChild(item);
+        });
+        riskSection.appendChild(riskList);
+        app.appendChild(riskSection);
+    }
+
+    // URL Sharing: encode answers into query string
+    const params = new URLSearchParams();
+    ['q1','q2','q3','q4','q5','q6','q7','q8','q9'].forEach(function(key) {
+        if (answers[key]) {
+            params.set(key, answers[key]);
+        }
+    });
+    window.history.replaceState(null, '', '?' + params.toString() + '#score');
+
     // Actions
     const nav = document.createElement('div');
     nav.className = 'nav-buttons';
+
+    const copyLinkBtn = document.createElement('button');
+    copyLinkBtn.className = 'nav-btn copy-link-btn';
+    copyLinkBtn.textContent = 'Copy Link';
+    copyLinkBtn.addEventListener('click', function() {
+        navigator.clipboard.writeText(window.location.href);
+        copyLinkBtn.textContent = 'Copied!';
+        setTimeout(function() { copyLinkBtn.textContent = 'Copy Link'; }, 2000);
+    });
+    nav.appendChild(copyLinkBtn);
 
     const restartBtn = document.createElement('button');
     restartBtn.className = 'nav-btn secondary';
     restartBtn.textContent = 'Retake Audit';
     restartBtn.addEventListener('click', function() {
         clearAnswers();
+        window.history.replaceState(null, '', window.location.pathname);
         navigate('#step1');
     });
     nav.appendChild(restartBtn);
@@ -333,5 +384,22 @@ window.addEventListener('DOMContentLoaded', function() {
     if (typeof runSelfTests === 'function') {
         runSelfTests();
     }
+
+    // Load answers from URL query params if present, then navigate to score screen
+    const params = new URLSearchParams(window.location.search);
+    const sharedKeys = ['q1','q2','q3','q4','q5','q6','q7','q8','q9'];
+    const hasSharedAnswers = sharedKeys.some(function(key) { return params.has(key); });
+    if (hasSharedAnswers) {
+        const loaded = {};
+        sharedKeys.forEach(function(key) {
+            if (params.has(key)) {
+                loaded[key] = params.get(key);
+            }
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+        navigate('#score');
+        return;
+    }
+
     renderCurrentScreen();
 });
