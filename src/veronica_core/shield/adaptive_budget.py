@@ -1,7 +1,8 @@
 """AdaptiveBudgetHook for VERONICA Execution Shield.
 
 v0.6.0: Auto-adjusts budget ceiling based on recent SafetyEvent history.
-v0.7.0: Cooldown window, adjustment smoothing, hard floor/ceiling, direction lock.
+v0.7.0: Cooldown window, adjustment smoothing, hard floor/ceiling, direction lock,
+        anomaly tightening.
 
 Observes past events in a rolling window and tightens or loosens the
 effective ceiling:
@@ -13,10 +14,19 @@ Stabilization (v0.7.0):
   - Smoothing: per-step cap on multiplier change (max_step_pct)
   - Floor/Ceiling: absolute bounds on multiplier (min_multiplier, max_multiplier)
   - Direction lock: prevents loosen after tighten until exceeded events clear
+  - Anomaly tightening: spike detection with temporary multiplier reduction
+
+Anomaly tightening (v0.7.0):
+  - Compares recent event rate vs rolling average over the full window
+  - If recent > spike_factor * average -> activate anomaly (temporary -N% ceiling)
+  - Auto-recovers after anomaly_window_seconds
+  - Anomaly factor is orthogonal to normal ceiling_multiplier
 
 Records ADAPTIVE_ADJUSTMENT SafetyEvent on each non-hold adjustment.
 Records ADAPTIVE_COOLDOWN_BLOCKED SafetyEvent when cooldown prevents adjustment.
 Records ADAPTIVE_DIRECTION_LOCKED SafetyEvent when direction lock prevents loosen.
+Records ANOMALY_TIGHTENING_APPLIED SafetyEvent when anomaly spike is detected.
+Records ANOMALY_RECOVERED SafetyEvent when anomaly auto-recovers.
 
 Design principles:
   - Decoupled: does NOT wrap a hook; returns adjusted values for caller
@@ -58,6 +68,7 @@ class AdjustmentResult:
     base_ceiling: int
     tighten_events_in_window: int
     degrade_events_in_window: int
+    anomaly_active: bool = False
 
 
 class AdaptiveBudgetHook:
@@ -89,6 +100,12 @@ class AdaptiveBudgetHook:
         min_multiplier: float | None = None,
         max_multiplier: float | None = None,
         direction_lock: bool = False,
+        # v0.7.0 anomaly tightening (defaults are backward-compatible)
+        anomaly_enabled: bool = False,
+        anomaly_spike_factor: float = 3.0,
+        anomaly_tighten_pct: float = 0.15,
+        anomaly_window_seconds: float = 600.0,
+        anomaly_recent_seconds: float = 300.0,
     ) -> None:
         if base_ceiling <= 0:
             raise ValueError(
@@ -129,6 +146,27 @@ class AdaptiveBudgetHook:
                 f"max_multiplier ({resolved_max})"
             )
 
+        # v0.7.0 anomaly validation
+        if anomaly_spike_factor <= 0:
+            raise ValueError(
+                f"anomaly_spike_factor must be > 0, got {anomaly_spike_factor}"
+            )
+        if not (0 < anomaly_tighten_pct <= 1.0):
+            raise ValueError(
+                f"anomaly_tighten_pct must be in (0, 1.0], "
+                f"got {anomaly_tighten_pct}"
+            )
+        if anomaly_window_seconds <= 0:
+            raise ValueError(
+                f"anomaly_window_seconds must be > 0, "
+                f"got {anomaly_window_seconds}"
+            )
+        if anomaly_recent_seconds <= 0:
+            raise ValueError(
+                f"anomaly_recent_seconds must be > 0, "
+                f"got {anomaly_recent_seconds}"
+            )
+
         self._base_ceiling = base_ceiling
         self._window_seconds = window_seconds
         self._tighten_trigger = tighten_trigger
@@ -149,9 +187,18 @@ class AdaptiveBudgetHook:
         self._max_multiplier = resolved_max
         self._direction_lock = direction_lock
 
+        # v0.7.0 anomaly tightening
+        self._anomaly_enabled = anomaly_enabled
+        self._anomaly_spike_factor = anomaly_spike_factor
+        self._anomaly_tighten_pct = anomaly_tighten_pct
+        self._anomaly_window_seconds = anomaly_window_seconds
+        self._anomaly_recent_seconds = anomaly_recent_seconds
+
         self._ceiling_multiplier: float = 1.0
         self._last_adjustment_ts: float | None = None
         self._last_action: str | None = None
+        self._anomaly_active: bool = False
+        self._anomaly_activated_ts: float | None = None
         self._event_buffer: deque[tuple[float, SafetyEvent]] = deque()
         self._safety_events: list[SafetyEvent] = []
         self._lock = threading.Lock()
@@ -170,7 +217,19 @@ class AdaptiveBudgetHook:
     @property
     def adjusted_ceiling(self) -> int:
         with self._lock:
-            return max(1, round(self._base_ceiling * self._ceiling_multiplier))
+            anomaly_factor = (
+                (1.0 - self._anomaly_tighten_pct)
+                if self._anomaly_active
+                else 1.0
+            )
+            return max(
+                1,
+                round(
+                    self._base_ceiling
+                    * self._ceiling_multiplier
+                    * anomaly_factor
+                ),
+            )
 
     @property
     def window_seconds(self) -> float:
@@ -205,6 +264,20 @@ class AdaptiveBudgetHook:
     def last_adjustment_ts(self) -> float | None:
         with self._lock:
             return self._last_adjustment_ts
+
+    @property
+    def anomaly_enabled(self) -> bool:
+        return self._anomaly_enabled
+
+    @property
+    def anomaly_active(self) -> bool:
+        with self._lock:
+            return self._anomaly_active
+
+    @property
+    def anomaly_activated_ts(self) -> float | None:
+        with self._lock:
+            return self._anomaly_activated_ts
 
     # -- Event ingestion -----------------------------------------------------
 
@@ -262,17 +335,91 @@ class AdaptiveBudgetHook:
             # Count relevant events
             tighten_count = 0
             degrade_count = 0
-            for _, event in self._event_buffer:
+            recent_tighten_count = 0
+            recent_cutoff = now - self._anomaly_recent_seconds
+            for ts, event in self._event_buffer:
                 if (
                     event.event_type in self._tighten_event_types
                     and event.decision == Decision.HALT
                 ):
                     tighten_count += 1
+                    if ts > recent_cutoff:
+                        recent_tighten_count += 1
                 if (
                     event.event_type in self._degrade_event_types
                     and event.decision == Decision.DEGRADE
                 ):
                     degrade_count += 1
+
+            # Anomaly auto-recovery (v0.7.0)
+            if (
+                self._anomaly_active
+                and self._anomaly_activated_ts is not None
+                and now - self._anomaly_activated_ts
+                >= self._anomaly_window_seconds
+            ):
+                self._anomaly_active = False
+                self._anomaly_activated_ts = None
+                request_id = ctx.request_id if ctx else None
+                self._safety_events.append(
+                    SafetyEvent(
+                        event_type="ANOMALY_RECOVERED",
+                        decision=Decision.ALLOW,
+                        reason="anomaly auto-recovered after window expired",
+                        hook="AdaptiveBudgetHook",
+                        request_id=request_id,
+                        metadata={
+                            "anomaly_window_seconds": (
+                                self._anomaly_window_seconds
+                            ),
+                        },
+                    )
+                )
+
+            # Anomaly spike detection (v0.7.0)
+            if self._anomaly_enabled and not self._anomaly_active:
+                periods = (
+                    self._window_seconds / self._anomaly_recent_seconds
+                )
+                avg_per_period = (
+                    tighten_count / periods if periods > 0 else 0.0
+                )
+                if (
+                    recent_tighten_count >= self._tighten_trigger
+                    and recent_tighten_count
+                    > self._anomaly_spike_factor * avg_per_period
+                ):
+                    self._anomaly_active = True
+                    self._anomaly_activated_ts = now
+                    request_id = ctx.request_id if ctx else None
+                    self._safety_events.append(
+                        SafetyEvent(
+                            event_type="ANOMALY_TIGHTENING_APPLIED",
+                            decision=Decision.DEGRADE,
+                            reason=(
+                                f"anomaly spike: {recent_tighten_count} "
+                                f"events in recent "
+                                f"{self._anomaly_recent_seconds:.0f}s "
+                                f"vs avg {avg_per_period:.1f}/period"
+                            ),
+                            hook="AdaptiveBudgetHook",
+                            request_id=request_id,
+                            metadata={
+                                "recent_tighten_count": (
+                                    recent_tighten_count
+                                ),
+                                "avg_per_period": round(
+                                    avg_per_period, 2
+                                ),
+                                "spike_factor": (
+                                    self._anomaly_spike_factor
+                                ),
+                                "anomaly_tighten_pct": (
+                                    self._anomaly_tighten_pct
+                                ),
+                            },
+                        )
+                    )
 
             # Cooldown check (v0.7.0)
             if (
@@ -281,9 +428,18 @@ class AdaptiveBudgetHook:
             ):
                 elapsed = now - self._last_adjustment_ts
                 if elapsed < self._cooldown_seconds:
+                    anomaly_factor = (
+                        (1.0 - self._anomaly_tighten_pct)
+                        if self._anomaly_active
+                        else 1.0
+                    )
                     adjusted = max(
                         1,
-                        round(self._base_ceiling * self._ceiling_multiplier),
+                        round(
+                            self._base_ceiling
+                            * self._ceiling_multiplier
+                            * anomaly_factor
+                        ),
                     )
                     request_id = ctx.request_id if ctx else None
                     self._safety_events.append(
@@ -314,6 +470,7 @@ class AdaptiveBudgetHook:
                         base_ceiling=self._base_ceiling,
                         tighten_events_in_window=tighten_count,
                         degrade_events_in_window=degrade_count,
+                        anomaly_active=self._anomaly_active,
                     )
 
             old_multiplier = self._ceiling_multiplier
@@ -345,8 +502,18 @@ class AdaptiveBudgetHook:
             else:
                 action = "hold"
 
+            anomaly_factor = (
+                (1.0 - self._anomaly_tighten_pct)
+                if self._anomaly_active
+                else 1.0
+            )
             adjusted = max(
-                1, round(self._base_ceiling * self._ceiling_multiplier)
+                1,
+                round(
+                    self._base_ceiling
+                    * self._ceiling_multiplier
+                    * anomaly_factor
+                ),
             )
 
             result = AdjustmentResult(
@@ -356,6 +523,7 @@ class AdaptiveBudgetHook:
                 base_ceiling=self._base_ceiling,
                 tighten_events_in_window=tighten_count,
                 degrade_events_in_window=degrade_count,
+                anomaly_active=self._anomaly_active,
             )
 
             # Record direction_locked event (v0.7.0)
@@ -438,5 +606,7 @@ class AdaptiveBudgetHook:
             self._ceiling_multiplier = 1.0
             self._last_adjustment_ts = None
             self._last_action = None
+            self._anomaly_active = False
+            self._anomaly_activated_ts = None
             self._event_buffer.clear()
             self._safety_events.clear()

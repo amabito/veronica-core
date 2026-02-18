@@ -120,6 +120,13 @@ class AdaptiveBudgetConfig:
       - ``max_step_pct``: per-adjustment cap on multiplier change
       - ``min_multiplier`` / ``max_multiplier``: absolute hard bounds
 
+    v0.7.0 anomaly tightening:
+      - ``anomaly_enabled``: enable spike detection
+      - ``anomaly_spike_factor``: recent events > factor * avg triggers anomaly
+      - ``anomaly_tighten_pct``: temporary ceiling reduction (orthogonal to multiplier)
+      - ``anomaly_window_minutes``: auto-recovery after N minutes
+      - ``anomaly_recent_minutes``: "recent" period for spike detection
+
     Rules:
       - >= ``tighten_trigger`` HALT events in window -> ceiling * (1 - tighten_pct)
       - Zero DEGRADE events in window -> ceiling * (1 + loosen_pct)
@@ -137,6 +144,12 @@ class AdaptiveBudgetConfig:
     min_multiplier: float = 0.6
     max_multiplier: float = 1.2
     direction_lock: bool = True
+    # v0.7.0 anomaly tightening
+    anomaly_enabled: bool = False
+    anomaly_spike_factor: float = 3.0
+    anomaly_tighten_pct: float = 0.15
+    anomaly_window_minutes: float = 10.0
+    anomaly_recent_minutes: float = 5.0
 
 
 @dataclass
