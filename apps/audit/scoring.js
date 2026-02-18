@@ -156,3 +156,9 @@ function runSelfTests() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { calculateScore, answerToPoints, isGap, runSelfTests };
 }
+
+// Run self-tests when executed directly with Node.js
+if (typeof require !== 'undefined' && require.main === module) {
+    const ok = runSelfTests();
+    process.exit(ok ? 0 : 1);
+}
