@@ -14,6 +14,7 @@ from veronica_core.shield.noop import (
     NoopRetryBoundaryHook,
 )
 from veronica_core.shield.pipeline import ShieldPipeline
+from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.types import Decision, ToolCallContext
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "Decision", "ToolCallContext",
     "PreDispatchHook", "EgressBoundaryHook", "RetryBoundaryHook", "BudgetBoundaryHook",
     "NoopPreDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
+    "SafeModeHook",
 ]
