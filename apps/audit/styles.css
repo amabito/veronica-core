@@ -228,6 +228,52 @@ header p {
     padding: 1rem 1.25rem;
 }
 
+/* ── Score screen extras ─────────────────────────────── */
+
+.install-cta {
+    font-size: 0.9rem;
+}
+
+.install-cta code {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.3rem 0.7rem;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.875rem;
+    color: var(--color-primary);
+}
+
+.risk-areas {
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.risk-areas-title {
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.risk-areas ul {
+    padding-left: 1.25rem;
+    color: var(--color-muted);
+}
+
+.risk-areas ul li {
+    margin-bottom: 0.25rem;
+}
+
+.copy-link-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.copy-link-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 480px) {
