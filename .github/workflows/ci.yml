@@ -41,4 +41,4 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=veronica --cov-report=xml --cov-report=term-missing --cov-fail-under=90 -v
+          pytest --cov=veronica_core --cov-report=xml --cov-report=term-missing --cov-fail-under=90 -v

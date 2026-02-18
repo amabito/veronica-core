@@ -1858,3 +1858,76 @@ class TestImportControlState:
         assert len(hook.get_events()) == 1
         # But multiplier changed
         assert hook.ceiling_multiplier == 0.80
+
+
+# ---------------------------------------------------------------------------
+# from_dict forward compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestFromDictForwardCompat:
+    def test_unknown_keys_ignored(self):
+        """from_dict ignores unknown keys for forward compatibility."""
+        from veronica_core.shield.config import ShieldConfig
+
+        data = {
+            "adaptive_budget": {
+                "enabled": True,
+                "future_field": "some_value",
+                "another_new_field": 42,
+            },
+            "safe_mode": {"enabled": False},
+        }
+        cfg = ShieldConfig.from_dict(data)
+        assert cfg.adaptive_budget.enabled is True
+        assert cfg.safe_mode.enabled is False
+
+    def test_empty_dict_gives_defaults(self):
+        from veronica_core.shield.config import ShieldConfig
+
+        cfg = ShieldConfig.from_dict({})
+        assert cfg.adaptive_budget.enabled is False
+        assert cfg.is_any_enabled is False
+
+    def test_none_sub_dict_gives_defaults(self):
+        """None values in sub-dicts produce defaults (not AttributeError)."""
+        from veronica_core.shield.config import ShieldConfig
+
+        data = {"safe_mode": None, "adaptive_budget": None}
+        cfg = ShieldConfig.from_dict(data)
+        assert cfg.safe_mode.enabled is False
+        assert cfg.adaptive_budget.enabled is False
+
+    def test_round_trip_with_all_v07_fields(self):
+        """Full round-trip preserves all v0.7.0 config fields."""
+        from veronica_core.shield.config import (
+            AdaptiveBudgetConfig,
+            ShieldConfig,
+            TimeAwarePolicyConfig,
+        )
+
+        cfg = ShieldConfig(
+            adaptive_budget=AdaptiveBudgetConfig(
+                enabled=True,
+                cooldown_minutes=5.0,
+                max_step_pct=0.02,
+                min_multiplier=0.5,
+                max_multiplier=1.5,
+                direction_lock=False,
+                anomaly_enabled=True,
+                anomaly_spike_factor=4.0,
+                anomaly_tighten_pct=0.20,
+                anomaly_window_minutes=15.0,
+                anomaly_recent_minutes=3.0,
+            ),
+            time_aware_policy=TimeAwarePolicyConfig(
+                enabled=True,
+                weekend_multiplier=0.70,
+            ),
+        )
+        d = cfg.to_dict()
+        restored = ShieldConfig.from_dict(d)
+        assert restored.adaptive_budget.anomaly_enabled is True
+        assert restored.adaptive_budget.direction_lock is False
+        assert restored.adaptive_budget.anomaly_window_minutes == 15.0
+        assert restored.time_aware_policy.weekend_multiplier == 0.70

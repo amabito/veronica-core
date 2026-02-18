@@ -81,7 +81,8 @@ class AdaptiveBudgetHook:
       - >= tighten_trigger HALT events in window  -> tighten by tighten_pct
       - 0 DEGRADE events in window                -> loosen by loosen_pct
       - Otherwise                                  -> hold (no change)
-      - Multiplier clamped to [1 - max_adjustment, 1 + max_adjustment]
+      - Multiplier clamped to [min_multiplier, max_multiplier]
+        (defaults computed from max_adjustment if not explicitly set)
     """
 
     def __init__(
@@ -591,12 +592,17 @@ class AdaptiveBudgetHook:
     # -- Event access --------------------------------------------------------
 
     def get_events(self) -> list[SafetyEvent]:
-        """Return accumulated ADAPTIVE_ADJUSTMENT events (shallow copy)."""
+        """Return all accumulated safety events (shallow copy).
+
+        Includes ADAPTIVE_ADJUSTMENT, ADAPTIVE_COOLDOWN_BLOCKED,
+        ADAPTIVE_DIRECTION_LOCKED, ANOMALY_TIGHTENING_APPLIED,
+        and ANOMALY_RECOVERED events.
+        """
         with self._lock:
             return list(self._safety_events)
 
     def clear_events(self) -> None:
-        """Clear accumulated ADAPTIVE_ADJUSTMENT events."""
+        """Clear all accumulated safety events."""
         with self._lock:
             self._safety_events.clear()
 

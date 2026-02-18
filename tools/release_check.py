@@ -48,6 +48,8 @@ class CheckResult:
 
 def _extract_version_pyproject() -> str | None:
     """Extract version from pyproject.toml."""
+    if not PYPROJECT.exists():
+        return None
     text = PYPROJECT.read_text(encoding="utf-8")
     match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
     return match.group(1) if match else None
@@ -127,7 +129,7 @@ def check_readme_freshness(result: CheckResult) -> None:
     pyproject_ver = _extract_version_pyproject()
     if pyproject_ver:
         pattern = rf"Ship Readiness.*v{re.escape(pyproject_ver)}"
-        if re.search(pattern, text):
+        if re.search(pattern, text, re.DOTALL):
             result.ok(
                 f"Ship Readiness references v{pyproject_ver}"
             )
@@ -230,6 +232,9 @@ def main() -> int:
     args = parser.parse_args()
 
     tag = args.tag if args.mode == "release" else None
+
+    if args.mode == "release" and tag is None:
+        print("WARNING: --mode=release without --tag; tag check will be skipped")
 
     result = CheckResult()
 
