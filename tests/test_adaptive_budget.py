@@ -1628,3 +1628,233 @@ class TestConfigAnomalyRoundTrip:
         assert restored.adaptive_budget.anomaly_tighten_pct == 0.20
         assert restored.adaptive_budget.anomaly_window_minutes == 15.0
         assert restored.adaptive_budget.anomaly_recent_minutes == 3.0
+
+
+# ===========================================================================
+# v0.7.0 Deterministic Replay API Tests
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# export_control_state
+# ---------------------------------------------------------------------------
+
+
+class TestExportControlState:
+    def test_default_state(self):
+        """Fresh hook exports clean default state."""
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        state = hook.export_control_state(_now=1000.0)
+        assert state["adaptive_multiplier"] == 1.0
+        assert state["time_multiplier"] == 1.0
+        assert state["anomaly_factor"] == 1.0
+        assert state["effective_multiplier"] == 1.0
+        assert state["base_ceiling"] == 100
+        assert state["adjusted_ceiling"] == 100
+        assert state["hard_floor"] == pytest.approx(0.80)
+        assert state["hard_ceiling"] == pytest.approx(1.20)
+        assert state["last_adjustment_ts"] is None
+        assert state["last_action"] is None
+        assert state["cooldown_active"] is False
+        assert state["cooldown_remaining_seconds"] is None
+        assert state["anomaly_active"] is False
+        assert state["anomaly_activated_ts"] is None
+        assert state["direction_lock_active"] is False
+        assert state["recent_event_counts"]["tighten"] == 0
+        assert state["recent_event_counts"]["degrade"] == 0
+
+    def test_after_tighten(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        hook.adjust(_now=1000.0)
+        state = hook.export_control_state(_now=1000.0)
+        assert state["adaptive_multiplier"] == 0.90
+        assert state["adjusted_ceiling"] == 90
+        assert state["last_action"] == "tighten"
+        assert state["last_adjustment_ts"] == 1000.0
+        assert state["recent_event_counts"]["tighten"] == 3
+
+    def test_with_cooldown_active(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        hook.adjust(_now=1000.0)
+        state = hook.export_control_state(_now=1030.0)
+        assert state["cooldown_active"] is True
+        assert state["cooldown_remaining_seconds"] == 30.0
+
+    def test_with_cooldown_expired(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        hook.adjust(_now=1000.0)
+        state = hook.export_control_state(_now=1061.0)
+        assert state["cooldown_active"] is False
+        assert state["cooldown_remaining_seconds"] is None
+
+    def test_with_time_multiplier(self):
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        state = hook.export_control_state(
+            time_multiplier=0.85, _now=1000.0
+        )
+        assert state["time_multiplier"] == 0.85
+        assert state["effective_multiplier"] == pytest.approx(0.85)
+        assert state["adjusted_ceiling"] == 85
+
+    def test_with_anomaly_active(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        state = hook.export_control_state(_now=550.0)
+        assert state["anomaly_active"] is True
+        assert state["anomaly_factor"] == 0.85
+        assert state["anomaly_activated_ts"] == 550.0
+
+    def test_with_direction_lock_active(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            direction_lock=True,
+        )
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        hook.adjust(_now=950.0)  # tighten
+        state = hook.export_control_state(_now=1001.0)
+        # 1 event remains at 950 (900s expired at 1001-100=901)
+        assert state["direction_lock_active"] is True
+
+    def test_json_serializable(self):
+        """State dict must be JSON-serializable."""
+        import json
+
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            cooldown_seconds=60.0,
+            direction_lock=True,
+        )
+        hook.adjust(_now=1000.0)
+        state = hook.export_control_state(_now=1030.0)
+        # Should not raise
+        serialized = json.dumps(state)
+        restored = json.loads(serialized)
+        assert restored["adaptive_multiplier"] == state["adaptive_multiplier"]
+
+    def test_combined_multipliers(self):
+        """effective_multiplier compounds all three factors."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=1000,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        # adaptive=0.90, anomaly=0.85, time=0.90
+        state = hook.export_control_state(
+            time_multiplier=0.90, _now=550.0
+        )
+        expected = 0.90 * 0.90 * 0.85
+        assert state["effective_multiplier"] == pytest.approx(
+            expected, abs=0.001
+        )
+        assert state["adjusted_ceiling"] == max(
+            1, round(1000 * expected)
+        )
+
+
+# ---------------------------------------------------------------------------
+# import_control_state
+# ---------------------------------------------------------------------------
+
+
+class TestImportControlState:
+    def test_round_trip(self):
+        """Export then import restores core state."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            cooldown_seconds=60.0,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        hook.adjust(_now=1000.0)
+
+        state = hook.export_control_state(_now=1000.0)
+
+        # Create fresh hook and import
+        hook2 = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            cooldown_seconds=60.0,
+        )
+        hook2.import_control_state(state)
+        assert hook2.ceiling_multiplier == 0.90
+        assert hook2.last_adjustment_ts == 1000.0
+        assert hook2.last_action == "tighten"
+
+    def test_import_with_anomaly(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            anomaly_enabled=True,
+            anomaly_tighten_pct=0.15,
+        )
+        # Manually import anomaly state
+        hook.import_control_state({
+            "adaptive_multiplier": 0.85,
+            "last_adjustment_ts": 500.0,
+            "last_action": "tighten",
+            "anomaly_active": True,
+            "anomaly_activated_ts": 450.0,
+        })
+        assert hook.ceiling_multiplier == 0.85
+        assert hook.anomaly_active is True
+        assert hook.anomaly_activated_ts == 450.0
+        # adjusted_ceiling includes anomaly: 100 * 0.85 * 0.85 = 72.25 -> 72
+        assert hook.adjusted_ceiling == 72
+
+    def test_import_resets_missing_fields(self):
+        """Fields not in state dict get safe defaults."""
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        hook.import_control_state({
+            "adaptive_multiplier": 0.95,
+        })
+        assert hook.ceiling_multiplier == 0.95
+        assert hook.last_adjustment_ts is None
+        assert hook.last_action is None
+        assert hook.anomaly_active is False
+        assert hook.anomaly_activated_ts is None
+
+    def test_import_does_not_affect_events(self):
+        """Import restores state but not event buffer or safety events."""
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        hook.adjust(_now=1000.0)  # creates an event
+        assert len(hook.get_events()) == 1
+
+        hook.import_control_state({
+            "adaptive_multiplier": 0.80,
+        })
+        # Events should still be there
+        assert len(hook.get_events()) == 1
+        # But multiplier changed
+        assert hook.ceiling_multiplier == 0.80
