@@ -16,6 +16,7 @@ from veronica_core.exit import VeronicaExit
 from veronica_core.backends import PersistenceBackend, JSONBackend
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
+from veronica_core.shield.config import ShieldConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class VeronicaIntegration:
         backend: Optional[PersistenceBackend] = None,
         guard: Optional[VeronicaGuard] = None,
         client: Optional[LLMClient] = None,
+        shield: Optional[ShieldConfig] = None,
     ):
         """Initialize integration layer.
 
@@ -45,6 +47,7 @@ class VeronicaIntegration:
             backend: Persistence backend (default: JSONBackend with VeronicaPersistence path)
             guard: Validation guard (default: PermissiveGuard)
             client: LLM client (optional, default: NullClient - no LLM features)
+            shield: Shield configuration (optional, default: None - no shield)
         """
         # Set up backend (backward compatible with VeronicaPersistence)
         if backend is None:
@@ -60,6 +63,9 @@ class VeronicaIntegration:
 
         # Set up LLM client (optional)
         self.client: LLMClient = client or NullClient()
+
+        # Shield configuration (opt-in, stored only -- no behavior change yet)
+        self.shield: Optional[ShieldConfig] = shield
 
         # Load state
         if self.backend:
