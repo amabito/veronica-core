@@ -241,6 +241,7 @@ Design and diagrams:
 
 SafeModeHook is optional and disabled by default.
 BudgetWindowHook is optional and disabled by default.
+DEGRADE support allows model fallback before hard stop.
 [Execution Boundary concept](docs/execution-boundary.md)
 
 ---

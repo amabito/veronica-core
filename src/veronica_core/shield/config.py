@@ -61,11 +61,18 @@ class BudgetWindowConfig:
     """Rolling time-window call-count limiter (opt-in).
 
     Disabled by default -- zero behavioral impact until explicitly enabled.
+
+    ``degrade_threshold`` controls the DEGRADE zone as a fraction of
+    ``max_calls`` (default 0.8 = 80 %).  Set to 1.0 to disable DEGRADE.
+    ``degrade_map`` is an optional mapping of model names for fallback routing
+    (consumed by the caller; the hook itself only returns the Decision).
     """
 
     enabled: bool = False
     max_calls: int = 100
     window_seconds: float = 60.0
+    degrade_threshold: float = 0.8
+    degrade_map: dict = field(default_factory=dict)
 
 
 @dataclass
