@@ -46,7 +46,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.coverage.run]
-source = ["veronica"]
+source = ["veronica_core"]
 
 [tool.coverage.report]
 fail_under = 90
