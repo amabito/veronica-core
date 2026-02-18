@@ -71,16 +71,18 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 
 ---
 
-## Ship Readiness (v0.4.3)
+## Ship Readiness (v0.5.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
 - [x] DEGRADE supported (fallback at threshold, HALT at ceiling)
 - [x] TokenBudgetHook: cumulative output/total token ceiling with DEGRADE zone
 - [x] MinimalResponsePolicy: opt-in conciseness constraints for system messages
+- [x] InputCompressionHook: input size gate with SHA-256 evidence (skeleton -- compression in v0.5.1)
+- [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events + token-level budget enforcement.
+Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events + token-level budget enforcement + input size detection.
 
 ---
 
@@ -106,6 +108,27 @@ python examples/token_budget_minimal_demo.py
 --- MinimalResponsePolicy demo ---
   [disabled] system message unchanged: You are a helpful assistant.
   [enabled]  system message with constraints injected
+```
+
+---
+
+## Input Compression Skeleton Demo (30 seconds)
+
+```bash
+pip install -e .
+python examples/input_compression_skeleton_demo.py
+```
+
+```
+--- InputCompressionHook demo ---
+  Short input (22 tokens)  -> ALLOW
+  Medium input (750 tokens) -> DEGRADE  (compression suggested)
+  Large input (1250 tokens)  -> HALT  (input too large)
+
+  Evidence (HALT):
+    estimated_tokens: 1250
+    input_sha256: c59d3c04...  (raw text NOT stored)
+    decision: HALT
 ```
 
 ---
