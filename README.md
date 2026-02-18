@@ -71,18 +71,20 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 
 ---
 
-## Ship Readiness (v0.5.0)
+## Ship Readiness (v0.6.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
 - [x] DEGRADE supported (fallback at threshold, HALT at ceiling)
 - [x] TokenBudgetHook: cumulative output/total token ceiling with DEGRADE zone
 - [x] MinimalResponsePolicy: opt-in conciseness constraints for system messages
-- [x] InputCompressionHook: input size gate with SHA-256 evidence (skeleton -- compression in v0.5.1)
+- [x] InputCompressionHook: real compression with Compressor protocol + safety guarantees (v0.5.1)
+- [x] AdaptiveBudgetHook: auto-adjusts ceiling based on SafetyEvent history (v0.6.0)
+- [x] TimeAwarePolicy: weekend/off-hours budget multipliers (v0.6.0)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events + token-level budget enforcement + input size detection.
+500 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling.
 
 ---
 
@@ -310,7 +312,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-370%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-500%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 

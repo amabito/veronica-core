@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veronica-core"
-version = "0.5.0"
+version = "0.6.0"
 description = "Enforcement hooks for LLM agent runs. Budget limits, concurrency gating, and degradation control."
 readme = "README.md"
 license = "MIT"
