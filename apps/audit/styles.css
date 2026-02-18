@@ -1,0 +1,251 @@
+/* Risk Audit MVP - Styles */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --color-bg:       #0f1117;
+    --color-surface:  #1a1d27;
+    --color-border:   #2c2f3e;
+    --color-text:     #e2e4ed;
+    --color-muted:    #8b8fa8;
+    --color-primary:  #6366f1;
+    --color-low:      #22c55e;
+    --color-med:      #f59e0b;
+    --color-high:     #ef4444;
+    --radius:         8px;
+    --max-width:      680px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+}
+
+/* ── Layout ──────────────────────────────────────────── */
+
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+header p {
+    color: var(--color-muted);
+    margin-top: 0.4rem;
+    font-size: 0.95rem;
+}
+
+.container {
+    width: 100%;
+    max-width: var(--max-width);
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* ── Progress ────────────────────────────────────────── */
+
+.progress {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* ── Question blocks ─────────────────────────────────── */
+
+.question-block {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.question-text {
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.option-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.option-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    border-radius: var(--radius);
+    padding: 0.45rem 0.9rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.option-btn:hover {
+    background: #2a2d3e;
+    border-color: var(--color-primary);
+}
+
+.option-btn.selected {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ── Navigation buttons ──────────────────────────────── */
+
+.nav-buttons {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+}
+
+.nav-btn {
+    padding: 0.6rem 1.4rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+}
+
+.nav-btn:hover {
+    opacity: 0.85;
+}
+
+.nav-btn.primary {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.nav-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+/* ── Score screen ────────────────────────────────────── */
+
+.score-box {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.score-number {
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.rating-badge {
+    display: inline-block;
+    padding: 0.3rem 1rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}
+
+/* Rating color variants */
+.score-box.rating-low {
+    border-color: var(--color-low);
+}
+.score-box.rating-low .score-number {
+    color: var(--color-low);
+}
+.score-box.rating-low .rating-badge {
+    background: var(--color-low);
+    color: #000;
+}
+
+.score-box.rating-med {
+    border-color: var(--color-med);
+}
+.score-box.rating-med .score-number {
+    color: var(--color-med);
+}
+.score-box.rating-med .rating-badge {
+    background: var(--color-med);
+    color: #000;
+}
+
+.score-box.rating-high {
+    border-color: var(--color-high);
+}
+.score-box.rating-high .score-number {
+    color: var(--color-high);
+}
+.score-box.rating-high .rating-badge {
+    background: var(--color-high);
+    color: #fff;
+}
+
+.gap-summary {
+    color: var(--color-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.interpretation {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+}
+
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .option-group {
+        flex-direction: column;
+    }
+
+    .option-btn {
+        width: 100%;
+        text-align: left;
+    }
+
+    .nav-buttons {
+        flex-direction: column-reverse;
+    }
+
+    .nav-btn {
+        width: 100%;
+        text-align: center;
+    }
+}
