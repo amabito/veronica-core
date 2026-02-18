@@ -57,6 +57,18 @@ class SecretGuardConfig:
 
 
 @dataclass
+class BudgetWindowConfig:
+    """Rolling time-window call-count limiter (opt-in).
+
+    Disabled by default -- zero behavioral impact until explicitly enabled.
+    """
+
+    enabled: bool = False
+    max_calls: int = 100
+    window_seconds: float = 60.0
+
+
+@dataclass
 class ShieldConfig:
     """Top-level shield configuration.
 
@@ -69,6 +81,7 @@ class ShieldConfig:
     circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
     egress: EgressConfig = field(default_factory=EgressConfig)
     secret_guard: SecretGuardConfig = field(default_factory=SecretGuardConfig)
+    budget_window: BudgetWindowConfig = field(default_factory=BudgetWindowConfig)
 
     @property
     def is_any_enabled(self) -> bool:
@@ -79,6 +92,7 @@ class ShieldConfig:
             self.circuit_breaker.enabled,
             self.egress.enabled,
             self.secret_guard.enabled,
+            self.budget_window.enabled,
         ])
 
     def to_dict(self) -> dict:
@@ -94,6 +108,7 @@ class ShieldConfig:
             circuit_breaker=CircuitBreakerConfig(**data.get("circuit_breaker", {})),
             egress=EgressConfig(**data.get("egress", {})),
             secret_guard=SecretGuardConfig(**data.get("secret_guard", {})),
+            budget_window=BudgetWindowConfig(**data.get("budget_window", {})),
         )
 
     @classmethod

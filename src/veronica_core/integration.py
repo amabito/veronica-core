@@ -16,6 +16,7 @@ from veronica_core.exit import VeronicaExit
 from veronica_core.backends import PersistenceBackend, JSONBackend
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
+from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
@@ -72,8 +73,19 @@ class VeronicaIntegration:
         # Shield pipeline (created when config present)
         if shield is not None:
             safe_hook = SafeModeHook(enabled=True) if shield.safe_mode.enabled else None
+            # safe_mode takes priority: when enabled it HALTs everything,
+            # so there is no point also running BudgetWindowHook.
+            if safe_hook is not None:
+                pre_dispatch_hook = safe_hook
+            elif shield.budget_window.enabled:
+                pre_dispatch_hook = BudgetWindowHook(
+                    max_calls=shield.budget_window.max_calls,
+                    window_seconds=shield.budget_window.window_seconds,
+                )
+            else:
+                pre_dispatch_hook = None
             self._shield_pipeline: Optional[ShieldPipeline] = ShieldPipeline(
-                pre_dispatch=safe_hook,
+                pre_dispatch=pre_dispatch_hook,
                 retry=safe_hook,
             )
         else:
