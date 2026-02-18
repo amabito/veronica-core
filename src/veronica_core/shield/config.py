@@ -76,6 +76,20 @@ class BudgetWindowConfig:
 
 
 @dataclass
+class InputCompressionConfig:
+    """Input compression gate (opt-in).
+
+    Disabled by default.  When enabled, ``check_input()`` returns DEGRADE
+    when estimated tokens exceed ``compression_threshold_tokens`` and HALT
+    at ``halt_threshold_tokens``.  No actual compression -- skeleton only.
+    """
+
+    enabled: bool = False
+    compression_threshold_tokens: int = 4000
+    halt_threshold_tokens: int = 8000
+
+
+@dataclass
 class TokenBudgetConfig:
     """Token-based budget limiter (opt-in).
 
@@ -105,6 +119,7 @@ class ShieldConfig:
     secret_guard: SecretGuardConfig = field(default_factory=SecretGuardConfig)
     budget_window: BudgetWindowConfig = field(default_factory=BudgetWindowConfig)
     token_budget: TokenBudgetConfig = field(default_factory=TokenBudgetConfig)
+    input_compression: InputCompressionConfig = field(default_factory=InputCompressionConfig)
 
     @property
     def is_any_enabled(self) -> bool:
@@ -117,6 +132,7 @@ class ShieldConfig:
             self.secret_guard.enabled,
             self.budget_window.enabled,
             self.token_budget.enabled,
+            self.input_compression.enabled,
         ])
 
     def to_dict(self) -> dict:
@@ -134,6 +150,7 @@ class ShieldConfig:
             secret_guard=SecretGuardConfig(**data.get("secret_guard", {})),
             budget_window=BudgetWindowConfig(**data.get("budget_window", {})),
             token_budget=TokenBudgetConfig(**data.get("token_budget", {})),
+            input_compression=InputCompressionConfig(**data.get("input_compression", {})),
         )
 
     @classmethod
