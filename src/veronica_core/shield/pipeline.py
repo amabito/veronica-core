@@ -24,7 +24,7 @@ _HOOK_EVENT_TYPES: dict[str, str] = {
     "BudgetWindowHook": "BUDGET_WINDOW_EXCEEDED",
     "TokenBudgetHook": "TOKEN_BUDGET_EXCEEDED",
     "InputCompressionHook": "INPUT_TOO_LARGE",
-    "AdaptiveBudgetHook": "ADAPTIVE_ADJUSTMENT",
+    "AdaptiveBudgetHook": "ADAPTIVE_ADJUSTMENT",  # also ADAPTIVE_COOLDOWN_BLOCKED
     "TimeAwarePolicy": "TIME_POLICY_APPLIED",
     "BudgetBoundaryHook": "BUDGET_EXCEEDED",
     "EgressBoundaryHook": "EGRESS_BLOCKED",

@@ -1,4 +1,4 @@
-"""Tests for AdaptiveBudgetHook (v0.6.0)."""
+"""Tests for AdaptiveBudgetHook (v0.6.0 + v0.7.0 stabilization)."""
 
 from __future__ import annotations
 
@@ -559,3 +559,378 @@ class TestAdjustmentResult:
         )
         with pytest.raises(AttributeError):
             result.action = "loosen"  # type: ignore[misc]
+
+
+# ===========================================================================
+# v0.7.0 Stabilization Tests
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Cooldown window
+# ---------------------------------------------------------------------------
+
+
+class TestCooldown:
+    def test_cooldown_disabled_by_default(self):
+        """Default cooldown_seconds=0 means no cooldown."""
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        assert hook.cooldown_seconds == 0.0
+        # Two rapid adjustments should both succeed
+        r1 = hook.adjust(_now=1000.0)
+        r2 = hook.adjust(_now=1000.1)
+        assert r1.action == "loosen"
+        assert r2.action == "loosen"
+
+    def test_cooldown_blocks_rapid_adjustment(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        # First adjustment succeeds (no prior adjustment)
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "loosen"
+        # Second adjustment within 60s -> blocked
+        r2 = hook.adjust(_now=1030.0)
+        assert r2.action == "cooldown_blocked"
+        assert r2.adjusted_ceiling == r1.adjusted_ceiling
+
+    def test_cooldown_expires(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "loosen"
+        # After cooldown expires
+        r2 = hook.adjust(_now=1061.0)
+        assert r2.action == "loosen"
+
+    def test_cooldown_records_event(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        hook.adjust(CTX, _now=1000.0)
+        hook.adjust(CTX, _now=1030.0)  # blocked
+        events = hook.get_events()
+        # First: ADAPTIVE_ADJUSTMENT (loosen), Second: ADAPTIVE_COOLDOWN_BLOCKED
+        assert len(events) == 2
+        assert events[1].event_type == "ADAPTIVE_COOLDOWN_BLOCKED"
+        assert events[1].decision == Decision.DEGRADE
+        assert events[1].request_id == "test-adaptive"
+
+    def test_cooldown_event_metadata(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        hook.adjust(_now=1000.0)
+        hook.adjust(_now=1030.0)  # blocked
+        ev = hook.get_events()[1]
+        assert ev.metadata["elapsed_seconds"] == 30.0
+        assert ev.metadata["cooldown_seconds"] == 60.0
+        assert ev.metadata["remaining_seconds"] == 30.0
+
+    def test_cooldown_includes_event_counts(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            cooldown_seconds=60.0,
+            tighten_trigger=3,
+        )
+        hook.adjust(_now=1000.0)  # loosen
+        # Feed 3 HALT events
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1010.0)
+        # Blocked by cooldown, but counts should be reported
+        r = hook.adjust(_now=1020.0)
+        assert r.action == "cooldown_blocked"
+        assert r.tighten_events_in_window == 3
+
+    def test_cooldown_not_updated_on_hold(self):
+        """Hold actions don't update the cooldown timestamp."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            cooldown_seconds=60.0,
+            tighten_trigger=3,
+        )
+        # loosen at t=1000 -> sets last_adjustment_ts=1000
+        hook.adjust(_now=1000.0)
+        assert hook.last_adjustment_ts == 1000.0
+
+        # feed 1 HALT + 1 DEGRADE -> hold (doesn't update timestamp)
+        hook.feed_event(_halt_event(), ts=1070.0)
+        hook.feed_event(_degrade_event(), ts=1070.0)
+        r = hook.adjust(_now=1070.0)
+        assert r.action == "hold"
+        assert hook.last_adjustment_ts == 1000.0
+
+    def test_cooldown_reset_clears_timestamp(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, cooldown_seconds=60.0
+        )
+        hook.adjust(_now=1000.0)
+        assert hook.last_adjustment_ts == 1000.0
+        hook.reset()
+        assert hook.last_adjustment_ts is None
+
+
+# ---------------------------------------------------------------------------
+# Adjustment smoothing (max_step_pct)
+# ---------------------------------------------------------------------------
+
+
+class TestSmoothing:
+    def test_default_no_smoothing(self):
+        """Default max_step_pct=1.0 means no per-step cap."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, loosen_pct=0.15
+        )
+        assert hook.max_step_pct == 1.0
+        r = hook.adjust(_now=1000.0)
+        assert r.ceiling_multiplier == 1.15  # full loosen_pct applied
+
+    def test_smoothing_caps_loosen(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, loosen_pct=0.10, max_step_pct=0.05
+        )
+        r = hook.adjust(_now=1000.0)
+        # loosen_pct=0.10 but capped by max_step_pct=0.05
+        assert r.ceiling_multiplier == 1.05
+
+    def test_smoothing_caps_tighten(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            max_step_pct=0.05,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        r = hook.adjust(_now=1000.0)
+        # tighten_pct=0.10 but capped by max_step_pct=0.05
+        assert r.ceiling_multiplier == 0.95
+
+    def test_smoothing_no_effect_when_step_larger(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, loosen_pct=0.03, max_step_pct=0.05
+        )
+        r = hook.adjust(_now=1000.0)
+        # loosen_pct=0.03 < max_step_pct=0.05 -> no cap
+        assert r.ceiling_multiplier == 1.03
+
+    def test_smoothing_gradual_convergence(self):
+        """Multiple capped steps converge gradually."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, loosen_pct=0.10, max_step_pct=0.03
+        )
+        for i in range(5):
+            hook.adjust(_now=1000.0 + i)
+        # 5 steps at +0.03 each = 1.15
+        assert hook.ceiling_multiplier == pytest.approx(1.15, abs=0.001)
+
+
+# ---------------------------------------------------------------------------
+# Hard floor/ceiling (min_multiplier, max_multiplier)
+# ---------------------------------------------------------------------------
+
+
+class TestFloorCeiling:
+    def test_defaults_from_max_adjustment(self):
+        """Without explicit min/max, computed from max_adjustment."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, max_adjustment=0.30
+        )
+        assert hook.min_multiplier == pytest.approx(0.70)
+        assert hook.max_multiplier == pytest.approx(1.30)
+
+    def test_explicit_min_multiplier(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, min_multiplier=0.50
+        )
+        assert hook.min_multiplier == 0.50
+
+    def test_explicit_max_multiplier(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, max_multiplier=1.50
+        )
+        assert hook.max_multiplier == 1.50
+
+    def test_floor_enforced_on_tighten(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=1,
+            tighten_pct=0.50,
+            min_multiplier=0.60,
+            max_multiplier=1.40,
+        )
+        hook.feed_event(_halt_event(), ts=1000.0)
+        r = hook.adjust(_now=1000.0)
+        # Would be 1.0 - 0.50 = 0.50 but clamped to 0.60
+        assert r.ceiling_multiplier == 0.60
+        assert r.adjusted_ceiling == 60
+
+    def test_ceiling_enforced_on_loosen(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            loosen_pct=0.50,
+            min_multiplier=0.60,
+            max_multiplier=1.10,
+        )
+        r = hook.adjust(_now=1000.0)
+        # Would be 1.0 + 0.50 = 1.50 but clamped to 1.10
+        assert r.ceiling_multiplier == 1.10
+        assert r.adjusted_ceiling == 110
+
+    def test_validates_min_positive(self):
+        with pytest.raises(ValueError, match="min_multiplier must be > 0"):
+            AdaptiveBudgetHook(
+                base_ceiling=100, min_multiplier=0.0
+            )
+
+    def test_validates_min_less_than_max(self):
+        with pytest.raises(ValueError, match="min_multiplier.*must be <"):
+            AdaptiveBudgetHook(
+                base_ceiling=100,
+                min_multiplier=1.5,
+                max_multiplier=1.0,
+            )
+
+    def test_validates_min_equal_max(self):
+        with pytest.raises(ValueError, match="min_multiplier.*must be <"):
+            AdaptiveBudgetHook(
+                base_ceiling=100,
+                min_multiplier=1.0,
+                max_multiplier=1.0,
+            )
+
+    def test_wider_floor_than_max_adjustment(self):
+        """Explicit min_multiplier can be wider than max_adjustment implies."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            max_adjustment=0.10,  # would imply min=0.90
+            min_multiplier=0.50,  # but explicit floor is wider
+            tighten_trigger=1,
+            tighten_pct=0.15,
+        )
+        hook.feed_event(_halt_event(), ts=1000.0)
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.ceiling_multiplier == 0.85  # 1.0 - 0.15
+
+        hook.feed_event(_halt_event(), ts=1001.0)
+        r2 = hook.adjust(_now=1001.0)
+        assert r2.ceiling_multiplier == 0.70  # 0.85 - 0.15
+
+        hook.feed_event(_halt_event(), ts=1002.0)
+        r3 = hook.adjust(_now=1002.0)
+        assert r3.ceiling_multiplier == 0.55  # 0.70 - 0.15
+
+        hook.feed_event(_halt_event(), ts=1003.0)
+        r4 = hook.adjust(_now=1003.0)
+        assert r4.ceiling_multiplier == 0.50  # clamped at floor
+
+
+# ---------------------------------------------------------------------------
+# Validation of new params
+# ---------------------------------------------------------------------------
+
+
+class TestNewParamValidation:
+    def test_validates_cooldown_negative(self):
+        with pytest.raises(ValueError, match="cooldown_seconds"):
+            AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=-1.0)
+
+    def test_validates_max_step_pct_zero(self):
+        with pytest.raises(ValueError, match="max_step_pct"):
+            AdaptiveBudgetHook(base_ceiling=100, max_step_pct=0.0)
+
+    def test_validates_max_step_pct_over_one(self):
+        with pytest.raises(ValueError, match="max_step_pct"):
+            AdaptiveBudgetHook(base_ceiling=100, max_step_pct=1.5)
+
+    def test_cooldown_zero_is_valid(self):
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=0.0)
+        assert hook.cooldown_seconds == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Config round-trip (v0.7.0 fields)
+# ---------------------------------------------------------------------------
+
+
+class TestConfigRoundTripV07:
+    def test_config_new_defaults(self):
+        from veronica_core.shield.config import AdaptiveBudgetConfig
+
+        cfg = AdaptiveBudgetConfig()
+        assert cfg.cooldown_minutes == 15.0
+        assert cfg.max_step_pct == 0.05
+        assert cfg.min_multiplier == 0.6
+        assert cfg.max_multiplier == 1.2
+
+    def test_shield_config_round_trip_v07(self):
+        from veronica_core.shield.config import (
+            AdaptiveBudgetConfig,
+            ShieldConfig,
+        )
+
+        cfg = ShieldConfig(
+            adaptive_budget=AdaptiveBudgetConfig(
+                enabled=True,
+                cooldown_minutes=10.0,
+                max_step_pct=0.03,
+                min_multiplier=0.50,
+                max_multiplier=1.50,
+            )
+        )
+        d = cfg.to_dict()
+        restored = ShieldConfig.from_dict(d)
+        assert restored.adaptive_budget.cooldown_minutes == 10.0
+        assert restored.adaptive_budget.max_step_pct == 0.03
+        assert restored.adaptive_budget.min_multiplier == 0.50
+        assert restored.adaptive_budget.max_multiplier == 1.50
+
+
+# ---------------------------------------------------------------------------
+# Combined: cooldown + smoothing + floor/ceiling
+# ---------------------------------------------------------------------------
+
+
+class TestCombinedStabilization:
+    def test_all_features_together(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.10,
+            cooldown_seconds=60.0,
+            max_step_pct=0.05,
+            min_multiplier=0.70,
+            max_multiplier=1.10,
+        )
+        # Feed 3 HALT -> tighten (capped at 0.05)
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "tighten"
+        assert r1.ceiling_multiplier == 0.95  # 1.0 - 0.05 (capped)
+
+        # Immediate retry -> cooldown blocked
+        r2 = hook.adjust(_now=1030.0)
+        assert r2.action == "cooldown_blocked"
+
+        # After cooldown + events expired -> loosen (capped)
+        r3 = hook.adjust(_now=2900.0)
+        assert r3.action == "loosen"
+        assert r3.ceiling_multiplier == 1.0  # 0.95 + 0.05 (capped)
+
+    def test_floor_with_smoothing(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=1,
+            tighten_pct=0.20,
+            max_step_pct=0.05,
+            min_multiplier=0.90,
+        )
+        # Each tighten is capped at 0.05
+        for i in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0 + i)
+            hook.adjust(_now=1000.0 + i)
+        # 1.0 -> 0.95 -> 0.90 (floor hit)
+        assert hook.ceiling_multiplier == pytest.approx(0.90)

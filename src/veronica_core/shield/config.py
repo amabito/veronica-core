@@ -115,6 +115,11 @@ class AdaptiveBudgetConfig:
     When enabled, monitors SafetyEvents and auto-adjusts budget ceiling
     within +/- ``max_adjustment_pct`` of the base value.
 
+    v0.7.0 stabilization:
+      - ``cooldown_minutes``: minimum interval between adjustments
+      - ``max_step_pct``: per-adjustment cap on multiplier change
+      - ``min_multiplier`` / ``max_multiplier``: absolute hard bounds
+
     Rules:
       - >= ``tighten_trigger`` HALT events in window -> ceiling * (1 - tighten_pct)
       - Zero DEGRADE events in window -> ceiling * (1 + loosen_pct)
@@ -126,6 +131,11 @@ class AdaptiveBudgetConfig:
     tighten_pct: float = 0.10
     loosen_pct: float = 0.05
     max_adjustment_pct: float = 0.20
+    # v0.7.0 stabilization
+    cooldown_minutes: float = 15.0
+    max_step_pct: float = 0.05
+    min_multiplier: float = 0.6
+    max_multiplier: float = 1.2
 
 
 @dataclass
