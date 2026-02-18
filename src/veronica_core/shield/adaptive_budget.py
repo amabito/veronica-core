@@ -610,3 +610,123 @@ class AdaptiveBudgetHook:
             self._anomaly_activated_ts = None
             self._event_buffer.clear()
             self._safety_events.clear()
+
+    # -- Deterministic replay ------------------------------------------------
+
+    def export_control_state(
+        self,
+        *,
+        time_multiplier: float = 1.0,
+        _now: float | None = None,
+    ) -> dict:
+        """Export the full control state as a JSON-serializable dict.
+
+        Captures all internal state needed for deterministic replay or
+        observability dashboards.  The optional ``time_multiplier``
+        parameter allows the caller to inject the TimeAwarePolicy
+        multiplier for a complete picture.
+
+        Args:
+            time_multiplier: External time-policy multiplier (default 1.0).
+            _now: Injected timestamp for deterministic testing.
+
+        Returns:
+            A plain dict suitable for ``json.dumps()``.
+        """
+        now = _now if _now is not None else time.time()
+
+        with self._lock:
+            # Compute cooldown status
+            cooldown_active = False
+            cooldown_remaining: float | None = None
+            if (
+                self._cooldown_seconds > 0
+                and self._last_adjustment_ts is not None
+            ):
+                elapsed = now - self._last_adjustment_ts
+                if elapsed < self._cooldown_seconds:
+                    cooldown_active = True
+                    cooldown_remaining = round(
+                        self._cooldown_seconds - elapsed, 1
+                    )
+
+            # Compute direction lock status
+            cutoff = now - self._window_seconds
+            tighten_count = 0
+            degrade_count = 0
+            for ts, event in self._event_buffer:
+                if ts <= cutoff:
+                    continue
+                if (
+                    event.event_type in self._tighten_event_types
+                    and event.decision == Decision.HALT
+                ):
+                    tighten_count += 1
+                if (
+                    event.event_type in self._degrade_event_types
+                    and event.decision == Decision.DEGRADE
+                ):
+                    degrade_count += 1
+
+            direction_lock_active = (
+                self._direction_lock
+                and self._last_action == "tighten"
+                and tighten_count > 0
+            )
+
+            # Compute effective values
+            anomaly_factor = (
+                (1.0 - self._anomaly_tighten_pct)
+                if self._anomaly_active
+                else 1.0
+            )
+            effective_multiplier = (
+                self._ceiling_multiplier * time_multiplier * anomaly_factor
+            )
+            adjusted_ceiling = max(
+                1,
+                round(self._base_ceiling * effective_multiplier),
+            )
+
+            return {
+                "adaptive_multiplier": round(
+                    self._ceiling_multiplier, 4
+                ),
+                "time_multiplier": round(time_multiplier, 4),
+                "anomaly_factor": round(anomaly_factor, 4),
+                "effective_multiplier": round(effective_multiplier, 4),
+                "base_ceiling": self._base_ceiling,
+                "adjusted_ceiling": adjusted_ceiling,
+                "hard_floor": self._min_multiplier,
+                "hard_ceiling": self._max_multiplier,
+                "last_adjustment_ts": self._last_adjustment_ts,
+                "last_action": self._last_action,
+                "cooldown_active": cooldown_active,
+                "cooldown_remaining_seconds": cooldown_remaining,
+                "anomaly_active": self._anomaly_active,
+                "anomaly_activated_ts": self._anomaly_activated_ts,
+                "direction_lock_active": direction_lock_active,
+                "recent_event_counts": {
+                    "tighten": tighten_count,
+                    "degrade": degrade_count,
+                },
+            }
+
+    def import_control_state(self, state: dict) -> None:
+        """Restore control state from a previously exported dict.
+
+        Restores the core multiplier and timing state.  The event buffer
+        is *not* restored -- the caller should replay events separately
+        via ``feed_event()`` if needed.
+
+        Args:
+            state: A dict previously returned by ``export_control_state()``.
+        """
+        with self._lock:
+            self._ceiling_multiplier = float(
+                state["adaptive_multiplier"]
+            )
+            self._last_adjustment_ts = state.get("last_adjustment_ts")
+            self._last_action = state.get("last_action")
+            self._anomaly_active = bool(state.get("anomaly_active", False))
+            self._anomaly_activated_ts = state.get("anomaly_activated_ts")
