@@ -234,6 +234,13 @@ pytest
 
 ---
 
+### v0.4.0 — Execution Shield Foundation
+
+Design and diagrams:
+[docs/v0.4.0-technical-artifacts.md](docs/v0.4.0-technical-artifacts.md)
+
+---
+
 ## License
 
 MIT
