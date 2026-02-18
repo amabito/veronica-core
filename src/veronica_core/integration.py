@@ -20,6 +20,7 @@ from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
+from veronica_core.shield.token_budget import TokenBudgetHook
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,12 @@ class VeronicaIntegration:
             # so there is no point also running BudgetWindowHook.
             if safe_hook is not None:
                 pre_dispatch_hook = safe_hook
+            elif shield.token_budget.enabled:
+                pre_dispatch_hook = TokenBudgetHook(
+                    max_output_tokens=shield.token_budget.max_output_tokens,
+                    max_total_tokens=shield.token_budget.max_total_tokens,
+                    degrade_threshold=shield.token_budget.degrade_threshold,
+                )
             elif shield.budget_window.enabled:
                 pre_dispatch_hook = BudgetWindowHook(
                     max_calls=shield.budget_window.max_calls,
