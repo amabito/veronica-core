@@ -71,7 +71,7 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 
 ---
 
-## Ship Readiness (v0.6.0)
+## Ship Readiness (v0.7.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -81,10 +81,13 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 - [x] InputCompressionHook: real compression with Compressor protocol + safety guarantees (v0.5.1)
 - [x] AdaptiveBudgetHook: auto-adjusts ceiling based on SafetyEvent history (v0.6.0)
 - [x] TimeAwarePolicy: weekend/off-hours budget multipliers (v0.6.0)
+- [x] Adaptive stabilization: cooldown, smoothing, floor/ceiling, direction lock (v0.7.0)
+- [x] Anomaly tightening: spike detection with temporary ceiling reduction (v0.7.0)
+- [x] Deterministic replay: export/import control state for observability (v0.7.0)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-500 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling.
+580 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection.
 
 ---
 
@@ -312,9 +315,28 @@ pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-500%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-580%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+
+---
+
+### v0.7.0 — Adaptive Budget Stabilization
+
+Adaptive budget control with production-grade stabilization.
+[Full engineering doc](docs/adaptive-control.md)
+
+New features:
+- **Cooldown window**: minimum interval between adjustments (prevents oscillation)
+- **Adjustment smoothing**: per-step cap on multiplier change (gradual convergence)
+- **Hard floor/ceiling**: absolute bounds on multiplier
+- **Direction lock**: blocks loosen after tighten until exceeded events clear
+- **Anomaly tightening**: spike detection with temporary ceiling reduction + auto-recovery
+- **Deterministic replay**: export/import control state for observability dashboards
+
+```bash
+python examples/adaptive_demo.py
+```
 
 ---
 
