@@ -2,6 +2,7 @@
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.config import ShieldConfig
 from veronica_core.shield.errors import ShieldBlockedError
+from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.hooks import (
     BudgetBoundaryHook,
     EgressBoundaryHook,
@@ -25,4 +26,5 @@ __all__ = [
     "NoopPreDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
     "SafeModeHook",
     "BudgetWindowHook",
+    "SafetyEvent",
 ]
