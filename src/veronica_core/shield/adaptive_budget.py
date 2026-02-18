@@ -1,7 +1,7 @@
 """AdaptiveBudgetHook for VERONICA Execution Shield.
 
 v0.6.0: Auto-adjusts budget ceiling based on recent SafetyEvent history.
-v0.7.0: Cooldown window, adjustment smoothing, hard floor/ceiling.
+v0.7.0: Cooldown window, adjustment smoothing, hard floor/ceiling, direction lock.
 
 Observes past events in a rolling window and tightens or loosens the
 effective ceiling:
@@ -12,9 +12,11 @@ Stabilization (v0.7.0):
   - Cooldown: minimum interval between adjustments (cooldown_seconds)
   - Smoothing: per-step cap on multiplier change (max_step_pct)
   - Floor/Ceiling: absolute bounds on multiplier (min_multiplier, max_multiplier)
+  - Direction lock: prevents loosen after tighten until exceeded events clear
 
 Records ADAPTIVE_ADJUSTMENT SafetyEvent on each non-hold adjustment.
 Records ADAPTIVE_COOLDOWN_BLOCKED SafetyEvent when cooldown prevents adjustment.
+Records ADAPTIVE_DIRECTION_LOCKED SafetyEvent when direction lock prevents loosen.
 
 Design principles:
   - Decoupled: does NOT wrap a hook; returns adjusted values for caller
@@ -50,7 +52,7 @@ _DEFAULT_DEGRADE_EVENT_TYPES = frozenset({
 class AdjustmentResult:
     """Result of an adaptive adjustment cycle."""
 
-    action: str  # "tighten", "loosen", "hold"
+    action: str  # "tighten", "loosen", "hold", "cooldown_blocked", "direction_locked"
     adjusted_ceiling: int
     ceiling_multiplier: float
     base_ceiling: int
@@ -86,6 +88,7 @@ class AdaptiveBudgetHook:
         max_step_pct: float = 1.0,
         min_multiplier: float | None = None,
         max_multiplier: float | None = None,
+        direction_lock: bool = False,
     ) -> None:
         if base_ceiling <= 0:
             raise ValueError(
@@ -144,9 +147,11 @@ class AdaptiveBudgetHook:
         self._max_step_pct = max_step_pct
         self._min_multiplier = resolved_min
         self._max_multiplier = resolved_max
+        self._direction_lock = direction_lock
 
         self._ceiling_multiplier: float = 1.0
         self._last_adjustment_ts: float | None = None
+        self._last_action: str | None = None
         self._event_buffer: deque[tuple[float, SafetyEvent]] = deque()
         self._safety_events: list[SafetyEvent] = []
         self._lock = threading.Lock()
@@ -186,6 +191,15 @@ class AdaptiveBudgetHook:
     @property
     def max_multiplier(self) -> float:
         return self._max_multiplier
+
+    @property
+    def direction_lock(self) -> bool:
+        return self._direction_lock
+
+    @property
+    def last_action(self) -> str | None:
+        with self._lock:
+            return self._last_action
 
     @property
     def last_adjustment_ts(self) -> float | None:
@@ -313,12 +327,21 @@ class AdaptiveBudgetHook:
                 )
                 action = "tighten"
             elif degrade_count == 0:
-                step = min(self._loosen_pct, self._max_step_pct)
-                self._ceiling_multiplier = min(
-                    self._max_multiplier,
-                    self._ceiling_multiplier + step,
-                )
-                action = "loosen"
+                # Direction lock (v0.7.0): block loosen if last action
+                # was tighten and there are still exceeded events
+                if (
+                    self._direction_lock
+                    and self._last_action == "tighten"
+                    and tighten_count > 0
+                ):
+                    action = "direction_locked"
+                else:
+                    step = min(self._loosen_pct, self._max_step_pct)
+                    self._ceiling_multiplier = min(
+                        self._max_multiplier,
+                        self._ceiling_multiplier + step,
+                    )
+                    action = "loosen"
             else:
                 action = "hold"
 
@@ -335,8 +358,32 @@ class AdaptiveBudgetHook:
                 degrade_events_in_window=degrade_count,
             )
 
-            # Record event and update cooldown timestamp for non-hold
-            if action != "hold":
+            # Record direction_locked event (v0.7.0)
+            if action == "direction_locked":
+                request_id = ctx.request_id if ctx else None
+                self._safety_events.append(
+                    SafetyEvent(
+                        event_type="ADAPTIVE_DIRECTION_LOCKED",
+                        decision=Decision.DEGRADE,
+                        reason=(
+                            f"direction_locked: loosen blocked, "
+                            f"{tighten_count} exceeded events remain"
+                        ),
+                        hook="AdaptiveBudgetHook",
+                        request_id=request_id,
+                        metadata={
+                            "tighten_events": tighten_count,
+                            "degrade_events": degrade_count,
+                            "ceiling_multiplier": round(
+                                self._ceiling_multiplier, 4
+                            ),
+                        },
+                    )
+                )
+
+            # Record adjustment event and update state for tighten/loosen
+            if action in ("tighten", "loosen"):
+                self._last_action = action
                 self._last_adjustment_ts = now
                 request_id = ctx.request_id if ctx else None
                 self._safety_events.append(
@@ -390,5 +437,6 @@ class AdaptiveBudgetHook:
         with self._lock:
             self._ceiling_multiplier = 1.0
             self._last_adjustment_ts = None
+            self._last_action = None
             self._event_buffer.clear()
             self._safety_events.clear()

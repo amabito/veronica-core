@@ -934,3 +934,212 @@ class TestCombinedStabilization:
             hook.adjust(_now=1000.0 + i)
         # 1.0 -> 0.95 -> 0.90 (floor hit)
         assert hook.ceiling_multiplier == pytest.approx(0.90)
+
+
+# ---------------------------------------------------------------------------
+# Direction lock (v0.7.0)
+# ---------------------------------------------------------------------------
+
+
+class TestDirectionLock:
+    def test_disabled_by_default(self):
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        assert hook.direction_lock is False
+
+    def test_enabled_via_param(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, direction_lock=True
+        )
+        assert hook.direction_lock is True
+
+    def test_blocks_loosen_after_tighten(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.05,
+            direction_lock=True,
+        )
+        # Tighten: 2 events at t=900, 1 at t=950
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        r1 = hook.adjust(_now=950.0)
+        assert r1.action == "tighten"
+        assert hook.last_action == "tighten"
+
+        # At t=1001: events at t=900 expired, 1 remains
+        # tighten_count=1 < 3, degrade_count=0 -> would loosen, but locked
+        r2 = hook.adjust(_now=1001.0)
+        assert r2.action == "direction_locked"
+        assert r2.ceiling_multiplier == 0.90  # unchanged
+
+    def test_allows_loosen_when_exceeded_clear(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=60.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.05,
+            direction_lock=True,
+        )
+        # Tighten
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "tighten"
+
+        # After window expires, exceeded events = 0 -> loosen allowed
+        r2 = hook.adjust(_now=1061.0)
+        assert r2.action == "loosen"
+        assert hook.last_action == "loosen"
+
+    def test_no_block_without_direction_lock(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.05,
+            direction_lock=False,
+        )
+        # 2 at t=900, 1 at t=950
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        r1 = hook.adjust(_now=950.0)
+        assert r1.action == "tighten"
+
+        # At t=1001: 1 event remains, tighten_count=1 < 3
+        # Without direction_lock, loosen is allowed
+        r2 = hook.adjust(_now=1001.0)
+        assert r2.action == "loosen"
+
+    def test_records_direction_locked_event(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            direction_lock=True,
+        )
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        hook.adjust(CTX, _now=950.0)  # tighten
+        hook.adjust(CTX, _now=1001.0)  # direction_locked (1 event remains)
+        events = hook.get_events()
+        locked_events = [
+            e for e in events
+            if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
+        ]
+        assert len(locked_events) == 1
+        assert locked_events[0].decision == Decision.DEGRADE
+        assert locked_events[0].request_id == "test-adaptive"
+
+    def test_direction_locked_event_metadata(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            direction_lock=True,
+        )
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        hook.adjust(_now=950.0)  # tighten
+        hook.adjust(_now=1001.0)  # direction_locked (1 remains at t=950)
+        ev = [
+            e for e in hook.get_events()
+            if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
+        ][0]
+        assert ev.metadata["tighten_events"] == 1
+        assert "ceiling_multiplier" in ev.metadata
+
+    def test_direction_lock_does_not_change_multiplier(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            direction_lock=True,
+        )
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=900.0)
+        hook.feed_event(_halt_event(), ts=950.0)
+        hook.adjust(_now=950.0)  # tighten -> 0.90
+        assert hook.ceiling_multiplier == 0.90
+
+        hook.adjust(_now=1001.0)  # direction_locked (1 remains)
+        assert hook.ceiling_multiplier == 0.90  # unchanged
+
+    def test_direction_lock_allows_further_tighten(self):
+        """Direction lock doesn't prevent tighten, only loosen."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            tighten_pct=0.05,
+            direction_lock=True,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1000.0)
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "tighten"
+
+        # Feed more HALT events -> tighten again
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=1001.0)
+        r2 = hook.adjust(_now=1001.0)
+        assert r2.action == "tighten"
+
+    def test_last_action_after_loosen(self):
+        """After loosen, direction lock doesn't block next loosen."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            loosen_pct=0.05,
+            direction_lock=True,
+        )
+        r1 = hook.adjust(_now=1000.0)
+        assert r1.action == "loosen"
+        assert hook.last_action == "loosen"
+
+        r2 = hook.adjust(_now=1001.0)
+        assert r2.action == "loosen"  # no block
+
+    def test_reset_clears_last_action(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100, direction_lock=True
+        )
+        hook.adjust(_now=1000.0)  # loosen
+        assert hook.last_action == "loosen"
+        hook.reset()
+        assert hook.last_action is None
+
+
+# ---------------------------------------------------------------------------
+# Config round-trip (direction_lock)
+# ---------------------------------------------------------------------------
+
+
+class TestConfigDirectionLock:
+    def test_config_default_enabled(self):
+        from veronica_core.shield.config import AdaptiveBudgetConfig
+
+        cfg = AdaptiveBudgetConfig()
+        assert cfg.direction_lock is True
+
+    def test_shield_config_round_trip_direction_lock(self):
+        from veronica_core.shield.config import (
+            AdaptiveBudgetConfig,
+            ShieldConfig,
+        )
+
+        cfg = ShieldConfig(
+            adaptive_budget=AdaptiveBudgetConfig(
+                enabled=True, direction_lock=False
+            )
+        )
+        d = cfg.to_dict()
+        restored = ShieldConfig.from_dict(d)
+        assert restored.adaptive_budget.direction_lock is False
