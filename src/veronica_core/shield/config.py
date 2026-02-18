@@ -109,6 +109,26 @@ class TokenBudgetConfig:
 
 
 @dataclass
+class AdaptiveBudgetConfig:
+    """Adaptive budget auto-adjustment (opt-in).
+
+    When enabled, monitors SafetyEvents and auto-adjusts budget ceiling
+    within +/- ``max_adjustment_pct`` of the base value.
+
+    Rules:
+      - >= ``tighten_trigger`` HALT events in window -> ceiling * (1 - tighten_pct)
+      - Zero DEGRADE events in window -> ceiling * (1 + loosen_pct)
+    """
+
+    enabled: bool = False
+    window_seconds: float = 1800.0
+    tighten_trigger: int = 3
+    tighten_pct: float = 0.10
+    loosen_pct: float = 0.05
+    max_adjustment_pct: float = 0.20
+
+
+@dataclass
 class ShieldConfig:
     """Top-level shield configuration.
 
@@ -124,6 +144,7 @@ class ShieldConfig:
     budget_window: BudgetWindowConfig = field(default_factory=BudgetWindowConfig)
     token_budget: TokenBudgetConfig = field(default_factory=TokenBudgetConfig)
     input_compression: InputCompressionConfig = field(default_factory=InputCompressionConfig)
+    adaptive_budget: AdaptiveBudgetConfig = field(default_factory=AdaptiveBudgetConfig)
 
     @property
     def is_any_enabled(self) -> bool:
@@ -137,6 +158,7 @@ class ShieldConfig:
             self.budget_window.enabled,
             self.token_budget.enabled,
             self.input_compression.enabled,
+            self.adaptive_budget.enabled,
         ])
 
     def to_dict(self) -> dict:
@@ -155,6 +177,7 @@ class ShieldConfig:
             budget_window=BudgetWindowConfig(**data.get("budget_window", {})),
             token_budget=TokenBudgetConfig(**data.get("token_budget", {})),
             input_compression=InputCompressionConfig(**data.get("input_compression", {})),
+            adaptive_budget=AdaptiveBudgetConfig(**data.get("adaptive_budget", {})),
         )
 
     @classmethod
