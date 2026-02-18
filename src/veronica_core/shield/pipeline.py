@@ -22,6 +22,7 @@ from veronica_core.shield.types import Decision, ToolCallContext
 _HOOK_EVENT_TYPES: dict[str, str] = {
     "SafeModeHook": "SAFE_MODE",
     "BudgetWindowHook": "BUDGET_WINDOW_EXCEEDED",
+    "TokenBudgetHook": "TOKEN_BUDGET_EXCEEDED",
     "BudgetBoundaryHook": "BUDGET_EXCEEDED",
     "EgressBoundaryHook": "EGRESS_BLOCKED",
     "RetryBoundaryHook": "RETRY_BLOCKED",
