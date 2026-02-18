@@ -2,10 +2,14 @@
 
 The pipeline calls each hook if present.  A hook returning ``None``
 is treated as ALLOW.  No side effects, no feature logic.
+
+Non-ALLOW decisions are recorded as SafetyEvent entries accessible
+via ``get_events()`` / ``clear_events()``.
 """
 
 from __future__ import annotations
 
+from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.hooks import (
     BudgetBoundaryHook,
     EgressBoundaryHook,
@@ -13,6 +17,21 @@ from veronica_core.shield.hooks import (
     RetryBoundaryHook,
 )
 from veronica_core.shield.types import Decision, ToolCallContext
+
+# Map hook class names to structured event_type strings.
+_HOOK_EVENT_TYPES: dict[str, str] = {
+    "SafeModeHook": "SAFE_MODE",
+    "BudgetWindowHook": "BUDGET_WINDOW_EXCEEDED",
+    "BudgetBoundaryHook": "BUDGET_EXCEEDED",
+    "EgressBoundaryHook": "EGRESS_BLOCKED",
+    "RetryBoundaryHook": "RETRY_BLOCKED",
+}
+
+
+def _event_type_for(hook: object) -> str:
+    """Return the event_type string for a hook instance."""
+    name = type(hook).__name__
+    return _HOOK_EVENT_TYPES.get(name, name.upper())
 
 
 class ShieldPipeline:
@@ -29,12 +48,44 @@ class ShieldPipeline:
         self._egress = egress
         self._retry = retry
         self._budget = budget
+        self.safety_events: list[SafetyEvent] = []
+
+    def _record(
+        self,
+        hook: object,
+        decision: Decision,
+        reason: str,
+        request_id: str | None,
+    ) -> None:
+        event = SafetyEvent(
+            event_type=_event_type_for(hook),
+            decision=decision,
+            reason=reason,
+            hook=type(hook).__name__,
+            request_id=request_id,
+        )
+        self.safety_events.append(event)
+
+    def get_events(self) -> list[SafetyEvent]:
+        """Return accumulated safety events (shallow copy)."""
+        return list(self.safety_events)
+
+    def clear_events(self) -> None:
+        """Clear all accumulated safety events."""
+        self.safety_events.clear()
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision:
         """Evaluate pre-dispatch hook."""
         if self._pre_dispatch is not None:
             result = self._pre_dispatch.before_llm_call(ctx)
             if result is not None:
+                if result != Decision.ALLOW:
+                    self._record(
+                        self._pre_dispatch,
+                        result,
+                        f"before_llm_call returned {result.value}",
+                        ctx.request_id,
+                    )
                 return result
         return Decision.ALLOW
 
@@ -43,6 +94,13 @@ class ShieldPipeline:
         if self._egress is not None:
             result = self._egress.before_egress(ctx, url, method)
             if result is not None:
+                if result != Decision.ALLOW:
+                    self._record(
+                        self._egress,
+                        result,
+                        f"before_egress returned {result.value} for {method} {url}",
+                        ctx.request_id,
+                    )
                 return result
         return Decision.ALLOW
 
@@ -51,6 +109,13 @@ class ShieldPipeline:
         if self._retry is not None:
             result = self._retry.on_error(ctx, err)
             if result is not None:
+                if result != Decision.ALLOW:
+                    self._record(
+                        self._retry,
+                        result,
+                        f"on_error returned {result.value}: {type(err).__name__}",
+                        ctx.request_id,
+                    )
                 return result
         return Decision.ALLOW
 
@@ -59,5 +124,12 @@ class ShieldPipeline:
         if self._budget is not None:
             result = self._budget.before_charge(ctx, cost_usd)
             if result is not None:
+                if result != Decision.ALLOW:
+                    self._record(
+                        self._budget,
+                        result,
+                        f"before_charge returned {result.value} for ${cost_usd:.4f}",
+                        ctx.request_id,
+                    )
                 return result
         return Decision.ALLOW
