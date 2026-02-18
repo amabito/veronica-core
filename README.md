@@ -71,14 +71,40 @@ If the agent spirals, `BudgetExceeded` is raised **before** the call reaches the
 
 ---
 
-## Ship Readiness (v0.4.2)
+## Ship Readiness (v0.4.3)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
 - [x] DEGRADE supported (fallback at threshold, HALT at ceiling)
+- [x] TokenBudgetHook: cumulative output/total token ceiling with DEGRADE zone
+- [x] MinimalResponsePolicy: opt-in conciseness constraints for system messages
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events.
+Minimum production use-case supported: runaway loop/cascade containment via budget ceiling + graceful degrade + auditable events + token-level budget enforcement.
+
+---
+
+## Token Budget + Minimal Response Demo (30 seconds)
+
+```bash
+pip install -e .
+python examples/token_budget_minimal_demo.py
+```
+
+```
+--- TokenBudgetHook demo ---
+  Tokens used:    0 / 100  -> ALLOW
+  Tokens used:   70 / 100  -> ALLOW
+  Tokens used:   80 / 100  -> DEGRADE  (80% threshold reached)
+  Tokens used:   95 / 100  -> DEGRADE
+  Tokens used:  100 / 100  -> HALT     (ceiling reached)
+  SafetyEvent: TOKEN_BUDGET_EXCEEDED / DEGRADE / TokenBudgetHook
+  SafetyEvent: TOKEN_BUDGET_EXCEEDED / HALT   / TokenBudgetHook
+
+--- MinimalResponsePolicy demo ---
+  [disabled] system message unchanged: You are a helpful assistant.
+  [enabled]  system message with constraints injected
+```
 
 ---
 
