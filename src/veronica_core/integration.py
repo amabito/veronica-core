@@ -107,6 +107,7 @@ class VeronicaIntegration:
                     InputCompressionHook(
                         compression_threshold_tokens=shield.input_compression.compression_threshold_tokens,
                         halt_threshold_tokens=shield.input_compression.halt_threshold_tokens,
+                        fallback_to_original=shield.input_compression.fallback_to_original,
                     )
                 )
             else:

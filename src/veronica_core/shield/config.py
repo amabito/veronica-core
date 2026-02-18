@@ -79,14 +79,18 @@ class BudgetWindowConfig:
 class InputCompressionConfig:
     """Input compression gate (opt-in).
 
-    Disabled by default.  When enabled, ``check_input()`` returns DEGRADE
-    when estimated tokens exceed ``compression_threshold_tokens`` and HALT
-    at ``halt_threshold_tokens``.  No actual compression -- skeleton only.
+    Disabled by default.  When enabled, ``compress_if_needed()`` compresses
+    input above ``compression_threshold_tokens`` and HALTs at
+    ``halt_threshold_tokens``.
+
+    ``fallback_to_original``: if True, compression failure returns DEGRADE
+    with original text instead of HALT.
     """
 
     enabled: bool = False
     compression_threshold_tokens: int = 4000
     halt_threshold_tokens: int = 8000
+    fallback_to_original: bool = False
 
 
 @dataclass
