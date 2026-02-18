@@ -10,6 +10,7 @@ from veronica_core.shield.input_compression import (
     InputCompressionHook,
     TemplateCompressor,
 )
+from veronica_core.shield.time_policy import TimeAwarePolicy, TimeResult
 from veronica_core.shield.token_budget import TokenBudgetHook
 from veronica_core.shield.errors import ShieldBlockedError
 from veronica_core.shield.event import SafetyEvent
@@ -42,5 +43,7 @@ __all__ = [
     "TemplateCompressor",
     "AdaptiveBudgetHook",
     "AdjustmentResult",
+    "TimeAwarePolicy",
+    "TimeResult",
     "SafetyEvent",
 ]

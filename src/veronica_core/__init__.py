@@ -71,11 +71,13 @@ from veronica_core.shield.config import (
     TokenBudgetConfig,
     InputCompressionConfig,
     AdaptiveBudgetConfig,
+    TimeAwarePolicyConfig,
 )
 from veronica_core.shield.budget_window import BudgetWindowHook
 from veronica_core.shield.token_budget import TokenBudgetHook
 from veronica_core.shield.input_compression import InputCompressionHook
 from veronica_core.shield.adaptive_budget import AdaptiveBudgetHook, AdjustmentResult
+from veronica_core.shield.time_policy import TimeAwarePolicy, TimeResult
 
 # Runtime Policies (v0.4.3 -- opt-in, all features disabled by default)
 from veronica_core.policies.minimal_response import MinimalResponsePolicy
@@ -134,6 +136,10 @@ __all__ = [
     "AdaptiveBudgetConfig",
     "AdaptiveBudgetHook",
     "AdjustmentResult",
+    # Time-Aware Policy (v0.6.0)
+    "TimeAwarePolicyConfig",
+    "TimeAwarePolicy",
+    "TimeResult",
     # Runtime Policies (v0.4.3)
     "MinimalResponsePolicy",
 ]

@@ -129,6 +129,24 @@ class AdaptiveBudgetConfig:
 
 
 @dataclass
+class TimeAwarePolicyConfig:
+    """Time-aware budget multiplier (opt-in).
+
+    When enabled, reduces budget ceilings during weekends and off-hours.
+    ``weekend_multiplier`` and ``offhour_multiplier`` are applied as
+    fractions of the base ceiling.  Work hours default to 09:00-18:00 UTC.
+    """
+
+    enabled: bool = False
+    weekend_multiplier: float = 0.85
+    offhour_multiplier: float = 0.90
+    work_start_hour: int = 9
+    work_start_minute: int = 0
+    work_end_hour: int = 18
+    work_end_minute: int = 0
+
+
+@dataclass
 class ShieldConfig:
     """Top-level shield configuration.
 
@@ -145,6 +163,7 @@ class ShieldConfig:
     token_budget: TokenBudgetConfig = field(default_factory=TokenBudgetConfig)
     input_compression: InputCompressionConfig = field(default_factory=InputCompressionConfig)
     adaptive_budget: AdaptiveBudgetConfig = field(default_factory=AdaptiveBudgetConfig)
+    time_aware_policy: TimeAwarePolicyConfig = field(default_factory=TimeAwarePolicyConfig)
 
     @property
     def is_any_enabled(self) -> bool:
@@ -159,6 +178,7 @@ class ShieldConfig:
             self.token_budget.enabled,
             self.input_compression.enabled,
             self.adaptive_budget.enabled,
+            self.time_aware_policy.enabled,
         ])
 
     def to_dict(self) -> dict:
@@ -178,6 +198,7 @@ class ShieldConfig:
             token_budget=TokenBudgetConfig(**data.get("token_budget", {})),
             input_compression=InputCompressionConfig(**data.get("input_compression", {})),
             adaptive_budget=AdaptiveBudgetConfig(**data.get("adaptive_budget", {})),
+            time_aware_policy=TimeAwarePolicyConfig(**data.get("time_aware_policy", {})),
         )
 
     @classmethod
