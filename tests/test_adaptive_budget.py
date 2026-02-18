@@ -1143,3 +1143,488 @@ class TestConfigDirectionLock:
         d = cfg.to_dict()
         restored = ShieldConfig.from_dict(d)
         assert restored.adaptive_budget.direction_lock is False
+
+
+# ===========================================================================
+# v0.7.0 Anomaly Tightening Tests
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: basic spike detection
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalySpike:
+    def test_disabled_by_default(self):
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        assert hook.anomaly_enabled is False
+        assert hook.anomaly_active is False
+
+    def test_no_anomaly_when_disabled(self):
+        """With anomaly_enabled=False, spikes are ignored."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=1800.0,
+            tighten_trigger=3,
+            anomaly_enabled=False,
+            anomaly_spike_factor=3.0,
+            anomaly_recent_seconds=300.0,
+        )
+        # All 5 HALT events in recent window (clear spike)
+        for _ in range(5):
+            hook.feed_event(_halt_event(), ts=1700.0)
+        hook.adjust(_now=1700.0)
+        assert hook.anomaly_active is False
+
+    def test_spike_activates_anomaly(self):
+        """Concentrated events in recent window trigger anomaly."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=1800.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=3.0,
+            anomaly_recent_seconds=300.0,
+            anomaly_tighten_pct=0.15,
+        )
+        # Spread 3 events across the full window (avg = 3/6 = 0.5/period)
+        hook.feed_event(_halt_event(), ts=100.0)
+        hook.feed_event(_halt_event(), ts=600.0)
+        hook.feed_event(_halt_event(), ts=1100.0)
+        # Spike: 4 events in last 300s (4 > 3.0 * 1.0 = 3.0)
+        # Total = 7, avg = 7/6 = 1.167, threshold = 3*1.167 = 3.5
+        # 4 > 3.5 -> spike!
+        for _ in range(4):
+            hook.feed_event(_halt_event(), ts=1600.0)
+        r = hook.adjust(_now=1700.0)
+        assert hook.anomaly_active is True
+        # Ceiling reduced by anomaly factor: 100 * 1.0 * 0.85 = 85
+        # (tighten also fires: 7 >= 3)
+        assert r.anomaly_active is True
+
+    def test_spike_reduces_adjusted_ceiling(self):
+        """Anomaly factor reduces the effective ceiling."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+        )
+        # All 3 events in recent window (spike: avg=3/6=0.5, 3>2*0.5=1)
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        r = hook.adjust(_now=550.0)
+        # Tighten: multiplier = 0.90
+        # Anomaly: factor = 0.85
+        # Ceiling: 100 * 0.90 * 0.85 = 76.5 -> 76 (banker's rounding)
+        assert r.action == "tighten"
+        assert r.anomaly_active is True
+        assert r.adjusted_ceiling == 76
+
+    def test_no_spike_below_tighten_trigger(self):
+        """Spike detection requires at least tighten_trigger recent events."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+        )
+        # Only 2 recent events (below trigger of 3)
+        hook.feed_event(_halt_event(), ts=550.0)
+        hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        assert hook.anomaly_active is False
+
+    def test_no_spike_when_evenly_distributed(self):
+        """Evenly distributed events do not trigger spike."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=3.0,
+            anomaly_recent_seconds=100.0,
+        )
+        # 6 events, 1 per 100s period: avg = 6/6 = 1.0
+        # Recent (last 100s): 1 event, 1 < 3 * 1.0 = 3.0
+        for i in range(6):
+            hook.feed_event(_halt_event(), ts=100.0 + i * 100.0)
+        hook.adjust(_now=600.0)
+        assert hook.anomaly_active is False
+
+    def test_spike_not_reactivated_when_already_active(self):
+        """Once active, anomaly doesn't re-trigger on more spikes."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_window_seconds=300.0,
+        )
+        # First spike
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        assert hook.anomaly_active is True
+        first_ts = hook.anomaly_activated_ts
+
+        # More events, still within anomaly window
+        for _ in range(5):
+            hook.feed_event(_halt_event(), ts=600.0)
+        hook.adjust(_now=600.0)
+        # Still active, timestamp unchanged
+        assert hook.anomaly_active is True
+        assert hook.anomaly_activated_ts == first_ts
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: auto-recovery
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalyRecovery:
+    def test_auto_recovery_after_window(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+            anomaly_window_seconds=300.0,
+        )
+        # Activate anomaly
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        assert hook.anomaly_active is True
+        assert hook.adjusted_ceiling < 100  # reduced
+
+        # After anomaly window expires
+        r = hook.adjust(_now=851.0)  # 550 + 300 + 1
+        assert hook.anomaly_active is False
+        assert r.anomaly_active is False
+
+    def test_recovery_records_event(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_window_seconds=300.0,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(CTX, _now=550.0)
+        hook.adjust(CTX, _now=851.0)
+        events = hook.get_events()
+        recovery_events = [
+            e for e in events if e.event_type == "ANOMALY_RECOVERED"
+        ]
+        assert len(recovery_events) == 1
+        assert recovery_events[0].decision == Decision.ALLOW
+        assert recovery_events[0].request_id == "test-adaptive"
+
+    def test_recovery_restores_ceiling(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.05,
+            anomaly_enabled=True,
+            anomaly_spike_factor=1.5,
+            anomaly_recent_seconds=50.0,
+            anomaly_tighten_pct=0.15,
+            anomaly_window_seconds=200.0,
+        )
+        # Activate anomaly with tighten
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=900.0)
+        r1 = hook.adjust(_now=900.0)
+        assert r1.anomaly_active is True
+        assert r1.ceiling_multiplier == 0.90
+        # 100 * 0.90 * 0.85 = 76.5 -> 76
+        assert r1.adjusted_ceiling == 76
+
+        # At t=1101: events expired (900+100=1000), anomaly recovered (900+200=1100)
+        # Empty window -> loosen: 0.90 + 0.05 = 0.95
+        r2 = hook.adjust(_now=1101.0)
+        assert r2.anomaly_active is False
+        assert r2.action == "loosen"
+        # 100 * 0.95 * 1.0 = 95 (anomaly factor removed)
+        assert hook.adjusted_ceiling == 95
+
+    def test_can_reactivate_after_recovery(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_window_seconds=200.0,
+        )
+        # First activation
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=500.0)
+        hook.adjust(_now=500.0)
+        assert hook.anomaly_active is True
+
+        # Recovery
+        hook.adjust(_now=701.0)
+        assert hook.anomaly_active is False
+
+        # Second spike -> re-activate
+        for _ in range(4):
+            hook.feed_event(_halt_event(), ts=750.0)
+        hook.adjust(_now=750.0)
+        assert hook.anomaly_active is True
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: events and metadata
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalyEvents:
+    def test_activation_records_event(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(CTX, _now=550.0)
+        events = hook.get_events()
+        anomaly_events = [
+            e for e in events
+            if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
+        ]
+        assert len(anomaly_events) == 1
+        assert anomaly_events[0].decision == Decision.DEGRADE
+        assert anomaly_events[0].request_id == "test-adaptive"
+
+    def test_activation_event_metadata(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        ev = [
+            e for e in hook.get_events()
+            if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
+        ][0]
+        assert ev.metadata["recent_tighten_count"] == 3
+        assert ev.metadata["spike_factor"] == 2.0
+        assert ev.metadata["anomaly_tighten_pct"] == 0.15
+        assert "avg_per_period" in ev.metadata
+
+    def test_recovery_event_metadata(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_window_seconds=300.0,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        hook.adjust(_now=851.0)
+        ev = [
+            e for e in hook.get_events()
+            if e.event_type == "ANOMALY_RECOVERED"
+        ][0]
+        assert ev.metadata["anomaly_window_seconds"] == 300.0
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: interaction with other features
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalyInteraction:
+    def test_anomaly_with_cooldown(self):
+        """Anomaly detection works during cooldown check."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            cooldown_seconds=60.0,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+            anomaly_tighten_pct=0.15,
+        )
+        # First adjust to set cooldown
+        hook.adjust(_now=500.0)  # loosen
+
+        # Spike events while in cooldown
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=520.0)
+
+        # Cooldown blocked, but anomaly should still activate
+        r = hook.adjust(_now=520.0)
+        assert r.action == "cooldown_blocked"
+        assert hook.anomaly_active is True
+        # Cooldown ceiling should include anomaly factor
+        assert r.anomaly_active is True
+
+    def test_anomaly_orthogonal_to_multiplier(self):
+        """Anomaly factor is independent of ceiling_multiplier."""
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=100.0,
+            tighten_trigger=3,
+            tighten_pct=0.10,
+            loosen_pct=0.05,
+            anomaly_enabled=True,
+            anomaly_spike_factor=1.5,
+            anomaly_recent_seconds=50.0,
+            anomaly_tighten_pct=0.15,
+            anomaly_window_seconds=150.0,
+        )
+        # Activate anomaly
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=900.0)
+        r = hook.adjust(_now=900.0)
+        assert r.ceiling_multiplier == 0.90  # normal tighten
+        assert r.anomaly_active is True
+        # 100 * 0.90 * 0.85 = 76.5 -> 76 (banker's rounding)
+        assert r.adjusted_ceiling == 76
+
+        # At t=1051: events expired (900+100=1000), anomaly recovered (900+150=1050)
+        # loosen: 0.90 + 0.05 = 0.95
+        r2 = hook.adjust(_now=1051.0)
+        assert r2.anomaly_active is False
+        assert r2.ceiling_multiplier == 0.95
+        assert hook.adjusted_ceiling == 95  # 100 * 0.95 * 1.0
+
+    def test_anomaly_result_flag_without_anomaly(self):
+        """anomaly_active=False when feature not enabled."""
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        r = hook.adjust(_now=1000.0)
+        assert r.anomaly_active is False
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: reset
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalyReset:
+    def test_reset_clears_anomaly_state(self):
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            window_seconds=600.0,
+            tighten_trigger=3,
+            anomaly_enabled=True,
+            anomaly_spike_factor=2.0,
+            anomaly_recent_seconds=100.0,
+        )
+        for _ in range(3):
+            hook.feed_event(_halt_event(), ts=550.0)
+        hook.adjust(_now=550.0)
+        assert hook.anomaly_active is True
+
+        hook.reset()
+        assert hook.anomaly_active is False
+        assert hook.anomaly_activated_ts is None
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: validation
+# ---------------------------------------------------------------------------
+
+
+class TestAnomalyValidation:
+    def test_validates_spike_factor_positive(self):
+        with pytest.raises(ValueError, match="anomaly_spike_factor"):
+            AdaptiveBudgetHook(
+                base_ceiling=100, anomaly_spike_factor=0.0
+            )
+
+    def test_validates_tighten_pct_range(self):
+        with pytest.raises(ValueError, match="anomaly_tighten_pct"):
+            AdaptiveBudgetHook(
+                base_ceiling=100, anomaly_tighten_pct=0.0
+            )
+
+    def test_validates_window_seconds_positive(self):
+        with pytest.raises(ValueError, match="anomaly_window_seconds"):
+            AdaptiveBudgetHook(
+                base_ceiling=100, anomaly_window_seconds=0.0
+            )
+
+    def test_validates_recent_seconds_positive(self):
+        with pytest.raises(ValueError, match="anomaly_recent_seconds"):
+            AdaptiveBudgetHook(
+                base_ceiling=100, anomaly_recent_seconds=-1.0
+            )
+
+
+# ---------------------------------------------------------------------------
+# Anomaly: config round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestConfigAnomalyRoundTrip:
+    def test_config_anomaly_defaults(self):
+        from veronica_core.shield.config import AdaptiveBudgetConfig
+
+        cfg = AdaptiveBudgetConfig()
+        assert cfg.anomaly_enabled is False
+        assert cfg.anomaly_spike_factor == 3.0
+        assert cfg.anomaly_tighten_pct == 0.15
+        assert cfg.anomaly_window_minutes == 10.0
+        assert cfg.anomaly_recent_minutes == 5.0
+
+    def test_shield_config_round_trip_anomaly(self):
+        from veronica_core.shield.config import (
+            AdaptiveBudgetConfig,
+            ShieldConfig,
+        )
+
+        cfg = ShieldConfig(
+            adaptive_budget=AdaptiveBudgetConfig(
+                enabled=True,
+                anomaly_enabled=True,
+                anomaly_spike_factor=4.0,
+                anomaly_tighten_pct=0.20,
+                anomaly_window_minutes=15.0,
+                anomaly_recent_minutes=3.0,
+            )
+        )
+        d = cfg.to_dict()
+        restored = ShieldConfig.from_dict(d)
+        assert restored.adaptive_budget.anomaly_enabled is True
+        assert restored.adaptive_budget.anomaly_spike_factor == 4.0
+        assert restored.adaptive_budget.anomaly_tighten_pct == 0.20
+        assert restored.adaptive_budget.anomaly_window_minutes == 15.0
+        assert restored.adaptive_budget.anomaly_recent_minutes == 3.0
