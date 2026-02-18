@@ -76,6 +76,21 @@ class BudgetWindowConfig:
 
 
 @dataclass
+class TokenBudgetConfig:
+    """Token-based budget limiter (opt-in).
+
+    Disabled by default. When enabled, enforces cumulative token limits
+    with optional DEGRADE zone at degrade_threshold.
+    Set max_total_tokens=0 to track output tokens only.
+    """
+
+    enabled: bool = False
+    max_output_tokens: int = 100_000
+    max_total_tokens: int = 0  # 0 = output-only tracking
+    degrade_threshold: float = 0.8
+
+
+@dataclass
 class ShieldConfig:
     """Top-level shield configuration.
 
@@ -89,6 +104,7 @@ class ShieldConfig:
     egress: EgressConfig = field(default_factory=EgressConfig)
     secret_guard: SecretGuardConfig = field(default_factory=SecretGuardConfig)
     budget_window: BudgetWindowConfig = field(default_factory=BudgetWindowConfig)
+    token_budget: TokenBudgetConfig = field(default_factory=TokenBudgetConfig)
 
     @property
     def is_any_enabled(self) -> bool:
@@ -100,6 +116,7 @@ class ShieldConfig:
             self.egress.enabled,
             self.secret_guard.enabled,
             self.budget_window.enabled,
+            self.token_budget.enabled,
         ])
 
     def to_dict(self) -> dict:
@@ -116,6 +133,7 @@ class ShieldConfig:
             egress=EgressConfig(**data.get("egress", {})),
             secret_guard=SecretGuardConfig(**data.get("secret_guard", {})),
             budget_window=BudgetWindowConfig(**data.get("budget_window", {})),
+            token_budget=TokenBudgetConfig(**data.get("token_budget", {})),
         )
 
     @classmethod
