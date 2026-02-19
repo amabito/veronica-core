@@ -1,8 +1,14 @@
 # VERONICA
 
-## VERONICA is a Runtime Containment Layer for LLM Systems.
+## VERONICA is the Execution OS for LLM Systems.
 
-*Turning unbounded model behavior into bounded system behavior.*
+Modern LLM stacks are incomplete.
+
+Prompting.
+Orchestration.
+Observability.
+
+They lack runtime containment.
 
 ```bash
 pip install veronica-core
