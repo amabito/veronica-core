@@ -56,7 +56,12 @@ def print_graph_summary(ctx: ExecutionContext) -> None:
     tool = g.get("total_tool_calls", 0)
     retries = g.get("total_retries", 0)
     depth = g.get("max_depth", 0)
-    print(f"  Graph: cost=${cost:.4f}, llm={llm}, tool={tool}, retries={retries}, depth={depth}")
+    llm_per_root = g.get("llm_calls_per_root", 0.0)
+    tool_per_root = g.get("tool_calls_per_root", 0.0)
+    print(
+        f"  Graph: cost=${cost:.4f}, llm={llm}, tool={tool}, retries={retries},"
+        f" depth={depth}, llm/root={llm_per_root:.1f}, tool/root={tool_per_root:.1f}"
+    )
 
 
 def print_graph_nodes(ctx: ExecutionContext) -> None:

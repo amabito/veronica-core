@@ -304,6 +304,11 @@ class ExecutionGraph:
         Can be called even before mark_running (status transitions directly
         from "created" to "fail"). Idempotent on already-terminal nodes.
 
+        A failed call still represents an attempted (and dispatched) operation,
+        so llm/tool counters are incremented exactly as they are for success.
+        This preserves the amplification semantics: a failed LLM call still
+        consumed a call slot and should be reflected in llm_calls_per_root.
+
         Args:
             node_id: Identifier of the node to update.
             error_class: Exception class name or error category (e.g.,
@@ -322,6 +327,10 @@ class ExecutionGraph:
             node.error_class = error_class
             node.stop_reason = stop_reason
             self._total_retries += node.retries_used
+            if node.kind == "llm":
+                self._total_llm_calls += 1
+            elif node.kind == "tool":
+                self._total_tool_calls += 1
 
     def mark_halt(
         self,
@@ -333,6 +342,12 @@ class ExecutionGraph:
         Use "halt" to indicate a policy decision stopped this node (e.g.,
         cost ceiling exceeded, circuit breaker open) rather than an error.
         Can be called before mark_running. Idempotent on terminal nodes.
+
+        A halted call represents attempted amplification: the policy fired
+        because the call was about to be (or was being) dispatched. Both
+        llm/tool counters are incremented so that llm_calls_per_root and
+        tool_calls_per_root accurately reflect the containment pressure that
+        caused the halt.
 
         Args:
             node_id: Identifier of the node to update.
@@ -349,6 +364,10 @@ class ExecutionGraph:
             node.end_ts_ms = _now_ms()
             node.stop_reason = stop_reason
             self._total_retries += node.retries_used
+            if node.kind == "llm":
+                self._total_llm_calls += 1
+            elif node.kind == "tool":
+                self._total_tool_calls += 1
 
     def increment_retries(self, node_id: str) -> None:
         """Increment the retry counter for *node_id* by one.
@@ -375,8 +394,20 @@ class ExecutionGraph:
         - "root_id": str or None
         - "nodes": dict mapping node_id to a dict of all node fields
         - "aggregates": dict with total_cost_usd, total_llm_calls,
-          total_tool_calls, total_retries, max_depth
+          total_tool_calls, total_retries, max_depth,
+          llm_calls_per_root, tool_calls_per_root, retries_per_root
         - "snapshot_ts_ms": int (current epoch milliseconds)
+
+        Amplification fields (llm_calls_per_root, tool_calls_per_root,
+        retries_per_root) are computed as total / root_count where
+        root_count is always 1 for a single-chain graph. They are exposed
+        as floats to preserve the division semantics for future multi-root
+        aggregation without a breaking API change.
+
+        Halt and fail nodes count toward llm/tool totals because they
+        represent attempted (dispatched) calls; CREATED nodes do not count
+        because they were never dispatched. The root system node is not
+        counted toward llm or tool totals regardless of its status.
 
         All mutable structures are deep-copied; the caller may store or
         mutate the result without affecting the live graph.
@@ -404,6 +435,9 @@ class ExecutionGraph:
                     "error_class": node.error_class,
                     "metadata": copy.deepcopy(node.metadata),
                 }
+            # root_count is always 1; expressed as a float so the division
+            # remains meaningful if multi-root support is added later.
+            root_count: float = 1.0
             return {
                 "chain_id": self._chain_id,
                 "root_id": self._root_id,
@@ -414,6 +448,9 @@ class ExecutionGraph:
                     "total_tool_calls": self._total_tool_calls,
                     "total_retries": self._total_retries,
                     "max_depth": self._max_depth,
+                    "llm_calls_per_root": self._total_llm_calls / root_count,
+                    "tool_calls_per_root": self._total_tool_calls / root_count,
+                    "retries_per_root": self._total_retries / root_count,
                 },
                 "snapshot_ts_ms": _now_ms(),
             }

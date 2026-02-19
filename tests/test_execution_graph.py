@@ -197,3 +197,111 @@ def test_context_graph_snapshot_exposed():
     assert agg["total_llm_calls"] == 1
     assert agg["total_tool_calls"] == 0
     assert abs(agg["total_cost_usd"] - 0.02) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Test 8: llm_calls_per_root counts llm nodes only
+# ---------------------------------------------------------------------------
+
+
+def test_amplification_llm_calls_per_root():
+    """3 llm nodes -> llm_calls_per_root=3.0, tool_calls_per_root=0.0."""
+    graph = ExecutionGraph(chain_id="test-chain-8")
+    root_id = graph.create_root("chain_root")
+
+    for i in range(3):
+        nid = graph.begin_node(parent_id=root_id, kind="llm", name=f"llm_step_{i}")
+        graph.mark_running(nid)
+        graph.mark_success(nid, cost_usd=0.0)
+
+    snap = graph.snapshot()
+    agg = snap["aggregates"]
+    assert agg["llm_calls_per_root"] == 3.0
+    assert agg["tool_calls_per_root"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test 9: halt nodes count toward llm_calls_per_root
+# ---------------------------------------------------------------------------
+
+
+def test_amplification_halt_nodes_counted():
+    """A halted llm node still counts as llm_calls_per_root == 1.0."""
+    graph = ExecutionGraph(chain_id="test-chain-9")
+    root_id = graph.create_root("chain_root")
+
+    nid = graph.begin_node(parent_id=root_id, kind="llm", name="halted_call")
+    graph.mark_halt(nid, stop_reason="budget_exceeded")
+
+    snap = graph.snapshot()
+    agg = snap["aggregates"]
+    assert agg["llm_calls_per_root"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Test 10: llm and tool nodes counted separately
+# ---------------------------------------------------------------------------
+
+
+def test_amplification_tool_nodes_counted_separately():
+    """2 llm + 3 tool -> llm_calls_per_root=2.0, tool_calls_per_root=3.0."""
+    graph = ExecutionGraph(chain_id="test-chain-10")
+    root_id = graph.create_root("chain_root")
+
+    for i in range(2):
+        nid = graph.begin_node(parent_id=root_id, kind="llm", name=f"llm_{i}")
+        graph.mark_running(nid)
+        graph.mark_success(nid, cost_usd=0.0)
+
+    for i in range(3):
+        nid = graph.begin_node(parent_id=root_id, kind="tool", name=f"tool_{i}")
+        graph.mark_running(nid)
+        graph.mark_success(nid, cost_usd=0.0)
+
+    snap = graph.snapshot()
+    agg = snap["aggregates"]
+    assert agg["llm_calls_per_root"] == 2.0
+    assert agg["tool_calls_per_root"] == 3.0
+
+
+# ---------------------------------------------------------------------------
+# Test 11: retries_per_root reflects total_retries
+# ---------------------------------------------------------------------------
+
+
+def test_amplification_retries_per_root():
+    """increment_retries x3 on one node -> retries_per_root == 3.0 after failure."""
+    graph = ExecutionGraph(chain_id="test-chain-11")
+    root_id = graph.create_root("chain_root")
+
+    nid = graph.begin_node(parent_id=root_id, kind="llm", name="retry_node")
+    graph.mark_running(nid)
+    graph.increment_retries(nid)
+    graph.increment_retries(nid)
+    graph.increment_retries(nid)
+    graph.mark_failure(nid, error_class="RateLimitError")
+
+    snap = graph.snapshot()
+    agg = snap["aggregates"]
+    assert agg["retries_per_root"] == 3.0
+    assert agg["total_retries"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Test 12: ExecutionContext graph_summary includes amplification fields
+# ---------------------------------------------------------------------------
+
+
+def test_context_graph_summary_includes_amplification():
+    """ctx.get_snapshot().graph_summary has llm_calls_per_root and tool_calls_per_root."""
+    config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+    ctx = ExecutionContext(config=config)
+
+    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(operation_name="llm_1"))
+    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(operation_name="llm_2"))
+
+    snap = ctx.get_snapshot()
+    g = snap.graph_summary
+    assert g is not None, "graph_summary must not be None"
+    assert g["llm_calls_per_root"] == 2.0
+    assert g["tool_calls_per_root"] == 0.0
