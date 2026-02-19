@@ -19,12 +19,14 @@ from veronica_core.shield.hooks import (
     EgressBoundaryHook,
     PreDispatchHook,
     RetryBoundaryHook,
+    ToolDispatchHook,
 )
 from veronica_core.shield.noop import (
     NoopBudgetBoundaryHook,
     NoopEgressBoundaryHook,
     NoopPreDispatchHook,
     NoopRetryBoundaryHook,
+    NoopToolDispatchHook,
 )
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
@@ -34,7 +36,9 @@ __all__ = [
     "ShieldConfig", "ShieldPipeline", "ShieldBlockedError",
     "Decision", "ToolCallContext",
     "PreDispatchHook", "EgressBoundaryHook", "RetryBoundaryHook", "BudgetBoundaryHook",
+    "ToolDispatchHook",
     "NoopPreDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
+    "NoopToolDispatchHook",
     "SafeModeHook",
     "BudgetWindowHook",
     "TokenBudgetHook",

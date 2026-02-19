@@ -26,6 +26,15 @@ Usage::
             break
 """
 
+# ---------------------------------------------------------------------------
+# Changelog
+# ---------------------------------------------------------------------------
+# STEP-C (wiring commit):
+#   - CircuitBreaker.check() wired before fn() dispatch (breaker_check stage)
+#   - pipeline.before_charge() wired after cost computed, before accumulation
+#   - kind="tool" routes to pipeline.before_tool_call(); before_charge skipped
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import threading
@@ -43,6 +52,7 @@ from veronica_core.shield.types import Decision, ToolCallContext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from veronica_core.circuit_breaker import CircuitBreaker
     from veronica_core.shield.pipeline import ShieldPipeline
 
 
@@ -229,9 +239,11 @@ class ExecutionContext:
         config: ExecutionConfig,
         pipeline: ShieldPipeline | None = None,
         metadata: ChainMetadata | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         self._config = config
         self._pipeline = pipeline
+        self._circuit_breaker = circuit_breaker
         self._metadata = metadata or ChainMetadata(
             request_id=str(uuid.uuid4()),
             chain_id=str(uuid.uuid4()),
@@ -430,9 +442,10 @@ class ExecutionContext:
         # Pipeline pre-dispatch check.
         if self._pipeline is not None:
             tool_ctx = self._make_tool_ctx(node_id, opts)
-            # TODO: wire to self._pipeline.before_llm_call(tool_ctx) for kind="llm"
-            # TODO: wire to separate tool hook when pipeline supports it for kind="tool"
-            pipeline_decision = self._pipeline.before_llm_call(tool_ctx)
+            if kind == "llm":
+                pipeline_decision = self._pipeline.before_llm_call(tool_ctx)
+            else:
+                pipeline_decision = self._pipeline.before_tool_call(tool_ctx)
             if pipeline_decision != Decision.ALLOW:
                 # Mirror pipeline events into chain-level log.
                 with self._lock:
@@ -445,10 +458,27 @@ class ExecutionContext:
                     self._nodes.append(node)
                 return pipeline_decision
 
-        # Circuit breaker pre-dispatch check.
-        # TODO: wire to CircuitBreaker.check(PolicyContext()) before dispatch
-        # If PolicyDecision.allowed is False, emit SafetyEvent("circuit_open", ...)
-        # and return Decision.HALT.
+        # CircuitBreaker pre-dispatch check.
+        if self._circuit_breaker is not None:
+            from veronica_core.runtime_policy import PolicyContext
+            policy_ctx = PolicyContext(
+                cost_usd=self._cost_usd_accumulated,
+                step_count=self._step_count,
+                chain_id=self._metadata.chain_id,
+                entity_id=self._metadata.user_id or "",
+            )
+            pd = self._circuit_breaker.check(policy_ctx)
+            if not pd.allowed:
+                with self._lock:
+                    self._emit_chain_event(
+                        "circuit_open",
+                        f"circuit breaker denied: {pd.reason}",
+                    )
+                node.status = "halted"
+                node.end_ts = datetime.now(timezone.utc)
+                with self._lock:
+                    self._nodes.append(node)
+                return Decision.HALT
 
         # Dispatch the callable.
         call_start = time.monotonic()
@@ -472,7 +502,8 @@ class ExecutionContext:
             else:
                 error_decision = Decision.RETRY
 
-            # TODO: wire to CircuitBreaker.record_failure() here
+            if self._circuit_breaker is not None:
+                self._circuit_breaker.record_failure()
 
             with self._lock:
                 self._retries_used += 1
@@ -492,13 +523,23 @@ class ExecutionContext:
 
         actual_cost = opts.cost_estimate_hint  # Use hint as proxy until billing is wired.
 
-        # Pipeline budget check (post-call).
-        if self._pipeline is not None and actual_cost > 0.0:
+        # Pipeline budget check (post-call, LLM calls only).
+        if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
             tool_ctx = self._make_tool_ctx(node_id, opts, cost_usd=actual_cost)
-            # TODO: wire to self._pipeline.before_charge(tool_ctx, actual_cost)
-            # If non-ALLOW, record the event and proceed (charge happened; log only).
+            charge_decision = self._pipeline.before_charge(tool_ctx, actual_cost)
+            if charge_decision != Decision.ALLOW:
+                with self._lock:
+                    for ev in self._pipeline.get_events():
+                        if ev not in self._events:
+                            self._events.append(ev)
+                node.status = "halted"
+                node.end_ts = datetime.now(timezone.utc)
+                with self._lock:
+                    self._nodes.append(node)
+                return charge_decision
 
-        # TODO: wire to CircuitBreaker.record_success() here
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.record_success()
 
         with self._lock:
             self._step_count += 1

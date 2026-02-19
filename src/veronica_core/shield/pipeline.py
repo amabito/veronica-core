@@ -15,6 +15,7 @@ from veronica_core.shield.hooks import (
     EgressBoundaryHook,
     PreDispatchHook,
     RetryBoundaryHook,
+    ToolDispatchHook,
 )
 from veronica_core.shield.types import Decision, ToolCallContext
 
@@ -29,6 +30,7 @@ _HOOK_EVENT_TYPES: dict[str, str] = {
     "BudgetBoundaryHook": "BUDGET_EXCEEDED",
     "EgressBoundaryHook": "EGRESS_BLOCKED",
     "RetryBoundaryHook": "RETRY_BLOCKED",
+    "ToolDispatchHook": "TOOL_DISPATCH_BLOCKED",
 }
 
 
@@ -47,11 +49,13 @@ class ShieldPipeline:
         egress: EgressBoundaryHook | None = None,
         retry: RetryBoundaryHook | None = None,
         budget: BudgetBoundaryHook | None = None,
+        tool_dispatch: ToolDispatchHook | None = None,
     ) -> None:
         self._pre_dispatch = pre_dispatch
         self._egress = egress
         self._retry = retry
         self._budget = budget
+        self._tool_dispatch = tool_dispatch
         self.safety_events: list[SafetyEvent] = []
 
     def _record(
@@ -133,6 +137,21 @@ class ShieldPipeline:
                         self._budget,
                         result,
                         f"before_charge returned {result.value} for ${cost_usd:.4f}",
+                        ctx.request_id,
+                    )
+                return result
+        return Decision.ALLOW
+
+    def before_tool_call(self, ctx: ToolCallContext) -> Decision:
+        """Evaluate tool dispatch hook (tool calls only)."""
+        if self._tool_dispatch is not None:
+            result = self._tool_dispatch.before_tool_call(ctx)
+            if result is not None:
+                if result != Decision.ALLOW:
+                    self._record(
+                        self._tool_dispatch,
+                        result,
+                        f"before_tool_call returned {result.value}",
                         ctx.request_id,
                     )
                 return result

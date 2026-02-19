@@ -234,6 +234,49 @@ def scenario_abort() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Scenario 5 - Circuit breaker pre-opened halts execution
+# ---------------------------------------------------------------------------
+
+
+def scenario_circuit_open() -> None:
+    print(SEPARATOR)
+    print("SCENARIO 5 - CHAIN_CIRCUIT_OPEN: circuit breaker pre-opened")
+    print(SEPARATOR)
+
+    from veronica_core.circuit_breaker import CircuitBreaker
+
+    config = ExecutionConfig(
+        max_cost_usd=100.00,
+        max_steps=100,
+        max_retries_total=50,
+        timeout_ms=0,
+    )
+
+    # Pre-open the circuit by recording failures up to threshold.
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=9999.0)
+    breaker.record_failure()  # circuit now OPEN
+    assert breaker.state.value == "OPEN"
+
+    ctx = ExecutionContext(config=config, circuit_breaker=breaker)
+
+    called = []
+    decision = ctx.wrap_llm_call(
+        fn=lambda: called.append("called"),
+        options=WrapOptions(operation_name="should_not_run"),
+    )
+
+    print(f"  decision: {decision}")
+    assert decision == Decision.HALT
+    assert len(called) == 0, "fn() must not be called when circuit is OPEN"
+
+    snap = ctx.get_snapshot()
+    print(f"  events: {[e.event_type for e in snap.events]}")
+    assert any(e.event_type == "CHAIN_CIRCUIT_OPEN" for e in snap.events)
+    print("  [PASS] CHAIN_CIRCUIT_OPEN halted execution before fn() dispatch.")
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -248,6 +291,7 @@ if __name__ == "__main__":
         scenario_agent_loop_step_limit()
         scenario_budget_stop()
         scenario_abort()
+        scenario_circuit_open()
         print("=" * 60)
         print("ALL SCENARIOS PASSED")
     except AssertionError as exc:

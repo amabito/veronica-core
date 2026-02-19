@@ -41,3 +41,10 @@ class NoopBudgetBoundaryHook:
         self, ctx: ToolCallContext, cost_usd: float
     ) -> Decision | None:
         return None
+
+
+class NoopToolDispatchHook:
+    """Tool dispatch hook that always defers."""
+
+    def before_tool_call(self, ctx: ToolCallContext) -> Decision | None:
+        return None
