@@ -317,7 +317,7 @@ See [docs/adaptive-control.md](docs/adaptive-control.md) for the full event refe
 
 ---
 
-## Ship Readiness (v0.7.1)
+## Ship Readiness (v0.9.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -330,10 +330,13 @@ See [docs/adaptive-control.md](docs/adaptive-control.md) for the full event refe
 - [x] Adaptive stabilization: cooldown, smoothing, floor/ceiling, direction lock (v0.7.0)
 - [x] Anomaly tightening: spike detection with temporary ceiling reduction (v0.7.0)
 - [x] Deterministic replay: export/import control state for observability (v0.7.0)
+- [x] ExecutionGraph: first-class runtime execution graph with typed node lifecycle (v0.9.0)
+- [x] Amplification metrics: llm_calls_per_root, tool_calls_per_root, retries_per_root (v0.9.0)
+- [x] Divergence heuristic: repeated-signature detection, warn-only, deduped (v0.9.0)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-590 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection.
+611 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection.
 
 ---
 
