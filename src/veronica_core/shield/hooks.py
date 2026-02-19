@@ -44,3 +44,10 @@ class BudgetBoundaryHook(Protocol):
     def before_charge(
         self, ctx: ToolCallContext, cost_usd: float
     ) -> Decision | None: ...
+
+
+@runtime_checkable
+class ToolDispatchHook(Protocol):
+    """Evaluated before every tool call (non-LLM dispatch)."""
+
+    def before_tool_call(self, ctx: ToolCallContext) -> Decision | None: ...
