@@ -24,7 +24,7 @@
     "day": 4,
     "weekday": "Thursday",
     "diagram": "assets/diagrams/03-observability-vs-enforcement.png",
-    "text": "Detecting vs Preventing.\n\nYour Grafana dashboard shows the spike at 3am.\nAn enforcement layer stops the spike at the first budget breach.\n\nBoth are necessary.\nBut only one prevents the invoice.\n\nDoes your LLM stack have enforcement, or only observability?",
+    "text": "Detecting vs Preventing.\n\nYour Grafana dashboard shows the spike at 3am.\nAn enforcement layer stops the spike at the first budget breach.\n\nBoth are necessary.\nBut only one prevents the invoice.\n\nDoes your LLM stack have enforcement, or only observability?\n\n#LLMOps #AIEngineering",
     "question": "Does your LLM stack have enforcement, or only observability?"
   },
   {
