@@ -47,7 +47,7 @@ class TestPRMode:
 class TestReleaseMode:
     def test_release_mode_with_tag(self) -> None:
         """Release mode accepts --tag argument."""
-        result = _run("--mode=release", "--tag=v0.7.0")
+        result = _run("--mode=release", "--tag=v0.7.1")
         output = result.stdout + result.stderr
         assert "Version Consistency" in output
 

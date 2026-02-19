@@ -152,7 +152,7 @@ See [docs/adaptive-control.md](docs/adaptive-control.md) for the full event refe
 
 ---
 
-## Ship Readiness (v0.7.0)
+## Ship Readiness (v0.7.1)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
