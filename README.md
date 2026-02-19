@@ -419,6 +419,12 @@ DEGRADE support allows model fallback before hard stop.
 
 ---
 
+## Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+---
+
 ## License
 
 MIT
