@@ -1,5 +1,11 @@
 # VERONICA
 
+```bash
+pip install veronica-core
+```
+
+Jump to [Quickstart (5 minutes)](#quickstart-5-minutes) or browse [docs/cookbook.md](docs/cookbook.md).
+
 ## LLM agents don't fail because of prompts. They fail because nothing stops them.
 
 You don't lose money because your model hallucinated.
@@ -149,8 +155,12 @@ See [docs/adaptive-control.md](docs/adaptive-control.md) for the full event refe
 - [examples/token_budget_minimal_demo.py](examples/token_budget_minimal_demo.py) -- token ceiling + minimal response
 - [examples/budget_degrade_demo.py](examples/budget_degrade_demo.py) -- call ceiling + model fallback
 - [examples/input_compression_skeleton_demo.py](examples/input_compression_skeleton_demo.py) -- input compression
+- [CHANGELOG.md](CHANGELOG.md) -- version history
 
 ---
+
+**Learns:** execution control patterns from SafetyEvents (budgets, degrade thresholds, time policy).
+**Never stores:** prompt contents. Evidence uses SHA-256 hashes by default.
 
 ## Ship Readiness (v0.7.1)
 
