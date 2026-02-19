@@ -62,3 +62,11 @@ smoke_test.py
 coverage.xml
 htmlcov/
 veronica-events.jsonl
+
+# Runtime state (machine-local, never commit)
+.post_state.json
+data/
+logs/
+
+# Session archives (J.A.R.V.I.S. intermediate files)
+.archive/
