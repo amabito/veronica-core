@@ -213,7 +213,7 @@ pip install veronica-core
 ### Minimal runtime containment example
 
 ```python
-from veronica_core.containment import ExecutionContext, ExecutionConfig, WrapOptions
+from veronica_core import ExecutionContext, ExecutionConfig, WrapOptions
 
 def simulated_llm_call(prompt: str) -> str:
     return f"response to: {prompt}"
@@ -271,7 +271,7 @@ semantics are deterministic and auditable per node.
 ### Enforce a step ceiling
 
 ```python
-from veronica_core.containment import ExecutionContext, ExecutionConfig, WrapOptions
+from veronica_core import ExecutionContext, ExecutionConfig, WrapOptions
 from veronica_core.shield.types import Decision
 
 config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=20, timeout_ms=0)

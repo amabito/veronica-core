@@ -82,6 +82,18 @@ from veronica_core.shield.time_policy import TimeAwarePolicy, TimeResult
 # Runtime Policies (v0.4.3 -- opt-in, all features disabled by default)
 from veronica_core.policies.minimal_response import MinimalResponsePolicy
 
+# Execution Containment (v0.9.0)
+from veronica_core.containment import (
+    CancellationToken,
+    ChainMetadata,
+    ContextSnapshot,
+    ExecutionConfig,
+    ExecutionContext,
+    ExecutionGraph,
+    NodeRecord,
+    WrapOptions,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -142,4 +154,13 @@ __all__ = [
     "TimeResult",
     # Runtime Policies (v0.4.3)
     "MinimalResponsePolicy",
+    # Execution Containment (v0.9.0)
+    "CancellationToken",
+    "ChainMetadata",
+    "ContextSnapshot",
+    "ExecutionConfig",
+    "ExecutionContext",
+    "ExecutionGraph",
+    "NodeRecord",
+    "WrapOptions",
 ]
