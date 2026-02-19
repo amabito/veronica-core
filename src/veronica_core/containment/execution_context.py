@@ -42,8 +42,9 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Optional
 
+from veronica_core.containment.execution_graph import ExecutionGraph
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision, ToolCallContext
 
@@ -198,6 +199,7 @@ class ContextSnapshot:
     elapsed_ms: float
     nodes: list[NodeRecord]
     events: list[SafetyEvent]
+    graph_summary: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +260,12 @@ class ExecutionContext:
         self._abort_reason: str | None = None
         self._nodes: list[NodeRecord] = []
         self._events: list[SafetyEvent] = []
+
+        # Execution graph for DAG tracking of all nodes.
+        self._graph = ExecutionGraph(chain_id=self._metadata.chain_id)
+        self._root_node_id = self._graph.create_root("chain_root", {})
+        # threading.local() stack for nested parent tracking.
+        self._node_stack = threading.local()
 
         # Timeout bookkeeping
         self._start_time: float = time.monotonic()
@@ -348,10 +356,15 @@ class ExecutionContext:
         after abort().
 
         Returns:
-            ContextSnapshot with copies of all mutable state.
+            ContextSnapshot with copies of all mutable state. The
+            graph_summary field contains aggregate counters from the
+            ExecutionGraph (total_cost_usd, total_llm_calls,
+            total_tool_calls, total_retries, max_depth).
         """
         with self._lock:
             elapsed_ms = (time.monotonic() - self._start_time) * 1000.0
+            graph_snap = self._graph.snapshot()
+            graph_summary = graph_snap["aggregates"]
             return ContextSnapshot(
                 chain_id=self._metadata.chain_id,
                 request_id=self._metadata.request_id,
@@ -363,7 +376,18 @@ class ExecutionContext:
                 elapsed_ms=elapsed_ms,
                 nodes=list(self._nodes),
                 events=list(self._events),
+                graph_summary=graph_summary,
             )
+
+    def get_graph_snapshot(self) -> dict[str, Any]:
+        """Return the full ExecutionGraph snapshot as a JSON-serializable dict.
+
+        Contains all nodes, aggregates, and chain metadata.
+
+        Returns:
+            dict as produced by ExecutionGraph.snapshot().
+        """
+        return self._graph.snapshot()
 
     def abort(self, reason: str) -> None:
         """Cancel all pending work and prevent future wrap calls.
@@ -413,6 +437,22 @@ class ExecutionContext:
             retries_used=0,
         )
 
+        # Determine graph parent using threading.local() stack.
+        stack: list[str] = getattr(self._node_stack, "stack", None)
+        if stack is None:
+            self._node_stack.stack = []
+            stack = self._node_stack.stack
+        graph_parent_id = stack[-1] if stack else self._root_node_id
+
+        # Create graph node and push onto stack.
+        graph_node_id = self._graph.begin_node(
+            parent_id=graph_parent_id,
+            kind=kind,
+            name=opts.operation_name or "unnamed",
+            model=self._metadata.model if kind == "llm" else None,
+        )
+        stack.append(graph_node_id)
+
         # Pre-flight: chain-level limit check.
         halt_reason = self._check_limits()
         if halt_reason is not None:
@@ -420,6 +460,8 @@ class ExecutionContext:
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 self._nodes.append(node)
+            stack.pop()
+            self._graph.mark_halt(graph_node_id, stop_reason=halt_reason)
             return Decision.HALT
 
         # Pre-flight: cost estimate check (before calling fn).
@@ -437,6 +479,8 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 with self._lock:
                     self._nodes.append(node)
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
                 return Decision.HALT
 
         # Pipeline pre-dispatch check.
@@ -456,6 +500,8 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 with self._lock:
                     self._nodes.append(node)
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
                 return pipeline_decision
 
         # CircuitBreaker pre-dispatch check.
@@ -478,9 +524,12 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 with self._lock:
                     self._nodes.append(node)
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="circuit_open")
                 return Decision.HALT
 
         # Dispatch the callable.
+        self._graph.mark_running(graph_node_id)
         call_start = time.monotonic()
         try:
             fn()
@@ -493,6 +542,8 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 with self._lock:
                     self._nodes.append(node)
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="timeout")
                 return Decision.HALT
 
             # Pipeline error hook.
@@ -513,6 +564,8 @@ class ExecutionContext:
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 self._nodes.append(node)
+            stack.pop()
+            self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
 
             if error_decision == Decision.HALT:
                 return Decision.HALT
@@ -536,6 +589,8 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 with self._lock:
                     self._nodes.append(node)
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
                 return charge_decision
 
         if self._circuit_breaker is not None:
@@ -555,6 +610,8 @@ class ExecutionContext:
                     if ev not in self._events:
                         self._events.append(ev)
 
+        stack.pop()
+        self._graph.mark_success(graph_node_id, cost_usd=actual_cost)
         return Decision.ALLOW
 
     def _check_limits(self) -> str | None:

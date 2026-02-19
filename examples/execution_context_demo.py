@@ -47,6 +47,36 @@ def print_snapshot(ctx: ExecutionContext) -> None:
         print(f"  nodes:   {statuses}")
 
 
+def print_graph_summary(ctx: ExecutionContext) -> None:
+    """Print aggregate graph summary after a scenario."""
+    snap = ctx.get_snapshot()
+    g = snap.graph_summary or {}
+    cost = g.get("total_cost_usd", 0.0)
+    llm = g.get("total_llm_calls", 0)
+    tool = g.get("total_tool_calls", 0)
+    retries = g.get("total_retries", 0)
+    depth = g.get("max_depth", 0)
+    print(f"  Graph: cost=${cost:.4f}, llm={llm}, tool={tool}, retries={retries}, depth={depth}")
+
+
+def print_graph_nodes(ctx: ExecutionContext) -> None:
+    """Print full node list from the execution graph."""
+    graph_snap = ctx.get_graph_snapshot()
+    nodes = graph_snap.get("nodes", {})
+    print("  Nodes:")
+    for node in nodes.values():
+        kind = node["kind"]
+        name = node["name"]
+        status = node["status"]
+        cost = node["cost_usd"]
+        stop = node.get("stop_reason")
+        node_id = node["node_id"]
+        if stop:
+            print(f"    {node_id}  {kind:<6}  {name:<25}  {status:<7}  stop={stop}")
+        else:
+            print(f"    {node_id}  {kind:<6}  {name:<25}  {status:<7}  cost=${cost:.4f}")
+
+
 # ---------------------------------------------------------------------------
 # Scenario 1 - Single request chain
 # ---------------------------------------------------------------------------
@@ -87,6 +117,7 @@ def scenario_single_request() -> None:
 
     print("  Final snapshot:")
     print_snapshot(ctx)
+    print_graph_summary(ctx)
     print("  [PASS] Single request completed cleanly.")
     print()
 
@@ -125,6 +156,8 @@ def scenario_agent_loop_step_limit() -> None:
     print(f"\n  Loop halted at iteration {halt_at_step} (step_count={snap.step_count})")
     print("  Final snapshot:")
     print_snapshot(ctx)
+    print_graph_summary(ctx)
+    print_graph_nodes(ctx)
     assert snap.step_count == 5, f"Expected 5 steps, got {snap.step_count}"
     assert halt_at_step == 5, f"Expected halt at loop index 5, got {halt_at_step}"
     print("  [PASS] Step limit enforced at step 5.")
@@ -172,6 +205,8 @@ def scenario_budget_stop() -> None:
     print(f"\n  Calls completed: {call_count}, accumulated: ${snap.cost_usd_accumulated:.4f}")
     print("  Final snapshot:")
     print_snapshot(ctx)
+    print_graph_summary(ctx)
+    print_graph_nodes(ctx)
     assert call_count == 2, f"Expected 2 successful calls, got {call_count}"
     print("  [PASS] Budget ceiling enforced on 3rd call.")
     print()
@@ -227,6 +262,8 @@ def scenario_abort() -> None:
     print(f"\n  aborted={snap.aborted}, reason={snap.abort_reason!r}")
     print("  Final snapshot:")
     print_snapshot(ctx)
+    print_graph_summary(ctx)
+    print_graph_nodes(ctx)
     assert snap.aborted is True
     assert snap.abort_reason == "user cancelled"
     print("  [PASS] abort() blocked all subsequent calls.")
@@ -272,6 +309,8 @@ def scenario_circuit_open() -> None:
     snap = ctx.get_snapshot()
     print(f"  events: {[e.event_type for e in snap.events]}")
     assert any(e.event_type == "CHAIN_CIRCUIT_OPEN" for e in snap.events)
+    print_graph_summary(ctx)
+    print_graph_nodes(ctx)
     print("  [PASS] CHAIN_CIRCUIT_OPEN halted execution before fn() dispatch.")
     print()
 

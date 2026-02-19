@@ -8,6 +8,7 @@ Public surface exported from this package:
 - ContextSnapshot: immutable snapshot of chain state at a point in time
 - NodeRecord: record of a single LLM or tool call within the chain
 - CancellationToken: simple threading.Event wrapper for cooperative cancellation
+- ExecutionGraph: directed acyclic graph tracking every node in one agent chain
 """
 
 from veronica_core.containment.execution_context import (
@@ -19,6 +20,7 @@ from veronica_core.containment.execution_context import (
     NodeRecord,
     WrapOptions,
 )
+from veronica_core.containment.execution_graph import ExecutionGraph
 
 __all__ = [
     "CancellationToken",
@@ -26,6 +28,7 @@ __all__ = [
     "ContextSnapshot",
     "ExecutionConfig",
     "ExecutionContext",
+    "ExecutionGraph",
     "NodeRecord",
     "WrapOptions",
 ]
