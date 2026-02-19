@@ -89,12 +89,15 @@ def check_version_consistency(result: CheckResult, tag: str | None) -> None:
 
     if tag is not None:
         tag_ver = tag.lstrip("v")
-        if tag_ver != pyproject_ver:
+        # For pre-release tags (v0.7.0-rc.1), compare base version only
+        base_tag_ver = re.split(r"-(?:rc|alpha|beta)", tag_ver)[0]
+        if base_tag_ver != pyproject_ver:
             result.fail(
-                f"Git tag ({tag_ver}) != pyproject.toml ({pyproject_ver})"
+                f"Git tag ({tag_ver}, base={base_tag_ver}) "
+                f"!= pyproject.toml ({pyproject_ver})"
             )
         else:
-            result.ok(f"Git tag: {tag_ver}")
+            result.ok(f"Git tag: {tag_ver} (base={base_tag_ver})")
 
 
 def check_readme_freshness(result: CheckResult) -> None:

@@ -35,9 +35,11 @@ jobs:
         run: |
           pip install dist/veronica_core-*.whl
           INSTALLED=$(python -c "import veronica_core; print(veronica_core.__version__)")
-          EXPECTED="${{ github.event.release.tag_name }}"
-          EXPECTED="${EXPECTED#v}"
-          echo "Installed: $INSTALLED, Expected: $EXPECTED"
+          TAG="${{ github.event.release.tag_name }}"
+          TAG="${TAG#v}"
+          # Strip pre-release suffix: 0.7.0-rc.1 -> 0.7.0
+          EXPECTED=$(python -c "import re; print(re.split(r'-(?:rc|alpha|beta)', '$TAG')[0])")
+          echo "Installed: $INSTALLED, Expected: $EXPECTED (tag: $TAG)"
           if [ "$INSTALLED" != "$EXPECTED" ]; then
             echo "::error::Version mismatch: installed=$INSTALLED expected=$EXPECTED"
             exit 1
