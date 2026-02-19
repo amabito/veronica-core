@@ -299,8 +299,10 @@ with ExecutionContext(config=config) as ctx:
 - [docs/execution-graph.md](docs/execution-graph.md) -- execution graph model and invariants
 - [docs/amplification-factor.md](docs/amplification-factor.md) -- amplification metrics
 - [docs/divergence-heuristics.md](docs/divergence-heuristics.md) -- divergence detection
+- [docs/adaptive-control.md](docs/adaptive-control.md) -- full engineering doc for adaptive ceiling control (v0.7.0)
 - [docs/cookbook.md](docs/cookbook.md) -- copy-paste recipes for common patterns
 - [examples/execution_context_demo.py](examples/execution_context_demo.py) -- runnable scenarios (step limit, budget, abort, circuit, divergence)
+- [examples/adaptive_demo.py](examples/adaptive_demo.py) -- adaptive ceiling demo (cooldown, direction lock, anomaly, replay)
 - [CHANGELOG.md](CHANGELOG.md) -- version history
 
 ---
