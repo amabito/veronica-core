@@ -46,14 +46,14 @@ jobs:
           fi
 
       - name: Publish to PyPI
-        if: ${{ !contains(github.event.release.tag_name, 'rc') && !contains(github.event.release.tag_name, 'alpha') && !contains(github.event.release.tag_name, 'beta') }}
+        if: false  # temporarily disabled for rc pipeline verification
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
 
       - name: Publish to TestPyPI (release candidates)
-        if: ${{ contains(github.event.release.tag_name, 'rc') || contains(github.event.release.tag_name, 'alpha') || contains(github.event.release.tag_name, 'beta') }}
+        if: false  # temporarily disabled for rc pipeline verification
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
