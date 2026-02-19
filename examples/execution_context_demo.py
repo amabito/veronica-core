@@ -321,6 +321,76 @@ def scenario_circuit_open() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Scenario 6 - Divergence detection (tool called 3+ times consecutively)
+# ---------------------------------------------------------------------------
+
+
+def scenario_divergence_detection() -> None:
+    print(SEPARATOR)
+    print("SCENARIO 6 - Divergence detection: tool called 4 times consecutively")
+    print(SEPARATOR)
+
+    config = ExecutionConfig(
+        max_cost_usd=100.00,
+        max_steps=100,
+        max_retries_total=50,
+        timeout_ms=0,
+    )
+
+    ctx = ExecutionContext(config=config)
+
+    # Fire the same tool call 4 times in a row.
+    # Tool threshold is 3, so the divergence_suspected event is emitted
+    # on the 3rd call (consecutive == 3 >= threshold 3) and NOT again
+    # for the 4th call (deduplication).
+    decisions = []
+    for i in range(4):
+        d = ctx.wrap_tool_call(
+            fn=lambda: None,
+            options=WrapOptions(operation_name="call_api"),
+        )
+        decisions.append(d)
+        print(f"  tool call {i + 1}: {d}")
+
+    snap = ctx.get_snapshot()
+    divergence_events = [
+        e for e in snap.events if e.event_type == "divergence_suspected"
+    ]
+
+    print(f"\n  Total events: {len(snap.events)}")
+    print(f"  divergence_suspected count: {len(divergence_events)}")
+    for ev in divergence_events:
+        sig = ev.metadata.get("signature", [])
+        repeat = ev.metadata.get("repeat_count", 0)
+        print(f"    -> signature={sig}, repeat_count={repeat}, decision={ev.decision}")
+
+    print_graph_summary(ctx)
+    print_graph_nodes(ctx)
+
+    # All wrap_tool_call decisions must be ALLOW (divergence is advisory only).
+    assert all(d == Decision.ALLOW for d in decisions), (
+        f"All decisions must be ALLOW, got {decisions}"
+    )
+    # Exactly one divergence_suspected event per (kind, name) signature.
+    assert len(divergence_events) == 1, (
+        f"Expected exactly 1 divergence_suspected event, got {len(divergence_events)}"
+    )
+    ev = divergence_events[0]
+    assert ev.metadata["signature"] == ["tool", "call_api"], (
+        f"Expected signature ['tool','call_api'], got {ev.metadata['signature']}"
+    )
+    assert ev.metadata["repeat_count"] == 3, (
+        f"Expected repeat_count=3, got {ev.metadata['repeat_count']}"
+    )
+    graph_snap = ctx.get_graph_snapshot()
+    assert graph_snap["aggregates"]["divergence_emitted_count"] == 1, (
+        "divergence_emitted_count must be 1 after one unique signature fires"
+    )
+    print("  [PASS] Divergence detected without halting execution.")
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -336,6 +406,7 @@ if __name__ == "__main__":
         scenario_budget_stop()
         scenario_abort()
         scenario_circuit_open()
+        scenario_divergence_detection()
         print("=" * 60)
         print("ALL SCENARIOS PASSED")
     except AssertionError as exc:

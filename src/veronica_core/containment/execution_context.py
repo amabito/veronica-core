@@ -530,6 +530,31 @@ class ExecutionContext:
 
         # Dispatch the callable.
         self._graph.mark_running(graph_node_id)
+
+        # Drain any divergence events produced by mark_running and forward
+        # them to the chain-level event log.  Divergence does NOT halt
+        # execution; the Decision remains ALLOW unless another condition fires.
+        for div_evt in self._graph.drain_divergence_events():
+            safe_evt = SafetyEvent(
+                event_type="divergence_suspected",
+                decision=Decision.ALLOW,
+                reason=(
+                    f"repeated {div_evt['signature'][0]}/{div_evt['signature'][1]}"
+                    f" x{div_evt['repeat_count']}"
+                ),
+                hook="ExecutionGraph",
+                request_id=self._metadata.request_id,
+                metadata={
+                    "signature": div_evt["signature"],
+                    "repeat_count": div_evt["repeat_count"],
+                    "chain_id": div_evt["chain_id"],
+                    "last_node_id": graph_node_id,
+                },
+            )
+            with self._lock:
+                if safe_evt not in self._events:
+                    self._events.append(safe_evt)
+
         call_start = time.monotonic()
         try:
             fn()

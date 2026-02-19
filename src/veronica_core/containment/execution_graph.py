@@ -43,7 +43,15 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 
-__all__ = ["ExecutionGraph", "Node"]
+__all__ = ["ExecutionGraph", "Node", "NodeSignature"]
+
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
+# NodeSignature identifies an operation kind by its (kind, name) pair.
+# Used by the divergence-detection heuristic to track repeated patterns.
+NodeSignature = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +132,27 @@ class ExecutionGraph:
         self._total_tool_calls: int = 0
         self._total_retries: int = 0
         self._max_depth: int = 0
+
+        # Divergence detection state.
+        # _sig_window: ring buffer of the last _K node signatures seen in
+        # mark_running order.  Oldest entry is popped from the front when the
+        # window exceeds _K entries.
+        self._sig_window: list[NodeSignature] = []
+        self._K: int = 8
+        # Consecutive-repeat thresholds per kind.  "system" is set to 999 so
+        # that chain-management nodes never trigger the heuristic.
+        self._diverge_thresholds: dict[str, int] = {
+            "tool": 3,
+            "llm": 5,
+            "system": 999,
+        }
+        # Deduplication: once a divergence_suspected event has been emitted for
+        # a given (kind, name) signature within this chain, it is not emitted
+        # again.  Prevents event spam in long loops.
+        self._emitted_divergences: set[NodeSignature] = set()
+        # Buffer of pending divergence event dicts.  Drained by
+        # drain_divergence_events().
+        self._pending_divergence_events: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -244,6 +273,12 @@ class ExecutionGraph:
         no-op. Calling it on a terminal node is also a no-op (the node has
         already completed; no rollback occurs).
 
+        Divergence detection: each call to mark_running (whether or not the
+        status actually changes) records the node's (kind, name) signature in
+        the ring buffer and may produce a divergence_suspected event.  The
+        event is staged in self._pending_divergence_events; callers should
+        drain it via drain_divergence_events() after calling mark_running.
+
         Args:
             node_id: Identifier of the node to update.
 
@@ -254,6 +289,10 @@ class ExecutionGraph:
             node = self._get_node(node_id)
             if node.status == "created":
                 node.status = "running"
+            sig: NodeSignature = (node.kind, node.name)
+            event = self._update_sig_window(sig)
+            if event is not None:
+                self._pending_divergence_events.append(event)
 
     def mark_success(
         self,
@@ -386,6 +425,28 @@ class ExecutionGraph:
             node = self._get_node(node_id)
             node.retries_used += 1
 
+    def drain_divergence_events(self) -> list[dict[str, Any]]:
+        """Return and clear all pending divergence events.
+
+        Should be called by ExecutionContext immediately after mark_running
+        returns so that divergence_suspected SafetyEvents can be forwarded
+        to the pipeline without delay.
+
+        Thread-safe: runs under the existing RLock.
+
+        Returns:
+            List of event payload dicts (may be empty).  Each dict contains:
+            - "event_type": "divergence_suspected"
+            - "severity": "warn"
+            - "signature": [kind, name]  (JSON-serializable list)
+            - "repeat_count": int
+            - "chain_id": str
+        """
+        with self._lock:
+            events = self._pending_divergence_events
+            self._pending_divergence_events = []
+            return events
+
     def snapshot(self) -> dict[str, Any]:
         """Return an immutable, JSON-serializable snapshot of the graph.
 
@@ -451,6 +512,10 @@ class ExecutionGraph:
                     "llm_calls_per_root": self._total_llm_calls / root_count,
                     "tool_calls_per_root": self._total_tool_calls / root_count,
                     "retries_per_root": self._total_retries / root_count,
+                    # Count of unique signatures for which a divergence_suspected
+                    # event has been emitted in this chain.  Ephemeral pending
+                    # events (_pending_divergence_events) are NOT included.
+                    "divergence_emitted_count": len(self._emitted_divergences),
                 },
                 "snapshot_ts_ms": _now_ms(),
             }
@@ -458,6 +523,47 @@ class ExecutionGraph:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _update_sig_window(self, sig: NodeSignature) -> Optional[dict[str, Any]]:
+        """Update the ring buffer and check for consecutive-repeat divergence.
+
+        Appends *sig* to self._sig_window and trims it to the last _K entries.
+        Then counts how many entries at the tail of the window equal *sig*
+        (i.e., consecutive trailing repeats).  If that count reaches the
+        threshold for sig[0] (the kind) and *sig* has not already been emitted
+        for this chain, an event payload dict is returned.
+
+        Must be called with self._lock held.
+
+        Args:
+            sig: (kind, name) tuple identifying the operation.
+
+        Returns:
+            Event payload dict if divergence should be emitted, else None.
+        """
+        self._sig_window.append(sig)
+        if len(self._sig_window) > self._K:
+            self._sig_window.pop(0)
+
+        # Count consecutive trailing entries that equal sig.
+        consecutive = 0
+        for entry in reversed(self._sig_window):
+            if entry == sig:
+                consecutive += 1
+            else:
+                break
+
+        threshold = self._diverge_thresholds.get(sig[0], 999)
+        if consecutive >= threshold and sig not in self._emitted_divergences:
+            self._emitted_divergences.add(sig)
+            return {
+                "event_type": "divergence_suspected",
+                "severity": "warn",
+                "signature": list(sig),
+                "repeat_count": consecutive,
+                "chain_id": self._chain_id,
+            }
+        return None
 
     def _next_id(self) -> str:
         """Return the next monotonic node ID (e.g., "n000001").
