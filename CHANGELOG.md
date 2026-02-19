@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file.
 
+---
+
+## v0.9.0 — Runtime Containment Edition
+
+### Architectural Shift
+
+VERONICA is no longer positioned primarily as a "cost control" or "LLM safety utility".
+
+It is now explicitly defined as:
+
+> A Runtime Containment Layer for LLM Systems.
+
+This release introduces a structural evolution, not incremental feature additions.
+The prior framing emphasized individual enforcement hooks applied at call sites.
+The v0.9.0 framing emphasizes what those hooks collectively constitute:
+a constraint layer that makes unbounded model behavior bounded at the system level.
+
+The distinction matters because containment is an architectural property, not a feature.
+An observability stack tells you that an agent ran away.
+A containment layer prevents it from doing so.
+
+---
+
+### Added
+
+- **ExecutionGraph**: a first-class execution graph tracking every LLM and tool call
+  within an `ExecutionContext` chain as typed nodes with lifecycle states
+  (`created`, `running`, `success`, `fail`, `halt`). Each node records
+  `cost_usd`, `tokens_in`, `tokens_out`, `stop_reason`, and `error_class`.
+
+- **Chain-level amplification metrics**: `llm_calls_per_root`, `tool_calls_per_root`,
+  `retries_per_root` — derived from graph counters. Exposes how many calls a single
+  root request generates. HALT and FAIL nodes are counted as attempted calls.
+
+- **Divergence heuristic**: repeated-signature detection using a ring buffer of the
+  last K=8 `(kind, name)` signatures. Emits `SafetyEvent("divergence_suspected",
+  severity="warn")` when a tool repeats 3 times consecutively or an LLM call repeats
+  5 times. Does not halt by default. Deduplicated per chain per signature.
+
+- **`ctx.get_graph_snapshot()`**: returns an immutable, JSON-serializable snapshot of
+  the full execution graph including all nodes, aggregates, and amplification metrics.
+
+- **`docs/execution-graph.md`**: full specification of the graph model, invariants,
+  data model, and API surface.
+
+- **`docs/amplification-factor.md`**: definition and rationale for chain-level
+  amplification metrics.
+
+- **`docs/divergence-heuristics.md`**: specification of the divergence detection
+  heuristic, thresholds, deduplication rule, and limitations.
+
+---
+
+### Changed
+
+- **`ExecutionContext`** now instantiates an `ExecutionGraph` at init and records
+  every `wrap_llm_call()` and `wrap_tool_call()` dispatch as a graph node with
+  full lifecycle tracking.
+
+- **HALT semantics** are now recorded as `stop_reason` on graph nodes
+  (`budget_exceeded`, `step_limit_exceeded`, `circuit_open`, `aborted`, etc.).
+  Previously, HALTs were only visible as `SafetyEvent` entries.
+
+- **`get_snapshot().graph_summary`**: optional field added to `ContextSnapshot`
+  containing `{total_cost_usd, total_llm_calls, total_tool_calls, total_retries,
+  max_depth, llm_calls_per_root, tool_calls_per_root, retries_per_root}`.
+
+- **`README.md`**: rewritten to lead with distributed systems vocabulary.
+  Positions VERONICA as the fourth component of the LLM stack alongside prompting,
+  orchestration, and observability.
+
+- **`pyproject.toml` description**: updated to reflect the Runtime Containment framing.
+
+---
+
+### Design Clarifications
+
+Containment is defined as enforcement of bounded properties across five dimensions:
+
+1. **Cost** — total spend per chain is capped and verified at dispatch time
+2. **Retries** — retry budget is finite and tracked; runaway retry loops are bounded
+3. **Recursion** — step count limits prevent infinite agent loops
+4. **Wait states** — timeout enforcement prevents indefinite blocking
+5. **Failure domains** — circuit breakers isolate failure propagation across chains
+
+**Observability is not Containment.** This distinction is clarified explicitly in
+the revised README and in `docs/execution-graph.md`. Tracing and logging record what
+happened. Containment prevents specific classes of behavior from happening.
+
+The `ExecutionGraph` is an internal structural model, not a tracing product.
+It exists to make containment decisions explicit and auditable within the process.
+
+---
+
+### Backwards Compatibility
+
+- No breaking API changes. All existing client code continues to work unchanged.
+- The simple wrapper pattern (`with ExecutionContext(...) as ctx`) is fully preserved.
+- `ExecutionGraph` is additive; it is instantiated automatically and does not require
+  any changes to call sites.
+- `graph_summary` in `ContextSnapshot` is `Optional` and defaults to `None`.
+  Callers that do not use it are unaffected.
+- `get_graph_snapshot()` is a new method; no existing method signatures changed.
+
+---
+
 ## v0.7.1
 
 - Verified PyPI publish pipeline (CI release gate + dry-run install)
@@ -34,3 +140,19 @@ All notable changes to this project will be documented in this file.
 - DEGRADE support: model fallback before hard stop
 - `ShieldPipeline`: hook-based pre-dispatch pipeline
 - Risk audit MVP
+
+## v0.3.x
+
+- `CircuitBreaker`: CLOSED/OPEN/HALF_OPEN state machine
+- `RetryContainer`: bounded retry with jitter
+- `AgentStepGuard`: step count enforcement
+- Runtime Policy Control API
+
+## v0.2.x
+
+- `BudgetEnforcer`: hard cost ceiling per chain
+- `PolicyContext` / `PolicyDecision` / `PolicyPipeline`
+
+## v0.1.x
+
+- Initial release: state machine core, persistence backends, guard interface
