@@ -5,7 +5,42 @@
 # Rule evaluation order: DENY → REQUIRE_APPROVAL → ALLOW → default DENY
 # (fail-closed: unknown actions are always denied)
 
-version: "1.0"
+version: "1.1"
+
+# ---------------------------------------------------------------------------
+# Secret classification patterns (enforced by masking.py SecretMasker)
+# Each entry documents a pattern label and its description.
+# ---------------------------------------------------------------------------
+
+secret_patterns:
+  AWS_KEY: "AKIA[0-9A-Z]{16} — AWS access key ID"
+  AWS_SECRET: "aws_secret_key=... — AWS secret access key"
+  GITHUB_TOKEN: "gh[psoua]_... — GitHub PAT (classic + server)"
+  GITHUB_FINE_GRAINED: "github_pat_... — GitHub fine-grained PAT (82+ chars)"
+  GITHUB_CLI_TOKEN: "gho_... — GitHub CLI OAuth token"
+  STRIPE_KEY: "sk_live_... / pk_live_... — Stripe live keys"
+  SERVICE_ROLE_JWT: "eyJ...eyJ...sig — Firebase/Supabase JWT"
+  RESEND_KEY: "re_... — Resend API key"
+  BITBANK_KEY: "bitbank_api_key=... — bitbank exchange credentials"
+  OPENAI_KEY: "sk-proj-... / sk-... — OpenAI API key"
+  ANTHROPIC_KEY: "sk-ant-... — Anthropic API key"
+  SLACK_TOKEN: "xox[bposa]-... — Slack bot/user/app/oauth token"
+  SLACK_WEBHOOK: "https://hooks.slack.com/... — Slack incoming webhook URL"
+  DISCORD_TOKEN: "M/N/O... — Discord bot token"
+  TWILIO_SID: "AC[0-9a-f]{32} — Twilio account SID"
+  TWILIO_TOKEN: "twilio_token=... — Twilio auth token"
+  SENDGRID_KEY: "SG.xxx.xxx — SendGrid API key"
+  GOOGLE_API_KEY: "AIza... — Google API key"
+  GOOGLE_OAUTH: "GOCSPX-... — Google OAuth2 client secret"
+  AZURE_SAS: "sig=... — Azure SAS token"
+  PGP_PRIVATE_KEY: "-----BEGIN PGP PRIVATE KEY BLOCK----- — PGP private key"
+  SSH_PRIVATE_KEY: "-----BEGIN RSA/EC/DSA/OPENSSH PRIVATE KEY----- — SSH private key"
+  NETRC_PASSWORD: "password <value> — .netrc password field"
+  NPM_TOKEN: "npm_... — npm automation token"
+  PYPI_TOKEN: "pypi-... — PyPI API token"
+  POLYMARKET_KEY: "polymarket_key=... — Polymarket API credentials"
+  HEX_SECRET: "[0-9a-f]{32,64} — generic 32-64 char hex secret"
+  PASSWORD_KV: "password=... / token=... — generic KV secret"
 
 # ---------------------------------------------------------------------------
 # DENY rules
@@ -48,6 +83,36 @@ deny:
       - "**/.ssh/**"
       - "**/.aws/**"
       - "**/.kube/**"
+      # Credential / secret files (E-2 expansion)
+      - "**/.npmrc"
+      - "**/.pypirc"
+      - "**/.netrc"
+      - "**/*id_rsa*"
+      - "**/*id_ed25519*"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/*.p12"
+      - "**/*.pfx"
+
+  shell:
+    # Credential sub-commands (E-2) — argv[0]=cmd, argv[1] in blocked list
+    # rule_id: SHELL_DENY_CREDENTIAL_SUBCMD, risk_delta=9
+    credential_commands:
+      git:
+        - credential
+        - credentials
+      gh:
+        - auth
+        - token
+        - secret
+      npm:
+        - token
+        - login
+        - logout
+        - adduser
+        - set-script
+      pip:
+        - config
 
   net:
     # Block mutating HTTP methods
@@ -64,6 +129,35 @@ deny:
       - github.com
       - raw.githubusercontent.com
       - registry.npmjs.org
+
+    # Additional GET restrictions to prevent network exfiltration (E-3)
+    get_restrictions:
+      # URL length limit — prevents data-in-URL exfiltration
+      url_max_length: 2048               # rule_id: net.url_too_long, risk_delta=8
+
+      # Query string entropy analysis
+      query_entropy_threshold: 4.5       # Shannon bits; value must also exceed min_length
+      query_entropy_min_length: 20       # Minimum value length before entropy check applies
+                                         # rule_id: net.high_entropy_query, risk_delta=9
+
+      # Query string pattern detection
+      query_deny_patterns:
+        - base64  # ^[A-Za-z0-9+/]{20,}={0,2}$  rule_id: net.base64_in_query,  risk_delta=9
+        - hex     # ^[0-9a-fA-F]{32,}$           rule_id: net.hex_in_query,     risk_delta=9
+
+      # Per-host path prefix allowlist (rule_id: net.path_not_allowed, risk_delta=6)
+      path_allowlist:
+        pypi.org:
+          - /pypi/
+          - /simple/
+        files.pythonhosted.org:
+          - /packages/
+        github.com:
+          - /
+        raw.githubusercontent.com:
+          - /
+        registry.npmjs.org:
+          - /
 
   git:
     # Block sensitive subcommands unless GIT_PUSH_APPROVAL capability is granted
