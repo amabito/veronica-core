@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VERONICA</title>
+  <title>VERONICA — Know Your LLM Risk Before It Costs You</title>
+  <meta name="description" content="5-minute LLM risk audit. Personalized risk score. Runtime containment layer for LLM systems — bounded behavior, bounded cost.">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -13,15 +14,39 @@
       font-family: "SF Mono", "Fira Code", "Consolas", monospace;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
       padding: 2rem;
     }
 
-    main {
-      max-width: 560px;
+    header, main {
+      max-width: 640px;
       width: 100%;
     }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 2.5rem;
+    }
+
+    .header-brand {
+      font-size: 0.825rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.1em;
+    }
+
+    .header-audit {
+      font-size: 0.825rem;
+      color: #7ec8a4;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .header-audit:hover { color: #e8e8e8; }
 
     .label {
       font-size: 0.70rem;
@@ -44,17 +69,44 @@
       font-size: 1rem;
       font-weight: 400;
       color: #aaa;
-      margin-bottom: 2.5rem;
+      margin-bottom: 0.75rem;
       letter-spacing: 0.01em;
     }
 
-    .desc {
-      font-size: 0.875rem;
-      line-height: 1.75;
-      color: #c0c0c0;
+    .subhead {
+      font-size: 0.825rem;
+      color: #777;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-ctas {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn-primary {
+      display: inline-block;
+      background: #7ec8a4;
+      color: #0d0d0d;
+      font-family: inherit;
+      font-size: 0.825rem;
+      font-weight: 700;
+      padding: 0.65rem 1.25rem;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: background 0.15s;
+      width: fit-content;
+    }
+    .btn-primary:hover { background: #9ddbb8; }
+
+    .credibility {
+      font-size: 0.725rem;
+      color: #444;
       margin-bottom: 2.5rem;
-      padding-left: 1rem;
-      border-left: 2px solid #2a2a2a;
+      letter-spacing: 0.02em;
     }
 
     .install {
@@ -63,15 +115,138 @@
       padding: 0.6rem 1rem;
       font-size: 0.825rem;
       color: #7ec8a4;
-      margin-bottom: 2.5rem;
       letter-spacing: 0.02em;
       user-select: all;
+      width: fit-content;
     }
 
+    /* ── SECTIONS ────────────────────────────── */
+
+    section {
+      margin-bottom: 2.5rem;
+    }
+
+    .section-label {
+      font-size: 0.70rem;
+      letter-spacing: 0.18em;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    /* Risk story */
+    .story-text {
+      font-size: 0.875rem;
+      line-height: 2;
+      color: #c0c0c0;
+      padding-left: 1rem;
+      border-left: 2px solid #2a2a2a;
+      margin-bottom: 0.875rem;
+    }
+
+    .bad  { color: #e07070; }
+    .good { color: #7ec8a4; }
+
+    .story-link {
+      font-size: 0.825rem;
+      color: #666;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: color 0.15s;
+    }
+    .story-link::before { content: "->"; color: #333; }
+    .story-link:hover { color: #e8e8e8; }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .card {
+      background: #111;
+      border: 1px solid #222;
+      padding: 1rem;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #e8e8e8;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.03em;
+    }
+
+    .card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .card li {
+      font-size: 0.75rem;
+      color: #666;
+      line-height: 1.5;
+    }
+    .card li::before { content: "– "; color: #333; }
+
+    /* Observability block */
+    .obs-tagline {
+      font-size: 0.825rem;
+      color: #aaa;
+      padding-left: 1rem;
+      border-left: 2px solid #2a2a2a;
+      margin-bottom: 1.25rem;
+    }
+
+    .obs-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .obs-col-title {
+      font-size: 0.70rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .obs-after .obs-col-title  { color: #555; }
+    .obs-before .obs-col-title { color: #7ec8a4; }
+
+    .obs-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+    .obs-col li { font-size: 0.75rem; color: #666; line-height: 1.5; }
+    .obs-after  li::before { content: "x  "; color: #3a3a3a; }
+    .obs-before li::before { content: "ok "; color: #5aaa80; }
+
+    /* CTA strip */
+    .cta-strip {
+      background: #111;
+      border: 1px solid #222;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2.5rem;
+    }
+
+    .cta-strip p {
+      font-size: 0.875rem;
+      color: #aaa;
+    }
+
+    /* Nav */
     nav {
       display: flex;
       flex-direction: column;
       gap: 0.6rem;
+      margin-bottom: 2.5rem;
     }
 
     nav a {
@@ -93,42 +268,124 @@
     nav a:hover { color: #e8e8e8; }
 
     footer {
-      margin-top: 3rem;
       font-size: 0.70rem;
       color: #333;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 500px) {
+      .cards    { grid-template-columns: 1fr; }
+      .obs-cols { grid-template-columns: 1fr; }
+      .cta-strip { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
 <body>
+
+  <header>
+    <span class="header-brand">VERONICA</span>
+    <a href="https://audit.veronica-core.dev/?utm_source=veronica-core.dev&utm_medium=nav&utm_campaign=risk_audit"
+       class="header-audit" aria-label="Take the 5-minute LLM risk audit">Risk Audit &#8594;</a>
+  </header>
+
   <main>
+
+    <!-- ── HERO ─────────────────────────────── -->
     <p class="label">runtime enforcement</p>
     <h1>VERONICA</h1>
-    <h2>Execution Shield for LLM agents.</h2>
+    <h2>Know Your LLM Risk Before It Costs You.</h2>
+    <p class="subhead">5-minute audit. Personalized risk score. See where your LLM calls are unguarded.</p>
 
-    <p class="desc">
-      VERONICA sits between your application and the LLM provider,
-      evaluating every tool dispatch, retry, egress call, and budget
-      charge against registered hook protocols. Each hook returns a
-      Decision &mdash; ALLOW, RETRY, HALT, DEGRADE, QUARANTINE, or
-      QUEUE &mdash; or defers to the next hook. The default is complete
-      pass-through; existing code is unaffected until you opt in.
-    </p>
+    <div class="hero-ctas">
+      <a href="https://audit.veronica-core.dev/?utm_source=veronica-core.dev&utm_medium=hero_cta&utm_campaign=risk_audit"
+         class="btn-primary" aria-label="See your personalized LLM risk score">See Your LLM Risk Score</a>
+      <div class="install">pip install veronica-core</div>
+    </div>
 
-    <div class="install">pip install veronica-core</div>
+    <p class="credibility">Runtime containment layer for LLM systems &mdash; bounded behavior, bounded cost.</p>
 
-    <nav>
-      <a href="https://github.com/amabito/veronica-core">
-        github.com/amabito/veronica-core
-      </a>
-      <a href="https://pypi.org/project/veronica-core/">
-        pypi.org/project/veronica-core
-      </a>
-      <a href="https://github.com/amabito/veronica-core/discussions/8">
-        v0.4.0 Execution Shield &mdash; design discussion
-      </a>
+    <!-- ── THE RISK IS REAL ──────────────────── -->
+    <section>
+      <p class="section-label">The Risk Is Real</p>
+      <p class="story-text">
+        Friday deploy. Agent hits a retry loop over the weekend.<br>
+        Monday invoice: <span class="bad">$18,400.</span><br>
+        <span class="good">With VERONICA: stopped at $49.92.</span>
+      </p>
+      <a href="https://audit.veronica-core.dev/?utm_source=veronica-core.dev&utm_medium=risk_story&utm_campaign=risk_audit"
+         class="story-link" aria-label="Run the LLM risk audit">Run the audit</a>
+    </section>
+
+    <!-- ── WHAT ACTUALLY STOPS IT ───────────── -->
+    <section>
+      <p class="section-label">What Actually Stops It</p>
+      <div class="cards">
+        <div class="card">
+          <div class="card-title">Hard Cost Ceiling</div>
+          <ul>
+            <li>Per-call and chain-level budgets</li>
+            <li>Blocks execution before the charge lands</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Runaway Containment</div>
+          <ul>
+            <li>Max step + cost budget per agent</li>
+            <li>Hard halt, not just an alert</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Shared Circuit Breaker</div>
+          <ul>
+            <li>One service detects &mdash; all back off</li>
+            <li>Stops cascade across your fleet</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── OBSERVABILITY != CONTAINMENT ─────── -->
+    <section>
+      <p class="section-label">Observability != Containment</p>
+      <p class="obs-tagline">Observability tells you what happened. Containment stops it.</p>
+      <div class="obs-cols">
+        <div class="obs-col obs-after">
+          <div class="obs-col-title">Observability</div>
+          <ul>
+            <li>Logs the $18K spike</li>
+            <li>Alerts after the invoice</li>
+            <li>Shows you what went wrong</li>
+          </ul>
+        </div>
+        <div class="obs-col obs-before">
+          <div class="obs-col-title">Containment</div>
+          <ul>
+            <li>Halts at $50 ceiling</li>
+            <li>Blocks before the charge</li>
+            <li>Stops it while it&rsquo;s happening</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── NAV ──────────────────────────────── -->
+    <nav aria-label="Links">
+      <a href="https://audit.veronica-core.dev/?utm_source=veronica-core.dev&utm_medium=nav&utm_campaign=risk_audit"
+         aria-label="Take the LLM risk audit">Risk Audit &mdash; 5-minute LLM risk score</a>
+      <a href="https://github.com/amabito/veronica-core">github.com/amabito/veronica-core</a>
+      <a href="https://pypi.org/project/veronica-core/">pypi.org/project/veronica-core</a>
+      <a href="https://github.com/amabito/veronica-core/discussions/8">v0.4.0 Execution Shield &mdash; design discussion</a>
     </nav>
 
+    <!-- ── AUDIT CTA STRIP ───────────────────── -->
+    <div class="cta-strip">
+      <p>Get your risk score in 5 minutes.</p>
+      <a href="https://audit.veronica-core.dev/?utm_source=veronica-core.dev&utm_medium=footer_strip&utm_campaign=risk_audit"
+         class="btn-primary" aria-label="Take the LLM risk audit">See Your LLM Risk Score</a>
+    </div>
+
     <footer>Apache-2.0 &middot; Python &ge;3.9 &middot; zero runtime dependencies</footer>
+
   </main>
 </body>
 </html>
