@@ -369,6 +369,49 @@ pytest
 
 ---
 
+## Containment Mode
+
+VERONICA's Security Containment Layer provides a **fail-closed enforcement
+boundary** that stops dangerous agent actions at the tool-dispatch and egress
+level — independently of any upper-layer system prompt or agent rules.  Even
+if an adversarial prompt fully bypasses the agent's own guidelines, the
+containment layer intercepts the call and returns `Decision.HALT` or
+`Decision.QUARANTINE` before any action reaches the OS.
+
+The layer enforces: uncontrolled shell execution, sensitive file reads
+(`.env`, SSH keys, cloud credentials), unauthenticated outbound POST/PUT/DELETE
+requests, CI workflow file modifications, and runaway agents that repeatedly
+probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
+
+**Quick start — wire `PolicyHook` into `ShieldPipeline`:**
+
+```python
+from veronica_core.security import PolicyEngine, PolicyHook, CapabilitySet
+from veronica_core.shield.pipeline import ShieldPipeline
+from veronica_core.shield.config import ShieldConfig
+
+engine = PolicyEngine()
+hook = PolicyHook(
+    engine=engine,
+    caps=CapabilitySet.ci(),   # restrict to CI capability profile
+    working_dir="/repo",
+    repo_root="/repo",
+    env="ci",
+)
+
+pipeline = ShieldPipeline(
+    config=ShieldConfig(),
+    tool_dispatch=[hook],      # ToolDispatchHook: blocks dangerous tool calls
+    egress=[hook],             # EgressBoundaryHook: blocks outbound HTTP
+)
+```
+
+For full architecture details, audit findings coverage, capability profiles,
+and custom policy configuration, see
+[docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md).
+
+---
+
 ## Version History
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
