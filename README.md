@@ -412,6 +412,35 @@ and custom policy configuration, see
 
 ---
 
+## Red Team Regression
+
+VERONICA includes a permanent regression suite of 20 attack scenarios covering
+the most common techniques an adversarial agent or prompt-injected payload
+would attempt.
+
+Every scenario is blocked by a specific containment rule — the test suite
+verifies this on every CI run.
+
+```bash
+uv run pytest tests/redteam/ -v
+```
+
+### Coverage
+
+| Category           | Scenarios | Description                                          |
+|--------------------|-----------|------------------------------------------------------|
+| Exfiltration       | 5         | HTTP POST, base64/hex GET encoding, high-entropy query, long URL |
+| Credential Hunt    | 5         | `.env`, `.npmrc`, `id_rsa`, `.pem`, git credential helper |
+| Workflow Poisoning | 5         | CI file write, git push, npm token, pip config, exec() bypass |
+| Persistence        | 5         | Shell destruction, token replay, expired token, scope mismatch, sandbox traversal |
+
+All 20 scenarios: **blocked**.
+
+For the full scenario table, rule IDs, and architecture details, see
+[docs/SECURITY_CONTAINMENT_PLAN.md#phase-f](docs/SECURITY_CONTAINMENT_PLAN.md#phase-f-red-team-regression).
+
+---
+
 ## Version History
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.

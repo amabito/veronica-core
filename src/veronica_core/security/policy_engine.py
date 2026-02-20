@@ -5,7 +5,11 @@ Rules are fail-closed: default verdict is DENY.
 """
 from __future__ import annotations
 
+import collections
 import fnmatch
+import math
+import re
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +38,16 @@ FILE_READ_DENY_PATTERNS: tuple[str, ...] = (
     "**/.ssh/**",
     "**/.aws/**",
     "**/.kube/**",
+    # Credential / secret files (E-2 expansion)
+    "**/.npmrc",
+    "**/.pypirc",
+    "**/.netrc",
+    "**/*id_rsa*",
+    "**/*id_ed25519*",
+    "**/*.pem",
+    "**/*.key",
+    "**/*.p12",
+    "**/*.pfx",
 )
 
 NET_ALLOWLIST_HOSTS: frozenset[str] = frozenset({
@@ -45,6 +59,23 @@ NET_ALLOWLIST_HOSTS: frozenset[str] = frozenset({
 })
 
 NET_DENY_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+NET_URL_MAX_LENGTH: int = 2048
+
+NET_ENTROPY_THRESHOLD: float = 4.5
+NET_ENTROPY_MIN_LEN: int = 20
+
+# Per-host path prefix allowlist (only these prefixes are permitted for GET)
+NET_PATH_ALLOWLIST: dict[str, list[str]] = {
+    "pypi.org": ["/pypi/", "/simple/"],
+    "files.pythonhosted.org": ["/packages/"],
+    "github.com": ["/"],
+    "raw.githubusercontent.com": ["/"],
+    "registry.npmjs.org": ["/"],
+}
+
+_RE_BASE64 = re.compile(r"^[A-Za-z0-9+/]{20,}={0,2}$")
+_RE_HEX = re.compile(r"^[0-9a-fA-F]{32,}$")
 
 GIT_DENY_SUBCMDS: frozenset[str] = frozenset({"push", "workflow", "release", "tag"})
 
@@ -62,6 +93,16 @@ SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
 })
 
 FILE_COUNT_APPROVAL_THRESHOLD = 20
+
+# Credential sub-command deny rules (E-2)
+# Each entry: (argv0, blocked_subcommands_set)
+# Evaluated after SHELL_DENY_COMMANDS and before SHELL_ALLOW_COMMANDS.
+SHELL_CREDENTIAL_DENY: tuple[tuple[str, frozenset[str]], ...] = (
+    ("git",  frozenset({"credential", "credentials"})),
+    ("gh",   frozenset({"auth", "token", "secret"})),
+    ("npm",  frozenset({"token", "login", "logout", "adduser", "set-script"})),
+    ("pip",  frozenset({"config"})),
+)
 
 
 @dataclass(frozen=True)
@@ -130,6 +171,15 @@ def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
     return False
 
 
+def _shannon_entropy(s: str) -> float:
+    """Compute Shannon entropy of string *s* in bits."""
+    if not s:
+        return 0.0
+    counts = collections.Counter(s)
+    length = len(s)
+    return -sum((c / length) * math.log2(c / length) for c in counts.values())
+
+
 def _url_host(url: str) -> str:
     """Extract hostname from a URL string (stdlib only)."""
     # Strip scheme
@@ -141,6 +191,12 @@ def _url_host(url: str) -> str:
     # Strip port
     host = host.split(":")[0]
     return host.lower()
+
+
+def _url_path(url: str) -> str:
+    """Extract path component from URL (stdlib only, without query/fragment)."""
+    parsed = urllib.parse.urlparse(url)
+    return parsed.path or "/"
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +226,17 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                 rule_id="SHELL_DENY_OPERATOR",
                 reason=f"Shell operator '{op}' is blocked by policy",
                 risk_score_delta=6,
+            )
+
+    # DENY: credential sub-commands (git credential, gh auth, npm token, pip config, etc.)
+    argv1 = args[1].lower() if len(args) > 1 else ""
+    for cmd, blocked_subcmds in SHELL_CREDENTIAL_DENY:
+        if argv0 == cmd and argv1 in blocked_subcmds:
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id="SHELL_DENY_CREDENTIAL_SUBCMD",
+                reason=f"Subcommand '{argv0} {argv1}' is blocked (credential access)",
+                risk_score_delta=9,
             )
 
     # REQUIRE_APPROVAL: large file count change
@@ -254,6 +321,15 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
             risk_score_delta=6,
         )
 
+    # DENY: URL length exceeds limit
+    if len(url) > NET_URL_MAX_LENGTH:
+        return PolicyDecision(
+            verdict="DENY",
+            rule_id="net.url_too_long",
+            reason=f"URL length {len(url)} exceeds maximum {NET_URL_MAX_LENGTH}",
+            risk_score_delta=8,
+        )
+
     # DENY: GET to non-allowlisted host
     host = _url_host(url)
     if host not in NET_ALLOWLIST_HOSTS:
@@ -263,6 +339,48 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
             reason=f"Host '{host}' is not in the allowlist",
             risk_score_delta=5,
         )
+
+    # For GET requests: inspect query string for exfiltration indicators
+    parsed = urllib.parse.urlparse(url)
+    qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    for values in qs.values():
+        for value in values:
+            # Base64-encoded data check
+            if _RE_BASE64.match(value):
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="net.base64_in_query",
+                    reason="Query string contains base64-encoded data (potential exfiltration)",
+                    risk_score_delta=9,
+                )
+            # Hex string check
+            if _RE_HEX.match(value):
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="net.hex_in_query",
+                    reason="Query string contains hex-encoded data (potential exfiltration)",
+                    risk_score_delta=9,
+                )
+            # High-entropy value check
+            if len(value) > NET_ENTROPY_MIN_LEN and _shannon_entropy(value) > NET_ENTROPY_THRESHOLD:
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="net.high_entropy_query",
+                    reason=f"Query string value has high entropy ({_shannon_entropy(value):.2f} bits)",
+                    risk_score_delta=9,
+                )
+
+    # DENY: path not in per-host allowlist
+    allowed_paths = NET_PATH_ALLOWLIST.get(host)
+    if allowed_paths is not None:
+        path = _url_path(url)
+        if not any(path.startswith(prefix) for prefix in allowed_paths):
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id="net.path_not_allowed",
+                reason=f"Path '{path}' is not permitted for host '{host}'",
+                risk_score_delta=6,
+            )
 
     return PolicyDecision(
         verdict="ALLOW",
