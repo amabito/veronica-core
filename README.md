@@ -494,6 +494,45 @@ For the full scenario table, rule IDs, and architecture details, see
 
 ---
 
+## Security Guarantees
+
+The following guarantees are verified by the VERONICA test suite on every CI
+run.  The full verifiable claim set is documented in
+[docs/SECURITY_CLAIMS.md](docs/SECURITY_CLAIMS.md).
+
+### Containment (20 red-team scenarios — all blocked)
+
+| Category | Claims | Pytest coverage |
+|----------|--------|-----------------|
+| Exfiltration | HTTP POST, base64/hex encoding, high-entropy query, long URL | `tests/redteam/` |
+| Credential Hunt | `.env`, SSH keys, `.pem`, npm/pip tokens | `tests/redteam/` |
+| Workflow Poisoning | CI file write, git push, exec() bypass | `tests/redteam/` |
+| Persistence | Token replay, sandbox traversal, scope mismatch | `tests/redteam/` |
+
+### Cryptographic Integrity
+
+| Guarantee | Mechanism | Pytest mapping |
+|-----------|-----------|----------------|
+| Policy files are signed | Ed25519 (v2) + HMAC-SHA256 (v1 fallback) | `tests/security/test_policy_signing.py` |
+| Public key is pinned | SHA-256 pin in `policies/key_pin.txt` | `tests/security/test_key_pin.py` |
+| Policy rollback is detected | `RollbackGuard` checks `policy_version` monotonicity | `tests/security/test_policy_rollback.py` |
+| Release artifacts are verified | `tools/verify_release.py` exits 0 | `tests/tools/test_release_tools.py` |
+
+### Threat Model Coverage
+
+| Threat | Defence | Phase |
+|--------|---------|-------|
+| Prompt-injected tool calls | PolicyEngine DENY rules | G |
+| Supply chain compromise | SBOM diff gate + approval token | I |
+| Key substitution | Key pinning (J-2) + CI enforcement | J |
+| Policy tampering | Ed25519 sig verification at load | I |
+| Rollback attack | RollbackGuard monotonic version check | J |
+| Privilege escalation | AttestationChecker mid-session anomaly | G |
+
+Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+
+---
+
 ## Version History
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.

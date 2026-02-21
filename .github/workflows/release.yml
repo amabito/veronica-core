@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Sign policy artifacts
+        if: ${{ secrets.VERONICA_PRIVATE_KEY_PEM != '' }}
+        env:
+          VERONICA_PRIVATE_KEY_PEM: ${{ secrets.VERONICA_PRIVATE_KEY_PEM }}
+        run: python tools/release_sign_policy.py
+
+      - name: Skip signing (no secret)
+        if: ${{ secrets.VERONICA_PRIVATE_KEY_PEM == '' }}
+        run: echo "[INFO] VERONICA_PRIVATE_KEY_PEM not set; skipping signing step."
+
+      - name: Verify release artifacts
+        run: python tools/verify_release.py
+
+      - name: Generate SBOM
+        run: python tools/generate_sbom.py sbom.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ github.ref_name }}
+          path: |
+            sbom.json
+            policies/default.yaml.sig.v2
