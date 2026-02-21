@@ -399,6 +399,25 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   identical approval requests; `ApprovalRateLimiter` caps throughput at
   10 approvals/60 s by default.
 
+**Phase I additions:**
+
+- **Policy signing v2 (I-1)**: `PolicySignerV2` upgrades from HMAC-SHA256
+  (symmetric) to **ed25519 asymmetric signing** via the `cryptography`
+  package.  Only the public key is committed; the private key stays in a
+  secrets manager.  `PolicyEngine` checks `.sig.v2` first; falls back to
+  v1 HMAC if `cryptography` is not installed.  See
+  [docs/SIGNING_GUIDE.md](docs/SIGNING_GUIDE.md) for the full workflow.
+- **Active sandbox probe (I-2)**: `SandboxProbe` actively attempts a
+  protected filesystem read and an outbound network request to verify
+  that sandbox restrictions are **actually enforced** — not just
+  configured.  Any probe that succeeds (sandbox failed to block) emits
+  `SANDBOX_PROBE_FAILURE` and the caller must trigger SAFE_MODE.
+- **SBOM diff gate (I-3)**: `tools/sbom_diff.py` compares two SBOM
+  snapshots and exits non-zero on any package addition, removal, or
+  version change.  An HMAC-SHA256 approval token allows pre-approved
+  diffs to pass the gate without manual intervention.  Integrates into
+  CI as a required check on lock file / `pyproject.toml` changes.
+
 **Quick start — wire `PolicyHook` into `ShieldPipeline`:**
 
 ```python

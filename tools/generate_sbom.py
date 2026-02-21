@@ -71,8 +71,12 @@ def generate_sbom(output_path: Path | None = None) -> dict:
             })
 
     entries.sort(key=lambda e: e["name"].lower())
+    # Sort deps lists for deterministic output
+    for entry in entries:
+        entry["deps"] = sorted(entry["deps"])
 
     sbom: dict = {
+        "schema_version": "1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "packages": entries,
     }
