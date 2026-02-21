@@ -418,6 +418,24 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   diffs to pass the gate without manual intervention.  Integrates into
   CI as a required check on lock file / `pyproject.toml` changes.
 
+**Phase J additions:**
+
+- **Security levels (J-1)**: Auto-detected DEV / CI / PROD tiers control how
+  strictly cryptographic requirements are enforced.  Set `VERONICA_SECURITY_LEVEL`
+  to override; CI/PROD require the `cryptography` package and a valid signature.
+  See `src/veronica_core/security/security_level.py`.
+- **Key pinning (J-2)**: `KeyPinChecker` verifies that the loaded ed25519 public
+  key matches the committed SHA-256 pin in `policies/key_pin.txt` (or
+  `VERONICA_KEY_PIN` env var).  A mismatch in CI/PROD raises `RuntimeError`.
+  See [docs/KEY_ROTATION.md](docs/KEY_ROTATION.md) for the rotation workflow.
+- **Policy rollback protection (J-3)**: `RollbackGuard` scans the audit log
+  backward to detect if an older `policy_version` has been submitted after a
+  newer one (rollback attack).  `policy_checkpoint` events enable fast startup
+  by bounding the backward scan.
+- **xfailed registry (J-4)**: All `xfail`-marked tests are documented in
+  [docs/XFAILED_REGISTRY.md](docs/XFAILED_REGISTRY.md) with a safety risk
+  assessment.  No test with High safety risk may remain as a permanent xfail.
+
 **Quick start — wire `PolicyHook` into `ShieldPipeline`:**
 
 ```python

@@ -5,6 +5,9 @@
 # Rule evaluation order: DENY → REQUIRE_APPROVAL → ALLOW → default DENY
 # (fail-closed: unknown actions are always denied)
 
+policy_version: 1
+min_engine_version: "0.1.0"
+
 version: "1.1"
 
 # ---------------------------------------------------------------------------
