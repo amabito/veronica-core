@@ -420,7 +420,7 @@ result = call_llm("Hello!")
 
 ---
 
-## Ship Readiness (v0.9.4)
+## Ship Readiness (v0.9.5)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -443,6 +443,7 @@ result = call_llm("Hello!")
 - [x] CI: release workflow secrets guard fixed (v0.9.2)
 - [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
 - [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
+- [x] LangChain adapter: VeronicaCallbackHandler + patch_langchain() + build_langchain_container() (v0.9.5)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 

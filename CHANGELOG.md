@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.5] — 2026-02-21
+
+### Added
+- `veronica_core.adapters.langchain` module: LangChain callback handler.
+  - `VeronicaCallbackHandler(config)`: `BaseCallbackHandler` subclass that enforces
+    VERONICA policies on every LLM call in a LangChain pipeline.
+  - Accepts `GuardConfig` or `ExecutionConfig` (both expose `max_cost_usd`,
+    `max_steps`, `max_retries_total`).
+  - `on_llm_start`: pre-call policy check via `AIcontainer.check()`.
+    Raises `VeronicaHalt` on denial.
+  - `on_llm_end`: increments step counter; records token cost via
+    `BudgetEnforcer.spend()`.
+  - `on_llm_error`: logs error without charging budget.
+  - `langchain-core` (or `langchain`) required separately; not a
+    `veronica-core` dependency. Clear `ImportError` if absent.
+
+### Notes
+- No deprecations. All existing APIs unchanged.
+- Adapters are opt-in: `from veronica_core.adapters.langchain import VeronicaCallbackHandler`.
+  The top-level `veronica_core` namespace is not changed.
+
+---
+
 ## [0.9.4] — 2026-02-21
 
 ### Added
