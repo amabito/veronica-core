@@ -15,6 +15,7 @@ from veronica_core.circuit_breaker import CircuitBreaker
 from veronica_core.partial import PartialResultBuffer
 from veronica_core.retry import RetryContainer
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision, PolicyPipeline
+from veronica_core.semantic import SemanticLoopGuard
 
 
 @dataclass
@@ -50,6 +51,7 @@ class AIcontainer:
     retry: Optional[RetryContainer] = None
     step_guard: Optional[AgentStepGuard] = None
     partial_buffer: Optional[PartialResultBuffer] = None
+    semantic_guard: Optional[SemanticLoopGuard] = None
 
     _pipeline: PolicyPipeline = field(init=False, repr=False)
 
@@ -61,6 +63,7 @@ class AIcontainer:
                 self.circuit_breaker,
                 self.retry,
                 self.step_guard,
+                self.semantic_guard,
             )
             if p is not None
         ]
@@ -104,6 +107,7 @@ class AIcontainer:
             self.circuit_breaker,
             self.retry,
             self.step_guard,
+            self.semantic_guard,
         ):
             if primitive is not None:
                 primitive.reset()

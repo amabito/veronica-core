@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.9.5"
+__version__ = "0.9.6"
 
 # Core state machine
 from veronica_core.state import (
@@ -109,6 +109,9 @@ from veronica_core.inject import (
 # SDK patch module (v0.9.4 -- opt-in, not applied on import)
 from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 
+# Semantic Loop Guard (v0.9.6)
+from veronica_core.semantic import SemanticLoopGuard
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -190,4 +193,6 @@ __all__ = [
     "patch_openai",
     "patch_anthropic",
     "unpatch_all",
+    # Semantic Loop Guard (v0.9.6)
+    "SemanticLoopGuard",
 ]

@@ -420,7 +420,84 @@ result = call_llm("Hello!")
 
 ---
 
-## Ship Readiness (v0.9.5)
+## VeronicaCallbackHandler — LangChain Integration (v0.9.5)
+
+Enforce VERONICA policies in LangChain pipelines via the standard callback interface.
+No changes to existing call sites required.
+
+```python
+from langchain_openai import ChatOpenAI
+from veronica_core.adapters.langchain import VeronicaCallbackHandler
+from veronica_core import GuardConfig
+
+handler = VeronicaCallbackHandler(GuardConfig(max_cost_usd=1.0, max_steps=20))
+llm = ChatOpenAI(callbacks=[handler])
+
+# Budget is checked before each LLM call.
+# Token cost is recorded and steps counted after each response.
+response = llm.invoke("Hello!")
+```
+
+Also works with `ExecutionConfig`:
+
+```python
+from veronica_core.containment import ExecutionConfig
+handler = VeronicaCallbackHandler(
+    ExecutionConfig(max_cost_usd=5.0, max_steps=50, max_retries_total=10)
+)
+```
+
+**Guarantees:**
+- `VeronicaHalt` raised on policy denial, halting the LangChain chain.
+- Steps accumulate across the handler's lifetime (reset via `handler.container.reset()`).
+- `langchain-core` or `langchain` must be installed separately.
+- Importing `veronica_core` without langchain installed is safe.
+
+---
+
+## SemanticLoopGuard — Semantic Loop Detection (v0.9.6)
+
+Detect when an LLM produces semantically repetitive outputs using pure-Python
+word-level Jaccard similarity — no heavy ML dependencies required.
+
+```python
+from veronica_core import SemanticLoopGuard, AIcontainer
+
+guard = SemanticLoopGuard(
+    window=3,                # rolling window size
+    jaccard_threshold=0.92,  # similarity above this → deny
+    min_chars=80,            # skip short outputs to avoid false positives
+)
+
+# Attach to AIcontainer
+container = AIcontainer(semantic_guard=guard)
+
+# Or use standalone
+result = guard.feed("The answer is 42. " * 5)  # record + check
+if not result.allowed:
+    print(f"Loop detected: {result.reason}")
+```
+
+**How it works:**
+- Maintains a rolling buffer of recent outputs (up to `window` entries)
+- Normalizes text (lowercase, whitespace collapse) before comparison
+- Exact-match shortcut for O(1) identical output detection
+- Pairwise Jaccard similarity check on word frozensets
+- Outputs shorter than `min_chars` characters are skipped
+
+```python
+# Manual record/check API
+guard.record("first llm output here...")
+guard.record("second llm output here...")
+decision = guard.check()  # PolicyDecision(allowed=bool, ...)
+
+# Reset the buffer
+guard.reset()
+```
+
+---
+
+## Ship Readiness (v0.9.6)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -443,11 +520,12 @@ result = call_llm("Hello!")
 - [x] CI: release workflow secrets guard fixed (v0.9.2)
 - [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
 - [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
-- [x] LangChain adapter: VeronicaCallbackHandler + patch_langchain() + build_langchain_container() (v0.9.5)
+- [x] VeronicaCallbackHandler: LangChain adapter with pre/post-call policy enforcement (v0.9.5)
+- [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIcontainer (v0.9.6)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1080 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer.
+1120 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection.
 
 ---
 
