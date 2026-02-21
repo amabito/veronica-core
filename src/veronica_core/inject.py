@@ -15,17 +15,27 @@ from typing import Any, Callable, Optional
 
 from veronica_core.runtime_policy import PolicyDecision
 
-__all__ = ["veronica_guard", "GuardConfig", "VeronicaHalt", "is_guard_active"]
+__all__ = ["veronica_guard", "GuardConfig", "VeronicaHalt", "is_guard_active", "get_active_container"]
 
 # ContextVar: set to True while inside a guard-wrapped call.
 # Lets future transparent injection detect an active guard without inspecting
 # the call stack.
 _guard_active: ContextVar[bool] = ContextVar("veronica_guard_active", default=False)
 
+# ContextVar: holds the current AIcontainer while inside a guard boundary.
+# Allows patch.py and other transparent injection layers to retrieve the
+# container without modifying call sites.
+_active_container: ContextVar[Optional[Any]] = ContextVar("veronica_active_container", default=None)
+
 
 def is_guard_active() -> bool:
     """Return True if the current call is executing inside a veronica_guard boundary."""
     return _guard_active.get()
+
+
+def get_active_container() -> Optional[Any]:
+    """Return the AIcontainer currently active in this guard boundary, or None."""
+    return _active_container.get()
 
 
 class VeronicaHalt(RuntimeError):
@@ -111,10 +121,12 @@ def veronica_guard(
                 raise VeronicaHalt(decision.reason, decision)
 
             token = _guard_active.set(True)
+            container_token = _active_container.set(container)
             try:
                 return func(*args, **kwargs)
             finally:
                 _guard_active.reset(token)
+                _active_container.reset(container_token)
 
         # Expose container for testing and introspection.
         wrapper._container = container  # type: ignore[attr-defined]
