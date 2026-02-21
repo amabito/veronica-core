@@ -140,20 +140,52 @@ def test_policy_engine_invalid_sig_raises(tmp_policy: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 8: PolicyEngine with missing sig → logs warning, loads OK
+# Test 8: PolicyEngine with missing sig
+#   DEV mode  → logs warning, loads OK (backward compat)
+#   CI mode   → raises RuntimeError (J-1: signature required in CI)
 # ---------------------------------------------------------------------------
 
 
-def test_policy_engine_missing_sig_loads_ok(tmp_policy: Path, caplog: pytest.LogCaptureFixture) -> None:
-    # No .sig file — backward compat: engine should load
+def test_policy_engine_missing_sig_loads_ok(
+    tmp_policy: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Force DEV security level so the missing-sig path logs instead of raising.
+    monkeypatch.setenv("VERONICA_SECURITY_LEVEL", "DEV")
+
+    from veronica_core.security import security_level as _sl
     from veronica_core.security.policy_engine import PolicyEngine
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="veronica_core.security.policy_engine"):
-        engine = PolicyEngine(policy_path=tmp_policy)
+    _sl.reset_security_level()
+    try:
+        with caplog.at_level(logging.WARNING, logger="veronica_core.security.policy_engine"):
+            engine = PolicyEngine(policy_path=tmp_policy)
+    finally:
+        _sl.reset_security_level()
 
     assert engine is not None
     assert any("policy_sig_missing" in r.message for r in caplog.records)
+
+
+def test_policy_engine_missing_sig_raises_in_ci(
+    tmp_policy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In CI security level, missing signature must raise RuntimeError.
+    monkeypatch.setenv("VERONICA_SECURITY_LEVEL", "CI")
+
+    from veronica_core.security import security_level as _sl
+    from veronica_core.security.policy_engine import PolicyEngine
+
+    # Reset the cached level so the env var is picked up fresh.
+    _sl.reset_security_level()
+    try:
+        with pytest.raises(RuntimeError, match="missing"):
+            PolicyEngine(policy_path=tmp_policy)
+    finally:
+        _sl.reset_security_level()
 
 
 # ---------------------------------------------------------------------------

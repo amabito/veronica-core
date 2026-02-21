@@ -161,11 +161,21 @@ def test_wrong_key_fails_verification(tmp_policy: Path, tmp_path: Path) -> None:
 
 
 def test_policy_engine_v2_valid_sig_ok(
-    signer_v2: tuple[PolicySignerV2, bytes], tmp_policy: Path, tmp_path: Path
+    signer_v2: tuple[PolicySignerV2, bytes],
+    tmp_policy: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """PolicyEngine must load without error when .sig.v2 is valid."""
+    import hashlib
+
     signer, priv_pem = signer_v2
     signer.sign(tmp_policy, priv_pem)
+
+    # Pin the test public key so KeyPinChecker passes in CI.
+    pub_pem = signer._public_key_path.read_bytes()
+    pin = hashlib.sha256(pub_pem.strip()).hexdigest()
+    monkeypatch.setenv("VERONICA_KEY_PIN", pin)
 
     from veronica_core.security.policy_engine import PolicyEngine
 

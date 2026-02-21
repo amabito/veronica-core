@@ -71,6 +71,11 @@ class PolicySigner:
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize(raw: bytes) -> bytes:
+        """Normalize line endings to LF for cross-platform signature stability."""
+        return raw.replace(b"\r\n", b"\n")
+
     def sign(self, policy_path: Path) -> str:
         """Return hex-encoded HMAC-SHA256 of *policy_path* content.
 
@@ -80,7 +85,7 @@ class PolicySigner:
         Returns:
             Hex string of the HMAC-SHA256 digest.
         """
-        content = policy_path.read_bytes()
+        content = self._normalize(policy_path.read_bytes())
         mac = hmac.new(self._key, content, hashlib.sha256)
         return mac.hexdigest()
 
@@ -96,7 +101,7 @@ class PolicySigner:
             Returns False if either file cannot be read.
         """
         try:
-            content = policy_path.read_bytes()
+            content = self._normalize(policy_path.read_bytes())
             stored_sig = sig_path.read_text(encoding="utf-8").strip()
         except OSError:
             return False
