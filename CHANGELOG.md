@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.6] - 2026-02-21
+
+### Added
+- `SemanticLoopGuard` — pure-Python semantic loop detection using word-level
+  Jaccard similarity; no heavy dependencies required
+- `AIcontainer` now accepts `semantic_guard: Optional[SemanticLoopGuard]`
+  parameter for automatic loop enforcement
+- `SemanticLoopGuard.feed(text)` — convenience method combining `record()` + `check()`
+- `SemanticLoopGuard.reset()` — clears the rolling output buffer
+
+### Details
+- Rolling window of recent LLM outputs (default: 3)
+- Configurable Jaccard threshold (default: 0.92)
+- Exact-match shortcut for O(1) detection of identical outputs
+- `min_chars` guard to avoid false positives on short outputs (default: 80)
+- Implements `RuntimePolicy` protocol (`check`, `policy_type`, `reset`)
+- Exported from top-level `veronica_core` namespace
+- 15 new tests; total: 1120 passing
+
+---
+
 ## [0.9.5] — 2026-02-21
 
 ### Added
