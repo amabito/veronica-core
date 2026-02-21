@@ -516,3 +516,201 @@ Each scenario should:
 1. Construct a `PolicyContext` (or `ApprovalToken`) that represents the attack.
 2. Assert that the result is `DENY` (or `approve()` returns `False`).
 3. Document the technique and expected rule ID in a comment.
+
+---
+
+## 13. Phase G: Supply Chain + Tamper Resistance (v0.5.x)
+
+### G-1: Policy Tamper Resistance
+
+**Problem:** An adversarial agent (or a compromised update process) could
+silently modify `policies/default.yaml` to weaken or remove security rules.
+With no integrity check, the policy file is trusted blindly at load time.
+
+**Solution:** `PolicySigner` (in `src/veronica_core/security/policy_signing.py`)
+computes an HMAC-SHA256 signature over the raw bytes of the policy file.  The
+signature is stored in `policies/default.yaml.sig` (committed to the repo).
+
+`PolicyEngine.__init__` verifies the signature immediately after loading:
+
+| Sig file state  | Verdict                                                        |
+|-----------------|----------------------------------------------------------------|
+| Valid match     | Engine loads normally                                          |
+| Mismatch        | `policy_tamper` audit event + `RuntimeError` (caller halts)   |
+| Missing         | `policy_sig_missing` warning logged, engine continues (compat)|
+
+Key management:
+
+- **Default key**: SHA256(`b"veronica-dev-key"`) — used in tests and dev
+- **Production key**: hex-encoded in `VERONICA_POLICY_KEY` env var
+- **Update path**: edit `policies/default.yaml` → REQUIRE_APPROVAL → re-sign
+  with `PolicySigner().sign(path)` → commit updated `.sig` file
+
+Implementation details:
+
+- Zero external dependencies — stdlib `hmac`, `hashlib`
+- Constant-time comparison via `hmac.compare_digest`
+- `PolicySigner` constructor accepts an explicit `key: bytes` parameter for
+  testing without env var side effects
+
+Tests: `tests/security/test_policy_signing.py` (10 test cases)
+
+---
+
+### G-2: Supply Chain Guard
+
+**Problem:** An agent could silently install malicious packages (`pip install`,
+`npm install`, `cargo add`) that persist across sessions and exfiltrate secrets
+or create backdoors.  Lock file modifications (`uv.lock`, `package-lock.json`)
+indicate a dependency change that should not happen unattended.
+
+**Solution:**
+
+**Shell interception (REQUIRE_APPROVAL):**
+
+| Command pattern            | Rule ID           | Risk delta |
+|----------------------------|-------------------|------------|
+| `pip install ...`          | SHELL_PKG_INSTALL | +4         |
+| `pip3 install ...`         | SHELL_PKG_INSTALL | +4         |
+| `uv pip install ...`       | SHELL_PKG_INSTALL | +4         |
+| `uv add ...`               | SHELL_PKG_INSTALL | +4         |
+| `npm install/add/i ...`    | SHELL_PKG_INSTALL | +4         |
+| `pnpm install/add/i ...`   | SHELL_PKG_INSTALL | +4         |
+| `yarn install/add ...`     | SHELL_PKG_INSTALL | +4         |
+| `cargo add/install ...`    | SHELL_PKG_INSTALL | +4         |
+
+**Lock file write interception (REQUIRE_APPROVAL):**
+
+| File pattern               | Rule ID              | Risk delta |
+|----------------------------|----------------------|------------|
+| `package-lock.json`        | FILE_WRITE_LOCKFILE  | +4         |
+| `yarn.lock`                | FILE_WRITE_LOCKFILE  | +4         |
+| `uv.lock`                  | FILE_WRITE_LOCKFILE  | +4         |
+| `Cargo.lock`               | FILE_WRITE_LOCKFILE  | +4         |
+| `requirements.txt`         | FILE_WRITE_LOCKFILE  | +4         |
+
+**Policy update interception (REQUIRE_APPROVAL):**
+
+`policies/*.yaml` edits require approval and must be followed by re-signing.
+
+**SBOM generation:**
+
+`tools/generate_sbom.py` enumerates installed packages via stdlib
+`importlib.metadata` and writes `sbom.json`:
+
+```bash
+python tools/generate_sbom.py [output.json]
+# [OK] SBOM: N packages -> sbom.json
+```
+
+Output format:
+```json
+{
+  "generated_at": "2026-02-21T00:00:00+00:00",
+  "packages": [
+    {"name": "veronica-core", "version": "0.5.0", "deps": [...]}
+  ]
+}
+```
+
+CI: `.github/workflows/sbom.yml` triggers on `pyproject.toml` / lock file
+changes and uploads `sbom.json` as a workflow artifact.
+
+Tests: `tests/security/test_supply_chain.py` (15 test cases)
+
+---
+
+### G-3: Runner Attestation
+
+**Problem:** A container-escape or privilege-escalation attack could change
+the effective user, interpreter, or working directory of the running agent
+without terminating it.  Existing rules would not detect this mid-session.
+
+**Solution:** `AttestationChecker` (in `src/veronica_core/runner/attestation.py`)
+captures an `EnvironmentFingerprint` at startup and re-checks on each call.
+
+`EnvironmentFingerprint` fields:
+
+| Field          | Source                              | Description                     |
+|----------------|-------------------------------------|---------------------------------|
+| `username`     | `USERNAME`/`USER` env, `os.getlogin`| OS user running the process     |
+| `platform`     | `sys.platform`                      | Operating system identifier     |
+| `python_path`  | `sys.executable`                    | Absolute interpreter path       |
+| `cwd`          | `os.getcwd()`                       | Current working directory       |
+| `uid`          | `os.getuid()` (POSIX only)          | POSIX user ID (None on Windows) |
+
+`AttestationChecker.check()`:
+- Returns `True` if current fingerprint matches baseline (no anomaly)
+- Returns `False` on any field mismatch, writes `ATTESTATION_ANOMALY` audit event
+- Caller is responsible for triggering SAFE_MODE when `False` is returned
+
+Tests: `tests/` (runner attestation test suite)
+
+---
+
+## 14. Phase H: Approval Fatigue Mitigation (v0.5.x)
+
+**Problem:** A high-frequency agent could trigger hundreds of REQUIRE_APPROVAL
+decisions per minute, overwhelming operators with prompts and causing "approval
+fatigue" — operators click through without reading.
+
+**Solution:** Two complementary mechanisms:
+
+### H-1: ApprovalBatcher
+
+`ApprovalBatcher` (in `src/veronica_core/approval/batch.py`) groups repeated
+approval requests for the **same operation** into a single prompt.
+
+Batch key: SHA256 of `"rule_id|action|arg0|arg1|..."` (exact argument match).
+
+| Operation                    | Behaviour                                |
+|------------------------------|------------------------------------------|
+| First request for a key      | New `BatchedRequest` created, callback fired |
+| Subsequent identical requests | `BatchedRequest.count` incremented       |
+| Operator approves            | `batcher.clear(args_hash)` removes batch |
+
+Thread-safe: all state protected by `threading.Lock`.
+
+```python
+batcher = ApprovalBatcher(on_batch_ready=notify_operator)
+batch = batcher.add("FILE_WRITE_REQUIRE_APPROVAL", "file_write", ["ci.yml"])
+print(batch.count)  # 1 on first call, 2 on second, etc.
+```
+
+### H-2: ApprovalRateLimiter
+
+`ApprovalRateLimiter` (in `src/veronica_core/approval/rate_limit.py`) implements
+a sliding-window token bucket.
+
+Default parameters: 10 approvals per 60-second window.
+
+| Method              | Returns                                         |
+|---------------------|-------------------------------------------------|
+| `acquire()`         | `True` (consumed token) / `False` (rate limited)|
+| `available_tokens()`| Remaining capacity in the current window        |
+| `reset()`           | Clear all timestamps (full refill)              |
+
+When `acquire()` returns `False`, the caller should activate SAFE_MODE and
+alert the operator that the approval rate has been exceeded.
+
+Thread-safe: all state protected by `threading.Lock`.
+
+```python
+limiter = ApprovalRateLimiter(max_per_window=10, window_seconds=60.0)
+if not limiter.acquire():
+    # Rate limit exceeded — activate SAFE_MODE
+    ...
+```
+
+---
+
+### Attack Vectors Closed by Phase G/H
+
+| Attack Vector                        | Phase | Mitigation                                      |
+|--------------------------------------|-------|-------------------------------------------------|
+| Policy file tampering                | G-1   | HMAC-SHA256 sig verification, SAFE_MODE on mismatch |
+| Malicious package installation       | G-2   | `pip/npm/uv/cargo install` → REQUIRE_APPROVAL  |
+| Dependency lock file poisoning       | G-2   | Lock file writes → REQUIRE_APPROVAL             |
+| Unknown dependency gap (SBOM blind)  | G-2   | Automated SBOM in CI, `generate_sbom.py`        |
+| Container escape / UID escalation    | G-3   | EnvironmentFingerprint anomaly detection        |
+| Approval fatigue / prompt flooding   | H     | ApprovalBatcher dedup + ApprovalRateLimiter     |

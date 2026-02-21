@@ -383,6 +383,22 @@ The layer enforces: uncontrolled shell execution, sensitive file reads
 requests, CI workflow file modifications, and runaway agents that repeatedly
 probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
 
+**Phase G/H additions:**
+
+- **Policy signing (G-1)**: `policies/default.yaml` is HMAC-SHA256 signed.
+  Set `VERONICA_POLICY_KEY` (hex) for the production signing key.  Any
+  tampered policy file raises `RuntimeError` at load time.
+- **Supply chain guard (G-2)**: `pip install`, `npm install`, `pnpm add`,
+  `yarn add`, `uv add`, `cargo add`, and lock file writes all route to
+  `REQUIRE_APPROVAL` before execution.  Run `python tools/generate_sbom.py`
+  to produce a `sbom.json` inventory of installed packages.
+- **Runner attestation (G-3)**: `AttestationChecker` captures username,
+  platform, Python path, CWD, and UID at startup and detects mid-session
+  anomalies (container escape, privilege escalation).
+- **Approval fatigue mitigation (H)**: `ApprovalBatcher` deduplicates
+  identical approval requests; `ApprovalRateLimiter` caps throughput at
+  10 approvals/60 s by default.
+
 **Quick start — wire `PolicyHook` into `ShieldPipeline`:**
 
 ```python

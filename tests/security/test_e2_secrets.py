@@ -180,11 +180,12 @@ class TestShellCredentialSubcommands:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
 
-    # Verify safe npm commands still work
-    def test_npm_install_is_allowed(self) -> None:
+    # npm install now requires approval (G-2 supply chain guard)
+    def test_npm_install_requires_approval(self) -> None:
         engine = _engine()
         decision = engine.evaluate(_ctx("shell", ["npm", "install"]))
-        assert decision.verdict == "ALLOW"
+        assert decision.verdict == "REQUIRE_APPROVAL"
+        assert decision.rule_id == "SHELL_PKG_INSTALL"
 
     def test_npm_run_is_allowed(self) -> None:
         engine = _engine()
