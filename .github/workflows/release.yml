@@ -24,15 +24,15 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Sign policy artifacts
-        if: ${{ secrets.VERONICA_PRIVATE_KEY_PEM != '' }}
+      - name: Sign policy artifacts (or skip if key not set)
         env:
           VERONICA_PRIVATE_KEY_PEM: ${{ secrets.VERONICA_PRIVATE_KEY_PEM }}
-        run: python tools/release_sign_policy.py
-
-      - name: Skip signing (no secret)
-        if: ${{ secrets.VERONICA_PRIVATE_KEY_PEM == '' }}
-        run: echo "[INFO] VERONICA_PRIVATE_KEY_PEM not set; skipping signing step."
+        run: |
+          if [ -n "${VERONICA_PRIVATE_KEY_PEM}" ]; then
+            python tools/release_sign_policy.py
+          else
+            echo "[INFO] VERONICA_PRIVATE_KEY_PEM not set; skipping signing step."
+          fi
 
       - name: Verify release artifacts
         run: python tools/verify_release.py
