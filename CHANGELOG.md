@@ -7,11 +7,44 @@ All notable changes to this project will be documented in this file.
 ## [0.9.1] — 2026-02-21
 
 ### Added
-- `AIcontainer`: declarative execution boundary abstraction in `veronica_core.container`.
-  Composes `BudgetEnforcer`, `CircuitBreaker`, `RetryContainer`, `AgentStepGuard`
-  into a single container with a unified `check()` API.
-  Import: `from veronica_core.container import AIcontainer`
-  All existing primitive imports remain unchanged.
+- `AIcontainer` (`veronica_core.container`): declarative execution boundary that composes
+  `BudgetEnforcer`, `CircuitBreaker`, `RetryContainer`, `AgentStepGuard` into a single
+  `check()` / `reset()` API. All existing primitive imports unchanged.
+
+### Security
+- `PolicyEngine` with declarative DENY/REQUIRE_APPROVAL/ALLOW rules loaded from
+  `policies/default.yaml`; integrates with `ShieldPipeline` via `PolicyHook`.
+- `SecretMasker`: redacts 28 credential patterns (AWS, GitHub, OpenAI, Anthropic,
+  Stripe, Slack, bitbank, Polymarket, and others) in audit output.
+- `SandboxRunner` / `WindowsSandboxRunner`: ephemeral temp-dir isolation with auto-cleanup.
+- `CLIApprover` v1: HMAC-SHA256 signed approval tokens with 5-minute TTL.
+- `ApprovalToken` v2: single-use nonces with replay, scope, and expiry enforcement.
+- `ApprovalBatcher` (SHA-256 dedup) + `ApprovalRateLimiter` (token bucket, 10/60s).
+- `AuditLog`: append-only JSONL with SHA-256 hash chain; secret masking on all entries.
+- `RiskScoreAccumulator`: thread-safe deny counter that auto-transitions to SAFE_MODE
+  at a configurable threshold.
+- AST-based CI lint gate (`tools/lint_no_raw_exec.py`) blocking `exec()`, `eval()`,
+  `os.system()`, `subprocess` with `shell=True` in source files.
+- Network exfiltration guard: URL length cap (2048 chars), Shannon entropy check (>4.5
+  bits), base64/hex query-string pattern detection.
+- Policy file signing: HMAC-SHA256 (`policies/default.yaml.sig`) and ed25519
+  (`policies/default.yaml.sig.v2`); `RuntimeError` on tamper detection.
+- Supply chain guard: `pip`, `npm`, `uv`, `cargo install` and lock-file writes
+  route to REQUIRE_APPROVAL in the policy engine.
+- `EnvironmentFingerprint` + `AttestationChecker`: mid-session anomaly detection
+  with `ATTESTATION_ANOMALY` audit event.
+- Security levels `DEV` / `CI` / `PROD` (auto-detected via `VERONICA_SECURITY_LEVEL`).
+- SHA-256 key pinning (`policies/key_pin.txt`): `RuntimeError` on mismatch in CI/PROD.
+- Policy rollback protection via backward scan of the audit log.
+- Release tooling: `tools/release_sign_policy.py` (ed25519 signing CLI),
+  `tools/verify_release.py` (sig + key-pin + policy-version verification).
+- 36 verifiable security claims documented in `docs/SECURITY_CLAIMS.md` with pytest mapping.
+- 20 red-team regression scenarios (exfiltration, credential-hunt, workflow-poison,
+  persistence) all blocked, tracked in `tests/redteam/test_redteam.py`.
+
+### Fixed
+- CRLF normalization in `PolicySigner` for cross-platform ed25519 consistency.
+- `cryptography` added to dev dependencies to fix CI test collection.
 
 ### Notes
 - No deprecation warnings introduced in this release.
