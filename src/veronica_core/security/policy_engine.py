@@ -529,16 +529,45 @@ class PolicyEngine:
         A missing sig file logs a ``policy_sig_missing`` warning and
         allows the engine to continue loading (backward compatibility).
 
+        In CI or PROD security levels:
+        - A missing signature file raises ``RuntimeError`` (not just a warning).
+        - If ed25519 (cryptography package) is unavailable, raises ``RuntimeError``.
+
         Args:
             policy_path: Optional path to a YAML policy file.
             public_key_path: Optional path to the ed25519 public key PEM
                              used for v2 verification.  Defaults to
                              ``policies/public_key.pem`` in the repo root.
         """
+        from veronica_core.security.security_level import SecurityLevel, get_security_level
+        from veronica_core.security.policy_signing import _ED25519_AVAILABLE
+
         self._policy_path = policy_path
         self._public_key_path = public_key_path
+        self._policy: dict[str, Any] = {}
+        self._audit_log = None
+
+        level = get_security_level()
+        strict = level in (SecurityLevel.CI, SecurityLevel.PROD)
+
+        if strict and not _ED25519_AVAILABLE:
+            raise RuntimeError(
+                f"cryptography package is required in {level.name} environment. "
+                "Install it with: pip install cryptography"
+            )
+
         if policy_path is not None:
+            if strict:
+                sig_v2_path = Path(str(policy_path) + ".sig.v2")
+                sig_v1_path = Path(str(policy_path) + ".sig")
+                if not sig_v2_path.exists() and not sig_v1_path.exists():
+                    raise RuntimeError(
+                        f"Policy signature file missing in {level.name} environment: "
+                        f"{policy_path}"
+                    )
             self._verify_policy_signature(policy_path, public_key_path=public_key_path)
+            self._policy = self._load_policy(policy_path)
+            self._check_rollback()
 
     # ------------------------------------------------------------------
     # Signature verification (G-1)
@@ -587,7 +616,26 @@ class PolicyEngine:
                 _emit_audit("policy_tamper", {"policy_path": str(policy_path), "version": "v2"})
                 _log.error("policy_tamper (v2): signature mismatch for %s", policy_path)
                 raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
-            # v2 verified — skip v1 check
+            # v2 verified — enforce key pin before continuing
+            resolved_pub = public_key_path or signer_v2._public_key_path
+            if resolved_pub.exists():
+                try:
+                    from veronica_core.security.key_pin import KeyPinChecker
+                    pub_pem = resolved_pub.read_bytes()
+                    audit_log = None
+                    try:
+                        from veronica_core.audit.log import AuditLog
+                        import tempfile
+                        audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
+                        audit_log = AuditLog(audit_dir / "policy.jsonl")
+                    except Exception:
+                        pass
+                    KeyPinChecker(audit_log).enforce(pub_pem)
+                except Exception as exc:
+                    if isinstance(exc, RuntimeError):
+                        raise
+                    _log.warning("key_pin check failed unexpectedly: %s", exc)
+            # skip v1 check
             return
 
         # ------------------------------------------------------------------
@@ -614,6 +662,39 @@ class PolicyEngine:
         # ------------------------------------------------------------------
         _emit_audit("policy_sig_missing", {"policy_path": str(policy_path)})
         _log.warning("policy_sig_missing: no signature file found for %s", policy_path)
+
+    @staticmethod
+    def _load_policy(policy_path: Path) -> dict[str, Any]:
+        """Load and parse a YAML policy file.
+
+        Returns an empty dict if yaml is unavailable or parsing fails.
+
+        Args:
+            policy_path: Path to the YAML policy file.
+
+        Returns:
+            Parsed policy dict, or empty dict on failure.
+        """
+        try:
+            import yaml  # type: ignore[import-untyped]
+            with policy_path.open("r", encoding="utf-8") as fh:
+                return yaml.safe_load(fh) or {}
+        except Exception:
+            return {}
+
+    def _check_rollback(self) -> None:
+        """Check policy_version / min_engine_version fields if present.
+
+        Delegates to RollbackGuard.  If audit_log is None, the guard still
+        validates engine version but skips persistent rollback tracking.
+        """
+        from veronica_core.security.rollback_guard import RollbackGuard
+
+        policy_version = self._policy.get("policy_version")
+        min_engine = self._policy.get("min_engine_version")
+        if policy_version is not None:
+            guard = RollbackGuard(audit_log=self._audit_log)
+            guard.check(int(policy_version), min_engine)
 
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
         """Evaluate *ctx* and return a PolicyDecision.

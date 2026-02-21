@@ -881,3 +881,129 @@ Tests: `tests/tools/test_sbom_diff.py`
 | HMAC鍵漏洩によるポリシー偽造                   | I-1   | ed25519非対称署名（公開鍵のみリポジトリにコミット）      |
 | サンドボックス設定不備による制限迂回            | I-2   | SandboxProbe能動的探索（read/net両方を実際に試みる）    |
 | サイレント依存関係変更（SBOMスナップショット間）| I-3   | sbom_diff.py差分ゲート + HMAC承認トークン               |
+
+---
+
+## 16. Phase J: Safety Floor — Fallback Prohibition, Key Pinning, Rollback Resistance
+
+Phase J closes four remaining gaps: environment-aware enforcement, public key
+substitution, policy version rollback, and silent safety gaps hidden in xfailed
+tests.
+
+### J-1: Security Levels (DEV/CI/PROD)
+
+**Problem:** Prior phases applied the same enforcement intensity in development
+and in production.  A missing signature file was logged as a warning in all
+environments, and the `cryptography` package was optional everywhere.
+
+**Solution:** `SecurityLevel` enum (`DEV`, `CI`, `PROD`) with auto-detection:
+
+| Resolution order | Source |
+|-----------------|--------|
+| 1st | `VERONICA_SECURITY_LEVEL` env var (`DEV`, `CI`, or `PROD`) |
+| 2nd | Known CI env vars (`GITHUB_ACTIONS`, `CI`, `TRAVIS`, `CIRCLECI`, etc.) |
+| 3rd | Falls back to `DEV` |
+
+**Enforcement matrix by level:**
+
+| Check | DEV | CI | PROD |
+|-------|-----|----|------|
+| `cryptography` package required | No | Yes | Yes |
+| Missing sig file | Warning | RuntimeError | RuntimeError |
+| Key pin mismatch | Warning | RuntimeError | RuntimeError |
+
+Implementation: `src/veronica_core/security/security_level.py`
+Tests: `tests/security/test_security_level.py`
+
+---
+
+### J-2: Key Pinning
+
+**Problem:** Phase I-1 committed the ed25519 public key to `policies/public_key.pem`.
+An attacker with write access to the repository could swap in a different key
+and produce a valid policy signature without modifying `public_key.pem` in the
+audit trail.
+
+**Solution:** `KeyPinChecker` computes SHA-256(`public_key.pem.strip()`) and
+compares it against a committed pin in `policies/key_pin.txt` (or the
+`VERONICA_KEY_PIN` env var).
+
+| Pin source | Priority |
+|------------|----------|
+| `VERONICA_KEY_PIN` env var | 1st (highest) |
+| `policies/key_pin.txt` | 2nd |
+| Not configured | Check passes (non-strict) |
+
+**Integration:** `PolicyEngine._verify_policy_signature()` calls
+`KeyPinChecker.enforce()` after loading the public key.  In CI/PROD, a
+mismatch raises `RuntimeError` before the engine proceeds.
+
+**Audit event:** `key_pin_mismatch` — includes `expected` and `actual` hashes.
+
+See [docs/KEY_ROTATION.md](KEY_ROTATION.md) for the key rotation workflow.
+
+Implementation: `src/veronica_core/security/key_pin.py`
+Tests: `tests/security/test_key_pin.py` (15 test cases)
+
+---
+
+### J-3: Policy Rollback Protection
+
+**Problem:** An attacker could submit an older, weakened policy version after
+a newer one has been applied.  Without backward scan of the audit log, a
+`policy_version=1` file could silently replace a `policy_version=5` file.
+
+**Solution:** `RollbackGuard` checks the audit log for the highest previously
+seen `policy_checkpoint` event and rejects any policy version below it.
+Engine version is checked against `min_engine_version` (semver).
+
+**Audit events:**
+
+| Event | Condition |
+|-------|-----------|
+| `policy_checkpoint` | New highest policy version seen — stored in audit log |
+| `policy_rollback_detected` | Submitted version < highest seen |
+| `engine_version_too_old` | Running engine < policy's `min_engine_version` |
+
+**Design:** The audit log is the sole source of truth for policy version history.
+No external state file is maintained; `policy_checkpoint` events bound the
+backward scan for fast startup.
+
+Implementation: `src/veronica_core/security/rollback_guard.py`
+Tests: `tests/security/test_rollback_guard.py`
+
+---
+
+### J-4: xfailed Test Registry
+
+**Problem:** Tests marked `xfail` can silently hide security gaps if they are
+accepted without review.  There was no formal process for tracking xfails or
+assessing their safety impact.
+
+**Solution:** `docs/XFAILED_REGISTRY.md` — a mandatory registry for all
+`xfail`-marked tests.
+
+**Process:**
+1. Every new `xfail` must have a registry entry with a safety risk assessment.
+2. Risk levels: **None** / **Low** / **High**.
+3. Any **High**-risk xfail must be fixed immediately — it cannot remain as xfail.
+4. Registry reviewed in the PR that adds the `xfail`.
+
+**Current xfailed tests (4 total, all risk: None):**
+
+All four xfails are in `tests/test_openclaw_api_detection.py` and cover planned
+multi-API detection (`v0.2.x`).  The containment layer is unaffected: unrecognised
+API patterns fail safely by transitioning to `SAFE_MODE`.
+
+See [docs/XFAILED_REGISTRY.md](XFAILED_REGISTRY.md) for the full registry.
+
+---
+
+### Phase Jで塞いだ突破口
+
+| 依存なしでHMACフォールバック | J-1 | CI/PRODはed25519必須 (`cryptography`パッケージ) |
+|------------------------------|-----|------------------------------------------------|
+| 公開鍵差し替えバイパス | J-2 | SHA-256 key pinning (`policies/key_pin.txt`) |
+| stateファイル巻き戻し | J-3 | audit log onlyでバックワードスキャン (policy_checkpoint) |
+| min_engine_version回避 | J-3 | エンジンバージョンチェック (semver) |
+| xfailに隠れた安全ギャップ | J-4 | XFAILED_REGISTRY.md (Highリスク即修正) |

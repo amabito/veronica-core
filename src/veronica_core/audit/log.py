@@ -73,6 +73,88 @@ class AuditLog:
                 fh.write(line)
             self._prev_hash = entry["hash"]
 
+    def append(self, payload: dict[str, Any]) -> None:
+        """Append a raw payload dict as an audit entry.
+
+        Uses the "event" key as event_type (defaults to "audit_event").
+        The full payload is stored under the "data" field.
+
+        Args:
+            payload: Dict containing at minimum an "event" key.
+        """
+        event_type = payload.get("event", "audit_event")
+        self.write(str(event_type), payload)
+
+    def get_last_policy_version(self) -> int | None:
+        """Backward scan of JSONL audit log to find last known policy version.
+
+        Reads lines in reverse, finds first:
+        - ``{"event": "policy_checkpoint", "max_policy_version": N}`` → return N
+        - ``{"event": "policy_version_accepted", "policy_version": N}`` → collect all, return max
+
+        Returns:
+            Last accepted policy version, or None if no policy version events found.
+        """
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            return None
+
+        max_accepted: int | None = None
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            # Policy events are stored in the "data" field by write()
+            data = entry.get("data", entry)
+            event = data.get("event") if isinstance(data, dict) else None
+            if event == "policy_checkpoint":
+                return int(data["max_policy_version"])
+            if event == "policy_version_accepted":
+                v = int(data.get("policy_version", 0))
+                if max_accepted is None or v > max_accepted:
+                    max_accepted = v
+        return max_accepted
+
+    def write_policy_checkpoint(self, policy_version: int) -> None:
+        """Write a policy checkpoint entry recording the highest seen version.
+
+        Args:
+            policy_version: The current maximum accepted policy version.
+        """
+        self.append({"event": "policy_checkpoint", "max_policy_version": policy_version})
+
+    def log_policy_version_accepted(self, policy_version: int, policy_path: str) -> None:
+        """Log that a policy version was accepted.
+
+        Args:
+            policy_version: The accepted policy version number.
+            policy_path: Path to the accepted policy file.
+        """
+        self.append({
+            "event": "policy_version_accepted",
+            "policy_version": policy_version,
+            "policy_path": policy_path,
+        })
+
+    def log_policy_rollback(self, current_version: int, last_seen: int) -> None:
+        """Log that a policy rollback was attempted.
+
+        Args:
+            current_version: The version number in the attempted policy.
+            last_seen: The last accepted (higher) version number.
+        """
+        self.append({
+            "event": "policy_rollback",
+            "current_version": current_version,
+            "last_seen_version": last_seen,
+        })
+
     def log_sbom_diff(
         self,
         added: list[str],
