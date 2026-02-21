@@ -312,7 +312,7 @@ with ExecutionContext(config=config) as ctx:
 
 ---
 
-## AIcontainer (v0.9.1)
+## AIcontainer (v0.9.2)
 
 `AIcontainer` is a declarative execution boundary that composes veronica-core primitives
 into a single container object. Use it when you want to declare all boundaries upfront
@@ -340,7 +340,7 @@ Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
 
 ---
 
-## Ship Readiness (v0.9.1)
+## Ship Readiness (v0.9.2)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -360,6 +360,7 @@ Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
 - [x] PolicyEngine: declarative DENY/REQUIRE_APPROVAL/ALLOW rule set (v0.9.1)
 - [x] AuditLog: append-only JSONL with SHA-256 hash chain + secret masking (v0.9.1)
 - [x] Policy signing: HMAC-SHA256 + ed25519 tamper detection (v0.9.1)
+- [x] CI: release workflow secrets guard fixed (v0.9.2)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
