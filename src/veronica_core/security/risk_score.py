@@ -73,8 +73,15 @@ class RiskScoreAccumulator:
 
     @property
     def is_safe_mode(self) -> bool:
-        """Return True when cumulative score has reached the deny threshold."""
-        return self.current_score >= self._config.deny_threshold
+        """Return True when cumulative score has reached the deny threshold.
+
+        Both the score computation and the threshold comparison are performed
+        under a single lock acquisition to prevent a TOCTOU race where another
+        thread adds a high-delta entry between the score read and the
+        comparison.
+        """
+        with self._lock:
+            return sum(e.delta for e in self._window) >= self._config.deny_threshold
 
     def reset(self) -> None:
         """Clear all accumulated entries and reset score to zero."""

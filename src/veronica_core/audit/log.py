@@ -64,10 +64,12 @@ class AuditLog:
             data: Arbitrary dict payload. Secrets are masked before writing.
         """
         masked_data = self._masker.mask_dict(data) if self._masker else data
-        entry = self._build_entry(event_type, masked_data)
-        line = json.dumps(entry, separators=(",", ":")) + "\n"
 
+        # Build entry and update prev_hash inside the lock to prevent concurrent
+        # writes from reading the same prev_hash and breaking the hash chain.
         with self._lock:
+            entry = self._build_entry(event_type, masked_data)
+            line = json.dumps(entry, separators=(",", ":")) + "\n"
             self._path.parent.mkdir(parents=True, exist_ok=True)
             with self._path.open("a", encoding="utf-8") as fh:
                 fh.write(line)

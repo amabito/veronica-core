@@ -241,7 +241,9 @@ class TestCircuitBreaker:
     def test_half_open_after_recovery_timeout(self):
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.001)
         cb.record_failure()
-        assert cb.state == CircuitState.OPEN
+        # Access internal _state directly to avoid triggering the half-open
+        # transition that .state property may apply if enough time has passed.
+        assert cb._state == CircuitState.OPEN
         time.sleep(0.05)  # 50x buffer for CI stability
         assert cb.state == CircuitState.HALF_OPEN
         assert cb.check(PolicyContext()).allowed

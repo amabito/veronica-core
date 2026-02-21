@@ -9,6 +9,8 @@ via ``get_events()`` / ``clear_events()``.
 
 from __future__ import annotations
 
+import threading
+
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.hooks import (
     BudgetBoundaryHook,
@@ -56,7 +58,8 @@ class ShieldPipeline:
         self._retry = retry
         self._budget = budget
         self._tool_dispatch = tool_dispatch
-        self.safety_events: list[SafetyEvent] = []
+        self._safety_events: list[SafetyEvent] = []
+        self._lock = threading.Lock()
 
     def _record(
         self,
@@ -72,15 +75,18 @@ class ShieldPipeline:
             hook=type(hook).__name__,
             request_id=request_id,
         )
-        self.safety_events.append(event)
+        with self._lock:
+            self._safety_events.append(event)
 
     def get_events(self) -> list[SafetyEvent]:
         """Return accumulated safety events (shallow copy)."""
-        return list(self.safety_events)
+        with self._lock:
+            return list(self._safety_events)
 
     def clear_events(self) -> None:
         """Clear all accumulated safety events."""
-        self.safety_events.clear()
+        with self._lock:
+            self._safety_events.clear()
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision:
         """Evaluate pre-dispatch hook."""

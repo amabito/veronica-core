@@ -9,6 +9,7 @@ import collections
 import fnmatch
 import math
 import re
+import threading
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -741,7 +742,19 @@ class PolicyHook:
         self._working_dir = working_dir
         self._repo_root = repo_root
         self._env = env
-        self.last_decision: PolicyDecision | None = None
+        self._last_decision: PolicyDecision | None = None
+        self._last_decision_lock = threading.Lock()
+
+    @property
+    def last_decision(self) -> PolicyDecision | None:
+        """The most recent PolicyDecision evaluated (thread-safe read)."""
+        with self._last_decision_lock:
+            return self._last_decision
+
+    @last_decision.setter
+    def last_decision(self, value: PolicyDecision | None) -> None:
+        with self._last_decision_lock:
+            self._last_decision = value
 
     def _verdict_to_decision(self, verdict: Literal["ALLOW", "DENY", "REQUIRE_APPROVAL"]) -> Decision:
         if verdict == "ALLOW":

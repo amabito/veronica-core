@@ -4,6 +4,7 @@ from __future__ import annotations
 import signal
 import atexit
 import logging
+import threading
 from enum import IntEnum
 from typing import Optional
 
@@ -33,6 +34,7 @@ class VeronicaExit:
         self.exit_requested = False
         self.exit_tier: Optional[ExitTier] = None
         self.exit_reason: str = ""
+        self._exit_lock = threading.Lock()
 
         # Register handlers
         self._register_handlers()
@@ -65,14 +67,15 @@ class VeronicaExit:
             self.request_exit(ExitTier.EMERGENCY, "atexit fallback")
 
     def request_exit(self, tier: ExitTier, reason: str) -> None:
-        """Request exit at specified tier."""
-        if self.exit_requested:
-            logger.warning(f"[VERONICA_EXIT] Exit already requested (tier={self.exit_tier}), ignoring")
-            return
+        """Request exit at specified tier. Thread-safe against duplicate signals."""
+        with self._exit_lock:
+            if self.exit_requested:
+                logger.warning(f"[VERONICA_EXIT] Exit already requested (tier={self.exit_tier}), ignoring")
+                return
 
-        self.exit_requested = True
-        self.exit_tier = tier
-        self.exit_reason = reason
+            self.exit_requested = True
+            self.exit_tier = tier
+            self.exit_reason = reason
 
         logger.warning(
             f"[VERONICA_EXIT] Exit requested: tier={tier.name} reason='{reason}'"

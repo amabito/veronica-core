@@ -7,6 +7,7 @@ In CI/PROD environments, a mismatch raises RuntimeError.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 from pathlib import Path
@@ -98,7 +99,7 @@ class KeyPinChecker:
             return True
 
         actual = compute_key_hash(pem_bytes)
-        if actual == expected:
+        if hmac.compare_digest(actual, expected):
             return True
 
         logger.error(

@@ -7,6 +7,7 @@ This module provides a drop-in replacement for global variables
 from __future__ import annotations
 from typing import Dict, Optional
 import logging
+import threading
 import time
 import atexit
 
@@ -158,9 +159,14 @@ class VeronicaIntegration:
         # Register exit handler
         self.exit_handler = VeronicaExit(self.state, self.persistence)
 
+        # When using modern backend mode, also register atexit to save via backend
+        if self.backend is not None:
+            atexit.register(self.save)
+
         # Auto-save tracking
         self.auto_save_interval = auto_save_interval
         self.operation_count = 0
+        self._op_lock = threading.Lock()
 
         logger.info(
             f"[VERONICA_INTEGRATION] Initialized: "
@@ -261,18 +267,23 @@ class VeronicaIntegration:
         if self.auto_save_interval <= 0:
             return  # Auto-save disabled
 
+        self._op_lock.acquire()
         self.operation_count += 1
-        if self.operation_count >= self.auto_save_interval:
+        should_save = self.operation_count >= self.auto_save_interval
+        if should_save:
+            self.operation_count = 0
+        self._op_lock.release()
+
+        if should_save:
             logger.debug(
-                f"[VERONICA_INTEGRATION] Auto-save triggered "
-                f"(operations={self.operation_count})"
+                f"[VERONICA_INTEGRATION] Auto-save triggered"
             )
             self.save()  # Use save() method (includes guard validation)
-            self.operation_count = 0
 
 
 # Global singleton instance (initialized in run_multi_pair_trading.py)
 _veronica_integration: Optional[VeronicaIntegration] = None
+_singleton_lock = threading.Lock()
 
 
 def get_veronica_integration(
@@ -281,6 +292,8 @@ def get_veronica_integration(
     auto_save_interval: int = 100,
 ) -> VeronicaIntegration:
     """Get or create global VeronicaIntegration instance.
+
+    Thread-safe: double-checked locking prevents duplicate initialization.
 
     Args:
         cooldown_fails: Number of consecutive fails to trigger cooldown
@@ -292,9 +305,11 @@ def get_veronica_integration(
     """
     global _veronica_integration
     if _veronica_integration is None:
-        _veronica_integration = VeronicaIntegration(
-            cooldown_fails=cooldown_fails,
-            cooldown_seconds=cooldown_seconds,
-            auto_save_interval=auto_save_interval,
-        )
+        with _singleton_lock:
+            if _veronica_integration is None:
+                _veronica_integration = VeronicaIntegration(
+                    cooldown_fails=cooldown_fails,
+                    cooldown_seconds=cooldown_seconds,
+                    auto_save_interval=auto_save_interval,
+                )
     return _veronica_integration

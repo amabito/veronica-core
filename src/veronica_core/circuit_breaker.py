@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Optional
 import logging
+import threading
 import time
 
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
@@ -53,6 +54,7 @@ class CircuitBreaker:
     _failure_count: int = field(default=0, init=False)
     _last_failure_time: Optional[float] = field(default=None, init=False)
     _success_count: int = field(default=0, init=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     @property
     def policy_type(self) -> str:
@@ -62,8 +64,9 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         """Current circuit state (may auto-transition to HALF_OPEN)."""
-        self._maybe_half_open()
-        return self._state
+        with self._lock:
+            self._maybe_half_open_locked()
+            return self._state
 
     def check(self, context: PolicyContext) -> PolicyDecision:
         """RuntimePolicy protocol: check if circuit allows the operation.
@@ -74,17 +77,18 @@ class CircuitBreaker:
         Returns:
             PolicyDecision allowing (CLOSED/HALF_OPEN) or denying (OPEN)
         """
-        self._maybe_half_open()
+        with self._lock:
+            self._maybe_half_open_locked()
 
-        if self._state == CircuitState.OPEN:
-            return PolicyDecision(
-                allowed=False,
-                policy_type=self.policy_type,
-                reason=(
-                    f"Circuit OPEN: "
-                    f"{self._failure_count} consecutive failures"
-                ),
-            )
+            if self._state == CircuitState.OPEN:
+                return PolicyDecision(
+                    allowed=False,
+                    policy_type=self.policy_type,
+                    reason=(
+                        f"Circuit OPEN: "
+                        f"{self._failure_count} consecutive failures"
+                    ),
+                )
 
         return PolicyDecision(allowed=True, policy_type=self.policy_type)
 
@@ -94,14 +98,15 @@ class CircuitBreaker:
         Closes the circuit if currently half-open.
         Resets consecutive failure counter.
         """
-        self._success_count += 1
+        with self._lock:
+            self._success_count += 1
 
-        if self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.CLOSED
-            self._failure_count = 0
-            logger.info("[VERONICA_CIRCUIT] Circuit closed after successful test")
-        elif self._state == CircuitState.CLOSED:
-            self._failure_count = 0
+            if self._state == CircuitState.HALF_OPEN:
+                self._state = CircuitState.CLOSED
+                self._failure_count = 0
+                logger.info("[VERONICA_CIRCUIT] Circuit closed after successful test")
+            elif self._state == CircuitState.CLOSED:
+                self._failure_count = 0
 
     def record_failure(self) -> None:
         """Record a failed operation.
@@ -109,23 +114,27 @@ class CircuitBreaker:
         Increments failure counter. Opens the circuit if threshold
         is reached. Reopens from half-open on failure.
         """
-        self._failure_count += 1
-        self._last_failure_time = time.time()
+        with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.time()
 
-        if self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.OPEN
-            logger.warning(
-                "[VERONICA_CIRCUIT] Circuit reopened after failed test"
-            )
-        elif self._failure_count >= self.failure_threshold:
-            self._state = CircuitState.OPEN
-            logger.warning(
-                f"[VERONICA_CIRCUIT] Circuit opened: "
-                f"{self._failure_count} consecutive failures"
-            )
+            if self._state == CircuitState.HALF_OPEN:
+                self._state = CircuitState.OPEN
+                logger.warning(
+                    "[VERONICA_CIRCUIT] Circuit reopened after failed test"
+                )
+            elif self._failure_count >= self.failure_threshold:
+                self._state = CircuitState.OPEN
+                logger.warning(
+                    f"[VERONICA_CIRCUIT] Circuit opened: "
+                    f"{self._failure_count} consecutive failures"
+                )
 
-    def _maybe_half_open(self) -> None:
-        """Transition from OPEN to HALF_OPEN if recovery timeout elapsed."""
+    def _maybe_half_open_locked(self) -> None:
+        """Transition from OPEN to HALF_OPEN if recovery timeout elapsed.
+
+        Must be called with self._lock held.
+        """
         if (
             self._state == CircuitState.OPEN
             and self._last_failure_time is not None
@@ -138,29 +147,33 @@ class CircuitBreaker:
 
     def reset(self) -> None:
         """Reset circuit to CLOSED state."""
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._last_failure_time = None
-        self._success_count = 0
+        with self._lock:
+            self._state = CircuitState.CLOSED
+            self._failure_count = 0
+            self._last_failure_time = None
+            self._success_count = 0
         logger.info("[VERONICA_CIRCUIT] Circuit reset")
 
     @property
     def failure_count(self) -> int:
         """Consecutive failure count."""
-        return self._failure_count
+        with self._lock:
+            return self._failure_count
 
     @property
     def success_count(self) -> int:
         """Total success count."""
-        return self._success_count
+        with self._lock:
+            return self._success_count
 
     def to_dict(self) -> Dict:
         """Serialize circuit breaker state."""
-        return {
-            "state": self._state.value,
-            "failure_count": self._failure_count,
-            "failure_threshold": self.failure_threshold,
-            "recovery_timeout": self.recovery_timeout,
-            "last_failure_time": self._last_failure_time,
-            "success_count": self._success_count,
-        }
+        with self._lock:
+            return {
+                "state": self._state.value,
+                "failure_count": self._failure_count,
+                "failure_threshold": self.failure_threshold,
+                "recovery_timeout": self.recovery_timeout,
+                "last_failure_time": self._last_failure_time,
+                "success_count": self._success_count,
+            }
