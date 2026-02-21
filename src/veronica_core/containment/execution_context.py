@@ -288,8 +288,13 @@ class ExecutionContext:
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
-        # Cancel the timeout watcher thread on exit so it does not linger.
+        # Signal the timeout watcher thread to stop and wait for it to exit.
+        # cancel() unblocks the thread's wait() call; join() ensures the thread
+        # has actually finished before the context exits, preventing thread leaks
+        # in test suites and short-lived programs.
         self._cancellation_token.cancel()
+        if self._timeout_thread is not None and self._timeout_thread.is_alive():
+            self._timeout_thread.join(timeout=1.0)
 
     # ------------------------------------------------------------------
     # Public API
@@ -465,20 +470,24 @@ class ExecutionContext:
             return Decision.HALT
 
         # Pre-flight: cost estimate check (before calling fn).
+        # Hold a single lock for the entire read-check-emit-append sequence to
+        # prevent another thread from modifying _cost_usd_accumulated between
+        # the read and the limit comparison.
+        _budget_exceeded = False
         if opts.cost_estimate_hint > 0.0:
             with self._lock:
                 projected = self._cost_usd_accumulated + opts.cost_estimate_hint
-            if projected > self._config.max_cost_usd:
-                with self._lock:
+                if projected > self._config.max_cost_usd:
+                    _budget_exceeded = True
                     self._emit_chain_event(
                         "budget_exceeded",
                         f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
                         f"chain ceiling ${self._config.max_cost_usd:.4f}",
                     )
-                node.status = "halted"
-                node.end_ts = datetime.now(timezone.utc)
-                with self._lock:
+                    node.status = "halted"
+                    node.end_ts = datetime.now(timezone.utc)
                     self._nodes.append(node)
+            if _budget_exceeded:
                 stack.pop()
                 self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
                 return Decision.HALT

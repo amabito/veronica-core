@@ -56,29 +56,34 @@ class BudgetEnforcer:
     @property
     def spent_usd(self) -> float:
         """Total amount spent so far."""
-        return self._spent_usd
+        with self._lock:
+            return self._spent_usd
 
     @property
     def remaining_usd(self) -> float:
         """Remaining budget in USD."""
-        return max(0.0, self.limit_usd - self._spent_usd)
+        with self._lock:
+            return max(0.0, self.limit_usd - self._spent_usd)
 
     @property
     def is_exceeded(self) -> bool:
         """True if budget has been exceeded."""
-        return self._spent_usd > self.limit_usd
+        with self._lock:
+            return self._spent_usd > self.limit_usd
 
     @property
     def call_count(self) -> int:
         """Total number of calls tracked."""
-        return self._call_count
+        with self._lock:
+            return self._call_count
 
     @property
     def utilization(self) -> float:
         """Budget utilization as a fraction (0.0 to 1.0+)."""
-        if self.limit_usd <= 0:
-            return float("inf")
-        return self._spent_usd / self.limit_usd
+        with self._lock:
+            if self.limit_usd <= 0:
+                return float("inf")
+            return self._spent_usd / self.limit_usd
 
     def reset(self) -> None:
         """Reset budget tracking."""

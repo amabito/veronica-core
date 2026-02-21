@@ -8,6 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List
+import threading
 import time
 import logging
 
@@ -21,6 +22,16 @@ class VeronicaState(Enum):
     COOLDOWN = "COOLDOWN"   # Pair-specific cooldown active
     SAFE_MODE = "SAFE_MODE" # Emergency safe mode (all trading halted)
     ERROR = "ERROR"         # System error state
+
+
+# Valid state transitions: from_state -> set of allowed to_states
+VALID_TRANSITIONS: Dict[VeronicaState, set] = {
+    VeronicaState.IDLE: {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
+    VeronicaState.SCREENING: {VeronicaState.IDLE, VeronicaState.COOLDOWN, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
+    VeronicaState.COOLDOWN: {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
+    VeronicaState.SAFE_MODE: {VeronicaState.IDLE, VeronicaState.ERROR},
+    VeronicaState.ERROR: {VeronicaState.IDLE, VeronicaState.SAFE_MODE},
+}
 
 
 @dataclass
@@ -48,120 +59,142 @@ class VeronicaStateMachine:
     current_state: VeronicaState = VeronicaState.IDLE
     state_history: List[StateTransition] = field(default_factory=list)
 
+    # Thread safety
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
     def is_in_cooldown(self, pair: str) -> bool:
         """Check if pair is in cooldown."""
         now = time.time()
-        if pair in self.cooldowns:
-            if now < self.cooldowns[pair]:
-                return True
-            else:
-                # Cooldown expired - cleanup
-                self.cleanup_expired_pair(pair)
+        with self._lock:
+            if pair in self.cooldowns:
+                if now < self.cooldowns[pair]:
+                    return True
+                else:
+                    # Cooldown expired - cleanup (lock already held)
+                    self._cleanup_pair_locked(pair)
         return False
 
     def record_fail(self, pair: str) -> bool:
         """Record sanity_fail for pair. Returns True if cooldown activated."""
-        self.fail_counts[pair] = self.fail_counts.get(pair, 0) + 1
+        with self._lock:
+            self.fail_counts[pair] = self.fail_counts.get(pair, 0) + 1
 
-        if self.fail_counts[pair] >= self.cooldown_fails:
-            # Activate cooldown
-            self.cooldowns[pair] = time.time() + self.cooldown_seconds
-            logger.warning(
-                f"[VERONICA_STATE] {pair} cooldown activated: "
-                f"{self.cooldown_fails} consecutive fails, "
-                f"expires in {self.cooldown_seconds}s"
-            )
-            return True
+            if self.fail_counts[pair] >= self.cooldown_fails:
+                # Activate cooldown
+                self.cooldowns[pair] = time.time() + self.cooldown_seconds
+                logger.warning(
+                    f"[VERONICA_STATE] {pair} cooldown activated: "
+                    f"{self.cooldown_fails} consecutive fails, "
+                    f"expires in {self.cooldown_seconds}s"
+                )
+                return True
 
         return False
 
     def record_pass(self, pair: str) -> None:
         """Record sanity_pass for pair. Resets fail counter."""
-        if pair in self.fail_counts:
-            logger.info(f"[VERONICA_STATE] {pair} fail counter reset (was {self.fail_counts[pair]})")
-            self.fail_counts.pop(pair, None)
+        with self._lock:
+            if pair in self.fail_counts:
+                logger.info(f"[VERONICA_STATE] {pair} fail counter reset (was {self.fail_counts[pair]})")
+                self.fail_counts.pop(pair, None)
 
-    def cleanup_expired_pair(self, pair: str) -> None:
-        """Cleanup expired cooldown for specific pair."""
+    def _cleanup_pair_locked(self, pair: str) -> None:
+        """Cleanup cooldown entry for pair. Must be called with _lock held."""
         if pair in self.cooldowns:
             del self.cooldowns[pair]
             self.fail_counts.pop(pair, None)
             logger.info(f"[VERONICA_STATE] {pair} cooldown expired and cleaned up")
 
+    def cleanup_expired_pair(self, pair: str) -> None:
+        """Cleanup expired cooldown for specific pair."""
+        with self._lock:
+            self._cleanup_pair_locked(pair)
+
     def cleanup_expired(self) -> List[str]:
         """Cleanup all expired cooldowns. Returns list of cleaned pairs."""
         now = time.time()
-        expired = [pair for pair, expiry in self.cooldowns.items() if now >= expiry]
-        for pair in expired:
-            self.cleanup_expired_pair(pair)
+        with self._lock:
+            expired = [pair for pair, expiry in self.cooldowns.items() if now >= expiry]
+            for pair in expired:
+                self._cleanup_pair_locked(pair)
         return expired
 
     def transition(self, to_state: VeronicaState, reason: str) -> None:
         """Transition to new state with validation."""
-        if to_state == self.current_state:
-            return  # No-op
+        with self._lock:
+            if to_state == self.current_state:
+                return  # No-op
 
-        # Record transition
-        transition = StateTransition(
-            from_state=self.current_state,
-            to_state=to_state,
-            timestamp=time.time(),
-            reason=reason
-        )
-        self.state_history.append(transition)
+            # Validate transition is allowed
+            allowed = VALID_TRANSITIONS.get(self.current_state, set())
+            if to_state not in allowed:
+                raise ValueError(
+                    f"Invalid transition: {self.current_state.value} -> {to_state.value}"
+                )
 
-        # Keep only last 100 transitions
-        if len(self.state_history) > 100:
-            self.state_history = self.state_history[-100:]
+            # Record transition
+            transition = StateTransition(
+                from_state=self.current_state,
+                to_state=to_state,
+                timestamp=time.time(),
+                reason=reason
+            )
+            self.state_history.append(transition)
 
-        logger.info(
-            f"[VERONICA_STATE] Transition: {self.current_state.value} -> {to_state.value} ({reason})"
-        )
-        self.current_state = to_state
+            # Keep only last 100 transitions (in-place to avoid list re-assignment)
+            if len(self.state_history) > 100:
+                del self.state_history[:-100]
+
+            logger.info(
+                f"[VERONICA_STATE] Transition: {self.current_state.value} -> {to_state.value} ({reason})"
+            )
+            self.current_state = to_state
 
     def get_stats(self) -> Dict:
         """Get current state statistics."""
         now = time.time()
-        active_cooldowns = {
-            pair: max(0, expiry - now)
-            for pair, expiry in self.cooldowns.items()
-            if expiry > now
-        }
+        with self._lock:
+            active_cooldowns = {
+                pair: max(0, expiry - now)
+                for pair, expiry in self.cooldowns.items()
+                if expiry > now
+            }
 
-        return {
-            "current_state": self.current_state.value,
-            "active_cooldowns": active_cooldowns,
-            "fail_counts": dict(self.fail_counts),
-            "total_transitions": len(self.state_history),
-            "last_transition": (
-                {
-                    "from": self.state_history[-1].from_state.value,
-                    "to": self.state_history[-1].to_state.value,
-                    "reason": self.state_history[-1].reason,
-                    "timestamp": self.state_history[-1].timestamp,
-                }
-                if self.state_history else None
-            ),
-        }
+            return {
+                "current_state": self.current_state.value,
+                "active_cooldowns": active_cooldowns,
+                "fail_counts": dict(self.fail_counts),
+                "total_transitions": len(self.state_history),
+                "last_transition": (
+                    {
+                        "from": self.state_history[-1].from_state.value,
+                        "to": self.state_history[-1].to_state.value,
+                        "reason": self.state_history[-1].reason,
+                        "timestamp": self.state_history[-1].timestamp,
+                    }
+                    if self.state_history else None
+                ),
+            }
 
     def to_dict(self) -> Dict:
         """Serialize state to dict for persistence."""
-        return {
-            "cooldown_fails": self.cooldown_fails,
-            "cooldown_seconds": self.cooldown_seconds,
-            "fail_counts": dict(self.fail_counts),
-            "cooldowns": dict(self.cooldowns),
-            "current_state": self.current_state.value,
-            "state_history": [
-                {
-                    "from_state": t.from_state.value,
-                    "to_state": t.to_state.value,
-                    "timestamp": t.timestamp,
-                    "reason": t.reason,
-                }
-                for t in self.state_history[-100:]  # Last 100 only
-            ],
-        }
+        with self._lock:
+            return {
+                "cooldown_fails": self.cooldown_fails,
+                "cooldown_seconds": self.cooldown_seconds,
+                "fail_counts": dict(self.fail_counts),
+                "cooldowns": dict(self.cooldowns),
+                "current_state": self.current_state.value,
+                "state_history": [
+                    {
+                        "from_state": t.from_state.value,
+                        "to_state": t.to_state.value,
+                        "timestamp": t.timestamp,
+                        "reason": t.reason,
+                    }
+                    for t in self.state_history[-100:]  # Last 100 only
+                ],
+            }
 
     @classmethod
     def from_dict(cls, data: Dict) -> VeronicaStateMachine:
