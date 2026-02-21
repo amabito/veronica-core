@@ -340,7 +340,51 @@ Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
 
 ---
 
-## Ship Readiness (v0.9.2)
+## veronica_guard — Decorator Injection (v0.9.3)
+
+`veronica_guard` wraps any callable in an `AIcontainer` boundary without changing
+the call site.
+
+```python
+from veronica_core.inject import veronica_guard, VeronicaHalt
+
+@veronica_guard(max_cost_usd=1.0, max_steps=20, max_retries_total=3)
+def call_llm(prompt: str) -> str:
+    return llm.complete(prompt)
+
+try:
+    result = call_llm("Hello")
+except VeronicaHalt as e:
+    print(f"Denied: {e.reason}")
+```
+
+To return the `PolicyDecision` instead of raising:
+
+```python
+@veronica_guard(max_cost_usd=1.0, return_decision=True)
+def call_llm(prompt: str):
+    return llm.complete(prompt)
+
+result = call_llm("Hello")
+if isinstance(result, PolicyDecision):
+    # policy denied — handle gracefully
+    ...
+```
+
+Use `is_guard_active()` to detect an active boundary from inside a call:
+
+```python
+from veronica_core.inject import is_guard_active
+
+def my_tool():
+    if is_guard_active():
+        # running inside a veronica_guard boundary
+        ...
+```
+
+---
+
+## Ship Readiness (v0.9.3)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -361,10 +405,11 @@ Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
 - [x] AuditLog: append-only JSONL with SHA-256 hash chain + secret masking (v0.9.1)
 - [x] Policy signing: HMAC-SHA256 + ed25519 tamper detection (v0.9.1)
 - [x] CI: release workflow secrets guard fixed (v0.9.2)
+- [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1070 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer.
+1080 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer.
 
 ---
 
