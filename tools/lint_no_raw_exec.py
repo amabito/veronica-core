@@ -26,6 +26,9 @@ _ALLOWLIST: frozenset[str] = frozenset(
         "src/veronica_core/adapter/exec.py",
         "src/veronica_core/runner/sandbox.py",
         "src/veronica_core/runner/sandbox_windows.py",
+        # SandboxProbe intentionally calls urllib.request.urlopen to test
+        # whether the sandbox actually blocks outbound network access.
+        "src/veronica_core/runner/attestation.py",
         "tools/lint_no_raw_exec.py",
     }
 )

@@ -714,3 +714,170 @@ if not limiter.acquire():
 | Unknown dependency gap (SBOM blind)  | G-2   | Automated SBOM in CI, `generate_sbom.py`        |
 | Container escape / UID escalation    | G-3   | EnvironmentFingerprint anomaly detection        |
 | Approval fatigue / prompt flooding   | H     | ApprovalBatcher dedup + ApprovalRateLimiter     |
+
+---
+
+## 15. Phase I: Cryptographic Hardening (v0.6.x)
+
+Phase I extends the Security Containment Layer with three cryptographic
+hardening measures that raise the bar against key compromise, sandbox escape,
+and silent dependency drift.
+
+### I-1: Policy Signing v2 (ed25519 with HMAC fallback)
+
+**Problem:** Phase G-1 used HMAC-SHA256 (symmetric) to sign `policies/default.yaml`.
+A symmetric key must be shared between the signer and the verifier, which means
+any process that can verify the signature can also forge one.  An adversary that
+extracts `VERONICA_POLICY_KEY` can silently re-sign a tampered policy.
+
+**Solution:** `PolicySignerV2` (in `src/veronica_core/security/policy_signing.py`)
+uses **ed25519 asymmetric signing** via the `cryptography` package.  The private
+key is never stored on disk in production; only the public key is committed to
+the repository.
+
+| Version | Algorithm      | Dependency    | File suffix | Forgery risk if key leaks |
+|---------|---------------|---------------|-------------|--------------------------|
+| v1      | HMAC-SHA256   | stdlib only   | `.sig`      | Full (symmetric key)     |
+| v2      | ed25519       | `cryptography`| `.sig.v2`   | None (public key only in repo) |
+
+**Priority:** `PolicyEngine` checks `.sig.v2` first.  If present and valid, v1 is
+ignored.  If `.sig.v2` is absent but `.sig` exists, v1 is used with a deprecation
+warning.  If neither exists, `policy_sig_missing` is logged and the engine
+continues (backward-compatible).
+
+**Conditional availability:** `PolicySignerV2.is_available()` returns `False` if
+`cryptography` is not installed.  All methods fall back gracefully (log warning,
+return `False` from `verify()`).  `PolicySignerV2.mode` returns `"ed25519"` or
+`"unavailable"`.
+
+**Key management:**
+- Generate a dev keypair: `PolicySignerV2.generate_dev_keypair()` → `(priv_pem, pub_pem)`
+- Commit `policies/public_key.pem` (public key — safe to commit)
+- Commit `policies/default.yaml.sig.v2` (base64-encoded signature)
+- Store the private key in a secrets manager; pass as `private_key_pem: bytes` to `sign()`
+- CI: set `VERONICA_SIGNING_KEY` (PEM, from secret) and re-sign after any policy edit
+
+**See:** `docs/SIGNING_GUIDE.md` for full workflow.
+
+---
+
+### I-2: Runner Attestation v2 — Active Sandbox Probe
+
+**Problem:** Phase G-3 `AttestationChecker` detected mid-session environment
+anomalies (user switching, interpreter change).  It did not verify that sandbox
+restrictions were **actually enforced** — only that the fingerprint was unchanged.
+A misconfigured sandbox could silently allow filesystem reads or outbound network
+calls that should be blocked.
+
+**Solution:** `SandboxProbe` (in `src/veronica_core/runner/attestation.py`) actively
+probes sandbox restrictions by attempting the exact operations the sandbox should block.
+
+**Probes:**
+
+| Probe       | Method         | Target (default)                      | Pass condition                              |
+|-------------|----------------|---------------------------------------|---------------------------------------------|
+| `read_probe`| `stat()`       | `/etc/shadow` (Linux) / Windows SAM   | `PermissionError` or "access denied" OSError |
+| `net_probe` | HTTP GET       | `http://example.com` (timeout 0.5 s)  | `ConnectionRefusedError` or any `OSError`   |
+
+**Modes:**
+
+- **Dev mode** (`sandbox_mode=False`, default): Failed probes are logged as
+  informational only.  The sandbox is not expected to be active in development.
+- **Sandbox mode** (`sandbox_mode=True`): Any `passed=False` result is a security
+  violation.  Caller must trigger SAFE_MODE.
+
+**Audit events:**
+
+| Event                  | Condition                            |
+|------------------------|--------------------------------------|
+| `SANDBOX_PROBE_OK`     | All probes passed                    |
+| `SANDBOX_PROBE_FAILURE`| One or more probes failed            |
+
+**Usage:**
+
+```python
+from veronica_core.runner.attestation import SandboxProbe
+
+probe = SandboxProbe(audit_log=audit_log)
+results = probe.run_all(sandbox_mode=True)
+if any(not r.passed for r in results):
+    # Sandbox is not enforcing restrictions — activate SAFE_MODE
+    ...
+```
+
+---
+
+### I-3: SBOM Diff Gate
+
+**Problem:** Phase G-2 generated an SBOM snapshot (`generate_sbom.py`) and
+required approval for package installs, but did not provide a programmatic way
+to detect **silent dependency drift** between two SBOM snapshots — i.e., packages
+that changed version, were added, or were removed without going through the
+approval gate.
+
+**Solution:** `tools/sbom_diff.py` — a zero-dependency CLI tool that compares
+two SBOM JSON files and gates CI on any detected change.
+
+**Diff logic:**
+
+```
+baseline.packages → current.packages
+  added   = names in current but not in baseline
+  removed = names in baseline but not in current
+  changed = names in both with different version strings
+  is_clean = (added == [] and removed == [] and changed == [])
+```
+
+`generated_at` is intentionally excluded so timestamp-only regenerations
+produce no diff.
+
+**Exit codes:**
+
+| Code | Meaning                        |
+|------|--------------------------------|
+| 0    | No differences (clean)         |
+| 1    | Differences found (gate fails) |
+| 2    | Usage / parse error            |
+
+**Approval token:** If differences are expected (e.g. a deliberate upgrade),
+an operator computes an HMAC-SHA256 token over the canonical diff JSON and
+passes it via `--secret` + `--token`.  The gate exits 0 only when the token
+is valid.
+
+```bash
+# Compute approval token
+python - <<'EOF'
+from tools.sbom_diff import diff_sbom, compute_diff_token
+import json
+baseline = json.loads(open("baseline.json").read())
+current  = json.loads(open("current.json").read())
+diff = diff_sbom(baseline, current)
+print(compute_diff_token(diff, "MY_SECRET"))
+EOF
+
+# Use in CI gate
+python tools/sbom_diff.py baseline.json current.json \
+    --secret MY_SECRET --token <token>
+```
+
+**CI integration:**
+
+```yaml
+# .github/workflows/sbom.yml (example step)
+- name: SBOM diff gate
+  run: |
+    python tools/generate_sbom.py /tmp/current.json
+    python tools/sbom_diff.py sbom-baseline.json /tmp/current.json
+```
+
+Tests: `tests/tools/test_sbom_diff.py`
+
+---
+
+### Phase Iで塞いだ突破口
+
+| 突破口                                         | Phase | 対策                                                    |
+|------------------------------------------------|-------|---------------------------------------------------------|
+| HMAC鍵漏洩によるポリシー偽造                   | I-1   | ed25519非対称署名（公開鍵のみリポジトリにコミット）      |
+| サンドボックス設定不備による制限迂回            | I-2   | SandboxProbe能動的探索（read/net両方を実際に試みる）    |
+| サイレント依存関係変更（SBOMスナップショット間）| I-3   | sbom_diff.py差分ゲート + HMAC承認トークン               |

@@ -516,89 +516,104 @@ class PolicyEngine:
     Unknown actions are denied by default (fail-closed).
     """
 
-    def __init__(self, policy_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        policy_path: Path | None = None,
+        public_key_path: Path | None = None,
+    ) -> None:
         """Initialize the engine.
 
-        If *policy_path* is provided and a matching ``.sig`` file exists,
-        the HMAC-SHA256 signature is verified.  A mismatch raises
-        ``RuntimeError`` after logging a ``policy_tamper`` audit event.
+        If *policy_path* is provided, its signature is verified.
+        v2 (ed25519) is checked first via ``.sig.v2``; v1 (HMAC-SHA256)
+        via ``.sig`` is the fallback.  A mismatch raises ``RuntimeError``.
         A missing sig file logs a ``policy_sig_missing`` warning and
         allows the engine to continue loading (backward compatibility).
 
         Args:
             policy_path: Optional path to a YAML policy file.
+            public_key_path: Optional path to the ed25519 public key PEM
+                             used for v2 verification.  Defaults to
+                             ``policies/public_key.pem`` in the repo root.
         """
         self._policy_path = policy_path
+        self._public_key_path = public_key_path
         if policy_path is not None:
-            self._verify_policy_signature(policy_path)
+            self._verify_policy_signature(policy_path, public_key_path=public_key_path)
 
     # ------------------------------------------------------------------
     # Signature verification (G-1)
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _verify_policy_signature(policy_path: Path) -> None:
-        """Verify HMAC-SHA256 signature for *policy_path*.
+    def _verify_policy_signature(
+        policy_path: Path,
+        public_key_path: Path | None = None,
+    ) -> None:
+        """Verify policy signature for *policy_path*.
 
-        Raises RuntimeError on tamper detection; logs warning on missing sig.
+        Checks v2 (ed25519) first if a ``.sig.v2`` file exists, then falls back
+        to v1 (HMAC-SHA256) via ``.sig``.  Raises RuntimeError on tamper;
+        logs warning if no signature file is found.
+
+        Args:
+            policy_path: Path to the YAML policy file.
+            public_key_path: Optional path to the ed25519 public key PEM.
         """
         import logging as _logging
 
-        from veronica_core.security.policy_signing import PolicySigner
+        from veronica_core.security.policy_signing import PolicySigner, PolicySignerV2
 
         _log = _logging.getLogger(__name__)
 
-        sig_path = Path(str(policy_path) + ".sig")
+        sig_v2_path = Path(str(policy_path) + ".sig.v2")
+        sig_v1_path = Path(str(policy_path) + ".sig")
 
-        if not sig_path.exists():
-            # Try to emit to audit log if available
-            try:
-                from veronica_core.audit.log import AuditLog
-                import tempfile, os as _os
-                audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
-                audit_log = AuditLog(audit_dir / "policy.jsonl")
-                audit_log.write(
-                    "policy_sig_missing",
-                    {"policy_path": str(policy_path)},
-                )
-            except Exception:
-                pass
-            _log.warning(
-                "policy_sig_missing: no signature file found for %s",
-                policy_path,
-            )
-            return
-
-        signer = PolicySigner()
-        if not signer.verify(policy_path, sig_path):
-            # Compute actual vs expected for the audit event
-            try:
-                actual = sig_path.read_text(encoding="utf-8").strip()
-            except OSError:
-                actual = "<unreadable>"
-            expected = signer.sign(policy_path)
-
+        def _emit_audit(event: str, payload: dict) -> None:
             try:
                 from veronica_core.audit.log import AuditLog
                 import tempfile
                 audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
                 audit_log = AuditLog(audit_dir / "policy.jsonl")
-                audit_log.write(
-                    "policy_tamper",
-                    {
-                        "policy_path": str(policy_path),
-                        "expected": expected,
-                        "actual": actual,
-                    },
-                )
+                audit_log.write(event, payload)
             except Exception:
                 pass
 
-            _log.error(
-                "policy_tamper: signature mismatch for %s",
-                policy_path,
-            )
-            raise RuntimeError(f"Policy tamper detected: {policy_path}")
+        # ------------------------------------------------------------------
+        # v2: ed25519
+        # ------------------------------------------------------------------
+        if sig_v2_path.exists():
+            signer_v2 = PolicySignerV2(public_key_path=public_key_path)
+            if not signer_v2.verify(policy_path, sig_v2_path):
+                _emit_audit("policy_tamper", {"policy_path": str(policy_path), "version": "v2"})
+                _log.error("policy_tamper (v2): signature mismatch for %s", policy_path)
+                raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
+            # v2 verified — skip v1 check
+            return
+
+        # ------------------------------------------------------------------
+        # v1: HMAC-SHA256
+        # ------------------------------------------------------------------
+        if sig_v1_path.exists():
+            signer = PolicySigner()
+            if not signer.verify(policy_path, sig_v1_path):
+                try:
+                    actual = sig_v1_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    actual = "<unreadable>"
+                expected = signer.sign(policy_path)
+                _emit_audit(
+                    "policy_tamper",
+                    {"policy_path": str(policy_path), "expected": expected, "actual": actual},
+                )
+                _log.error("policy_tamper: signature mismatch for %s", policy_path)
+                raise RuntimeError(f"Policy tamper detected: {policy_path}")
+            return
+
+        # ------------------------------------------------------------------
+        # No signature file found
+        # ------------------------------------------------------------------
+        _emit_audit("policy_sig_missing", {"policy_path": str(policy_path)})
+        _log.warning("policy_sig_missing: no signature file found for %s", policy_path)
 
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
         """Evaluate *ctx* and return a PolicyDecision.

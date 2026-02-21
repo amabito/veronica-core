@@ -73,6 +73,32 @@ class AuditLog:
                 fh.write(line)
             self._prev_hash = entry["hash"]
 
+    def log_sbom_diff(
+        self,
+        added: list[str],
+        removed: list[str],
+        changed: list[dict[str, str]],
+        approved: bool,
+    ) -> None:
+        """Convenience method to log an SBOM diff event.
+
+        Args:
+            added: List of newly added package names.
+            removed: List of removed package names.
+            changed: List of dicts with keys ``name``, ``old_version``,
+                ``new_version`` for each changed package.
+            approved: Whether the diff was approved (e.g. via a valid token).
+        """
+        self.write(
+            "SBOM_DIFF",
+            {
+                "added": added,
+                "removed": removed,
+                "changed": changed,
+                "approved": approved,
+            },
+        )
+
     def verify_chain(self) -> bool:
         """Verify the hash chain of the log file.
 
