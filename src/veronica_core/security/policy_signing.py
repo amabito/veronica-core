@@ -174,6 +174,11 @@ class PolicySignerV2:
     # Sign
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize(raw: bytes) -> bytes:
+        """Normalize line endings to LF for cross-platform signature stability."""
+        return raw.replace(b"\r\n", b"\n")
+
     def sign(self, policy_path: Path, private_key_pem: bytes) -> bytes:
         """Sign *policy_path* with the given private key.
 
@@ -194,7 +199,7 @@ class PolicySignerV2:
             raise RuntimeError(
                 "cryptography package is required for ed25519 signing."
             )
-        content = policy_path.read_bytes()
+        content = self._normalize(policy_path.read_bytes())
         private_key = load_pem_private_key(private_key_pem, password=None)
         raw_sig: bytes = private_key.sign(content)  # type: ignore[attr-defined]
 
@@ -224,7 +229,7 @@ class PolicySignerV2:
             return False
 
         try:
-            content = policy_path.read_bytes()
+            content = self._normalize(policy_path.read_bytes())
             sig_b64 = sig_path.read_text(encoding="utf-8").strip()
             raw_sig = base64.b64decode(sig_b64)
             pub_pem = self._public_key_path.read_bytes()
