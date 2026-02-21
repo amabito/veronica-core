@@ -50,11 +50,11 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: twine upload --skip-existing dist/*
 
       - name: Publish to TestPyPI (release candidates)
         if: ${{ contains(github.event.release.tag_name, 'rc') || contains(github.event.release.tag_name, 'alpha') || contains(github.event.release.tag_name, 'beta') }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        run: twine upload --repository testpypi dist/*
+        run: twine upload --skip-existing --repository testpypi dist/*
