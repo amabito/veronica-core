@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.4] — 2026-02-21
+
+### Added
+- `veronica_core.patch` module: opt-in SDK monkey-patching for OpenAI and Anthropic clients.
+  - `patch_openai()`: patches `openai.resources.chat.completions.Completions.create` (v1.x+)
+    and `openai.ChatCompletion.create` (v0.x legacy). Safe if openai is not installed.
+  - `patch_anthropic()`: patches `anthropic.resources.messages.Messages.create`.
+    Safe if anthropic is not installed.
+  - `unpatch_all()`: restores all patched methods to their originals.
+  - Context-aware: patches only activate inside `@veronica_guard` boundaries.
+    Calls outside a guard pass through unchanged.
+  - Pre-call: policy check via active container (`container.check(cost_usd=0.0)`).
+  - Post-call: token cost recorded via `BudgetEnforcer.spend()` after response.
+- `get_active_container() -> Optional[AIcontainer]`: returns the `AIcontainer` bound
+  to the current `@veronica_guard` boundary, or `None` if called outside a guard.
+  Exported from `veronica_core.inject` and top-level `veronica_core`.
+
+### Notes
+- No deprecations. All existing APIs unchanged.
+- Neither `openai` nor `anthropic` is added as a dependency — both remain optional.
+- Patches are NOT applied on import. Explicit opt-in required (`patch_openai()` / `patch_anthropic()`).
+
+---
+
 ## [0.9.3] — 2026-02-21
 
 ### Added

@@ -384,7 +384,43 @@ def my_tool():
 
 ---
 
-## Ship Readiness (v0.9.3)
+## patch_openai / patch_anthropic — Automatic SDK Injection (v0.9.4)
+
+Opt-in SDK patching applies `@veronica_guard` policies automatically to every
+OpenAI or Anthropic API call made inside a guard boundary — no per-call changes
+required.
+
+```python
+from veronica_core import veronica_guard
+from veronica_core.patch import patch_openai
+
+# Activate once at application startup.
+# Safe to call if openai is not installed.
+patch_openai()
+
+@veronica_guard(max_cost_usd=1.0, max_steps=20)
+def call_llm(prompt: str) -> str:
+    from openai import OpenAI
+    client = OpenAI()
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+# Budget is checked before the OpenAI call.
+# Token cost is recorded against the budget after each response.
+result = call_llm("Hello!")
+```
+
+**Guarantees:**
+- Calls outside a `@veronica_guard` boundary pass through unchanged.
+- Neither `openai` nor `anthropic` is a required dependency.
+- `unpatch_all()` restores all originals (useful in tests).
+
+---
+
+## Ship Readiness (v0.9.4)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -406,6 +442,7 @@ def my_tool():
 - [x] Policy signing: HMAC-SHA256 + ed25519 tamper detection (v0.9.1)
 - [x] CI: release workflow secrets guard fixed (v0.9.2)
 - [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
+- [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 

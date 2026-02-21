@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.9.3"
+__version__ = "0.9.4"
 
 # Core state machine
 from veronica_core.state import (
@@ -103,7 +103,11 @@ from veronica_core.inject import (
     GuardConfig,
     VeronicaHalt,
     is_guard_active,
+    get_active_container,
 )
+
+# SDK patch module (v0.9.4 -- opt-in, not applied on import)
+from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 
 __all__ = [
     # Core
@@ -181,4 +185,9 @@ __all__ = [
     "GuardConfig",
     "VeronicaHalt",
     "is_guard_active",
+    "get_active_container",
+    # SDK Patch (v0.9.4)
+    "patch_openai",
+    "patch_anthropic",
+    "unpatch_all",
 ]
