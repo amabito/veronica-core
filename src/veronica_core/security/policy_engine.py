@@ -86,6 +86,7 @@ FILE_WRITE_APPROVAL_PATTERNS: tuple[str, ...] = (
     "*.ps1",
     "*.bat",
     "*.sh",
+    "policies/*.yaml",
 )
 
 SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
@@ -93,6 +94,32 @@ SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
 })
 
 FILE_COUNT_APPROVAL_THRESHOLD = 20
+
+# Supply chain guard (G-2): package install subcommands requiring approval.
+# Maps argv0 → subcommands that trigger REQUIRE_APPROVAL.
+SHELL_PKG_INSTALL_APPROVAL: tuple[tuple[str, frozenset[str]], ...] = (
+    ("pip",    frozenset({"install", "download"})),
+    ("pip3",   frozenset({"install", "download"})),
+    ("npm",    frozenset({"install", "add", "i"})),
+    ("pnpm",   frozenset({"install", "add", "i"})),
+    ("yarn",   frozenset({"install", "add"})),
+    ("cargo",  frozenset({"add", "install"})),
+)
+
+# uv sub-commands that indicate package installation
+_UV_INSTALL_SUBCMDS: frozenset[str] = frozenset({"add", "pip"})
+# uv pip sub-subcommands that indicate installation
+_UV_PIP_INSTALL_SUBCMDS: frozenset[str] = frozenset({"install", "download"})
+
+# Lock file path patterns that require approval on write (G-2)
+FILE_WRITE_LOCKFILE_PATTERNS: tuple[str, ...] = (
+    "package-lock.json",
+    "yarn.lock",
+    "uv.lock",
+    "Cargo.lock",
+    "requirements.txt",
+    "requirements-*.txt",
+)
 
 # Credential sub-command deny rules (E-2)
 # Each entry: (argv0, blocked_subcommands_set)
@@ -239,6 +266,35 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                 risk_score_delta=9,
             )
 
+    # REQUIRE_APPROVAL: package installation (G-2 supply chain guard)
+    # Standard package managers: pip/pip3/npm/pnpm/yarn/cargo
+    for cmd, install_subcmds in SHELL_PKG_INSTALL_APPROVAL:
+        if argv0 == cmd and argv1 in install_subcmds:
+            return PolicyDecision(
+                verdict="REQUIRE_APPROVAL",
+                rule_id="SHELL_PKG_INSTALL",
+                reason=f"Package installation '{argv0} {argv1}' requires approval (supply chain risk)",
+                risk_score_delta=4,
+            )
+    # uv add → install; uv pip install → install
+    if argv0 == "uv":
+        if argv1 == "add":
+            return PolicyDecision(
+                verdict="REQUIRE_APPROVAL",
+                rule_id="SHELL_PKG_INSTALL",
+                reason="Package installation 'uv add' requires approval (supply chain risk)",
+                risk_score_delta=4,
+            )
+        if argv1 == "pip":
+            argv2 = args[2].lower() if len(args) > 2 else ""
+            if argv2 in _UV_PIP_INSTALL_SUBCMDS:
+                return PolicyDecision(
+                    verdict="REQUIRE_APPROVAL",
+                    rule_id="SHELL_PKG_INSTALL",
+                    reason=f"Package installation 'uv pip {argv2}' requires approval (supply chain risk)",
+                    risk_score_delta=4,
+                )
+
     # REQUIRE_APPROVAL: large file count change
     file_count = ctx.metadata.get("file_count")
     if isinstance(file_count, int) and file_count > FILE_COUNT_APPROVAL_THRESHOLD:
@@ -296,6 +352,15 @@ def _eval_file_write(ctx: PolicyContext) -> PolicyDecision | None:
             verdict="REQUIRE_APPROVAL",
             rule_id="FILE_WRITE_REQUIRE_APPROVAL",
             reason=f"File path '{path}' requires approval before writing",
+            risk_score_delta=4,
+        )
+
+    # REQUIRE_APPROVAL: lock file writes indicate dependency changes (G-2)
+    if _matches_any(path, FILE_WRITE_LOCKFILE_PATTERNS):
+        return PolicyDecision(
+            verdict="REQUIRE_APPROVAL",
+            rule_id="FILE_WRITE_LOCKFILE",
+            reason=f"Lock file '{path}' modification requires approval (supply chain risk)",
             risk_score_delta=4,
         )
 
@@ -454,13 +519,86 @@ class PolicyEngine:
     def __init__(self, policy_path: Path | None = None) -> None:
         """Initialize the engine.
 
+        If *policy_path* is provided and a matching ``.sig`` file exists,
+        the HMAC-SHA256 signature is verified.  A mismatch raises
+        ``RuntimeError`` after logging a ``policy_tamper`` audit event.
+        A missing sig file logs a ``policy_sig_missing`` warning and
+        allows the engine to continue loading (backward compatibility).
+
         Args:
             policy_path: Optional path to a YAML policy file.
-                         Currently the engine uses built-in rules; the path
-                         argument is accepted for forward-compatibility.
         """
-        # policy_path reserved for future external rule loading
         self._policy_path = policy_path
+        if policy_path is not None:
+            self._verify_policy_signature(policy_path)
+
+    # ------------------------------------------------------------------
+    # Signature verification (G-1)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _verify_policy_signature(policy_path: Path) -> None:
+        """Verify HMAC-SHA256 signature for *policy_path*.
+
+        Raises RuntimeError on tamper detection; logs warning on missing sig.
+        """
+        import logging as _logging
+
+        from veronica_core.security.policy_signing import PolicySigner
+
+        _log = _logging.getLogger(__name__)
+
+        sig_path = Path(str(policy_path) + ".sig")
+
+        if not sig_path.exists():
+            # Try to emit to audit log if available
+            try:
+                from veronica_core.audit.log import AuditLog
+                import tempfile, os as _os
+                audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
+                audit_log = AuditLog(audit_dir / "policy.jsonl")
+                audit_log.write(
+                    "policy_sig_missing",
+                    {"policy_path": str(policy_path)},
+                )
+            except Exception:
+                pass
+            _log.warning(
+                "policy_sig_missing: no signature file found for %s",
+                policy_path,
+            )
+            return
+
+        signer = PolicySigner()
+        if not signer.verify(policy_path, sig_path):
+            # Compute actual vs expected for the audit event
+            try:
+                actual = sig_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                actual = "<unreadable>"
+            expected = signer.sign(policy_path)
+
+            try:
+                from veronica_core.audit.log import AuditLog
+                import tempfile
+                audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
+                audit_log = AuditLog(audit_dir / "policy.jsonl")
+                audit_log.write(
+                    "policy_tamper",
+                    {
+                        "policy_path": str(policy_path),
+                        "expected": expected,
+                        "actual": actual,
+                    },
+                )
+            except Exception:
+                pass
+
+            _log.error(
+                "policy_tamper: signature mismatch for %s",
+                policy_path,
+            )
+            raise RuntimeError(f"Policy tamper detected: {policy_path}")
 
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
         """Evaluate *ctx* and return a PolicyDecision.

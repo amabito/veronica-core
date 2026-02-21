@@ -165,12 +165,13 @@ class TestAdditionalPolicyEdgeCases:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "NET_DENY_METHOD"
 
-    def test_shell_uv_pip_install_is_allowed(self) -> None:
-        """uv is in the allow list."""
+    def test_shell_uv_pip_install_requires_approval(self) -> None:
+        """uv pip install requires approval (G-2 supply chain guard)."""
         engine = _engine()
         ctx = _ctx("shell", ["uv", "pip", "install", "requests"])
         decision = engine.evaluate(ctx)
-        assert decision.verdict == "ALLOW"
+        assert decision.verdict == "REQUIRE_APPROVAL"
+        assert decision.rule_id == "SHELL_PKG_INSTALL"
 
     def test_git_push_without_capability_is_denied(self) -> None:
         """git push requires GIT_PUSH_APPROVAL capability."""
