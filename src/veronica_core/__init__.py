@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 # Core state machine
 from veronica_core.state import (
@@ -97,6 +97,14 @@ from veronica_core.containment import (
 # Execution boundary (v0.9.1)
 from veronica_core.container import AIcontainer
 
+# Decorator-based injection (v0.9.3)
+from veronica_core.inject import (
+    veronica_guard,
+    GuardConfig,
+    VeronicaHalt,
+    is_guard_active,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -168,4 +176,9 @@ __all__ = [
     "WrapOptions",
     # Execution boundary (v0.9.1)
     "AIcontainer",
+    # Decorator-based injection (v0.9.3)
+    "veronica_guard",
+    "GuardConfig",
+    "VeronicaHalt",
+    "is_guard_active",
 ]

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.3] — 2026-02-21
+
+### Added
+- `veronica_core.inject` module: decorator-based execution boundary injection.
+  - `veronica_guard(max_cost_usd, max_steps, max_retries_total, timeout_ms, return_decision)`:
+    wraps any callable in an `AIcontainer` execution boundary. Raises `VeronicaHalt`
+    on policy denial; returns `PolicyDecision` when `return_decision=True`.
+  - `VeronicaHalt(RuntimeError)`: raised when a guard denies execution. Carries
+    `.reason: str` and `.decision: PolicyDecision`.
+  - `GuardConfig`: dataclass documenting all `veronica_guard` parameters.
+  - `is_guard_active() -> bool`: returns `True` when called inside a guard boundary
+    (via `contextvars`). Enables future transparent injection.
+- All symbols exported from `veronica_core` top-level (`__init__.py`).
+
+### Notes
+- No deprecations. All existing APIs unchanged.
+- `timeout_ms` is accepted but not yet enforced (reserved for v1.0).
+
+---
+
 ## [0.9.2] — 2026-02-21
 
 ### Fixed
