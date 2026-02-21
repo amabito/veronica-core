@@ -94,6 +94,9 @@ from veronica_core.containment import (
     WrapOptions,
 )
 
+# Execution boundary (v0.9.1)
+from veronica_core.container import AIcontainer
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -163,4 +166,6 @@ __all__ = [
     "ExecutionGraph",
     "NodeRecord",
     "WrapOptions",
+    # Execution boundary (v0.9.1)
+    "AIcontainer",
 ]
