@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.2] — 2026-02-21
+
+### Fixed
+- `release.yml`: replaced `secrets != ''` if-condition (invalid at workflow parse-time)
+  with shell guard `[ -n "${VAR}" ]`; signing step now skips cleanly when key is absent.
+- `__version__` in `__init__.py` and `version` in `pyproject.toml` now match on every
+  commit that reaches PyPI (release_check gate enforces consistency).
+
+### Notes
+- No API changes. All v0.9.1 code is unchanged; this is a CI infrastructure fix only.
+
+---
+
 ## [0.9.1] — 2026-02-21
 
 ### Added
