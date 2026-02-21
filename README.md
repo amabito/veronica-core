@@ -312,6 +312,34 @@ with ExecutionContext(config=config) as ctx:
 
 ---
 
+## AIcontainer (v0.9.1)
+
+`AIcontainer` is a declarative execution boundary that composes veronica-core primitives
+into a single container object. Use it when you want to declare all boundaries upfront
+instead of wiring primitives individually.
+
+```python
+from veronica_core.container import AIcontainer
+from veronica_core import BudgetEnforcer, CircuitBreaker, RetryContainer
+
+container = AIcontainer(
+    budget=BudgetEnforcer(limit_usd=10.0),
+    circuit_breaker=CircuitBreaker(failure_threshold=3),
+    retry=RetryContainer(max_retries=2),
+)
+
+decision = container.check(cost_usd=0.5)
+if not decision.allowed:
+    raise RuntimeError(f"Boundary violated: {decision.reason}")
+
+print(container.active_policies)  # ['budget', 'circuit_breaker', 'retry_budget']
+```
+
+All arguments are optional. Pass only the boundaries you need.
+Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
+
+---
+
 ## Ship Readiness (v0.9.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)

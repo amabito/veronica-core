@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.1] — 2026-02-21
+
+### Added
+- `AIcontainer`: declarative execution boundary abstraction in `veronica_core.container`.
+  Composes `BudgetEnforcer`, `CircuitBreaker`, `RetryContainer`, `AgentStepGuard`
+  into a single container with a unified `check()` API.
+  Import: `from veronica_core.container import AIcontainer`
+  All existing primitive imports remain unchanged.
+
+### Notes
+- No deprecation warnings introduced in this release.
+- Existing primitives (`BudgetEnforcer`, `CircuitBreaker`, etc.) are fully preserved.
+
+---
+
 ## v0.9.0 — Runtime Containment Edition
 
 ### Architectural Shift
