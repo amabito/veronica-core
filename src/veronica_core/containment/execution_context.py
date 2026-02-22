@@ -146,6 +146,8 @@ class ExecutionConfig:
     max_steps: int
     max_retries_total: int
     timeout_ms: int = 0
+    budget_backend: "Any | None" = None  # BudgetBackend instance for cross-process tracking
+    redis_url: str | None = None  # Convenience: auto-create RedisBudgetBackend
 
 
 @dataclass(frozen=True)
@@ -253,6 +255,19 @@ class ExecutionContext:
             chain_id=str(uuid.uuid4()),
         )
 
+        # Budget backend setup (v0.10.0)
+        if config.budget_backend is not None:
+            self._budget_backend = config.budget_backend
+        elif config.redis_url:
+            from veronica_core.distributed import get_default_backend
+            self._budget_backend = get_default_backend(
+                redis_url=config.redis_url,
+                chain_id=self._metadata.chain_id,
+            )
+        else:
+            from veronica_core.distributed import LocalBudgetBackend
+            self._budget_backend = LocalBudgetBackend()
+
         # Mutable chain-level counters (protected by _lock)
         self._lock = threading.Lock()
         self._step_count: int = 0
@@ -297,6 +312,8 @@ class ExecutionContext:
         self._cancellation_token.cancel()
         if self._timeout_thread is not None and self._timeout_thread.is_alive():
             self._timeout_thread.join(timeout=1.0)
+        if hasattr(self, "_budget_backend"):
+            self._budget_backend.close()
 
     # ------------------------------------------------------------------
     # Public API
@@ -653,7 +670,8 @@ class ExecutionContext:
 
         with self._lock:
             self._step_count += 1
-            self._cost_usd_accumulated += actual_cost
+            new_total = self._budget_backend.add(actual_cost)
+            self._cost_usd_accumulated = new_total
             node.cost_usd = actual_cost
             node.status = "ok"
             node.end_ts = datetime.now(timezone.utc)
