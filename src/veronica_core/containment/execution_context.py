@@ -160,6 +160,8 @@ class WrapOptions:
     cost_estimate_hint: float = 0.0
     timeout_ms: int | None = None
     retry_policy_override: int | None = None
+    model: str | None = None
+    response_hint: Any = None
 
 
 @dataclass
@@ -608,7 +610,26 @@ class ExecutionContext:
         # Success path.
         call_elapsed_ms = (time.monotonic() - call_start) * 1000.0  # noqa: F841
 
-        actual_cost = opts.cost_estimate_hint  # Use hint as proxy until billing is wired.
+        actual_cost = opts.cost_estimate_hint
+        if actual_cost == 0.0 and kind == "llm":
+            from veronica_core.pricing import estimate_cost_usd, extract_usage_from_response
+            model_name = opts.model or ""
+            if not model_name and hasattr(self, "_metadata") and self._metadata:
+                model_name = self._metadata.model or ""
+            usage = None
+            if opts.response_hint is not None:
+                usage = extract_usage_from_response(opts.response_hint)
+            if usage is not None:
+                actual_cost = estimate_cost_usd(model_name, usage[0], usage[1])
+            elif model_name:
+                _ev = SafetyEvent(
+                    event_type="COST_ESTIMATION_SKIPPED",
+                    decision=Decision.ALLOW,
+                    reason=f"model={model_name!r} known but response_hint not provided; cost_usd=0.0 recorded",
+                    hook="AutoPricing",
+                )
+                with self._lock:
+                    self._events.append(_ev)
 
         # Pipeline budget check (post-call, LLM calls only).
         if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
