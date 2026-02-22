@@ -128,6 +128,27 @@ class TestDefaultBudgetWindowConfig:
         assert cfg.is_any_enabled is True
 
 
+class TestBudgetWindowExpiryBoundary:
+    """Exact boundary: call at t=window_seconds is expired (< not <=)."""
+
+    def test_boundary_exact_window_not_double_counted(self, monkeypatch):
+        # Call at t=0. At t=60, that call should be expired (cutoff = 60-60 = 0, ts=0 < 0 is False).
+        # But we want to verify < semantics: ts < cutoff means expired.
+        # At t=60: cutoff=0, ts=0 -> 0 < 0 is False -> NOT pruned, still counts.
+        # At t=60.001: cutoff=0.001, ts=0 -> 0 < 0.001 -> pruned.
+        times = iter([0.0, 60.0, 60.001])
+        monkeypatch.setattr(time, "time", lambda: next(times))
+
+        hook = BudgetWindowHook(max_calls=1, window_seconds=60.0)
+        assert hook.before_llm_call(CTX) is None        # t=0.0, reserved slot
+
+        # At t=60: cutoff=0.0, ts=0.0 -> 0.0 < 0.0 is False -> NOT expired
+        assert hook.before_llm_call(CTX) is Decision.HALT  # t=60.0, still within window
+
+        # At t=60.001: cutoff=0.001, ts=0.0 -> 0.0 < 0.001 -> expired, fresh window
+        assert hook.before_llm_call(CTX) is None        # t=60.001, old call pruned
+
+
 class TestBudgetWindowIntegrationWiring:
     """VeronicaIntegration wires BudgetWindowHook only when enabled."""
 

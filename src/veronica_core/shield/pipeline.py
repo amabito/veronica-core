@@ -61,6 +61,8 @@ class ShieldPipeline:
         self._safety_events: list[SafetyEvent] = []
         self._lock = threading.Lock()
 
+    _MAX_SAFETY_EVENTS: int = 1000
+
     def _record(
         self,
         hook: object,
@@ -76,7 +78,8 @@ class ShieldPipeline:
             request_id=request_id,
         )
         with self._lock:
-            self._safety_events.append(event)
+            if len(self._safety_events) < self._MAX_SAFETY_EVENTS:
+                self._safety_events.append(event)
         # OTel export (no-op if disabled)
         try:
             from veronica_core.otel import emit_safety_event

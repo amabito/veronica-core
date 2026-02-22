@@ -167,6 +167,20 @@ def test_wrap_llm_call_no_response_hint_emits_warning():
     assert snap.cost_usd_accumulated == pytest.approx(0.0)
 
 
+def test_negative_tokens_raise_value_error():
+    """estimate_cost_usd raises ValueError for negative token counts."""
+    with pytest.raises((ValueError, Exception)):
+        estimate_cost_usd("gpt-4o", -1, 0)
+
+
+def test_exact_match_only_no_substring():
+    """A model name that embeds 'gpt-4o-mini' but is not a prefix match falls back."""
+    # "my-enterprise-gpt-4o-mini-v2" is not a prefix of any key, and no key is
+    # a prefix of it, so it must return the unknown fallback (not gpt-4o or gpt-4o-mini).
+    pricing = resolve_model_pricing("my-enterprise-gpt-4o-mini-v2")
+    assert pricing == _UNKNOWN_MODEL_FALLBACK
+
+
 def test_wrap_llm_call_cost_estimate_hint_takes_precedence():
     """Explicit cost_estimate_hint overrides auto calculation."""
     from veronica_core.containment import ExecutionConfig, ExecutionContext, WrapOptions

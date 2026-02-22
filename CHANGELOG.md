@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.5] — 2026-02-23 — Adversarial Security Hardening
+
+### Security
+
+- **HIGH** (`shield/token_budget.py`): `TokenBudgetHook.before_llm_call()` now uses
+  pending-reservation accounting to close a TOCTOU window. When `ctx.tokens_out`/`ctx.tokens_in`
+  are provided, the estimated tokens are atomically reserved inside the lock after passing all
+  checks, so concurrent callers project against `_output_total + _pending_output + estimate`
+  rather than a stale snapshot. `record_usage()` releases the pending reservation atomically.
+  New `release_reservation()` method lets callers cancel a reservation on LLM call failure.
+
+- **HIGH** (`partial.py`): `PartialResultBuffer.append()` now raises structured
+  `PartialBufferOverflow(ValueError)` instead of a plain `ValueError`. The exception carries
+  evidence fields (`total_bytes`, `kept_bytes`, `total_chunks`, `kept_chunks`,
+  `truncation_point`) enabling upstream callers to emit a `SafetyEvent` with full context.
+  `to_dict()` includes `"truncated": True` when an overflow occurred. Backward-compatible:
+  existing `except ValueError` handlers continue to work.
+
+- **HIGH** (`shield/budget_window.py`): Off-by-one at window boundary fixed.
+  The timestamp pruning loop now uses `< cutoff` instead of `<= cutoff`, preventing a
+  single-call gift when an event lands at exactly the window boundary.
+
+- **HIGH** (`containment/execution_graph.py`): Frequency-based divergence detection added
+  alongside the existing consecutive-signature check. When any single call signature appears
+  `>= freq_threshold` times within the `_K=8` sliding window — regardless of interleaving —
+  a `divergence_suspected` event fires with `detection_mode="frequency"`. Thresholds:
+  tool=5, llm=7. This closes the alternating A,B,A,B... bypass confirmed by the adversarial
+  review.
+
+- **HIGH** (`retry.py`): `RetryContainer` gains a `jitter: float = 0.25` field (default 25%).
+  Backoff delays are multiplied by `1.0 + random.uniform(-jitter, jitter)` and clamped to
+  `[0.0, backoff_max]`. Without jitter, simultaneous agents produced perfectly synchronized
+  retry bursts (thundering herd).
+
+- **MEDIUM** (`containment/execution_context.py`): Chain event accumulation is now capped at
+  `_MAX_CHAIN_EVENTS = 1_000`; events beyond the cap are silently dropped. Duplicate event
+  deduplication key now excludes the auto-generated `ts` field (was including it, making every
+  event unique and defeating the guard).
+
+- **MEDIUM** (`pricing.py`): Substring-based model name matching removed from
+  `resolve_model_pricing()`. Only exact match (step 1) and prefix match (step 2) remain.
+  Substring matching allowed a model named `"my-enterprise-gpt-4o-mini"` to resolve to the
+  cheaper `"gpt-4o-mini"` pricing, enabling cost underestimation.
+
+- **LOW** (`pricing.py`): `estimate_cost_usd()` now raises `ValueError` for negative
+  `tokens_in` / `tokens_out`, closing a vector where adversarial callers could push the
+  accumulated cost counter below zero.
+
+- **LOW** (`shield/token_budget.py`): `record_usage()` validates non-negative tokens
+  (raises `ValueError`), preventing negative-token injection that would drive
+  `_output_total` below zero and permanently disable HALT/DEGRADE.
+
+### Tests
+
+- 21 new regression tests across `test_shield_token_budget.py`, `test_partial.py`,
+  `test_execution_graph.py`, and `tests/security/` covering all patched areas.
+  Full suite: **1253 passed, 4 xfailed**.
+
+---
+
 ## [0.10.4] — 2026-02-22 — Concurrency & Isolation Hotfix
 
 ### Security

@@ -563,3 +563,85 @@ def test_divergence_does_not_halt():
     assert len(div_events) == 1, (
         f"Expected exactly 1 divergence_suspected event, got {len(div_events)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Frequency divergence — alternating pattern A,B,A,B,...
+# ---------------------------------------------------------------------------
+
+
+def test_frequency_divergence_alternating_pattern():
+    """AAABAAAB... pattern triggers frequency divergence for tool_A.
+
+    freq_threshold for "tool" kind is 5.
+    mark_running + mark_success each call _update_sig_window, so each
+    begin/run/success cycle contributes 2 window entries per sig.
+    Pattern: 3x tool_A, 1x tool_B repeated → A appears 6 times in an 8-entry
+    window ([A,A,A,A,A,A,B,B]) and exceeds freq_threshold=5.
+    """
+    graph = ExecutionGraph(chain_id="freq-test")
+    root_id = graph.create_root("agent_run")
+
+    all_events: list = []
+
+    def run_tool(name: str) -> None:
+        node_id = graph.begin_node(parent_id=root_id, kind="tool", name=name)
+        graph.mark_running(node_id)
+        graph.mark_success(node_id, cost_usd=0.0)
+        all_events.extend(graph.drain_divergence_events())
+
+    # Pattern: AAABAAAB — 3 A then 1 B, repeated twice
+    for _ in range(2):
+        run_tool("tool_A")
+        run_tool("tool_A")
+        run_tool("tool_A")
+        run_tool("tool_B")
+
+    freq_events = [e for e in all_events if e.get("detection_mode") == "frequency"]
+    assert len(freq_events) >= 1, (
+        f"Expected at least one frequency divergence event, "
+        f"got events: {all_events}"
+    )
+    # Check that the event has the right structure
+    ev = freq_events[0]
+    assert ev["event_type"] == "divergence_suspected"
+    assert ev["detection_mode"] == "frequency"
+
+
+# ---------------------------------------------------------------------------
+# Test 19: Frequency divergence — does not spam (fires at most once per sig)
+# ---------------------------------------------------------------------------
+
+
+def test_frequency_divergence_does_not_spam():
+    """Each signature fires frequency divergence at most once per chain."""
+    graph = ExecutionGraph(chain_id="no-spam-test")
+    root_id = graph.create_root("agent_run")
+
+    all_events: list = []
+
+    def run_tool(name: str) -> None:
+        node_id = graph.begin_node(parent_id=root_id, kind="tool", name=name)
+        graph.mark_running(node_id)
+        graph.mark_success(node_id, cost_usd=0.0)
+        all_events.extend(graph.drain_divergence_events())
+
+    # Many repetitions of AAAB pattern to ensure multiple potential trigger points
+    for _ in range(5):
+        run_tool("tool_A")
+        run_tool("tool_A")
+        run_tool("tool_A")
+        run_tool("tool_B")
+
+    # Count frequency events per signature
+    from collections import Counter
+    freq_counts: Counter = Counter()
+    for ev in all_events:
+        if ev.get("detection_mode") == "frequency":
+            sig = tuple(ev["signature"])
+            freq_counts[sig] += 1
+
+    for sig, count in freq_counts.items():
+        assert count == 1, (
+            f"Frequency divergence for signature {sig} fired {count} times, expected 1"
+        )

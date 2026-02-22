@@ -521,7 +521,7 @@ guard.reset()
 
 ---
 
-## Ship Readiness (v0.10.4)
+## Ship Readiness (v0.10.5)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -558,10 +558,11 @@ guard.reset()
 - [x] Security hardening: SHELL_ALLOW_COMMANDS exec-flag bypass closed (python -c, cmake -P, make --eval, uv run wrappers), $()/ backtick/newline added to SHELL_DENY_OPERATORS, URL host parser unified to urllib.parse, patch.py threading.Lock added, SandboxRunner stale-data fix, SecretMasker HEX_SECRET upper-bound removed, _load_policy warning on failure (v0.10.2)
 - [x] Security: combined flag bypass, stdin exec path, pip via -m, make --eval closed; fail-closed policy on load error (v0.10.3)
 - [x] Concurrency: atomic budget spend, CircuitBreaker isolation enforcement, per-invocation veronica_guard container (v0.10.4)
+- [x] Adversarial hardening: TokenBudgetHook TOCTOU fix (pending reservation), BudgetWindow boundary off-by-one, frequency-based divergence detection (alternating bypass closed), RetryContainer jitter (thundering herd), event cap + dedup fix, PartialBufferOverflow structured exception, pricing substring match removed (v0.10.5)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1218 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
+1253 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
 
 ---
 

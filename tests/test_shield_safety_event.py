@@ -158,6 +158,17 @@ class TestSafetyEventImmutable:
         assert event.metadata == {}
 
 
+class TestEventCap:
+    """Events list is capped at 1000 entries."""
+
+    def test_record_event_capped_at_1000(self):
+        hook = BudgetWindowHook(max_calls=0, window_seconds=60.0)
+        pipe = ShieldPipeline(pre_dispatch=hook)
+        for _ in range(1100):
+            pipe.before_llm_call(CTX)
+        assert len(pipe.get_events()) <= 1000
+
+
 class TestSafetyEventTimestamp:
     """SafetyEvent timestamp is within 1 second of now."""
 

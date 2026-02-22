@@ -16,6 +16,39 @@ _MAX_CHUNKS: int = 10_000
 _MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
 
+class PartialBufferOverflow(ValueError):
+    """Raised when PartialResultBuffer exceeds its chunk or byte limit.
+
+    Subclasses ValueError for backward compatibility with callers that
+    catch ValueError. Carries structured evidence so callers can emit
+    a SafetyEvent with full context.
+
+    Attributes:
+        total_bytes: Total bytes accumulated before overflow.
+        kept_bytes: Bytes that were kept (same as total_bytes at overflow).
+        total_chunks: Number of chunks accumulated before overflow.
+        kept_chunks: Chunks that were kept (same as total_chunks at overflow).
+        truncation_point: "chunk_count" or "byte_size" indicating which
+            limit was hit.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        total_bytes: int,
+        kept_bytes: int,
+        total_chunks: int,
+        kept_chunks: int,
+        truncation_point: str,
+    ) -> None:
+        super().__init__(message)
+        self.total_bytes = total_bytes
+        self.kept_bytes = kept_bytes
+        self.total_chunks = total_chunks
+        self.kept_chunks = kept_chunks
+        self.truncation_point = truncation_point
+
+
 @dataclass
 class PartialResultBuffer:
     """Captures and preserves partial results during LLM streaming or multi-step execution.
@@ -39,6 +72,7 @@ class PartialResultBuffer:
     _metadata: Dict[str, Any] = field(default_factory=dict, init=False)
     _is_complete: bool = field(default=False, init=False)
     _total_bytes: int = field(default=0, init=False)
+    _is_partial_overflow: bool = field(default=False, init=False)
 
     def append(self, chunk: str) -> None:
         """Append a streaming chunk.
@@ -47,18 +81,31 @@ class PartialResultBuffer:
             chunk: Text chunk from LLM stream
 
         Raises:
-            ValueError: If chunk count or total byte size limit is exceeded.
+            PartialBufferOverflow: If chunk count or total byte size limit is
+                exceeded. Subclasses ValueError for backward compatibility.
         """
         if len(self._chunks) >= _MAX_CHUNKS:
-            raise ValueError(
+            self._is_partial_overflow = True
+            raise PartialBufferOverflow(
                 f"PartialResultBuffer exceeded max chunk count ({_MAX_CHUNKS}). "
-                "Possible streaming DoS."
+                "Possible streaming DoS.",
+                total_bytes=self._total_bytes,
+                kept_bytes=self._total_bytes,
+                total_chunks=len(self._chunks) + 1,
+                kept_chunks=len(self._chunks),
+                truncation_point="chunk_count",
             )
         chunk_bytes = len(chunk.encode("utf-8"))
         if self._total_bytes + chunk_bytes > _MAX_BYTES:
-            raise ValueError(
+            self._is_partial_overflow = True
+            raise PartialBufferOverflow(
                 f"PartialResultBuffer exceeded max byte size ({_MAX_BYTES} bytes). "
-                "Possible streaming DoS."
+                "Possible streaming DoS.",
+                total_bytes=self._total_bytes + chunk_bytes,
+                kept_bytes=self._total_bytes,
+                total_chunks=len(self._chunks) + 1,
+                kept_chunks=len(self._chunks),
+                truncation_point="byte_size",
             )
         self._chunks.append(chunk)
         self._total_bytes += chunk_bytes
@@ -109,9 +156,12 @@ class PartialResultBuffer:
 
     def to_dict(self) -> Dict:
         """Serialize buffer state."""
-        return {
+        result: Dict = {
             "partial_text": self.get_partial(),
             "chunk_count": self.chunk_count,
             "is_complete": self._is_complete,
             "metadata": dict(self._metadata),
         }
+        if self._is_partial_overflow:
+            result["truncated"] = True
+        return result

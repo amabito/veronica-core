@@ -142,6 +142,43 @@ class TestTokenBudgetConfigDefaults:
         assert cfg.is_any_enabled is True
 
 
+class TestTokenBudgetPendingReservation:
+    """TOCTOU fix: pending reservation tests."""
+
+    def test_pending_reservation_blocks_second_concurrent_call(self):
+        # max=100, estimated_out=60 per call: first reserves 60, second projected=120 -> HALT
+        hook = TokenBudgetHook(max_output_tokens=100)
+        ctx_estimated = ToolCallContext(request_id="r1", tool_name="llm", tokens_out=60)
+        result1 = hook.before_llm_call(ctx_estimated)
+        assert result1 is None  # First call passes and reserves 60
+        assert hook.pending_output == 60
+
+        result2 = hook.before_llm_call(ctx_estimated)
+        assert result2 is Decision.HALT  # Second call: 0 + 60 + 60 = 120 >= 100
+
+    def test_record_usage_releases_pending(self):
+        hook = TokenBudgetHook(max_output_tokens=200)
+        ctx_estimated = ToolCallContext(request_id="r1", tool_name="llm", tokens_out=80)
+        hook.before_llm_call(ctx_estimated)  # reserves 80
+        assert hook.pending_output == 80
+
+        hook.record_usage(output_tokens=50)  # actual=50, releases min(80,50)=50 from pending
+        assert hook.pending_output == 30     # 80-50=30 remaining pending
+        assert hook.output_total == 50
+
+    def test_release_reservation_releases_pending(self):
+        hook = TokenBudgetHook(max_output_tokens=200)
+        ctx_estimated = ToolCallContext(request_id="r1", tool_name="llm", tokens_out=80)
+        hook.before_llm_call(ctx_estimated)  # reserves 80
+        assert hook.pending_output == 80
+
+        hook.release_reservation(estimated_out=80)
+        assert hook.pending_output == 0
+        # After release, another call with same estimate should pass
+        result = hook.before_llm_call(ctx_estimated)
+        assert result is None
+
+
 class TestTokenBudgetIntegrationWiring:
     def test_disabled_allows_all(self):
         from veronica_core.integration import VeronicaIntegration
