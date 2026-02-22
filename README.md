@@ -179,6 +179,30 @@ VERONICA does not prescribe how the orchestrator responds to DEGRADE or HALT. It
 
 ---
 
+## Security Boundary
+
+veronica-core enforces execution policy at the process boundary (argv-level). It is not an OS-level sandbox.
+
+**What veronica-core does NOT guarantee:**
+
+- Does not contain subprocesses spawned by allowed binaries (e.g., a build tool invoking a subshell)
+- Does not restrict syscalls
+- Does not enforce kernel-level or container-level isolation
+- Does not inspect the content of LLM responses
+
+**What veronica-core DOES guarantee:**
+
+- Cost containment: hard ceilings on token spend and call volume
+- Retry containment: amplification control and circuit breaking
+- Step limits: bounded recursion depth per entity
+- Fail-closed policy enforcement: a policy file that exists but cannot be parsed raises `RuntimeError`; unknown or unevaluated actions default to DENY
+
+**On build tools and subshells:**
+
+If a binary such as `make` spawns a subshell internally, that execution occurs outside veronica-core's policy scope. PolicyEngine inspects the argv at the point of call; it has no visibility into child processes created by the called binary. This is why build tools are not allowlisted by default.
+
+---
+
 ## 6. OSS and Cloud Boundary
 
 **veronica-core** is the local containment primitive library. It contains all enforcement logic: ShieldPipeline, BudgetWindowHook, TokenBudgetHook, AdaptiveBudgetHook, TimeAwarePolicy, InputCompressionHook, MinimalResponsePolicy, VeronicaStateMachine, SafetyEvent, VeronicaExit, and associated state management.
