@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.3] - 2026-02-22
+
+### Security
+
+- **CRITICAL: Combined short flag bypass for inline exec (R-1)** (`security/policy_engine.py`):
+  `python -Sc "code"` bypassed `SHELL_DENY_INLINE_EXEC` because Python expands `-Sc` into
+  `-S -c` at runtime, but the policy engine checked for the exact token `"-c"` using a
+  `frozenset` intersection, which returned an empty set for `-Sc`. A new
+  `_has_combined_short_flag(token, ch)` helper (`re.match(r"^-[A-Za-z]{2,}$", token)`) now
+  detects combined short-option clusters. The `python`/`python3` branch in `_eval_shell` scans
+  every token with both an exact check (`token == "-c"`) and a cluster check
+  (`_has_combined_short_flag(token, "c")`), closing the bypass for any cluster containing `c`.
+
+- **HIGH: Stdin code execution via `python -` not blocked (R-1)** (`security/policy_engine.py`):
+  `python - < evil.py` (stdin execution) was not covered by any deny rule. The `python`/`python3`
+  block in `_eval_shell` now explicitly denies `"-"` as an argument with
+  `rule_id=SHELL_DENY_INLINE_EXEC`.
+
+- **HIGH: Supply chain bypass via `python -m pip` (R-2)** (`security/policy_engine.py`):
+  `python -m pip install evil` received `ALLOW` because `SHELL_PKG_INSTALL` only checked
+  `argv0 in ("pip", "pip3")`. The new `_PYTHON_MODULE_PKG_MANAGERS` constant
+  (`frozenset({"pip", "pip3", "ensurepip"})`) is checked when `python`/`python3` is invoked
+  with `-m`, returning `REQUIRE_APPROVAL` with `rule_id=SHELL_PKG_INSTALL`.
+
+- **HIGH: `make -f evil.mk` sub-shell escape (R-3)** (`security/policy_engine.py`):
+  `make` spawns sub-shells to execute recipe lines, which are invisible to `PolicyEngine`.
+  No flag-level check can close this structural gap. `"make"` has been removed from
+  `SHELL_ALLOW_COMMANDS` so all `make` invocations now return `DENY`.
+
+  **Breaking change**: code that previously relied on `make` being allowlisted must explicitly
+  grant `make` access through a custom `PolicyEngine` subclass or YAML policy override.
+
+- **MEDIUM: Policy YAML load fail-open (R-5)** (`security/policy_engine.py`):
+  `_load_policy()` caught all exceptions and silently returned `{}`, meaning a corrupt or
+  attacker-tampered YAML file would silently disable all YAML-defined rules (rollback checks,
+  custom allow/deny lists). `_load_policy()` is now fail-closed: if the policy file *exists*
+  but cannot be parsed, a `RuntimeError` is raised immediately. The file-absent path retains
+  backward-compatible behavior (warn and return `{}`).
+
+---
+
 ## [0.10.2] - 2026-02-22
 
 ### Security

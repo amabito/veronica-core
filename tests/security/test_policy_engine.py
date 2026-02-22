@@ -475,3 +475,125 @@ class TestSecureExecutorRaisesOnDeny:
         executor = _executor()
         with pytest.raises(ValueError, match="argv must not be empty"):
             executor.execute_shell([])
+
+
+# ---------------------------------------------------------------------------
+# v0.10.3 Security Regression Tests
+# ---------------------------------------------------------------------------
+
+
+class TestV0103SecurityFixes:
+    """Regression tests for v0.10.3 security hotfix (R-1, R-2, R-3, R-5)."""
+
+    # --- R-1: Combined short flag bypass ---
+
+    def test_r1_python_combined_Sc_is_denied(self) -> None:
+        """-Sc combined cluster must be DENY (R-1: combined flag bypass)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-Sc", "print(1)"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python_combined_cS_is_denied(self) -> None:
+        """-cS combined cluster must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-cS", "print(1)"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python_combined_ISc_is_denied(self) -> None:
+        """-ISc combined cluster must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-ISc", "print(1)"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python3_combined_Sc_is_denied(self) -> None:
+        """python3 -Sc combined cluster must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python3", "-Sc", "print(1)"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python_exact_c_regression(self) -> None:
+        """python -c must still be DENY (no regression from v0.10.2)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-c", "import os"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python_stdin_exec_is_denied(self) -> None:
+        """python - (stdin execution) must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-", "somefile"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_r1_python_script_file_is_still_allowed(self) -> None:
+        """python script.py must remain ALLOW (no regression from R-1 fix)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "script.py"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+
+    # --- R-2: python -m pkg manager bypass ---
+
+    def test_r2_python_m_pip_requires_approval(self) -> None:
+        """python -m pip install must be REQUIRE_APPROVAL (R-2: supply chain)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-m", "pip", "install", "evil"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "REQUIRE_APPROVAL"
+        assert decision.rule_id == "SHELL_PKG_INSTALL"
+
+    def test_r2_python_m_ensurepip_requires_approval(self) -> None:
+        """python -m ensurepip must be REQUIRE_APPROVAL."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-m", "ensurepip"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "REQUIRE_APPROVAL"
+        assert decision.rule_id == "SHELL_PKG_INSTALL"
+
+    def test_r2_python_m_http_server_is_still_allowed(self) -> None:
+        """python -m http.server must remain ALLOW (not a pkg manager)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-m", "http.server", "8080"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+
+    # --- R-3: make removed from allow list ---
+
+    def test_r3_make_f_evil_mk_is_denied(self) -> None:
+        """make -f /tmp/evil.mk must be DENY (make removed from allowlist, R-3)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["make", "-f", "/tmp/evil.mk"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+
+    def test_r3_make_all_is_denied(self) -> None:
+        """make all must be DENY (make no longer in SHELL_ALLOW_COMMANDS)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["make", "all"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+
+    # --- R-5: policy file fail-closed ---
+
+    def test_r5_invalid_yaml_raises_runtime_error(self, tmp_path) -> None:
+        """Existing but unparseable policy file must raise RuntimeError (fail-closed, R-5)."""
+        bad_policy = tmp_path / "bad_policy.yaml"
+        bad_policy.write_text("invalid: yaml: [\n  unclosed bracket\n", encoding="utf-8")
+        with pytest.raises(RuntimeError, match="policy_load_failed"):
+            PolicyEngine._load_policy(bad_policy)
+
+    def test_r5_missing_yaml_does_not_raise(self, tmp_path) -> None:
+        """Missing policy file must return {} without raising (backward-compat, R-5)."""
+        absent = tmp_path / "nonexistent_policy.yaml"
+        result = PolicyEngine._load_policy(absent)
+        assert result == {}
