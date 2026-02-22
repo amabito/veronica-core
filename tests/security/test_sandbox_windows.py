@@ -56,10 +56,10 @@ def runner(repo_root: str, mock_executor: MagicMock) -> WindowsSandboxRunner:
 
 class TestReadPathBlocked:
     def test_blocks_windows_users_backslash(self, runner: WindowsSandboxRunner) -> None:
-        assert runner.read_path_blocked(r"C:\Users\amabito\secret.txt") is True
+        assert runner.read_path_blocked(r"C:\Users\testuser\secret.txt") is True
 
     def test_blocks_windows_users_forward_slash(self, runner: WindowsSandboxRunner) -> None:
-        assert runner.read_path_blocked("C:/Users/amabito/.env") is True
+        assert runner.read_path_blocked("C:/Users/testuser/.env") is True
 
     def test_blocks_system32_backslash(self, runner: WindowsSandboxRunner) -> None:
         assert runner.read_path_blocked(r"C:\Windows\System32\cmd.exe") is True
@@ -126,7 +126,7 @@ class TestRunInSandboxPathValidation:
             mock_executor,
         ) as r:
             with pytest.raises(PermissionError, match="blocked path"):
-                r.run_in_sandbox(["echo", "C:/Users/amabito/.env"])
+                r.run_in_sandbox(["echo", "C:/Users/testuser/.env"])
 
     def test_raises_when_not_in_context(
         self, runner: WindowsSandboxRunner
@@ -155,7 +155,7 @@ class TestRunInSandboxPathValidation:
         )
         with WindowsSandboxRunner(config, mock_executor) as r:
             with pytest.raises(PermissionError):
-                r.run_in_sandbox(["type", r"C:\Users\amabito\.env"])
+                r.run_in_sandbox(["type", r"C:\Users\testuser\.env"])
 
 
 # ---------------------------------------------------------------------------

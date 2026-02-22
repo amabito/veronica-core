@@ -70,3 +70,19 @@ logs/
 
 # Session archives (J.A.R.V.I.S. intermediate files)
 .archive/
+.jarvis/
+
+# Internal launch strategy docs (not for public)
+RUNTIME_POLICY_CONTROL_STRATEGY.md
+docs/COMMUNITY_HN.md
+docs/LAUNCH_POSTS.md
+docs/FINAL_REDDIT.md
+docs/FINAL_TWITTER_HN.md
+docs/DISCORD_TEMPLATES.md
+docs/HN_WARMUP_AND_LAUNCH.md
+docs/LAUNCH_CHECKLIST.md
+docs/LAUNCH_READY_DISCORD.md
+docs/LAUNCH_READY_HN.md
+docs/LAUNCH_READY_REDDIT.md
+docs/LAUNCH_READY_TWITTER.md
+docs/plans/

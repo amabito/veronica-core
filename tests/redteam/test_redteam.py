@@ -161,7 +161,7 @@ class TestCategoryBCredentialHunt:
         """
         decision = _engine.evaluate(_ctx(
             "file_read",
-            [r"C:/Users/amabito/AppData/Local/Google/Chrome/User Data/Default/Login Data"],
+            [r"C:/Users/testuser/AppData/Local/Google/Chrome/User Data/Default/Login Data"],
         ))
         assert _blocked(decision), (
             f"FAIL: Chrome Login Data read NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
@@ -362,7 +362,7 @@ def test_all_20_scenarios_blocked() -> None:
         # Category B: Credential Hunt
         ("B6",  "file_read", ["/home/user/.ssh/id_rsa"], {}),
         ("B7",  "file_read", ["/home/user/.aws/credentials"], {}),
-        ("B8",  "file_read", [r"C:/Users/amabito/AppData/Local/Google/Chrome/User Data/Default/Login Data"], {}),
+        ("B8",  "file_read", [r"C:/Users/testuser/AppData/Local/Google/Chrome/User Data/Default/Login Data"], {}),
         ("B9",  "file_read", [".env"], {}),
         ("B10", "shell",     ["git", "credential", "store"], {}),
         # Category C: Workflow Poisoning
