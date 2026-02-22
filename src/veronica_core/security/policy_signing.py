@@ -43,15 +43,32 @@ except ImportError:  # pragma: no cover
 
 
 def _derive_test_key() -> bytes:
-    """Return SHA256(b'veronica-dev-key') as the built-in test key."""
+    """Return SHA256(b'veronica-dev-key') as the built-in test key.
+
+    This key is publicly known and must never be used in production.
+    """
     return hashlib.sha256(b"veronica-dev-key").digest()
 
 
 def _load_key() -> bytes:
-    """Return signing key from env var (hex) or the built-in test key."""
+    """Return signing key from env var (hex) or the built-in test key.
+
+    In production, set ``VERONICA_POLICY_KEY`` to a securely generated
+    32-byte hex string, e.g.::
+
+        python -c "import secrets; print(secrets.token_hex(32))"
+
+    For secret storage, prefer AWS Secrets Manager, Azure Key Vault, or
+    HashiCorp Vault over environment variables where possible.
+    """
     hex_key = os.environ.get(_ENV_KEY_VAR)
     if hex_key:
         return bytes.fromhex(hex_key)
+    logger.warning(
+        "policy_signing: %s is not set; falling back to built-in development "
+        "key. This key is publicly known — set the env var before deploying.",
+        _ENV_KEY_VAR,
+    )
     return _derive_test_key()
 
 
@@ -240,12 +257,19 @@ class PolicySignerV2:
             pub_pem = self._public_key_path.read_bytes()
         except OSError:
             return False
-        except Exception:
+        except ValueError:
+            # Malformed base64 in signature file
+            logger.debug("policy_signing_v2: failed to decode signature data")
             return False
 
         try:
             public_key = load_pem_public_key(pub_pem)
             public_key.verify(raw_sig, content)  # type: ignore[attr-defined]
             return True
-        except Exception:
+        except Exception as exc:
+            # cryptography raises InvalidSignature on mismatch; log the type
+            # but not the content to avoid leaking key material.
+            logger.debug(
+                "policy_signing_v2: verification failed (%s)", type(exc).__name__
+            )
             return False

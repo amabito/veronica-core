@@ -1,6 +1,7 @@
 """VERONICA Scheduler — admission control, dispatch, and concurrency gating."""
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from typing import Any
 
@@ -195,7 +196,7 @@ class Scheduler:
             labels=self._make_labels(entry),
             payload={
                 "priority": entry.priority.value,
-                "waited_ms": ((__import__("time").monotonic() - entry.queued_at) * 1000),
+                "waited_ms": ((time.monotonic() - entry.queued_at) * 1000),
                 **self._queue_snapshot(entry),
             },
         ))
@@ -233,6 +234,6 @@ class Scheduler:
             severity=Severity.WARN,
             payload={
                 "new_priority": entry.priority.value,
-                "waited_ms": ((__import__("time").monotonic() - entry.queued_at) * 1000),
+                "waited_ms": ((time.monotonic() - entry.queued_at) * 1000),
             },
         ))

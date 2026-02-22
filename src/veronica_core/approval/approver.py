@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import os
 import threading
+import time as _time
 import uuid
 import warnings
 from dataclasses import dataclass, field
@@ -68,6 +69,8 @@ class ApprovalToken:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_NONCE_REGISTRY_MAX_SIZE = 10_000
+# Nonces older than this are safe to evict: corresponding tokens are expired.
+_NONCE_TTL_SECONDS = 5 * 60  # matches _TOKEN_MAX_AGE_SECONDS below
 
 
 class NonceRegistry:
@@ -75,13 +78,19 @@ class NonceRegistry:
 
     Once a nonce is consumed it cannot be reused, preventing replay attacks.
 
+    Eviction is time-based: nonces older than ``_NONCE_TTL_SECONDS`` are
+    removed before each lookup. This guarantees that an evicted nonce's
+    corresponding token is already expired, so re-use would fail the token
+    expiry check even if the nonce were somehow accepted.  The ``max_size``
+    cap acts only as an additional memory safety net.
+
     Args:
-        max_size: Maximum number of nonces to hold before old ones are dropped
-                  (prevents unbounded memory growth in long-running processes).
+        max_size: Maximum number of live nonces before oldest are dropped.
     """
 
     def __init__(self, max_size: int = _DEFAULT_NONCE_REGISTRY_MAX_SIZE) -> None:
-        self._used: set[str] = set()
+        # Maps nonce → monotonic timestamp of insertion
+        self._used: dict[str, float] = {}
         self._order: list[str] = []  # insertion-order list for eviction
         self._max_size = max_size
         self._lock = threading.Lock()
@@ -99,15 +108,29 @@ class NonceRegistry:
             True = fresh, False = replay.
         """
         with self._lock:
+            now = _time.monotonic()
+            # Evict expired nonces first so the size cap only removes live ones
+            self._evict_expired(now)
             if nonce in self._used:
                 return False
-            self._used.add(nonce)
+            self._used[nonce] = now
             self._order.append(nonce)
-            # Evict oldest entries to cap memory
+            # Safety net: cap memory if expiry-based eviction leaves too many
             while len(self._order) > self._max_size:
                 oldest = self._order.pop(0)
-                self._used.discard(oldest)
+                self._used.pop(oldest, None)
             return True
+
+    def _evict_expired(self, now: float) -> None:
+        """Remove nonces older than the token TTL (caller must hold lock)."""
+        cutoff = now - _NONCE_TTL_SECONDS
+        while self._order:
+            oldest = self._order[0]
+            if self._used.get(oldest, now) < cutoff:
+                self._order.pop(0)
+                self._used.pop(oldest, None)
+            else:
+                break
 
     def clear_expired(self) -> None:
         """Clear all recorded nonces (optional maintenance call)."""
