@@ -77,6 +77,13 @@ class ShieldPipeline:
         )
         with self._lock:
             self._safety_events.append(event)
+        # OTel export (no-op if disabled)
+        try:
+            from veronica_core.otel import emit_safety_event
+
+            emit_safety_event(event)
+        except Exception:
+            pass  # Never let OTel failures affect containment
 
     def get_events(self) -> list[SafetyEvent]:
         """Return accumulated safety events (shallow copy)."""

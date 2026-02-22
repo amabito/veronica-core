@@ -123,6 +123,15 @@ from veronica_core.distributed import (
     get_default_backend,
 )
 
+# OpenTelemetry (v0.10.0)
+from veronica_core.otel import enable_otel, disable_otel, is_otel_enabled
+
+# Degradation Ladder (v0.10.0)
+from veronica_core.shield.degradation import DegradationLadder, DegradationConfig, Trimmer, NoOpTrimmer
+
+# PolicyDecision helpers (v0.10.0)
+from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limit_decision
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -216,4 +225,17 @@ __all__ = [
     "LocalBudgetBackend",
     "RedisBudgetBackend",
     "get_default_backend",
+    # OpenTelemetry (v0.10.0)
+    "enable_otel",
+    "disable_otel",
+    "is_otel_enabled",
+    # Degradation Ladder (v0.10.0)
+    "DegradationLadder",
+    "DegradationConfig",
+    "NoOpTrimmer",
+    # PolicyDecision helpers (v0.10.0)
+    "allow",
+    "deny",
+    "model_downgrade",
+    "rate_limit_decision",
 ]
