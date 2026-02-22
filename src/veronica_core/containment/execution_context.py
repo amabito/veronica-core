@@ -204,6 +204,7 @@ class ContextSnapshot:
     nodes: list[NodeRecord]
     events: list[SafetyEvent]
     graph_summary: Optional[dict[str, Any]] = None
+    parent_chain_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +214,7 @@ class ContextSnapshot:
 _STOP_REASON_EVENT_TYPE: dict[str, str] = {
     "aborted": "CHAIN_ABORTED",
     "budget_exceeded": "CHAIN_BUDGET_EXCEEDED",
+    "budget_exceeded_by_child": "CHAIN_BUDGET_EXCEEDED_BY_CHILD",
     "step_limit_exceeded": "CHAIN_STEP_LIMIT_EXCEEDED",
     "retry_budget_exceeded": "CHAIN_RETRY_BUDGET_EXCEEDED",
     "timeout": "CHAIN_TIMEOUT",
@@ -246,6 +248,7 @@ class ExecutionContext:
         pipeline: ShieldPipeline | None = None,
         metadata: ChainMetadata | None = None,
         circuit_breaker: CircuitBreaker | None = None,
+        parent: "ExecutionContext | None" = None,
     ) -> None:
         self._config = config
         self._pipeline = pipeline
@@ -254,6 +257,7 @@ class ExecutionContext:
             request_id=str(uuid.uuid4()),
             chain_id=str(uuid.uuid4()),
         )
+        self._parent: ExecutionContext | None = parent
 
         # Budget backend setup (v0.10.0)
         if config.budget_backend is not None:
@@ -401,6 +405,7 @@ class ExecutionContext:
                 nodes=list(self._nodes),
                 events=list(self._events),
                 graph_summary=graph_summary,
+                parent_chain_id=self._parent._metadata.chain_id if self._parent is not None else None,
             )
 
     def get_graph_snapshot(self) -> dict[str, Any]:
@@ -683,6 +688,10 @@ class ExecutionContext:
                     if ev not in self._events:
                         self._events.append(ev)
 
+        # Propagate cost up the parent chain (multi-agent linking).
+        if self._parent is not None and actual_cost > 0.0:
+            self._parent._propagate_child_cost(actual_cost)
+
         stack.pop()
         self._graph.mark_success(graph_node_id, cost_usd=actual_cost)
         return Decision.ALLOW
@@ -762,6 +771,69 @@ class ExecutionContext:
                 **self._metadata.tags,
             },
         )
+
+    def _propagate_child_cost(self, cost_usd: float) -> None:
+        """Receive cost from a child context and accumulate it here.
+
+        If accumulated cost exceeds ceiling, marks context as aborted.
+        Propagates further if this context also has a parent.
+
+        Args:
+            cost_usd: Cost amount (in USD) spent by the child context.
+        """
+        with self._lock:
+            self._cost_usd_accumulated += cost_usd
+            if self._cost_usd_accumulated >= self._config.max_cost_usd:
+                self._emit_chain_event(
+                    "budget_exceeded_by_child",
+                    f"child propagation pushed chain total "
+                    f"${self._cost_usd_accumulated:.4f} >= "
+                    f"ceiling ${self._config.max_cost_usd:.4f}",
+                )
+                self._aborted = True
+        # Propagate further up if we have a parent (outside lock to avoid deadlock).
+        if self._parent is not None:
+            self._parent._propagate_child_cost(cost_usd)
+
+    def spawn_child(
+        self,
+        max_cost_usd: float | None = None,
+        max_steps: int | None = None,
+        max_retries_total: int | None = None,
+        timeout_ms: int = 0,
+        pipeline: "ShieldPipeline | None" = None,
+    ) -> "ExecutionContext":
+        """Create a child context whose costs propagate to this parent.
+
+        Args:
+            max_cost_usd: Child ceiling. Defaults to parent's remaining budget.
+            max_steps: Child step limit. Defaults to parent's.
+            max_retries_total: Child retry budget. Defaults to parent's.
+            timeout_ms: Child timeout. 0 = no timeout.
+            pipeline: Optional ShieldPipeline for child.
+
+        Returns:
+            A new ExecutionContext linked to this parent.
+
+        Example::
+
+            with parent_ctx.spawn_child(max_cost_usd=0.5) as child:
+                child.wrap_llm_call(agent_b_fn)
+        """
+        with self._lock:
+            remaining = self._config.max_cost_usd - self._cost_usd_accumulated
+        child_max = max_cost_usd if max_cost_usd is not None else remaining
+        child_cfg = ExecutionConfig(
+            max_cost_usd=max(0.0, child_max),
+            max_steps=max_steps if max_steps is not None else self._config.max_steps,
+            max_retries_total=(
+                max_retries_total
+                if max_retries_total is not None
+                else self._config.max_retries_total
+            ),
+            timeout_ms=timeout_ms,
+        )
+        return ExecutionContext(config=child_cfg, pipeline=pipeline, parent=self)
 
     def _emit_chain_event(self, stop_reason: str, detail: str) -> None:
         """Append a chain-level SafetyEvent for *stop_reason*.
