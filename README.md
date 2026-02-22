@@ -521,7 +521,7 @@ guard.reset()
 
 ---
 
-## Ship Readiness (v0.10.1)
+## Ship Readiness (v0.10.3)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -556,6 +556,7 @@ guard.reset()
 - [x] Multi-agent Context Linking: parent-child ExecutionContext hierarchy with cost propagation (v0.10.0)
 - [x] Security patch: dev-key warning, sandbox credential exclusion, NonceRegistry TTL eviction, exception narrowing, audit-log corruption visibility (v0.10.1)
 - [x] Security hardening: SHELL_ALLOW_COMMANDS exec-flag bypass closed (python -c, cmake -P, make --eval, uv run wrappers), $()/ backtick/newline added to SHELL_DENY_OPERATORS, URL host parser unified to urllib.parse, patch.py threading.Lock added, SandboxRunner stale-data fix, SecretMasker HEX_SECRET upper-bound removed, _load_policy warning on failure (v0.10.2)
+- [x] Security: combined flag bypass, stdin exec path, pip via -m, make --eval closed; fail-closed policy on load error (v0.10.3)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
