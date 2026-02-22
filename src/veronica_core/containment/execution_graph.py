@@ -146,10 +146,19 @@ class ExecutionGraph:
             "llm": 5,
             "system": 999,
         }
-        # Deduplication: once a divergence_suspected event has been emitted for
-        # a given (kind, name) signature within this chain, it is not emitted
-        # again.  Prevents event spam in long loops.
-        self._emitted_divergences: set[NodeSignature] = set()
+        # Frequency-based thresholds: fires when a signature appears >= N times
+        # anywhere in the _K window, regardless of consecutiveness.  This catches
+        # alternating patterns (A,B,A,B,...) that evade the consecutive check.
+        self._freq_thresholds: dict[str, int] = {
+            "tool": 5,
+            "llm": 7,
+            "system": 999,
+        }
+        # Deduplication: tracks (sig, mode) pairs so that consecutive and
+        # frequency detections are independent, but each mode fires at most
+        # once per signature per chain.
+        # mode is "consecutive" or "frequency".
+        self._emitted_divergences: set[tuple[NodeSignature, str]] = set()
         # Buffer of pending divergence event dicts.  Drained by
         # drain_divergence_events().
         self._pending_divergence_events: list[dict[str, Any]] = []
@@ -516,9 +525,10 @@ class ExecutionGraph:
                     "llm_calls_per_root": self._total_llm_calls / root_count,
                     "tool_calls_per_root": self._total_tool_calls / root_count,
                     "retries_per_root": self._total_retries / root_count,
-                    # Count of unique signatures for which a divergence_suspected
-                    # event has been emitted in this chain.  Ephemeral pending
-                    # events (_pending_divergence_events) are NOT included.
+                    # Count of unique (signature, mode) pairs for which a
+                    # divergence_suspected event has been emitted.  Counts
+                    # consecutive and frequency detections separately.
+                    # Ephemeral pending events are NOT included.
                     "divergence_emitted_count": len(self._emitted_divergences),
                 },
                 "snapshot_ts_ms": _now_ms(),
@@ -529,13 +539,19 @@ class ExecutionGraph:
     # ------------------------------------------------------------------
 
     def _update_sig_window(self, sig: NodeSignature) -> Optional[dict[str, Any]]:
-        """Update the ring buffer and check for consecutive-repeat divergence.
+        """Update the ring buffer and check for divergence via two strategies.
 
-        Appends *sig* to self._sig_window and trims it to the last _K entries.
-        Then counts how many entries at the tail of the window equal *sig*
-        (i.e., consecutive trailing repeats).  If that count reaches the
-        threshold for sig[0] (the kind) and *sig* has not already been emitted
-        for this chain, an event payload dict is returned.
+        Strategy 1 (consecutive): counts trailing repeats of *sig* and fires
+        when they reach the kind-specific threshold.
+
+        Strategy 2 (frequency): counts total occurrences of *sig* in the _K
+        window regardless of position and fires when they reach the
+        frequency-specific threshold.  This catches alternating patterns such
+        as A,B,A,B,... that evade the consecutive check.
+
+        Each (sig, mode) pair fires at most once per chain (deduplication).
+        The first matching strategy wins for a given call; both may fire in
+        different calls.
 
         Must be called with self._lock held.
 
@@ -544,12 +560,14 @@ class ExecutionGraph:
 
         Returns:
             Event payload dict if divergence should be emitted, else None.
+            Only the first matching check is returned per invocation to keep
+            the pending-events list atomic per call.
         """
         self._sig_window.append(sig)
         if len(self._sig_window) > self._K:
             self._sig_window.pop(0)
 
-        # Count consecutive trailing entries that equal sig.
+        # --- Strategy 1: consecutive trailing repeats ---
         consecutive = 0
         for entry in reversed(self._sig_window):
             if entry == sig:
@@ -557,16 +575,40 @@ class ExecutionGraph:
             else:
                 break
 
-        threshold = self._diverge_thresholds.get(sig[0], 999)
-        if consecutive >= threshold and sig not in self._emitted_divergences:
-            self._emitted_divergences.add(sig)
+        consec_threshold = self._diverge_thresholds.get(sig[0], 999)
+        consec_key = (sig, "consecutive")
+        if consecutive >= consec_threshold and consec_key not in self._emitted_divergences:
+            self._emitted_divergences.add(consec_key)
             return {
                 "event_type": "divergence_suspected",
                 "severity": "warn",
+                "detection_mode": "consecutive",
                 "signature": list(sig),
                 "repeat_count": consecutive,
                 "chain_id": self._chain_id,
             }
+
+        # --- Strategy 2: frequency within window (non-consecutive pattern) ---
+        # Only fires when the consecutive check did NOT already fire (or was
+        # already deduped), specifically to catch alternating patterns like
+        # A,B,A,B,... where consecutive count stays below threshold.
+        # Condition: consecutive < consec_threshold (not a consecutive burst)
+        # but total frequency in window >= freq_threshold.
+        if consecutive < consec_threshold:
+            freq_count = sum(1 for entry in self._sig_window if entry == sig)
+            freq_threshold = self._freq_thresholds.get(sig[0], 999)
+            freq_key = (sig, "frequency")
+            if freq_count >= freq_threshold and freq_key not in self._emitted_divergences:
+                self._emitted_divergences.add(freq_key)
+                return {
+                    "event_type": "divergence_suspected",
+                    "severity": "warn",
+                    "detection_mode": "frequency",
+                    "signature": list(sig),
+                    "repeat_count": freq_count,
+                    "chain_id": self._chain_id,
+                }
+
         return None
 
     def _next_id(self) -> str:

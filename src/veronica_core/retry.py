@@ -3,6 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, TypeVar, Optional, Any
+import random
 import time
 import logging
 
@@ -29,6 +30,10 @@ class RetryContainer:
     max_retries: int = 3
     backoff_base: float = 1.0
     backoff_max: float = 30.0
+    # jitter fraction applied to each backoff delay (0.0 = no jitter, 1.0 = ±100%).
+    # Default 0.25 adds ±25% randomness to prevent thundering herd when many
+    # RetryContainer instances retry simultaneously after a shared failure.
+    jitter: float = 0.25
 
     _attempt_count: int = field(default=0, init=False)
     _total_retries: int = field(default=0, init=False)
@@ -77,10 +82,10 @@ class RetryContainer:
                     )
                     raise
 
-                delay = min(
-                    self.backoff_base * (2**attempt),
-                    self.backoff_max,
-                )
+                base_delay = self.backoff_base * (2**attempt)
+                if self.jitter > 0.0:
+                    base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
+                delay = min(max(0.0, base_delay), self.backoff_max)
                 logger.info(
                     f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
                     f"Retrying in {delay:.1f}s "

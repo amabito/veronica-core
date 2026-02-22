@@ -61,8 +61,10 @@ def resolve_model_pricing(model: str) -> Pricing:
     Resolution order:
     1. Exact match in PRICING_TABLE.
     2. Prefix match: any key that is a prefix of *model* (longest prefix wins).
-    3. Substring match: any key contained in *model*.
-    4. _UNKNOWN_MODEL_FALLBACK (conservative upper bound).
+    3. _UNKNOWN_MODEL_FALLBACK (conservative upper bound).
+
+    Note: Substring matching was removed to prevent cost underestimation
+    when model names embed known model identifiers (security hardening).
 
     Args:
         model: Model identifier string (e.g. "gpt-4o-2024-11-20").
@@ -83,12 +85,6 @@ def resolve_model_pricing(model: str) -> Pricing:
         best = max(prefix_matches, key=len)
         return PRICING_TABLE[best]
 
-    # 3. Substring match — key contained in model string
-    substring_matches = [key for key in PRICING_TABLE if key in model]
-    if substring_matches:
-        best = max(substring_matches, key=len)
-        return PRICING_TABLE[best]
-
     return _UNKNOWN_MODEL_FALLBACK
 
 
@@ -103,6 +99,11 @@ def estimate_cost_usd(model: str, tokens_in: int, tokens_out: int) -> float:
     Returns:
         Estimated cost in USD (non-negative float).
     """
+    if tokens_in < 0 or tokens_out < 0:
+        raise ValueError(
+            f"estimate_cost_usd: tokens must be non-negative, "
+            f"got tokens_in={tokens_in}, tokens_out={tokens_out}"
+        )
     if tokens_in == 0 and tokens_out == 0:
         return 0.0
     pricing = resolve_model_pricing(model)

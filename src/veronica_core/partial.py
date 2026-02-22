@@ -11,6 +11,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Hard limits to prevent DoS via unbounded streaming buffers.
+_MAX_CHUNKS: int = 10_000
+_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
 
 @dataclass
 class PartialResultBuffer:
@@ -18,6 +22,10 @@ class PartialResultBuffer:
 
     When an LLM call is interrupted (timeout, abort, budget exceeded),
     accumulated chunks are preserved instead of silently discarded.
+
+    Limits:
+        - Maximum 10,000 chunks (raises ValueError when exceeded).
+        - Maximum 10 MB total bytes across all chunks (raises ValueError when exceeded).
 
     Example:
         buf = PartialResultBuffer()
@@ -30,14 +38,30 @@ class PartialResultBuffer:
     _chunks: List[str] = field(default_factory=list, init=False)
     _metadata: Dict[str, Any] = field(default_factory=dict, init=False)
     _is_complete: bool = field(default=False, init=False)
+    _total_bytes: int = field(default=0, init=False)
 
     def append(self, chunk: str) -> None:
         """Append a streaming chunk.
 
         Args:
             chunk: Text chunk from LLM stream
+
+        Raises:
+            ValueError: If chunk count or total byte size limit is exceeded.
         """
+        if len(self._chunks) >= _MAX_CHUNKS:
+            raise ValueError(
+                f"PartialResultBuffer exceeded max chunk count ({_MAX_CHUNKS}). "
+                "Possible streaming DoS."
+            )
+        chunk_bytes = len(chunk.encode("utf-8"))
+        if self._total_bytes + chunk_bytes > _MAX_BYTES:
+            raise ValueError(
+                f"PartialResultBuffer exceeded max byte size ({_MAX_BYTES} bytes). "
+                "Possible streaming DoS."
+            )
         self._chunks.append(chunk)
+        self._total_bytes += chunk_bytes
 
     def mark_complete(self) -> None:
         """Mark the result as complete (not partial)."""
@@ -81,6 +105,7 @@ class PartialResultBuffer:
         self._chunks.clear()
         self._metadata.clear()
         self._is_complete = False
+        self._total_bytes = 0
 
     def to_dict(self) -> Dict:
         """Serialize buffer state."""

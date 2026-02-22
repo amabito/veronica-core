@@ -50,7 +50,7 @@ class BudgetWindowHook:
 
         with self._lock:
             # Prune expired timestamps
-            while self._timestamps and self._timestamps[0] <= cutoff:
+            while self._timestamps and self._timestamps[0] < cutoff:
                 self._timestamps.popleft()
 
             count = len(self._timestamps)

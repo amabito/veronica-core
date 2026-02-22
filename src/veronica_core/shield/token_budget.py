@@ -58,6 +58,11 @@ class TokenBudgetHook:
 
     def record_usage(self, output_tokens: int, input_tokens: int = 0) -> None:
         """Record token usage after a call completes."""
+        if output_tokens < 0 or input_tokens < 0:
+            raise ValueError(
+                f"record_usage: tokens must be non-negative, "
+                f"got output={output_tokens}, input={input_tokens}"
+            )
         with self._lock:
             self._output_total += output_tokens
             self._input_total += input_tokens

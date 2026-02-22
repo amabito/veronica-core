@@ -221,6 +221,10 @@ _STOP_REASON_EVENT_TYPE: dict[str, str] = {
     "circuit_open": "CHAIN_CIRCUIT_OPEN",
 }
 
+# Maximum number of SafetyEvents stored per chain to prevent memory exhaustion
+# from flooding callers or repeated limit-check emissions.
+_MAX_CHAIN_EVENTS: int = 1_000
+
 
 class ExecutionContext:
     """Chain-level containment for one agent run or request.
@@ -374,11 +378,15 @@ class ExecutionContext:
         Use this when application code emits SafetyEvent instances outside
         of wrap_llm_call / wrap_tool_call.
 
+        Silently drops events once the internal cap (_MAX_CHAIN_EVENTS) is
+        reached to prevent memory exhaustion from flooding callers.
+
         Args:
             event: SafetyEvent to record.
         """
         with self._lock:
-            self._events.append(event)
+            if len(self._events) < _MAX_CHAIN_EVENTS:
+                self._events.append(event)
 
     def get_snapshot(self) -> ContextSnapshot:
         """Return an immutable snapshot of current chain state.
@@ -856,8 +864,16 @@ class ExecutionContext:
             hook="ExecutionContext",
             request_id=self._metadata.request_id,
         )
-        # Append only if not already present (idempotent for repeated limit checks).
-        if event not in self._events:
+        # Dedup by content fields (excluding ts, which is unique per-instance).
+        # SafetyEvent.ts is auto-set to datetime.now() on construction, so two
+        # events with identical fields but different creation times would NOT be
+        # equal under the default frozen-dataclass __eq__. Compare by key tuple
+        # instead to correctly suppress duplicate limit-check emissions.
+        dedup_key = (event.event_type, event.decision, event.reason, event.hook, event.request_id)
+        if len(self._events) < _MAX_CHAIN_EVENTS and not any(
+            (e.event_type, e.decision, e.reason, e.hook, e.request_id) == dedup_key
+            for e in self._events
+        ):
             self._events.append(event)
 
     def _start_timeout_watcher(self) -> None:
