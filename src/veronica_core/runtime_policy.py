@@ -55,6 +55,10 @@ class PolicyDecision:
     policy_type: str
     reason: str = ""
     partial_result: Any = None
+    # Degradation extensions (v0.10.0) -- all optional, default None/0
+    degradation_action: str | None = None  # "MODEL_DOWNGRADE" | "CONTEXT_TRIM" | "RATE_LIMIT"
+    fallback_model: str | None = None
+    rate_limit_ms: int = 0
 
 
 @runtime_checkable
@@ -149,3 +153,44 @@ class PolicyPipeline:
 
     def __len__(self) -> int:
         return len(self._policies)
+
+
+# ---------------------------------------------------------------------------
+# PolicyDecision factory helpers (v0.10.0)
+# ---------------------------------------------------------------------------
+
+
+def allow(policy_type: str = "allow") -> PolicyDecision:
+    """Return an allowed PolicyDecision."""
+    return PolicyDecision(allowed=True, policy_type=policy_type)
+
+
+def deny(policy_type: str, reason: str = "") -> PolicyDecision:
+    """Return a denied PolicyDecision."""
+    return PolicyDecision(allowed=False, policy_type=policy_type, reason=reason)
+
+
+def model_downgrade(
+    current_model: str,
+    fallback_model: str,
+    reason: str = "",
+) -> PolicyDecision:
+    """Return a MODEL_DOWNGRADE degradation decision."""
+    return PolicyDecision(
+        allowed=True,
+        policy_type="model_downgrade",
+        reason=reason,
+        degradation_action="MODEL_DOWNGRADE",
+        fallback_model=fallback_model,
+    )
+
+
+def rate_limit_decision(delay_ms: int, reason: str = "") -> PolicyDecision:
+    """Return a RATE_LIMIT degradation decision."""
+    return PolicyDecision(
+        allowed=True,
+        policy_type="rate_limit",
+        reason=reason,
+        degradation_action="RATE_LIMIT",
+        rate_limit_ms=delay_ms,
+    )

@@ -112,6 +112,15 @@ from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 # Semantic Loop Guard (v0.9.6)
 from veronica_core.semantic import SemanticLoopGuard
 
+# OpenTelemetry (v0.10.0)
+from veronica_core.otel import enable_otel, disable_otel, is_otel_enabled
+
+# Degradation Ladder (v0.10.0)
+from veronica_core.shield.degradation import DegradationLadder, DegradationConfig, Trimmer, NoOpTrimmer
+
+# PolicyDecision helpers (v0.10.0)
+from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limit_decision
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -195,4 +204,17 @@ __all__ = [
     "unpatch_all",
     # Semantic Loop Guard (v0.9.6)
     "SemanticLoopGuard",
+    # OpenTelemetry (v0.10.0)
+    "enable_otel",
+    "disable_otel",
+    "is_otel_enabled",
+    # Degradation Ladder (v0.10.0)
+    "DegradationLadder",
+    "DegradationConfig",
+    "NoOpTrimmer",
+    # PolicyDecision helpers (v0.10.0)
+    "allow",
+    "deny",
+    "model_downgrade",
+    "rate_limit_decision",
 ]
