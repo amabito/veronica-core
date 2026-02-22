@@ -497,7 +497,7 @@ guard.reset()
 
 ---
 
-## Ship Readiness (v0.10.0)
+## Ship Readiness (v0.10.1)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -530,6 +530,7 @@ guard.reset()
 - [x] OpenTelemetry Export: SafetyEvent → OTel span events, privacy-safe, opt-in (v0.10.0)
 - [x] Degradation Ladder: 4-tier graceful degradation (model_downgrade → context_trim → rate_limit → halt) (v0.10.0)
 - [x] Multi-agent Context Linking: parent-child ExecutionContext hierarchy with cost propagation (v0.10.0)
+- [x] Security patch: dev-key warning, sandbox credential exclusion, NonceRegistry TTL eviction, exception narrowing, audit-log corruption visibility (v0.10.1)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
