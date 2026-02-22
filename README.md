@@ -565,9 +565,10 @@ pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-616%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1185%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Security](https://img.shields.io/badge/security-reviewed-brightgreen)
 
 ---
 

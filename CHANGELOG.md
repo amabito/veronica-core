@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.1] - 2026-02-22
+
+### Security
+
+- **`_load_key()` warning on dev key fallback** (`security/policy_signing.py`): emit
+  `logger.warning` when `VERONICA_POLICY_KEY` is unset so operators are alerted before
+  deploying with the publicly-known development key. Docstring now documents the
+  recommended `secrets.token_hex(32)` generation command and points to AWS Secrets
+  Manager / Azure Key Vault / HashiCorp Vault as preferred secret stores.
+
+- **Sandbox ignores credential files** (`runner/sandbox_windows.py`): `shutil.copytree`
+  ignore patterns extended to cover `.env`, `.env.*`, `*.env`, `*.key`, `*.pem`, `*.pfx`,
+  `*.p12`, and `*.secret` — preventing private keys and credentials from being copied into
+  the ephemeral sandbox directory.
+
+- **`NonceRegistry` TTL-based eviction** (`approval/approver.py`): replaced size-based
+  eviction (`maxsize`) with time-to-live eviction (default 5 minutes). Nonces are now
+  guaranteed to be checked for the full TTL window regardless of registry size, eliminating
+  the replay-attack window that existed when the registry was full and old nonces were
+  evicted before expiry.
+
+- **Exception narrowing in `policy_signing.py`**: broad `except Exception` blocks replaced
+  with `except ValueError` (malformed base64) and a dedicated `except Exception` that logs
+  only `type(exc).__name__` to avoid leaking key material in error messages.
+
+- **`scheduler.py` — remove `__import__("time")` anti-pattern**: replaced dynamic import
+  in hot event-emission paths with a standard top-level `import time`, removing an
+  unintentional obfuscation of the module dependency.
+
+- **Silent log-corruption skip replaced with warnings** (`audit/log.py`): `get_last_policy_version`
+  and `_load_last_hash` now emit `logger.warning` (including file path and exception) instead
+  of silently continuing past `json.JSONDecodeError` / `OSError`, making audit-log corruption
+  observable.
+
+---
+
 ## [0.10.0] - 2026-02-22
 
 ### Added
