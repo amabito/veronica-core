@@ -112,6 +112,14 @@ from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 # Semantic Loop Guard (v0.9.6)
 from veronica_core.semantic import SemanticLoopGuard
 
+# Distributed Budget (v0.10.0)
+from veronica_core.distributed import (
+    BudgetBackend,
+    LocalBudgetBackend,
+    RedisBudgetBackend,
+    get_default_backend,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -195,4 +203,9 @@ __all__ = [
     "unpatch_all",
     # Semantic Loop Guard (v0.9.6)
     "SemanticLoopGuard",
+    # Distributed Budget (v0.10.0)
+    "BudgetBackend",
+    "LocalBudgetBackend",
+    "RedisBudgetBackend",
+    "get_default_backend",
 ]
