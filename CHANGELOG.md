@@ -30,11 +30,13 @@ All notable changes to this project will be documented in this file.
 
 - **HIGH: `make -f evil.mk` sub-shell escape (R-3)** (`security/policy_engine.py`):
   `make` spawns sub-shells to execute recipe lines, which are invisible to `PolicyEngine`.
-  No flag-level check can close this structural gap. `"make"` has been removed from
-  `SHELL_ALLOW_COMMANDS` so all `make` invocations now return `DENY`.
+  No flag-level check can close this structural gap. veronica-core is a policy enforcement
+  layer that operates on argv; it is not an OS-level sandbox. Build tools that spawn their
+  own sub-shells cannot be safely contained here. `"make"` has been removed from
+  `SHELL_ALLOW_COMMANDS`; all `make` invocations now return `DENY`.
 
-  **Breaking change**: code that previously relied on `make` being allowlisted must explicitly
-  grant `make` access through a custom `PolicyEngine` subclass or YAML policy override.
+  > **BREAKING CHANGE**: Any code that relied on `make` being allowlisted will now receive
+  > `DENY`. See the v0.10.3 release notes for migration options.
 
 - **MEDIUM: Policy YAML load fail-open (R-5)** (`security/policy_engine.py`):
   `_load_policy()` caught all exceptions and silently returned `{}`, meaning a corrupt or
