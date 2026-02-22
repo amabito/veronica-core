@@ -58,8 +58,9 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("PYPI_TOKEN", re.compile(r"\b(pypi-[A-Za-z0-9_\-]{50,})\b")),
     # Polymarket API keys (common in this project)
     ("POLYMARKET_KEY", re.compile(r"(?i)polymarket[_\-. ]?(?:api[_\-. ]?)?(?:key|secret|token)\s*[=:]\s*([^\s,;\"']{20,})")),
-    # Generic 32+ hex strings (must be standalone to avoid false positives on hashes)
-    ("HEX_SECRET", re.compile(r"(?<![A-Za-z0-9])([0-9a-fA-F]{32,64})(?![A-Za-z0-9])")),
+    # Generic 32+ hex strings (must be standalone to avoid false positives on hashes).
+    # No upper bound: 65+ char secrets (SHA-512 digests, long API tokens) are also redacted.
+    ("HEX_SECRET", re.compile(r"(?<![A-Za-z0-9])([0-9a-fA-F]{32,})(?![A-Za-z0-9])")),
     # password=value, passwd=value, secret=value patterns
     ("PASSWORD_KV", re.compile(
         r"(?i)(?:password|passwd|secret|token|api_key|apikey|access_key)\s*[=:]\s*([^\s,;\"'&]{4,})"

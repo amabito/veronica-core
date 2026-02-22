@@ -15,6 +15,7 @@ Public API:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any, Callable, Dict
 
 from veronica_core.inject import get_active_container, is_guard_active
@@ -25,6 +26,8 @@ __all__ = ["patch_openai", "patch_anthropic", "unpatch_all"]
 
 # Registry: key -> (target_class, attr_name, original_callable)
 _patches: Dict[str, tuple] = {}
+# Protects all reads and writes to _patches against concurrent patch/unpatch calls.
+_patches_lock = threading.Lock()
 
 
 def _estimate_cost_openai(response: Any) -> float:
@@ -99,37 +102,39 @@ def patch_openai() -> None:
 
     Safe to call when openai is not installed (logs a warning, returns).
     Idempotent: subsequent calls after the first are no-ops.
+    Thread-safe: all registry writes are protected by _patches_lock.
     """
-    patched_any = False
+    with _patches_lock:
+        patched_any = False
 
-    # Modern OpenAI (v1.x)
-    if "openai_modern" not in _patches:
-        try:
-            import openai.resources.chat.completions as _mod  # type: ignore[import]
-            orig = _mod.Completions.create
-            _mod.Completions.create = _make_patched(orig, _estimate_cost_openai, "openai")
-            _patches["openai_modern"] = (_mod.Completions, "create", orig)
-            logger.info("[VERONICA_PATCH] Patched openai.resources.chat.completions.Completions.create")
-            patched_any = True
-        except (ImportError, AttributeError):
-            pass
-
-    # Legacy OpenAI (v0.x)
-    if "openai_legacy" not in _patches:
-        try:
-            import openai as _oa  # type: ignore[import]
-            cls = getattr(_oa, "ChatCompletion", None)
-            if cls is not None:
-                orig = cls.create
-                cls.create = _make_patched(orig, _estimate_cost_openai, "openai-legacy")
-                _patches["openai_legacy"] = (cls, "create", orig)
-                logger.info("[VERONICA_PATCH] Patched openai.ChatCompletion.create")
+        # Modern OpenAI (v1.x)
+        if "openai_modern" not in _patches:
+            try:
+                import openai.resources.chat.completions as _mod  # type: ignore[import]
+                orig = _mod.Completions.create
+                _mod.Completions.create = _make_patched(orig, _estimate_cost_openai, "openai")
+                _patches["openai_modern"] = (_mod.Completions, "create", orig)
+                logger.info("[VERONICA_PATCH] Patched openai.resources.chat.completions.Completions.create")
                 patched_any = True
-        except (ImportError, AttributeError, TypeError):
-            pass
+            except (ImportError, AttributeError):
+                pass
 
-    if not patched_any and "openai_modern" not in _patches and "openai_legacy" not in _patches:
-        logger.warning("[VERONICA_PATCH] openai not installed or no patchable targets found")
+        # Legacy OpenAI (v0.x)
+        if "openai_legacy" not in _patches:
+            try:
+                import openai as _oa  # type: ignore[import]
+                cls = getattr(_oa, "ChatCompletion", None)
+                if cls is not None:
+                    orig = cls.create
+                    cls.create = _make_patched(orig, _estimate_cost_openai, "openai-legacy")
+                    _patches["openai_legacy"] = (cls, "create", orig)
+                    logger.info("[VERONICA_PATCH] Patched openai.ChatCompletion.create")
+                    patched_any = True
+            except (ImportError, AttributeError, TypeError):
+                pass
+
+        if not patched_any and "openai_modern" not in _patches and "openai_legacy" not in _patches:
+            logger.warning("[VERONICA_PATCH] openai not installed or no patchable targets found")
 
 
 def patch_anthropic() -> None:
@@ -139,27 +144,31 @@ def patch_anthropic() -> None:
 
     Safe to call when anthropic is not installed (logs a warning, returns).
     Idempotent: subsequent calls after the first are no-ops.
+    Thread-safe: all registry writes are protected by _patches_lock.
     """
-    if "anthropic" in _patches:
-        logger.debug("[VERONICA_PATCH] Anthropic already patched, skipping")
-        return
+    with _patches_lock:
+        if "anthropic" in _patches:
+            logger.debug("[VERONICA_PATCH] Anthropic already patched, skipping")
+            return
 
-    try:
-        import anthropic.resources.messages as _mod  # type: ignore[import]
-        orig = _mod.Messages.create
-        _mod.Messages.create = _make_patched(orig, _estimate_cost_anthropic, "anthropic")
-        _patches["anthropic"] = (_mod.Messages, "create", orig)
-        logger.info("[VERONICA_PATCH] Patched anthropic.resources.messages.Messages.create")
-    except (ImportError, AttributeError):
-        logger.warning("[VERONICA_PATCH] anthropic not installed or no patchable targets found")
+        try:
+            import anthropic.resources.messages as _mod  # type: ignore[import]
+            orig = _mod.Messages.create
+            _mod.Messages.create = _make_patched(orig, _estimate_cost_anthropic, "anthropic")
+            _patches["anthropic"] = (_mod.Messages, "create", orig)
+            logger.info("[VERONICA_PATCH] Patched anthropic.resources.messages.Messages.create")
+        except (ImportError, AttributeError):
+            logger.warning("[VERONICA_PATCH] anthropic not installed or no patchable targets found")
 
 
 def unpatch_all() -> None:
     """Restore all patched SDK methods to their originals.
 
     Safe to call when nothing is patched (no-op).
+    Thread-safe: all registry writes are protected by _patches_lock.
     """
-    for key, (cls, attr, original) in list(_patches.items()):
-        setattr(cls, attr, original)
-        logger.info("[VERONICA_PATCH] Restored %s.%s", key, attr)
-    _patches.clear()
+    with _patches_lock:
+        for key, (cls, attr, original) in list(_patches.items()):
+            setattr(cls, attr, original)
+            logger.info("[VERONICA_PATCH] Restored %s.%s", key, attr)
+        _patches.clear()

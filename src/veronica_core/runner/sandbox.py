@@ -148,10 +148,15 @@ class SandboxRunner:
 
         if self._config.read_only:
             dest = Path(self._temp_dir) / "_repo"
+            # Remove any stale data from a previous run before copying.
+            # dirs_exist_ok=True would silently merge old and new files, allowing
+            # deleted-source files to persist in the sandbox (data contamination).
+            if dest.exists():
+                shutil.rmtree(dest)
             shutil.copytree(
                 self._config.repo_root,
                 str(dest),
-                dirs_exist_ok=True,
+                dirs_exist_ok=False,
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
             )
             self._temp_dir = str(dest)

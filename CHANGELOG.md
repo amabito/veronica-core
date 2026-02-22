@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.2] - 2026-02-22
+
+### Security
+
+- **CRITICAL: Inline code execution bypass via SHELL_ALLOW_COMMANDS** (`security/policy_engine.py`):
+  Allowlisted commands such as `python`, `python3`, `cmake`, and `make` could bypass the
+  containment layer when called with inline code execution flags (`-c`, `-P`, `--eval`).
+  An adversary with shell tool access could execute `python -c "import os; os.system(...)"` and
+  receive `ALLOW` because `python` is in `SHELL_ALLOW_COMMANDS` while the dangerous flag was
+  not inspected. A new `SHELL_DENY_EXEC_FLAGS` table now denies these flag patterns with
+  `rule_id=SHELL_DENY_INLINE_EXEC` and `risk_score_delta=9` before the allowlist check.
+  The `uv run` wrapper path is also covered: `uv run python -c "..."` is blocked by scanning
+  `args[2:]` for inline-exec flags (`_UVR_INLINE_EXEC_FLAGS`).
+
+- **HIGH: Missing command substitution operators in `SHELL_DENY_OPERATORS`** (`security/policy_engine.py`):
+  The operator deny list did not include `$(`, backtick (`` ` ``), or newline (`\n`).
+  All three enable shell command substitution, allowing payloads such as
+  `echo "$(cat /etc/passwd)"` to pass operator checks.
+  All three patterns are now blocked with `rule_id=SHELL_DENY_OPERATOR`.
+
+- **HIGH: URL host extraction inconsistency** (`security/policy_engine.py`):
+  `_url_host()` used a hand-rolled parser that diverged from `urllib.parse.urlparse()` under
+  non-standard URL formats (user-info fields, IPv6 literals, percent-encoding, default ports).
+  An attacker could craft a URL parsed differently by `_url_host` (host allowlist) versus
+  `_url_path` (path allowlist), potentially allowing a request to a non-allowlisted host.
+  `_url_host()` now uses `urllib.parse.urlparse(url).hostname`, matching `_url_path()`.
+
+- **HIGH: `patch.py` thread safety** (`patch.py`):
+  The module-level `_patches` registry had no lock. Concurrent calls to `patch_openai()` and
+  `unpatch_all()` could corrupt the registry, causing an already-wrapped callable to be wrapped
+  again (infinite recursion) or the original to be lost (double-free-equivalent). A
+  `threading.Lock` (`_patches_lock`) now guards all reads and writes to `_patches` in
+  `patch_openai()`, `patch_anthropic()`, and `unpatch_all()`.
+
+- **MEDIUM: `SandboxRunner` stale data contamination** (`runner/sandbox.py`):
+  When `ephemeral_dir` was provided with `read_only=True`, the repo was copied into
+  `ephemeral_dir/_repo` with `dirs_exist_ok=True`. If `_repo` existed from a previous run,
+  files deleted from the source repo persisted in the sandbox, creating a data contamination
+  path where the sandbox environment diverged from the source tree. `_setup()` now removes
+  `_repo` before copying and uses `dirs_exist_ok=False` to enforce a clean copy.
+
+- **MEDIUM: `SecretMasker` `HEX_SECRET` upper-bound gap** (`security/masking.py`):
+  The `HEX_SECRET` pattern matched `{32,64}` hex characters, silently missing secrets longer
+  than 64 characters (e.g. 128-char SHA-512 digests, 256-char token strings). The pattern is
+  updated to `{32,}` (no upper bound) while retaining the word-boundary guards that prevent
+  false positives on commit hashes embedded in prose.
+
+- **LOW: Silent policy file load failure** (`security/policy_engine.py`):
+  `_load_policy()` returned an empty `{}` on any `Exception` without logging, making YAML
+  parse errors and missing `pyyaml` installs silently undetectable in production. Failures now
+  emit `logger.warning("policy_load_failed: ...")` with file path and exception type.
+
+---
+
 ## [0.10.1] - 2026-02-22
 
 ### Security

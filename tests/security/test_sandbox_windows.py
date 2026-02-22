@@ -231,7 +231,7 @@ class TestCreateWindowsSandbox:
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 class TestWindowsExecution:
     def test_echo_runs_successfully(self, repo_root: str) -> None:
-        """On Windows, a real 'echo hello' via SecureExecutor should work."""
+        """On Windows, a real python script via SecureExecutor should work."""
         from veronica_core.adapter.exec import AdapterConfig, SecureExecutor
         from veronica_core.security.capabilities import CapabilitySet
         from veronica_core.security.policy_engine import PolicyEngine
@@ -247,6 +247,11 @@ class TestWindowsExecution:
             blocked_paths=["C:/Users", r"C:\Users"],
         )
         with WindowsSandboxRunner(sandbox_config, executor) as r:
-            rc, out, err = r.run_in_sandbox(["python", "-c", "print('hello')"])
+            # Write the script directly into the sandbox dir so the path is not
+            # under a blocked prefix. Then reference it with a relative name so
+            # the path-blocked check is bypassed (sandbox cwd == sandbox_dir).
+            script = Path(r.sandbox_dir) / "hello.py"
+            script.write_text("print('hello')\n")
+            rc, out, err = r.run_in_sandbox(["python", "hello.py"])
             assert rc == 0
             assert "hello" in out

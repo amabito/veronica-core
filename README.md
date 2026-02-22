@@ -531,10 +531,11 @@ guard.reset()
 - [x] Degradation Ladder: 4-tier graceful degradation (model_downgrade → context_trim → rate_limit → halt) (v0.10.0)
 - [x] Multi-agent Context Linking: parent-child ExecutionContext hierarchy with cost propagation (v0.10.0)
 - [x] Security patch: dev-key warning, sandbox credential exclusion, NonceRegistry TTL eviction, exception narrowing, audit-log corruption visibility (v0.10.1)
+- [x] Security hardening: SHELL_ALLOW_COMMANDS exec-flag bypass closed (python -c, cmake -P, make --eval, uv run wrappers), $()/ backtick/newline added to SHELL_DENY_OPERATORS, URL host parser unified to urllib.parse, patch.py threading.Lock added, SandboxRunner stale-data fix, SecretMasker HEX_SECRET upper-bound removed, _load_policy warning on failure (v0.10.2)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1185 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
+1206 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
 
 ---
 
@@ -621,6 +622,26 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   version change.  An HMAC-SHA256 approval token allows pre-approved
   diffs to pass the gate without manual intervention.  Integrates into
   CI as a required check on lock file / `pyproject.toml` changes.
+
+**Phase K additions (v0.10.2):**
+
+- **Inline exec flag guard (K-1)**: `SHELL_DENY_EXEC_FLAGS` blocks inline code execution
+  flags (`python -c`, `python3 -c`, `cmake -P/-E`, `make --eval`) and the `uv run python -c`
+  wrapper path. Applied before `SHELL_ALLOW_COMMANDS`; `rule_id=SHELL_DENY_INLINE_EXEC`,
+  `risk_score_delta=9`.
+- **Command substitution operators (K-2)**: `$(`, `` ` ``, and `\n` added to
+  `SHELL_DENY_OPERATORS`, closing the command-substitution injection path in allowlisted
+  commands.
+- **URL parser unification (K-3)**: `_url_host()` rewritten to use `urllib.parse.urlparse()`
+  for consistency with `_url_path()`, eliminating host/path parser split that could be
+  exploited with crafted URLs.
+- **patch.py thread safety (K-4)**: `threading.Lock` (`_patches_lock`) guards all reads and
+  writes to `_patches` in `patch_openai()`, `patch_anthropic()`, and `unpatch_all()`.
+- **Sandbox clean-copy enforcement (K-5)**: `SandboxRunner._setup()` removes stale `_repo`
+  before `shutil.copytree` and uses `dirs_exist_ok=False`.
+- **SecretMasker HEX_SECRET no upper bound (K-6)**: `{32,64}` → `{32,}` to catch 65+ char
+  hex secrets (SHA-512, long API tokens).
+- **Policy load warning (K-7)**: `_load_policy()` now emits `logger.warning` on any failure.
 
 **Phase J additions:**
 

@@ -270,6 +270,159 @@ class TestAdditionalPolicyEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# v0.10.2 security fix regression tests
+# ---------------------------------------------------------------------------
+
+
+class TestV0102SecurityFixes:
+    """Regression tests for v0.10.2 security fixes.
+
+    Each test corresponds to a specific vulnerability closed in this release:
+    - SHELL_DENY_INLINE_EXEC: python -c, cmake -P, make --eval, uv run wrappers
+    - SHELL_DENY_OPERATOR extended: $(), backtick, newline injection
+    - _url_host() consistency with urllib.parse
+    - python without -c flag still ALLOW (no regression)
+    """
+
+    # --- SHELL_ALLOW_COMMANDS exec flag bypass (CRITICAL) ---
+
+    def test_python_c_inline_exec_is_denied(self) -> None:
+        """python -c '...' must be DENY (inline code execution, no file needed).
+
+        The test payload intentionally avoids shell operators (;, $, etc.) to
+        confirm that SHELL_DENY_INLINE_EXEC fires — not SHELL_DENY_OPERATOR.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-c", "print('pwned')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+        assert decision.risk_score_delta == 9
+
+    def test_python3_c_inline_exec_is_denied(self) -> None:
+        """python3 -c '...' must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python3", "-c", "print('id')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+        assert decision.risk_score_delta == 9
+
+    def test_cmake_script_mode_is_denied(self) -> None:
+        """cmake -P evil.cmake must be DENY (arbitrary CMake script execution)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["cmake", "-P", "/tmp/evil.cmake"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_cmake_E_flag_is_denied(self) -> None:
+        """cmake -E shell must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["cmake", "-E", "echo", "injected"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_make_eval_is_denied(self) -> None:
+        """make --eval '<expr>' must be DENY (arbitrary make expression evaluation).
+
+        Avoids shell operators in the payload to ensure SHELL_DENY_INLINE_EXEC fires.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["make", "--eval", "all: injected-target"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_uv_run_python_c_is_denied(self) -> None:
+        """uv run python -c '...' must be DENY (uv wraps an inline exec).
+
+        Payload avoids shell operators to confirm SHELL_DENY_INLINE_EXEC fires.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["uv", "run", "python", "-c", "print('pwned')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_uv_run_python3_c_is_denied(self) -> None:
+        """uv run python3 -c '...' must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["uv", "run", "python3", "-c", "print('pwned')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    # --- python without dangerous flag still ALLOW (no regression) ---
+
+    def test_python_script_file_is_still_allowed(self) -> None:
+        """python tests/test_main.py must remain ALLOW (no -c flag)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "tests/test_main.py"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+        assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+    def test_python_m_pytest_is_still_allowed(self) -> None:
+        """python -m pytest must remain ALLOW (-m is not in deny flags)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["python", "-m", "pytest", "tests/"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+
+    # --- Extended SHELL_DENY_OPERATORS: $(), backtick, newline (HIGH) ---
+
+    def test_command_substitution_dollar_paren_is_denied(self) -> None:
+        """$() in any arg must be DENY (command substitution)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["echo", "$(cat /etc/passwd)"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+    def test_command_substitution_backtick_is_denied(self) -> None:
+        """`cmd` backtick in any arg must be DENY (command substitution)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["echo", "`id`"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+    def test_newline_injection_is_denied(self) -> None:
+        """Newline embedded in an argument must be DENY (multi-command injection)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["pytest", "tests/\nrm -rf /"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+    # --- URL host consistency (HIGH) ---
+
+    def test_url_host_uses_urllib_parse(self) -> None:
+        """_url_host() and _url_path() must agree on standard URLs."""
+        from veronica_core.security.policy_engine import _url_host, _url_path
+
+        url = "https://pypi.org/pypi/requests/json"
+        assert _url_host(url) == "pypi.org"
+        assert _url_path(url) == "/pypi/requests/json"
+
+    def test_url_host_strips_port(self) -> None:
+        """_url_host() must strip port number (consistent with urllib.parse)."""
+        from veronica_core.security.policy_engine import _url_host
+
+        assert _url_host("https://pypi.org:443/simple/") == "pypi.org"
+
+    def test_url_host_ipv6_does_not_crash(self) -> None:
+        """_url_host() must handle IPv6 literals without raising."""
+        from veronica_core.security.policy_engine import _url_host
+
+        host = _url_host("https://[::1]:8080/path")
+        # Should return the bare IPv6 address without brackets
+        assert "8080" not in host
+
+
+# ---------------------------------------------------------------------------
 # SecureExecutor integration tests (via adapter)
 # ---------------------------------------------------------------------------
 

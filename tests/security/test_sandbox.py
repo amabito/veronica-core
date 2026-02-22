@@ -45,9 +45,13 @@ class TestSandboxIsolation:
     """Verify that sandbox writes do not affect the original repo."""
 
     def test_write_in_sandbox_does_not_affect_repo(
-        self, repo_root: str, executor: SecureExecutor
+        self, tmp_path: Path, repo_root: str, executor: SecureExecutor
     ) -> None:
         """A file written inside the sandbox must not appear in repo_root."""
+        # Use a script file to avoid the blocked python -c inline-exec flag.
+        write_script = tmp_path / "write_file.py"
+        write_script.write_text("open('sandbox_output.txt', 'w').write('test')\n")
+
         sandbox_cfg = SandboxConfig(
             repo_root=repo_root,
             executor=executor,
@@ -56,7 +60,7 @@ class TestSandboxIsolation:
         with SandboxRunner(sandbox_cfg) as runner:
             # Write a file inside the sandbox (python writes to cwd)
             rc, out, err = runner.run_in_sandbox(
-                ["python", "-c", "open('sandbox_output.txt', 'w').write('test')"]
+                ["python", str(write_script)]
             )
             assert rc == 0, f"sandbox write failed: {err}"
             # Confirm the file exists in the sandbox
