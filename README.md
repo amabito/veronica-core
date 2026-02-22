@@ -497,7 +497,7 @@ guard.reset()
 
 ---
 
-## Ship Readiness (v0.9.6)
+## Ship Readiness (v0.9.7)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -522,6 +522,9 @@ guard.reset()
 - [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
 - [x] VeronicaCallbackHandler: LangChain adapter with pre/post-call policy enforcement (v0.9.5)
 - [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIcontainer (v0.9.6)
+- [x] Thread safety: all core modules (budget, circuit_breaker, agent_guard, pipeline, policy_engine, risk_score, exit, state, audit/log) fully Lock-protected (v0.9.7)
+- [x] Security: key-pin comparison uses hmac.compare_digest (timing-attack resistant) (v0.9.7)
+- [x] Resource safety: timeout watcher thread joined on context exit (v0.9.7)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
