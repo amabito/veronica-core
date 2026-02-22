@@ -14,7 +14,7 @@ Introducing VERONICA Core: Production-grade failsafe state machine for autonomou
 
 Battle-tested at 1000+ ops/sec. Zero dependencies. Survives hard kills.
 
-🧵 (1/7)
+(1/7)
 ```
 
 ### Tweet 2 (Problem)
@@ -48,11 +48,11 @@ Strategy engines decide. VERONICA enforces safe execution.
 ```
 VERONICA provides:
 
-✓ Circuit breakers (fail count → cooldown)
-✓ SAFE_MODE emergency halt (persists across crashes)
-✓ Atomic state persistence (tmp → rename, crash-safe)
-✓ Graceful exit handlers (SIGINT/SIGTERM/atexit)
-✓ Zero dependencies (stdlib only)
+- Circuit breakers (fail count → cooldown)
+- SAFE_MODE emergency halt (persists across crashes)
+- Atomic state persistence (tmp → rename, crash-safe)
+- Graceful exit handlers (SIGINT/SIGTERM/atexit)
+- Zero dependencies (stdlib only)
 
 (4/7)
 ```
@@ -286,7 +286,7 @@ VERONICA Core発表：自律システム向けのプロダクショングレー�
 
 1000+ ops/sec実証済み。依存ゼロ。ハードキル耐性。
 
-🧵 (1/7)
+(1/7)
 ```
 
 ### Tweet 2 (Problem)
@@ -320,11 +320,11 @@ Layer 3: 外部システム — "どこで実行するか"
 ```
 VERONICAの機能：
 
-✓ サーキットブレーカー（失敗回数 → クールダウン）
-✓ SAFE_MODE緊急停止（クラッシュ後も永続化）
-✓ アトミック状態永続化（tmp → rename、クラッシュ耐性）
-✓ グレースフルシャットダウン（SIGINT/SIGTERM/atexit）
-✓ 依存ゼロ（stdlib のみ）
+- サーキットブレーカー（失敗回数 → クールダウン）
+- SAFE_MODE緊急停止（クラッシュ後も永続化）
+- アトミック状態永続化（tmp → rename、クラッシュ耐性）
+- グレースフルシャットダウン（SIGINT/SIGTERM/atexit）
+- 依存ゼロ（stdlib のみ）
 
 (4/7)
 ```

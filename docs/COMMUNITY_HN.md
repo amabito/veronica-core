@@ -17,8 +17,6 @@ Complete submission package for HackerNews with titles, post bodies, and comment
 9. **How we built a crash-proof safety layer for autonomous trading bots**
 10. **VERONICA: The missing safety layer between strategy engines and production**
 
-**Recommended**: #2 or #5 (hook-driven, not product-centric)
-
 ---
 
 ## Post Body — Short (< 500 chars)
@@ -354,7 +352,7 @@ All destruction tests with reproduction steps, expected/actual output, and produ
 
 ## Template Usage
 
-1. Choose title (#2 or #5 recommended)
+1. Choose a title from the candidates above
 2. Copy "Medium" post body (500-1000 chars is optimal for HN)
 3. Replace `[link]` with actual GitHub URL
 4. Post at optimal time (Mon-Thu 8-10am PST)
