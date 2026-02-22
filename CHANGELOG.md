@@ -4,6 +4,95 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.0] - 2026-02-22
+
+### Added
+
+- **P1-1: Auto Cost Calculation (`veronica_core.pricing`)**
+  - `Pricing` dataclass: `input_per_1k`, `output_per_1k` (USD)
+  - `PRICING_TABLE`: built-in pricing for OpenAI (gpt-4o, gpt-4o-mini, o1, o1-mini, o3-mini),
+    Anthropic (claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus), and Google (gemini-1.5-pro, gemini-1.5-flash)
+  - `resolve_model_pricing(model)`: case-insensitive prefix lookup; falls back to a conservative
+    `$0.030/$0.060` per 1k sentinel when the model is unknown
+  - `estimate_cost_usd(model, tokens_in, tokens_out)`: single-call cost estimate
+  - `extract_usage_from_response(response)`: extracts `(tokens_in, tokens_out)` from OpenAI,
+    Anthropic, and Google SDK response objects (duck-typed, no hard dependency)
+  - `ExecutionContext.wrap_llm_call()` / `wrap_tool_call()`: new `model` and `response_hint`
+    fields on `WrapOptions`; cost is auto-estimated when `cost_estimate_hint` is 0 and a
+    response is available; emits `SafetyEvent("cost_estimated", severity="info")` on success,
+    `SafetyEvent("cost_estimation_unavailable", severity="warn")` on fallback
+  - Exported from top-level `veronica_core` namespace
+  - 17 new tests (test_pricing.py); total: 1185 passing
+
+- **P1-2: Distributed Budget Backend (`veronica_core.distributed`)**
+  - `BudgetBackend` Protocol: `add(amount) -> float`, `get() -> float`, `reset()`, `close()`
+  - `LocalBudgetBackend`: thread-safe in-process backend (drop-in for existing behavior)
+  - `RedisBudgetBackend`: cross-process budget coordination via `INCRBYFLOAT` + atomic pipeline.
+    Key format: `veronica:budget:{chain_id}`. Configurable TTL (default: 3600s).
+    `fallback_on_error=True` falls back to local accumulation on Redis failure.
+  - `get_default_backend(redis_url, chain_id, ttl_seconds)`: convenience factory; returns
+    `LocalBudgetBackend` when `redis_url` is `None`
+  - `ExecutionConfig`: new optional `redis_url: str | None` field (default `None`)
+  - `AIcontainer`: passes `redis_url` through to `ExecutionConfig` when provided
+  - Optional extra: `pip install veronica-core[redis]` (requires `redis>=5.0`)
+  - Dev extra: `fakeredis>=2.0` for unit testing without a real Redis instance
+  - Exported from top-level `veronica_core` namespace
+  - 12 new tests (test_distributed.py)
+
+- **P2-1: OpenTelemetry Export (`veronica_core.otel`)**
+  - `enable_otel(service_name, exporter=None, endpoint=None)`: configures a global OTel tracer.
+    Uses `OTLPSpanExporter` when endpoint is provided; falls back to `ConsoleSpanExporter`.
+  - `enable_otel_with_tracer(tracer)`: inject a pre-built tracer (used in tests)
+  - `disable_otel()` / `is_otel_enabled()`: runtime toggle
+  - `emit_safety_event(event: SafetyEvent)`: records `SafetyEvent` fields as OTel span event
+    attributes. **Privacy guarantee**: prompt/response content is never included; only
+    `event_type`, `decision`, `reason` (truncated to 200 chars), `hook`, `chain_id`.
+  - `emit_containment_decision(decision_name, reason, cost_usd, chain_id)`: low-level helper
+  - `ShieldPipeline._record()`: automatically emits OTel after recording each `SafetyEvent`
+  - Optional extra: `pip install veronica-core[otel]` (requires `opentelemetry-api>=1.20`)
+  - Dev extra: `opentelemetry-sdk>=1.20` for `InMemorySpanExporter`-based tests
+  - Exported: `enable_otel`, `disable_otel`, `is_otel_enabled`
+  - 10 new tests (test_otel.py)
+
+- **P2-2: Multi-agent Context Linking (`veronica_core.containment`)**
+  - `ExecutionContext.__init__`: new optional `parent: ExecutionContext | None` parameter
+  - `ExecutionContext.spawn_child(**overrides)`: creates a child context linked to `self`;
+    child budget defaults to `parent.remaining_budget_usd` when not overridden
+  - Child cost propagation: every `_accumulate_cost()` call walks up to the root and calls
+    `_propagate_child_cost()` on each ancestor; parent aborts if its own ceiling is exceeded
+  - `ContextSnapshot.parent_chain_id`: captures the parent's `chain_id` (or `None` for roots)
+  - All existing constructor signatures and context-manager usage unchanged
+  - 12 new tests (test_context_linking.py)
+
+- **P2-3: Degradation Ladder (`veronica_core.shield.degradation`)**
+  - `Trimmer` Protocol: `trim(messages: list) -> list`
+  - `NoOpTrimmer`: pass-through trimmer (default)
+  - `DegradationConfig`: `model_map`, `rate_limit_ms`, `cost_thresholds`
+    (keys: `model_downgrade`, `context_trim`, `rate_limit`; values: fraction of `max_cost_usd`)
+  - `DegradationLadder.evaluate(cost_accumulated, max_cost_usd, current_model) -> PolicyDecision | None`:
+    returns `None` below all thresholds; returns a graded `PolicyDecision` with
+    `degradation_action` ∈ `{model_downgrade, context_trim, rate_limit, halt}` above each tier
+  - `apply_rate_limit(decision)`: `time.sleep(rate_limit_ms / 1000)`
+  - `apply_context_trim(messages)`: delegates to the configured `Trimmer`
+  - `PolicyDecision` extended with `degradation_action: str | None`, `fallback_model: str | None`,
+    `rate_limit_ms: int` (all default to backward-compatible values — no existing code changes)
+  - Helper factories: `allow(policy_type)`, `deny(reason)`, `model_downgrade(current, target)`,
+    `rate_limit_decision(ms)` — exported from `veronica_core.runtime_policy` and top-level
+  - 16 new tests (test_degradation.py)
+
+### Notes
+
+- No breaking API changes. All v0.9.7 public interfaces are fully preserved.
+- New optional extras: `[redis]`, `[otel]` — neither is installed by default.
+- Test suite: 1185 passing, 0 failures, 4 xfailed.
+- Assumptions made during implementation (documented in code):
+  - Unknown models in `PRICING_TABLE` fall back to `$0.030/$0.060` per 1k (conservative sentinel)
+  - `RedisBudgetBackend` uses string keys with float-compatible `INCRBYFLOAT`; TTL is reset on each write
+  - OTel reason strings are truncated at 200 characters to limit span attribute size
+  - `spawn_child` without explicit `max_cost_usd` inherits `parent.remaining_budget_usd` at spawn time (not dynamically)
+
+---
+
 ## [0.9.7] - 2026-02-22
 
 ### Fixed

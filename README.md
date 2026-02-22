@@ -497,7 +497,7 @@ guard.reset()
 
 ---
 
-## Ship Readiness (v0.9.7)
+## Ship Readiness (v0.10.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -522,13 +522,18 @@ guard.reset()
 - [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
 - [x] VeronicaCallbackHandler: LangChain adapter with pre/post-call policy enforcement (v0.9.5)
 - [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIcontainer (v0.9.6)
-- [x] Thread safety: all core modules (budget, circuit_breaker, agent_guard, pipeline, policy_engine, risk_score, exit, state, audit/log) fully Lock-protected (v0.9.7)
+- [x] Thread safety: all core modules fully Lock-protected (v0.9.7)
 - [x] Security: key-pin comparison uses hmac.compare_digest (timing-attack resistant) (v0.9.7)
 - [x] Resource safety: timeout watcher thread joined on context exit (v0.9.7)
+- [x] Auto Cost Calculation: pricing table + response-object extraction for OpenAI/Anthropic/Google (v0.10.0)
+- [x] Distributed Budget: Redis INCRBYFLOAT backend for cross-process cost coordination (v0.10.0)
+- [x] OpenTelemetry Export: SafetyEvent → OTel span events, privacy-safe, opt-in (v0.10.0)
+- [x] Degradation Ladder: 4-tier graceful degradation (model_downgrade → context_trim → rate_limit → halt) (v0.10.0)
+- [x] Multi-agent Context Linking: parent-child ExecutionContext hierarchy with cost propagation (v0.10.0)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1120 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection.
+1185 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
 
 ---
 
