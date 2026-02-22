@@ -115,6 +115,14 @@ from veronica_core.semantic import SemanticLoopGuard
 # Auto Pricing (v0.10.0)
 from veronica_core.pricing import estimate_cost_usd, resolve_model_pricing, Pricing, extract_usage_from_response
 
+# Distributed Budget (v0.10.0)
+from veronica_core.distributed import (
+    BudgetBackend,
+    LocalBudgetBackend,
+    RedisBudgetBackend,
+    get_default_backend,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -203,4 +211,9 @@ __all__ = [
     "resolve_model_pricing",
     "Pricing",
     "extract_usage_from_response",
+    # Distributed Budget (v0.10.0)
+    "BudgetBackend",
+    "LocalBudgetBackend",
+    "RedisBudgetBackend",
+    "get_default_backend",
 ]

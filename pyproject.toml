@@ -30,10 +30,14 @@ Repository = "https://github.com/amabito/veronica-core"
 Issues = "https://github.com/amabito/veronica-core/issues"
 
 [project.optional-dependencies]
+redis = [
+    "redis>=5.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "cryptography>=42",
+    "fakeredis>=2.0",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -52,3 +56,9 @@ source = ["veronica_core"]
 [tool.coverage.report]
 fail_under = 90
 show_missing = true
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.0",
+    "redis>=5.0",
+]
