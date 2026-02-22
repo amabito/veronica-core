@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.4] — 2026-02-22 — Concurrency & Isolation Hotfix
+
+### Security
+
+- **CRITICAL** (`budget.py`): `BudgetEnforcer.spend()` now uses check-then-add within a single
+  lock acquisition. The previous increment-before-check pattern permitted concurrent threads to
+  collectively overspend the limit. `spend()` now raises `ValueError` for negative amounts.
+
+- **CRITICAL** (`circuit_breaker.py`): `CircuitBreaker` now tracks an owner context ID.
+  Binding the same instance to a second `ExecutionContext` raises `RuntimeError`:
+  `"CircuitBreaker instance is being shared across contexts; create a new one per ExecutionContext."`
+
+- **HIGH** (`inject.py`): `veronica_guard` now creates a fresh `AIcontainer` per invocation.
+  Previously, all callers of a decorated function shared one `BudgetEnforcer`, `RetryContainer`,
+  and `AgentStepGuard`, enabling multi-tenant state leakage.
+
+- **MEDIUM** (`aicontainer.py`): `AIcontainer.reset()` is now protected by a `threading.Lock`
+  to prevent TOCTOU races under concurrent `check()` + `reset()` usage.
+
+- **MEDIUM** (`execution_graph.py`): Divergence detection now fires when a node transitions
+  `created → success` directly (skipping `mark_running()`), closing the lifecycle-skip bypass.
+
+### Rationale
+
+veronica-core provides chain-scoped containment. Shared mutable enforcement state across chains
+or invocations breaks isolation regardless of per-call policy correctness.
+
+---
+
 ## [0.10.3] - 2026-02-22
 
 ### Security

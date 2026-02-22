@@ -6,6 +6,7 @@ and PartialResultBuffer into a single check-and-reset boundary.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -54,6 +55,7 @@ class AIcontainer:
     semantic_guard: Optional[SemanticLoopGuard] = None
 
     _pipeline: PolicyPipeline = field(init=False, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self) -> None:
         primitives = [
@@ -94,29 +96,32 @@ class AIcontainer:
             entity_id=entity_id,
             chain_id=chain_id,
         )
-        return self._pipeline.evaluate(context)
+        with self._lock:
+            return self._pipeline.evaluate(context)
 
     def reset(self) -> None:
         """Reset all active primitives to their initial state.
 
         Calls reset() on each non-None primitive and rebuilds the pipeline.
         Use between agent runs to clear accumulated state.
+        Thread-safe: protected by an internal lock.
         """
-        for primitive in (
-            self.budget,
-            self.circuit_breaker,
-            self.retry,
-            self.step_guard,
-            self.semantic_guard,
-        ):
-            if primitive is not None:
-                primitive.reset()
+        with self._lock:
+            for primitive in (
+                self.budget,
+                self.circuit_breaker,
+                self.retry,
+                self.step_guard,
+                self.semantic_guard,
+            ):
+                if primitive is not None:
+                    primitive.reset()
 
-        if self.partial_buffer is not None:
-            self.partial_buffer.clear()
+            if self.partial_buffer is not None:
+                self.partial_buffer.clear()
 
-        # Rebuild pipeline (reset does not change membership)
-        self.__post_init__()
+            # Rebuild pipeline (reset does not change membership)
+            self.__post_init__()
 
     @property
     def active_policies(self) -> List[str]:

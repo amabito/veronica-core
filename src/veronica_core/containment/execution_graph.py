@@ -319,6 +319,10 @@ class ExecutionGraph:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
                 return
+            sig: NodeSignature = (node.kind, node.name)
+            event = self._update_sig_window(sig)
+            if event is not None:
+                self._pending_divergence_events.append(event)
             node.status = "success"
             node.end_ts_ms = _now_ms()
             node.cost_usd = cost_usd

@@ -64,25 +64,22 @@ class TestAllowPath:
 
 class TestDenyRaises:
     def test_raises_veronica_halt_on_deny(self) -> None:
-        @veronica_guard(max_cost_usd=1.0)
+        # max_steps=0 causes immediate denial on every call (step 0 >= max 0).
+        @veronica_guard(max_cost_usd=1.0, max_steps=0)
         def my_func() -> str:
-            return "should not reach"
-
-        my_func._container.check = MagicMock(return_value=_deny_decision("budget exceeded"))
+            return "should not reach"  # pragma: no cover
 
         with pytest.raises(VeronicaHalt) as exc_info:
             my_func()
 
-        assert exc_info.value.reason == "budget exceeded"
+        assert exc_info.value.reason  # non-empty denial reason
         assert isinstance(exc_info.value.decision, PolicyDecision)
         assert not exc_info.value.decision.allowed
 
     def test_halt_is_runtime_error(self) -> None:
-        @veronica_guard()
+        @veronica_guard(max_steps=0)
         def my_func() -> None:
-            pass
-
-        my_func._container.check = MagicMock(return_value=_deny_decision())
+            pass  # pragma: no cover
 
         with pytest.raises(RuntimeError):
             my_func()
@@ -94,18 +91,16 @@ class TestDenyRaises:
 
 class TestReturnDecision:
     def test_returns_policy_decision_on_deny(self) -> None:
-        @veronica_guard(return_decision=True)
+        # max_steps=0 triggers immediate denial so return_decision path is exercised.
+        @veronica_guard(max_steps=0, return_decision=True)
         def my_func() -> str:
-            return "result"
-
-        deny = _deny_decision("step limit")
-        my_func._container.check = MagicMock(return_value=deny)
+            return "result"  # pragma: no cover
 
         result = my_func()
 
         assert isinstance(result, PolicyDecision)
         assert not result.allowed
-        assert result.reason == "step limit"
+        assert result.reason  # non-empty denial reason
 
     def test_allow_still_executes_function(self) -> None:
         @veronica_guard(return_decision=True)
@@ -153,15 +148,14 @@ class TestNestedGuard:
     def test_deny_in_inner_does_not_affect_outer_state(self) -> None:
         """VeronicaHalt from inner propagates naturally; outer is not silently swallowed."""
 
-        @veronica_guard()
+        # max_steps=0 on inner means it denies immediately on every call.
+        @veronica_guard(max_steps=0)
         def inner() -> None:
-            pass
+            pass  # pragma: no cover
 
         @veronica_guard()
         def outer() -> None:
             inner()
 
-        inner._container.check = MagicMock(return_value=_deny_decision("inner denied"))
-
-        with pytest.raises(VeronicaHalt, match="inner denied"):
+        with pytest.raises(VeronicaHalt):
             outer()

@@ -259,6 +259,9 @@ class ExecutionContext:
         )
         self._parent: ExecutionContext | None = parent
 
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.bind_to_context(self._metadata.chain_id)
+
         # Budget backend setup (v0.10.0)
         if config.budget_backend is not None:
             self._budget_backend = config.budget_backend

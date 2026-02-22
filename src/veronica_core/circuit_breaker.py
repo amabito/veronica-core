@@ -55,11 +55,33 @@ class CircuitBreaker:
     _last_failure_time: Optional[float] = field(default=None, init=False)
     _success_count: int = field(default=0, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _owner_id: Optional[str] = field(default=None, init=False, repr=False)
 
     @property
     def policy_type(self) -> str:
         """RuntimePolicy protocol: policy type identifier."""
         return "circuit_breaker"
+
+    def bind_to_context(self, ctx_id: str) -> None:
+        """Bind this CircuitBreaker to a specific ExecutionContext.
+
+        Prevents accidental sharing of a single CircuitBreaker across
+        multiple independent contexts, which would corrupt failure counts.
+
+        Args:
+            ctx_id: The chain_id of the ExecutionContext binding this breaker.
+
+        Raises:
+            RuntimeError: If already bound to a different ctx_id.
+        """
+        with self._lock:
+            if self._owner_id is None:
+                self._owner_id = ctx_id
+            elif self._owner_id != ctx_id:
+                raise RuntimeError(
+                    "CircuitBreaker instance is being shared across contexts; "
+                    "create a new one per ExecutionContext."
+                )
 
     @property
     def state(self) -> CircuitState:

@@ -76,9 +76,9 @@ def veronica_guard(
 ) -> Callable:
     """Decorator that wraps a callable inside an AIcontainer execution boundary.
 
-    Creates one AIcontainer per decorated function (shared across invocations).
-    The container holds BudgetEnforcer, RetryContainer, and AgentStepGuard
-    configured from the decorator arguments.
+    Creates one AIcontainer per invocation so that state (budget, retries,
+    steps) never leaks between calls. Each call to the wrapped function
+    starts with a clean container.
 
     Args:
         max_cost_usd: Hard cost ceiling. Passed to BudgetEnforcer(limit_usd=...).
@@ -102,18 +102,17 @@ def veronica_guard(
         # Raises VeronicaHalt if policies deny.
         result = call_llm("Hello")
     """
-    from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard
-    from veronica_core.container import AIcontainer
-
-    container = AIcontainer(
-        budget=BudgetEnforcer(limit_usd=max_cost_usd),
-        retry=RetryContainer(max_retries=max_retries_total),
-        step_guard=AgentStepGuard(max_steps=max_steps),
-    )
-
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard
+            from veronica_core.container import AIcontainer
+
+            container = AIcontainer(
+                budget=BudgetEnforcer(limit_usd=max_cost_usd),
+                retry=RetryContainer(max_retries=max_retries_total),
+                step_guard=AgentStepGuard(max_steps=max_steps),
+            )
             decision = container.check()
             if not decision.allowed:
                 if return_decision:
@@ -128,8 +127,6 @@ def veronica_guard(
                 _guard_active.reset(token)
                 _active_container.reset(container_token)
 
-        # Expose container for testing and introspection.
-        wrapper._container = container  # type: ignore[attr-defined]
         return wrapper
 
     return decorator

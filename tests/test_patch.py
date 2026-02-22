@@ -136,12 +136,17 @@ class TestPatchOpenAI:
         comp_mod.Completions.create = lambda self, *a, **kw: _openai_response()
         patch_openai()
 
+        captured: list = []
+
         @veronica_guard(max_cost_usd=10.0)
         def agent():
             comp_mod.Completions().create(model="gpt-4", messages=[])
+            # Capture container from inside the call (per-call design)
+            captured.append(get_active_container())
 
         agent()
-        assert agent._container.budget.call_count >= 1
+        assert captured, "Container should have been captured from inside the call"
+        assert captured[0].budget.call_count >= 1
 
     def test_pre_exhausted_budget_raises_veronica_halt(self):
         """Pre-exhausted budget inside guard raises VeronicaHalt via patch."""
