@@ -112,6 +112,9 @@ from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 # Semantic Loop Guard (v0.9.6)
 from veronica_core.semantic import SemanticLoopGuard
 
+# Auto Pricing (v0.10.0)
+from veronica_core.pricing import estimate_cost_usd, resolve_model_pricing, Pricing, extract_usage_from_response
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -195,4 +198,9 @@ __all__ = [
     "unpatch_all",
     # Semantic Loop Guard (v0.9.6)
     "SemanticLoopGuard",
+    # Auto Pricing (v0.10.0)
+    "estimate_cost_usd",
+    "resolve_model_pricing",
+    "Pricing",
+    "extract_usage_from_response",
 ]
