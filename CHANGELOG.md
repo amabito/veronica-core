@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.7] - 2026-02-22
+
+### Fixed
+
+- **Thread safety (11 issues):**
+  - `agent_guard`: add `threading.Lock` to all state-mutating methods
+  - `budget`: protect property reads (`spent_usd`, `remaining_usd`, etc.) inside Lock to prevent torn reads
+  - `circuit_breaker`: add `threading.Lock`; extract `_maybe_half_open_locked` to avoid side-effects under contention
+  - `shield/pipeline`: protect `safety_events` list with `threading.Lock`
+  - `security/policy_engine`: protect `PolicyHook.last_decision` with Lock
+  - `security/risk_score`: fix TOCTOU in `is_safe_mode` (atomicize score read + compare)
+  - `exit`: add `threading.Lock` to `request_exit` (prevents duplicate exit processing on double SIGTERM)
+  - `state`: add `threading.Lock` to all methods; fix `cleanup_expired` deadlock risk via lock separation
+
+- **Resource leak (1 issue):**
+  - `containment/execution_context`: call `thread.join(timeout=1.0)` in `__exit__` to prevent timeout watcher thread leak
+
+- **Security (1 issue):**
+  - `security/key_pin`: replace `==` with `hmac.compare_digest` to prevent timing-attack key-pin bypass
+
+- **Logic bugs (3 issues):**
+  - `containment/execution_context`: atomicize cost-estimate check to eliminate TOCTOU race
+  - `state`: fix `state_history` trim (was reassignment; now in-place `del`); enforce `VALID_TRANSITIONS` on all transitions
+  - `integration`: register `atexit` handler in modern backend mode (was missing)
+  - `audit/log`: move `_build_entry()` inside Lock to prevent hash-chain corruption under concurrent writes
+
+### Notes
+
+- No API changes. All v0.9.6 public interfaces are unchanged.
+- Test suite: 1120 passing, 0 failures, 92% coverage.
+
+---
+
 ## [0.9.6] - 2026-02-21
 
 ### Added
