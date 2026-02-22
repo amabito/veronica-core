@@ -1,6 +1,6 @@
-# Degradation Ladder (v0.10.0)
+# Degradation Ladder
 
-Multi-tier graceful degradation before HALT. Instead of failing immediately when cost approaches the ceiling, VERONICA steps down through cheaper alternatives.
+When cost approaches the ceiling, step down through cheaper alternatives rather than halting immediately.
 
 ## Tiers (lowest to highest activation)
 

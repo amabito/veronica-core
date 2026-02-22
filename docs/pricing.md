@@ -1,13 +1,7 @@
-# Auto Cost Estimation (v0.10.0)
+# Auto Cost Estimation
 
-veronica-core v0.10.0 introduces automatic cost estimation for LLM calls.
-Previously, callers had to provide `cost_estimate_hint` manually.
-Now, pass `model` and `response_hint` to `WrapOptions` and the cost is computed automatically.
-
-## Purpose
-
-Eliminate manual bookkeeping of per-call costs. The pricing module resolves
-model pricing and computes USD cost from actual token usage reported by the SDK.
+Pass `model` and `response_hint` to `WrapOptions` and the cost is computed automatically from actual token usage.
+No more manual `cost_estimate_hint`.
 
 ## Usage
 
@@ -85,16 +79,9 @@ WrapOptions(model="gpt-4o")  # no response_hint
 WrapOptions(model="gpt-4o", response_hint=response)
 ```
 
-## Accuracy Note
+## Accuracy
 
-Cost estimates are **approximate** and may differ from actual billing by +/-30%
-due to:
-- Pricing table staleness (models may change pricing)
-- Cached token discounts not reflected
-- Batch API discounts not reflected
-- Regional pricing differences
-
-For exact billing, refer to your provider's dashboard.
+Numbers are ballpark — typically within ±30%. Cached tokens, batch discounts, and regional pricing aren't factored in. Check your provider's dashboard for the real bill.
 
 ## Direct API
 

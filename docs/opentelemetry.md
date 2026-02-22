@@ -1,4 +1,4 @@
-# OpenTelemetry Integration (v0.10.0)
+# OpenTelemetry Integration
 
 VERONICA emits containment events as OpenTelemetry span events. Prompt/response content is **never** exported — only structured metadata.
 
@@ -29,9 +29,9 @@ from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 enable_otel(service_name="my-agent", exporter=ConsoleSpanExporter())
 ```
 
-## Privacy Guarantee
+## What gets exported
 
-The OTel module enforces that no `prompt` or `content` keys appear in exported attributes. Only structural metadata is emitted.
+Only structured metadata. No `prompt` or `content` fields are ever included.
 
 ## Install
 
