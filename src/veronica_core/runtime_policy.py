@@ -108,7 +108,7 @@ class PolicyPipeline:
         ])
         decision = pipeline.evaluate(PolicyContext(cost_usd=1.50))
         if not decision.allowed:
-            print(f"Denied by {decision.policy_type}: {decision.reason}")
+            logger.info("Denied by %s: %s", decision.policy_type, decision.reason)
     """
 
     def __init__(self, policies: Optional[List[RuntimePolicy]] = None) -> None:

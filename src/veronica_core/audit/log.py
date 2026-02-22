@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from veronica_core.security.masking import SecretMasker
 
@@ -110,7 +113,12 @@ class AuditLog:
                 continue
             try:
                 entry = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "audit_log: corrupted entry in %s — skipping line: %s",
+                    self._path,
+                    exc,
+                )
                 continue
             # Policy events are stored in the "data" field by write()
             data = entry.get("data", entry)
@@ -258,6 +266,10 @@ class AuditLog:
                 try:
                     entry = json.loads(line)
                     last_hash = entry.get("hash", last_hash)
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as exc:
+                    logger.warning(
+                        "audit_log: corrupted entry in %s — skipping line: %s",
+                        self._path,
+                        exc,
+                    )
         return last_hash
