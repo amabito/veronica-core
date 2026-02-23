@@ -709,7 +709,7 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   diffs to pass the gate without manual intervention.  Integrates into
   CI as a required check on lock file / `pyproject.toml` changes.
 
-**Phase K additions (v0.10.2):**
+**Additional security hardening (v0.10.2):**
 
 - **Inline exec flag guard (K-1)**: `SHELL_DENY_EXEC_FLAGS` blocks inline code execution
   flags (`python -c`, `python3 -c`, `cmake -P/-E`, `make --eval`) and the `uv run python -c`
@@ -729,7 +729,7 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   hex secrets (SHA-512, long API tokens).
 - **Policy load warning (K-7)**: `_load_policy()` now emits `logger.warning` on any failure.
 
-**Phase J additions:**
+**Key management & rollback protection:**
 
 - **Security levels (J-1)**: Auto-detected DEV / CI / PROD tiers control how
   strictly cryptographic requirements are enforced.  Set `VERONICA_SECURITY_LEVEL`
