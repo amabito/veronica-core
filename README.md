@@ -626,36 +626,37 @@ in v0.10.5.
 
 ## Roadmap
 
-### v0.9.x
-
-- OpenTelemetry export (opt-in SafetyEvent export to standard spans)
-- Middleware mode (ASGI/WSGI integration)
-- Distributed budget coordination (Redis-backed shared pools)
-- Improved divergence heuristics (cost-rate, token-velocity)
+### v0.11 (planned)
+- Middleware mode (ASGI/WSGI integration for request-scoped containment)
+- Improved divergence heuristics (cost-rate detection, token-velocity windows)
+- PartialResultBuffer integration with ExecutionContext event stream
 
 ### v1.0
-
 - Stable `ExecutionContext` API with formal deprecation policy
 - Formal containment guarantee documentation
 - `ExecutionGraph` extensibility hooks for external integrations
-- Multi-agent containment primitives (shared budget, cross-chain circuit breaker)
+- Multi-agent containment primitives (shared budget pools, cross-chain circuit breaker)
 
 ---
 
 ## Install
 
 ```bash
-pip install -e .
+pip install veronica-core
+```
 
-# With dev tools
+**Development install (contributing):**
+```bash
+git clone https://github.com/amabito/veronica-core
 pip install -e ".[dev]"
 pytest
 ```
 
-![CI](https://img.shields.io/badge/tests-1218%20passing-brightgreen)
+![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
+![CI](https://img.shields.io/badge/tests-1253%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Security](https://img.shields.io/badge/security-reviewed-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
@@ -673,7 +674,7 @@ The layer enforces: uncontrolled shell execution, sensitive file reads
 requests, CI workflow file modifications, and runaway agents that repeatedly
 probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
 
-**Phase G/H additions:**
+**Policy enforcement features:**
 
 - **Policy signing (G-1)**: `policies/default.yaml` is HMAC-SHA256 signed.
   Set `VERONICA_POLICY_KEY` (hex) for the production signing key.  Any
@@ -689,7 +690,7 @@ probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
   identical approval requests; `ApprovalRateLimiter` caps throughput at
   10 approvals/60 s by default.
 
-**Phase I additions:**
+**Cryptographic integrity features:**
 
 - **Policy signing v2 (I-1)**: `PolicySignerV2` upgrades from HMAC-SHA256
   (symmetric) to **ed25519 asymmetric signing** via the `cryptography`
@@ -830,14 +831,14 @@ run.  The full verifiable claim set is documented in
 
 ### Threat Model Coverage
 
-| Threat | Defence | Phase |
-|--------|---------|-------|
-| Prompt-injected tool calls | PolicyEngine DENY rules | G |
-| Supply chain compromise | SBOM diff gate + approval token | I |
-| Key substitution | Key pinning (J-2) + CI enforcement | J |
-| Policy tampering | Ed25519 sig verification at load | I |
-| Rollback attack | RollbackGuard monotonic version check | J |
-| Privilege escalation | AttestationChecker mid-session anomaly | G |
+| Threat | Defence |
+|--------|---------|
+| Prompt-injected tool calls | PolicyEngine DENY rules |
+| Supply chain compromise | SBOM diff gate + approval token |
+| Key substitution | Key pinning + CI enforcement |
+| Policy tampering | Ed25519 sig verification at load |
+| Rollback attack | RollbackGuard monotonic version check |
+| Privilege escalation | AttestationChecker mid-session anomaly |
 
 Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
@@ -845,7 +846,16 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ## Version History
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+| Version | Date | Summary |
+|---------|------|---------|
+| 0.10.5 | 2026-02-23 | Adversarial hardening: TOCTOU fix, PartialBufferOverflow, frequency divergence, jitter, event cap |
+| 0.10.4 | 2026-02-22 | Concurrency & isolation: atomic spend, CircuitBreaker isolation, per-invocation guard |
+| 0.10.3 | 2026-02-22 | Combined flag bypass, stdin exec, pip via -m, fail-closed policy |
+| 0.10.2 | 2026-02-21 | Shell exec-flag bypass, operator deny, URL parser, key rotation |
+| 0.10.1 | 2026-02-20 | Dev-key warning, sandbox credentials, NonceRegistry TTL |
+| 0.10.0 | 2026-02-19 | Auto cost, distributed budget (Redis), OTel export, degradation ladder, multi-agent |
+
+Full history: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
