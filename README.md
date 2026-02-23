@@ -521,6 +521,64 @@ guard.reset()
 
 ---
 
+## Limits & Defaults
+
+Hard limits and default values enforced by veronica-core at runtime. All
+values are module-level constants; they are not configurable at call-site
+in v0.10.5.
+
+**Partial buffer (`PartialResultBuffer`)**
+
+- `max_chunks = 10,000` — maximum number of streaming chunks that can be
+  appended before `PartialBufferOverflow(ValueError)` is raised.
+- `max_bytes = 10 MB` — maximum cumulative UTF-8 byte size across all chunks
+  before `PartialBufferOverflow(ValueError)` is raised.
+- On overflow, the exception carries structured evidence fields
+  (`total_bytes`, `kept_bytes`, `total_chunks`, `kept_chunks`,
+  `truncation_point`). Already-appended chunks are preserved; the
+  overflowing chunk is rejected. `to_dict()` includes `"truncated": true`.
+  `PartialBufferOverflow` is a `ValueError` subclass — existing
+  `except ValueError` handlers continue to catch it.
+
+**SafetyEvent chain cap (`ExecutionContext`)**
+
+- `max_events_per_chain = 1,000` — maximum SafetyEvents recorded per
+  `ExecutionContext` instance.
+- Drop policy: **newest-dropped**. Events recorded after the cap is reached
+  are silently discarded; the first 1,000 events are retained. This prevents
+  memory exhaustion from event-flooding callers while preserving the earliest
+  evidence for post-mortem analysis.
+
+**Retry jitter (`RetryContainer`)**
+
+- `jitter = 0.25` (default) — 25% multiplicative jitter applied to every
+  exponential-backoff delay: `delay = base * 2**attempt * (1 + uniform(-0.25, 0.25))`,
+  clamped to `[0.0, backoff_max]`. Set `jitter=0.0` to disable. Without
+  jitter, simultaneous agents produce synchronized retry bursts; the default
+  prevents thundering herd on shared downstream services.
+
+**TokenBudgetHook concurrency**
+
+- Pending-reservation accounting (v0.10.5): `before_llm_call()` atomically
+  reserves `ctx.tokens_out` / `ctx.tokens_in` inside the lock after all
+  checks pass. A second concurrent caller projecting `_output_total +
+  _pending_output + estimate >= max_output_tokens` receives `Decision.HALT`
+  before issuing its LLM call. Call `release_reservation()` to cancel a
+  reservation when the LLM call fails before tokens are consumed.
+- `record_usage()` releases the reservation for the actual token count and
+  adds to the running total atomically.
+
+**Security scope**
+
+- All policy enforcement is **argv-level** (argument inspection before
+  subprocess launch). veronica-core is not an OS-level sandbox, does not
+  use `seccomp`, `namespaces`, `cgroups`, or `ptrace`. A compromised process
+  can still perform arbitrary syscalls. Use veronica-core for structured
+  policy enforcement in cooperative (or lightly adversarial) agent
+  environments; pair with OS-level isolation for full containment.
+
+---
+
 ## Ship Readiness (v0.10.5)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
