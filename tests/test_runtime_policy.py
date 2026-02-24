@@ -99,7 +99,47 @@ class TestPolicyDecision:
         assert d.partial_result == {"output": "partial"}
 
 
-# --- BudgetEnforcer policy ---
+# --- BudgetEnforcer policy — parametrized table ---
+
+
+@pytest.mark.parametrize(
+    "limit_usd,already_spent,requested_cost,expected_allowed",
+    [
+        # Given: limit=10, nothing spent
+        # When: request 5.0
+        # Then: allowed (5 < 10)
+        (10.0, 0.0, 5.0, True),
+        # Given: limit=10, already spent 8.0
+        # When: request 5.0 (total 13 > 10)
+        # Then: denied
+        (10.0, 8.0, 5.0, False),
+        # Given: limit=10, already spent 5.0
+        # When: request 5.0 (total=10, exactly at limit)
+        # Then: allowed (not strictly greater than limit)
+        (10.0, 5.0, 5.0, True),
+        # Given: limit=0 (no budget)
+        # When: request any nonzero cost
+        # Then: denied
+        (0.0, 0.0, 0.01, False),
+    ],
+)
+def test_budget_enforcer_check(
+    limit_usd: float,
+    already_spent: float,
+    requested_cost: float,
+    expected_allowed: bool,
+) -> None:
+    # Given
+    b = BudgetEnforcer(limit_usd=limit_usd)
+    if already_spent > 0:
+        b.spend(already_spent)
+
+    # When
+    decision = b.check(PolicyContext(cost_usd=requested_cost))
+
+    # Then
+    assert decision.allowed == expected_allowed
+    assert decision.policy_type == "budget"
 
 
 class TestBudgetEnforcerPolicy:
@@ -209,7 +249,61 @@ class TestRetryContainerPolicy:
         assert RetryContainer().policy_type == "retry_budget"
 
 
-# --- CircuitBreaker ---
+# --- CircuitBreaker state transitions — parametrized table ---
+
+
+@pytest.mark.parametrize(
+    "given_failures,given_threshold,when_event,then_state,then_allowed",
+    [
+        # Given: no failures have occurred
+        # When: nothing (initial state)
+        # Then: circuit is CLOSED and calls are allowed
+        (0, 3, "none", CircuitState.CLOSED, True),
+        # Given: failures below threshold
+        # When: 2 failures recorded (threshold=3)
+        # Then: circuit remains CLOSED
+        (2, 3, "none", CircuitState.CLOSED, True),
+        # Given: failures exactly at threshold
+        # When: 3rd failure recorded
+        # Then: circuit opens and calls are denied
+        (3, 3, "none", CircuitState.OPEN, False),
+        # Given: circuit is OPEN with 1 failure (threshold=1)
+        # When: success recorded from HALF_OPEN (after timeout elapses)
+        # Then: circuit closes and calls are allowed again
+        (1, 1, "success_after_timeout", CircuitState.CLOSED, True),
+        # Given: circuit is OPEN with 1 failure (threshold=1)
+        # When: another failure recorded from HALF_OPEN (after timeout elapses)
+        # Then: circuit re-opens and calls are denied
+        (1, 1, "failure_after_timeout", CircuitState.OPEN, False),
+    ],
+)
+def test_circuit_breaker_state_transitions(
+    given_failures: int,
+    given_threshold: int,
+    when_event: str,
+    then_state: CircuitState,
+    then_allowed: bool,
+) -> None:
+    # Given
+    cb = CircuitBreaker(failure_threshold=given_threshold, recovery_timeout=0.001)
+    for _ in range(given_failures):
+        cb.record_failure()
+
+    # When
+    if when_event == "success_after_timeout":
+        time.sleep(0.05)
+        _ = cb.state  # trigger half-open transition
+        cb.record_success()
+    elif when_event == "failure_after_timeout":
+        time.sleep(0.05)
+        _ = cb.state  # trigger half-open transition
+        cb.record_failure()
+    # "none" → no additional event
+
+    # Then
+    assert cb.state == then_state
+    decision = cb.check(PolicyContext())
+    assert decision.allowed == then_allowed
 
 
 class TestCircuitBreaker:

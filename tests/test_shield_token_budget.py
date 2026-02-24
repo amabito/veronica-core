@@ -19,7 +19,7 @@ CTX = ToolCallContext(request_id="test", tool_name="llm")
 class TestTokenBudgetOff:
     """When budget is very large, hook never triggers."""
 
-    def test_returns_none_well_below_limit(self):
+    def test_service_allows_calls_when_token_budget_is_effectively_unlimited(self):
         hook = TokenBudgetHook(max_output_tokens=1_000_000)
         for _ in range(10):
             assert hook.before_llm_call(CTX) is None
@@ -28,17 +28,17 @@ class TestTokenBudgetOff:
 class TestTokenBudgetOn:
     """Basic HALT behavior."""
 
-    def test_halts_when_output_at_limit(self):
+    def test_service_halts_calls_once_output_token_budget_is_fully_consumed(self):
         hook = TokenBudgetHook(max_output_tokens=100)
         hook.record_usage(output_tokens=100)
         assert hook.before_llm_call(CTX) is Decision.HALT
 
-    def test_allows_before_limit(self):
+    def test_service_allows_calls_when_output_token_usage_is_below_limit(self):
         hook = TokenBudgetHook(max_output_tokens=100)
         hook.record_usage(output_tokens=50)
         assert hook.before_llm_call(CTX) is None
 
-    def test_halts_when_over_limit(self):
+    def test_service_halts_calls_when_token_usage_exceeds_configured_limit(self):
         hook = TokenBudgetHook(max_output_tokens=100)
         hook.record_usage(output_tokens=150)
         assert hook.before_llm_call(CTX) is Decision.HALT
@@ -47,22 +47,22 @@ class TestTokenBudgetOn:
 class TestTokenBudgetDegrade:
     """DEGRADE zone tests."""
 
-    def test_degrade_at_threshold(self):
+    def test_service_degrades_when_token_usage_reaches_degrade_threshold(self):
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
         hook.record_usage(output_tokens=80)
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
-    def test_degrade_between_threshold_and_limit(self):
+    def test_service_remains_degraded_for_all_usage_between_threshold_and_hard_limit(self):
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
         hook.record_usage(output_tokens=90)
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
-    def test_no_degrade_below_threshold(self):
+    def test_service_allows_calls_when_token_usage_is_below_degrade_threshold(self):
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
         hook.record_usage(output_tokens=79)
         assert hook.before_llm_call(CTX) is None
 
-    def test_degrade_threshold_1_disables_degrade(self):
+    def test_setting_degrade_threshold_to_maximum_disables_degrade_zone(self):
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=1.0)
         hook.record_usage(output_tokens=99)
         assert hook.before_llm_call(CTX) is None
@@ -73,30 +73,30 @@ class TestTokenBudgetDegrade:
 class TestTokenBudgetTotal:
     """max_total_tokens tests."""
 
-    def test_total_halt(self):
+    def test_service_halts_when_combined_input_and_output_tokens_exceed_total_limit(self):
         hook = TokenBudgetHook(max_output_tokens=1000, max_total_tokens=200)
         hook.record_usage(output_tokens=50, input_tokens=150)
         assert hook.before_llm_call(CTX) is Decision.HALT
 
-    def test_total_degrade(self):
+    def test_service_degrades_when_combined_token_usage_reaches_total_degrade_threshold(self):
         hook = TokenBudgetHook(
             max_output_tokens=1000, max_total_tokens=200, degrade_threshold=0.8
         )
         hook.record_usage(output_tokens=50, input_tokens=110)
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
-    def test_total_disabled_when_zero(self):
+    def test_service_ignores_total_token_limit_when_it_is_set_to_zero(self):
         hook = TokenBudgetHook(max_output_tokens=1000, max_total_tokens=0)
         hook.record_usage(output_tokens=50, input_tokens=999999)
         assert hook.before_llm_call(CTX) is None
 
 
 class TestTokenBudgetBoundary:
-    def test_zero_max_always_halts(self):
+    def test_service_halts_immediately_when_output_token_limit_is_zero(self):
         hook = TokenBudgetHook(max_output_tokens=0)
         assert hook.before_llm_call(CTX) is Decision.HALT
 
-    def test_properties_reflect_usage(self):
+    def test_usage_counters_accurately_reflect_recorded_token_consumption(self):
         hook = TokenBudgetHook(max_output_tokens=1000)
         hook.record_usage(output_tokens=100, input_tokens=200)
         assert hook.output_total == 100

@@ -42,14 +42,14 @@ def _degrade_event(event_type: str = "BUDGET_WINDOW_EXCEEDED") -> SafetyEvent:
 
 
 class TestInit:
-    def test_defaults(self):
+    def test_hook_starts_at_full_capacity_with_no_adjustment(self):
         hook = AdaptiveBudgetHook(base_ceiling=100)
         assert hook.base_ceiling == 100
         assert hook.ceiling_multiplier == 1.0
         assert hook.adjusted_ceiling == 100
         assert hook.window_seconds == 1800.0
 
-    def test_custom_params(self):
+    def test_hook_accepts_custom_tuning_parameters(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=200,
             window_seconds=600.0,
@@ -61,23 +61,23 @@ class TestInit:
         assert hook.base_ceiling == 200
         assert hook.window_seconds == 600.0
 
-    def test_validates_base_ceiling_positive(self):
+    def test_hook_rejects_zero_base_ceiling(self):
         with pytest.raises(ValueError, match="base_ceiling must be positive"):
             AdaptiveBudgetHook(base_ceiling=0)
 
-    def test_validates_base_ceiling_negative(self):
+    def test_hook_rejects_negative_base_ceiling(self):
         with pytest.raises(ValueError, match="base_ceiling must be positive"):
             AdaptiveBudgetHook(base_ceiling=-10)
 
-    def test_validates_tighten_pct(self):
+    def test_hook_rejects_zero_tighten_percentage(self):
         with pytest.raises(ValueError, match="tighten_pct"):
             AdaptiveBudgetHook(base_ceiling=100, tighten_pct=0.0)
 
-    def test_validates_loosen_pct(self):
+    def test_hook_rejects_negative_loosen_percentage(self):
         with pytest.raises(ValueError, match="loosen_pct"):
             AdaptiveBudgetHook(base_ceiling=100, loosen_pct=-0.1)
 
-    def test_validates_max_adjustment(self):
+    def test_hook_rejects_zero_max_adjustment(self):
         with pytest.raises(ValueError, match="max_adjustment"):
             AdaptiveBudgetHook(base_ceiling=100, max_adjustment=0.0)
 
@@ -88,13 +88,13 @@ class TestInit:
 
 
 class TestFeedEvents:
-    def test_feed_single_event(self):
+    def test_budget_hook_accepts_single_safety_event_without_error(self):
         hook = AdaptiveBudgetHook(base_ceiling=100)
         event = _halt_event()
         hook.feed_event(event, ts=1000.0)
         # No crash, event is buffered internally
 
-    def test_feed_multiple_events(self):
+    def test_budget_hook_accepts_batch_of_safety_events_without_error(self):
         hook = AdaptiveBudgetHook(base_ceiling=100)
         events = [_halt_event() for _ in range(5)]
         hook.feed_events(events)
@@ -107,7 +107,7 @@ class TestFeedEvents:
 
 
 class TestAdjustHold:
-    def test_hold_when_degrade_events_exist(self):
+    def test_budget_holds_steady_when_events_are_below_tighten_trigger(self):
         """Some degrade but below tighten threshold -> hold."""
         hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3)
         # Feed 1 HALT (below trigger) + 1 DEGRADE (prevents loosen)
@@ -119,7 +119,7 @@ class TestAdjustHold:
         assert result.adjusted_ceiling == 100
         assert result.ceiling_multiplier == 1.0
 
-    def test_hold_records_no_event(self):
+    def test_hold_action_produces_no_safety_events(self):
         hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3)
         hook.feed_event(_halt_event(), ts=1000.0)
         hook.feed_event(_degrade_event(), ts=1000.0)
@@ -133,7 +133,7 @@ class TestAdjustHold:
 
 
 class TestAdjustTighten:
-    def test_tighten_on_exceeded_events(self):
+    def test_budget_ceiling_reduced_when_halt_events_reach_trigger_count(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
         )
@@ -174,7 +174,7 @@ class TestAdjustTighten:
         assert ev.metadata["tighten_events"] == 3
         assert ev.request_id == "test-adaptive"
 
-    def test_tighten_clamp_at_min(self):
+    def test_budget_ceiling_stops_tightening_at_configured_minimum_multiplier(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100,
             tighten_trigger=1,
@@ -189,7 +189,7 @@ class TestAdjustTighten:
         assert hook.ceiling_multiplier == 0.80
         assert hook.adjusted_ceiling == 80
 
-    def test_multiple_tighten_adjustments(self):
+    def test_budget_ceiling_tightens_further_on_each_adjustment_cycle(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100, tighten_trigger=3, tighten_pct=0.05
         )
@@ -205,7 +205,7 @@ class TestAdjustTighten:
         result2 = hook.adjust(_now=1001.0)
         assert result2.ceiling_multiplier == 0.90
 
-    def test_tighten_with_token_budget_exceeded(self):
+    def test_token_budget_exceeded_events_also_trigger_tightening(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
         )
@@ -238,7 +238,7 @@ class TestAdjustTighten:
 
 
 class TestAdjustLoosen:
-    def test_loosen_when_no_degrade(self):
+    def test_budget_ceiling_increases_when_no_degrade_events_occur_in_window(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100, loosen_pct=0.05
         )
@@ -248,7 +248,7 @@ class TestAdjustLoosen:
         assert result.ceiling_multiplier == 1.05
         assert result.adjusted_ceiling == 105
 
-    def test_loosen_records_allow_event(self):
+    def test_loosen_action_emits_allow_safety_event(self):
         hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.05)
         hook.adjust(CTX, _now=1000.0)
         events = hook.get_events()
@@ -256,7 +256,7 @@ class TestAdjustLoosen:
         assert events[0].event_type == "ADAPTIVE_ADJUSTMENT"
         assert events[0].decision == Decision.ALLOW
 
-    def test_loosen_clamp_at_max(self):
+    def test_budget_ceiling_stops_loosening_at_configured_maximum_multiplier(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100, loosen_pct=0.15, max_adjustment=0.20
         )
@@ -267,7 +267,7 @@ class TestAdjustLoosen:
         assert hook.ceiling_multiplier == 1.20
         assert hook.adjusted_ceiling == 120
 
-    def test_loosen_after_empty_window(self):
+    def test_budget_loosens_when_observation_window_contains_no_events(self):
         """No events at all -> zero degrade -> loosen."""
         hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.05)
         result = hook.adjust(_now=5000.0)
@@ -281,7 +281,7 @@ class TestAdjustLoosen:
 
 
 class TestWindowExpiry:
-    def test_old_events_pruned(self):
+    def test_halt_events_older_than_window_do_not_influence_tighten_decision(self):
         hook = AdaptiveBudgetHook(
             base_ceiling=100,
             window_seconds=60.0,

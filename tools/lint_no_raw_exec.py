@@ -95,6 +95,28 @@ class ForbiddenCallVisitor(ast.NodeVisitor):
 
     def __init__(self) -> None:
         self.violations: list[tuple[int, int, str]] = []  # (line, col, pattern)
+        # Maps alias name -> canonical module name for aliased imports.
+        # e.g. "import subprocess as sp" -> {"sp": "subprocess"}
+        self._alias_map: dict[str, str] = {}
+
+    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+        """Track aliased module imports: import subprocess as sp."""
+        for alias in node.names:
+            if alias.asname is not None:
+                self._alias_map[alias.asname] = alias.name
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+        """Track aliased from-imports: from os import system as sys_call."""
+        for alias in node.names:
+            if alias.asname is not None and node.module is not None:
+                canonical = f"{node.module}.{alias.name}"
+                self._alias_map[alias.asname] = canonical
+        self.generic_visit(node)
+
+    def _resolve_module_name(self, name: str) -> str:
+        """Resolve an alias to its canonical module name if known."""
+        return self._alias_map.get(name, name)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
         """Inspect every function call node."""
@@ -103,6 +125,7 @@ class ForbiddenCallVisitor(ast.NodeVisitor):
         if isinstance(func, ast.Attribute):
             # Could be module.func (e.g. subprocess.run) or
             # package.module.func (e.g. urllib.request.urlopen)
+            # Also handles aliased imports: sp.run where sp = subprocess
             attr_name = func.attr
             obj = func.value
 
@@ -110,17 +133,20 @@ class ForbiddenCallVisitor(ast.NodeVisitor):
             module_path = _extract_dotted_name(obj)
 
             if module_path is not None:
+                # Resolve alias: "sp" -> "subprocess", "operating_system" -> "os"
+                resolved_path = self._resolve_module_name(module_path)
+
                 # Try full dotted path first (e.g. urllib.request.urlopen)
-                full_key: tuple[str | None, str] = (module_path, attr_name)
+                full_key: tuple[str | None, str] = (resolved_path, attr_name)
                 if full_key in _FORBIDDEN_SET:
-                    pattern = f"{module_path}.{attr_name}"
+                    pattern = f"{resolved_path}.{attr_name}"
                     self.violations.append((node.lineno, node.col_offset, pattern))
                 else:
                     # Try just the last component (e.g. "subprocess" from "subprocess.run")
-                    last_module = module_path.rsplit(".", 1)[-1]
+                    last_module = resolved_path.rsplit(".", 1)[-1]
                     short_key: tuple[str | None, str] = (last_module, attr_name)
                     if short_key in _FORBIDDEN_SET:
-                        pattern = f"{module_path}.{attr_name}"
+                        pattern = f"{resolved_path}.{attr_name}"
                         self.violations.append((node.lineno, node.col_offset, pattern))
 
         elif isinstance(func, ast.Name):
