@@ -77,13 +77,14 @@ def test_context_manager_with_statement():
     assert decision == Decision.ALLOW
 
 
-def test_context_manager_cancels_token_on_exit():
+def test_context_manager_done_after_exit():
     config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5)
     ctx = ExecutionContext(config=config)
     with ctx:
         pass
-    # After exit, cancellation token must be signalled (stops timeout watcher).
-    assert ctx._cancellation_token.is_cancelled
+    # After exit, the context is done — further wrap calls must HALT.
+    decision = ctx.wrap_llm_call(fn=lambda: None)
+    assert decision == Decision.HALT
 
 
 # ---------------------------------------------------------------------------
@@ -91,17 +92,19 @@ def test_context_manager_cancels_token_on_exit():
 # ---------------------------------------------------------------------------
 
 
-def test_timeout_ms_starts_watcher_thread():
+def test_timeout_ms_halts_after_expiry():
     config = ExecutionConfig(
         max_cost_usd=1.0,
         max_steps=10,
         max_retries_total=5,
-        timeout_ms=5000,  # > 0 triggers watcher
+        timeout_ms=50,  # very short timeout, execution must halt after it fires
     )
     ctx = ExecutionContext(config=config)
-    assert ctx._timeout_thread is not None
-    assert ctx._timeout_thread.is_alive()
-    ctx._cancellation_token.cancel()  # unblock watcher
+    # Wait for the timeout to fire
+    time.sleep(0.1)
+    # After timeout fires, further wrap calls must HALT
+    decision = ctx.wrap_llm_call(fn=lambda: None)
+    assert decision == Decision.HALT
 
 
 # ---------------------------------------------------------------------------

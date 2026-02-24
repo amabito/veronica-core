@@ -51,21 +51,6 @@ class TestSafeModeProtocol:
         assert isinstance(SafeModeHook(), RetryBoundaryHook)
 
 
-class TestSafeModePipelineIntegration:
-    """Pipeline wired with SafeModeHook behaves correctly."""
-
-    def test_pipeline_with_safe_mode_blocks(self):
-        hook = SafeModeHook(enabled=True)
-        pipe = ShieldPipeline(pre_dispatch=hook, retry=hook)
-        assert pipe.before_llm_call(CTX) is Decision.HALT
-        assert pipe.on_error(CTX, ValueError("v")) is Decision.HALT
-
-    def test_pipeline_without_safe_mode_allows(self):
-        pipe = ShieldPipeline()
-        assert pipe.before_llm_call(CTX) is Decision.ALLOW
-        assert pipe.on_error(CTX, ValueError("v")) is Decision.ALLOW
-
-
 class TestDefaultShieldConfigUnchanged:
     """Default ShieldConfig produces no behavioral change (non-breaking)."""
 

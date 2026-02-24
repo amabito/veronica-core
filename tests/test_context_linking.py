@@ -71,9 +71,15 @@ def test_spawn_child_creates_linked_context() -> None:
 
 def test_spawn_child_inherits_remaining_budget() -> None:
     """spawn_child with no max_cost_usd uses the parent's remaining budget."""
+    from veronica_core.containment import WrapOptions
+
     parent_cfg = make_config(max_cost=1.0)
     with ExecutionContext(parent_cfg) as parent_ctx:
-        parent_ctx._cost_usd_accumulated = 0.3  # simulate spending
+        # Spend 0.3 USD via public API to simulate cost accumulation
+        parent_ctx.wrap_llm_call(
+            fn=lambda: None,
+            options=WrapOptions(cost_estimate_hint=0.3),
+        )
         child = parent_ctx.spawn_child()  # no max specified
         assert child._config.max_cost_usd == pytest.approx(0.7, abs=0.001)
 

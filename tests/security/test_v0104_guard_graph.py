@@ -113,13 +113,26 @@ class TestAIcontainerLock:
     """AIcontainer.reset() and check() must be protected by a threading.Lock
     so that concurrent calls from different threads are race-free."""
 
-    def test_lock_field_exists(self) -> None:
-        """AIcontainer must expose a _lock attribute that is a threading.Lock."""
+    def test_concurrent_calls_succeed_without_deadlock(self) -> None:
+        """Concurrent reset() and check() calls must complete without deadlock."""
         container = AIcontainer(budget=BudgetEnforcer(limit_usd=1.0))
-        assert hasattr(container, "_lock"), "AIcontainer must have a _lock field"
-        assert isinstance(container._lock, type(threading.Lock())), (
-            "_lock must be a threading.Lock instance"
-        )
+        errors: list[Exception] = []
+
+        def mixed_calls() -> None:
+            try:
+                for _ in range(10):
+                    container.check()
+                    container.reset()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=mixed_calls) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent calls raised: {errors}"
 
     def test_concurrent_reset_does_not_raise(self) -> None:
         """Concurrent reset() calls from multiple threads must not raise."""
