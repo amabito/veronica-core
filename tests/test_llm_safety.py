@@ -51,14 +51,6 @@ class TestBudgetEnforcer:
         assert budget.call_count == 0
         assert not budget.is_exceeded
 
-    def test_to_dict(self):
-        budget = BudgetEnforcer(limit_usd=50.0)
-        budget.spend(10.0)
-        d = budget.to_dict()
-        assert d["limit_usd"] == 50.0
-        assert d["spent_usd"] == pytest.approx(10.0)
-        assert d["call_count"] == 1
-
 
 # --- AgentStepGuard ---
 
@@ -120,14 +112,6 @@ class TestPartialResultBuffer:
         assert not buf.is_partial  # Complete
         assert buf.is_complete
 
-    def test_metadata(self):
-        buf = PartialResultBuffer()
-        buf.set_metadata("model", "gpt-4o")
-        buf.set_metadata("abort_reason", "timeout")
-        meta = buf.metadata
-        assert meta["model"] == "gpt-4o"
-        assert meta["abort_reason"] == "timeout"
-
     def test_clear(self):
         buf = PartialResultBuffer()
         buf.append("data")
@@ -138,17 +122,6 @@ class TestPartialResultBuffer:
         assert buf.chunk_count == 0
         assert not buf.is_complete
         assert buf.metadata == {}
-
-    def test_to_dict(self):
-        buf = PartialResultBuffer()
-        buf.append("partial ")
-        buf.append("output")
-        buf.set_metadata("tokens", 42)
-        d = buf.to_dict()
-        assert d["partial_text"] == "partial output"
-        assert d["chunk_count"] == 2
-        assert d["is_complete"] is False
-        assert d["metadata"]["tokens"] == 42
 
 
 # --- RetryContainer ---

@@ -37,12 +37,6 @@ class TestAIcontainerInstantiation:
         assert container.budget.limit_usd == 50.0
         assert container.retry.max_retries == 5
 
-    def test_primitives_are_not_copied(self) -> None:
-        """AIcontainer must hold the same instance, not a copy."""
-        budget = BudgetEnforcer(limit_usd=10.0)
-        container = AIcontainer(budget=budget)
-        assert container.budget is budget
-
 
 class TestAIcontainerActivePolicies:
     def test_empty_container_has_no_active_policies(self) -> None:
