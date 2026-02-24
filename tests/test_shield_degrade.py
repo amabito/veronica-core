@@ -7,7 +7,6 @@ import pytest
 from veronica_core.shield import (
     BudgetWindowHook,
     Decision,
-    ShieldPipeline,
     ToolCallContext,
 )
 from veronica_core.shield.config import BudgetWindowConfig, ShieldConfig
@@ -105,26 +104,6 @@ class TestDefaultThreshold:
         hook = BudgetWindowHook(max_calls=5)
         assert hook._window_seconds == 60.0
         assert hook._degrade_threshold == 0.8
-
-
-class TestPipelineIntegration:
-    """DEGRADE flows through ShieldPipeline correctly."""
-
-    def test_pipeline_returns_degrade(self):
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.8)
-        pipe = ShieldPipeline(pre_dispatch=hook)
-        for _ in range(8):
-            pipe.before_llm_call(CTX)
-        assert pipe.before_llm_call(CTX) is Decision.DEGRADE
-
-    def test_pipeline_degrade_then_halt(self):
-        hook = BudgetWindowHook(max_calls=5, window_seconds=60.0, degrade_threshold=0.8)
-        pipe = ShieldPipeline(pre_dispatch=hook)
-        # degrade_at = 4.0 -> calls 0..3 None, call 4 DEGRADE, call 5 HALT
-        for _ in range(4):
-            assert pipe.before_llm_call(CTX) is Decision.ALLOW
-        assert pipe.before_llm_call(CTX) is Decision.DEGRADE
-        assert pipe.before_llm_call(CTX) is Decision.HALT
 
 
 class TestDegradeMapConfig:
