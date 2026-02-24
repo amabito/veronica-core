@@ -61,21 +61,49 @@ FIXED_DT = datetime(2026, 2, 17, 8, 30, 45, tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
-# 1. Policy defaults
+# 1. Policy defaults — parametrized table
 # ---------------------------------------------------------------------------
+#
+# Given: a default BudgetPolicy with no overrides
+# When:  the limit for each scope is read
+# Then:  the limit matches the documented default value
 
-def test_policy_org_defaults():
+
+@pytest.mark.parametrize(
+    "scope_attr,window_attr,expected_usd",
+    [
+        # Given: org scope
+        # When: minute limit is read
+        # Then: returns 50.0
+        ("org_limits", "minute_usd", 50.0),
+        # When: hour limit is read
+        # Then: returns 200.0
+        ("org_limits", "hour_usd", 200.0),
+        # When: day limit is read
+        # Then: returns 1000.0
+        ("org_limits", "day_usd", 1000.0),
+        # Given: default team scope
+        # When: minute limit is read
+        # Then: returns 15.0
+        ("default_team", "minute_usd", 15.0),
+        # When: hour limit is read
+        # Then: returns 60.0
+        ("default_team", "hour_usd", 60.0),
+        # When: day limit is read
+        # Then: returns 300.0
+        ("default_team", "day_usd", 300.0),
+    ],
+)
+def test_policy_default_limits(scope_attr: str, window_attr: str, expected_usd: float) -> None:
+    # Given
     policy = BudgetPolicy()
-    assert policy.org_limits.minute_usd == 50.0
-    assert policy.org_limits.hour_usd == 200.0
-    assert policy.org_limits.day_usd == 1000.0
 
+    # When
+    limit_obj = getattr(policy, scope_attr)
+    actual = getattr(limit_obj, window_attr)
 
-def test_policy_team_defaults():
-    policy = BudgetPolicy()
-    assert policy.default_team.minute_usd == 15.0
-    assert policy.default_team.hour_usd == 60.0
-    assert policy.default_team.day_usd == 300.0
+    # Then
+    assert actual == expected_usd
 
 
 def test_policy_custom_team():
