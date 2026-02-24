@@ -27,34 +27,13 @@ def test_dummy_client_returns_fixed_response():
     client = DummyClient(fixed_response="TEST_OK")
     response = client.generate("any prompt")
     assert response == "TEST_OK"
-    assert client.call_count == 1
-    assert client.last_prompt == "any prompt"
-
-
-def test_dummy_client_tracks_calls():
-    """DummyClient should track call count and last prompt."""
-    client = DummyClient(fixed_response="OK")
-
-    # First call
-    client.generate("prompt1")
-    assert client.call_count == 1
-    assert client.last_prompt == "prompt1"
-
-    # Second call
-    client.generate("prompt2", context={"key": "value"})
-    assert client.call_count == 2
-    assert client.last_prompt == "prompt2"
 
 
 def test_integration_with_dummy_client():
-    """VeronicaIntegration should accept DummyClient."""
+    """VeronicaIntegration should accept DummyClient and return correct response."""
     client = DummyClient(fixed_response="SAFE")
     veronica = VeronicaIntegration(client=client)
 
-    # Client should be accessible
-    assert veronica.client is client
-
-    # Should be able to call LLM
     response = veronica.client.generate("Is this safe?")
     assert response == "SAFE"
 

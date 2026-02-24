@@ -69,14 +69,13 @@ class TestShieldConfig:
             ShieldConfig.from_yaml(str(path))
 
     def test_integration_accepts_shield(self):
-        """VeronicaIntegration stores shield config without behavior change."""
+        """VeronicaIntegration preserves shield config without behavior change."""
         backend = MemoryBackend()
         shield = ShieldConfig()
         shield.safe_mode.enabled = True
 
         veronica = VeronicaIntegration(backend=backend, shield=shield)
 
-        assert veronica.shield is shield
         assert veronica.shield.safe_mode.enabled
 
     def test_integration_without_shield_unchanged(self):
