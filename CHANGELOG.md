@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.7] — 2026-02-25 — PyPI Metadata & Package Housekeeping
+
+### Packaging
+
+- **License field**: Changed `license = "MIT"` to `license = {text = "MIT"}` so PyPI
+  correctly displays the MIT license (PEP 621 table-format required by hatchling).
+- **Development Status**: Classifier updated from `3 - Alpha` to `4 - Beta` reflecting
+  stable API surface and 1289-test coverage since v0.10.4.
+- **New classifiers**: Added `Operating System :: OS Independent` and
+  `Topic :: Scientific/Engineering :: Artificial Intelligence`.
+- **Expanded keywords**: Added `safety`, `circuit-breaker`, `token-budget`, `ai-safety`,
+  `multi-agent`, `containment`, `rate-limit`.
+- **Project URLs**: Added `Homepage` (`https://veronica-core.dev`), `Changelog`, and
+  `Documentation` links; homepage URL corrected from PyPI self-reference to project site.
+
+### Housekeeping
+
+- Removed internal ops files from public repo (X posting scripts, marketing assets,
+  outreach templates) — moved to private `veronica-ops` repository.
+
+---
+
 ## [0.10.6] — 2026-02-25 — Test Suite Quality Overhaul
 
 ### Tests
