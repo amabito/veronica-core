@@ -769,6 +769,12 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
+## The VERONICA Stack
+
+veronica-core is the **Executor** layer. For the **Planner** layer (budget allocation, cost prediction, arbitration), see [veronica](https://github.com/amabito/veronica).
+
+---
+
 ## Roadmap
 
 ### v0.11 (planned)
