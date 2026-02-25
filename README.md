@@ -771,7 +771,17 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ## The VERONICA Stack
 
-veronica-core is the **Executor** layer. For the **Planner** layer (budget allocation, cost prediction, arbitration), see [veronica](https://github.com/amabito/veronica).
+veronica-core is the containment **engine**. [VERONICA](https://github.com/amabito/veronica) is the Execution OS built around it.
+
+```
+Application
+     |
+veronica-core   -- local containment (this library)
+     |
+VERONICA        -- Execution OS (Planner / Cloud / org policy)
+     |
+LLM Providers
+```
 
 ---
 
