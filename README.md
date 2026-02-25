@@ -1,20 +1,83 @@
 # VERONICA
 
-## VERONICA is the Execution OS for LLM Systems.
+![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
+![CI](https://img.shields.io/badge/tests-1253%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-Modern LLM stacks are incomplete.
-
-Prompting.
-Orchestration.
-Observability.
-
-They lack runtime containment.
+**Runtime containment for LLM systems. Enforce cost, step, and retry limits before damage occurs.**
 
 ```bash
 pip install veronica-core
 ```
 
-Jump to [Quickstart (5 minutes)](#quickstart-5-minutes) or browse [docs/cookbook.md](docs/cookbook.md).
+---
+
+## The Problem
+
+Observability tells you that an agent spent $12,000 over a weekend. It records every call. It does not stop it.
+
+Runtime containment stops it — before it happens, not after.
+
+---
+
+## 30-Second Demo
+
+```python
+# Option A: SDK-level (no per-call changes)
+from veronica_core.patch import patch_openai
+from veronica_core import veronica_guard, GuardConfig
+
+patch_openai()  # patches openai.chat.completions.create
+
+@veronica_guard(max_cost_usd=1.0, max_steps=20)
+def run_agent(prompt: str) -> str:
+    from openai import OpenAI
+    return OpenAI().chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    ).choices[0].message.content
+```
+
+```python
+# Option B: Explicit boundary
+from veronica_core.containment import ExecutionContext, ExecutionConfig
+
+with ExecutionContext(config=ExecutionConfig(
+    max_cost_usd=1.00,
+    max_steps=50,
+)) as ctx:
+    decision = ctx.wrap_llm_call(fn=agent_step)
+    # Decision.HALT if any limit exceeded -- fn is never called
+```
+
+---
+
+## Table of Contents
+
+1. [The Missing Layer in LLM Stacks](#1-the-missing-layer-in-llm-stacks)
+2. [Why LLM Calls Are Not APIs](#2-why-llm-calls-are-not-apis)
+3. [What Runtime Containment Means](#3-what-runtime-containment-means)
+4. [Containment Layers](#4-containment-layers-in-veronica)
+5. [Architecture Overview](#5-architecture-overview)
+6. [Security Boundary](#security-boundary)
+7. [OSS and Cloud Boundary](#6-oss-and-cloud-boundary)
+8. [Design Philosophy](#7-design-philosophy)
+9. [Quickstart](#quickstart-5-minutes)
+10. [AIcontainer](#aicontainer-v092)
+11. [veronica_guard](#veronica_guard--decorator-injection-v093)
+12. [patch_openai / patch_anthropic](#patch_openai--patch_anthropic--automatic-sdk-injection-v094)
+13. [VeronicaCallbackHandler](#veronicacallbackhandler--langchain-integration-v095)
+14. [SemanticLoopGuard](#semanticloopguard--semantic-loop-detection-v096)
+15. [Limits & Defaults](#limits--defaults)
+16. [Security](#security)
+17. [Red Team Regression](#red-team-regression)
+18. [Security Guarantees](#security-guarantees)
+19. [Roadmap](#roadmap)
+20. [Install](#install)
+21. [Version History](#version-history)
+22. [License](#license)
 
 ---
 
@@ -391,7 +454,7 @@ def call_llm(prompt: str):
 
 result = call_llm("Hello")
 if isinstance(result, PolicyDecision):
-    # policy denied — handle gracefully
+    # policy denied -- handle gracefully
     ...
 ```
 
@@ -489,7 +552,7 @@ from veronica_core import SemanticLoopGuard, AIcontainer
 
 guard = SemanticLoopGuard(
     window=3,                # rolling window size
-    jaccard_threshold=0.92,  # similarity above this → deny
+    jaccard_threshold=0.92,  # similarity above this -> deny
     min_chars=80,            # skip short outputs to avoid false positives
 )
 
@@ -579,200 +642,11 @@ in v0.10.5.
 
 ---
 
-## Ship Readiness (v0.10.5)
+## Security
 
-- [x] BudgetWindow stops runaway execution (ceiling enforced)
-- [x] SafetyEvent records structured evidence for non-ALLOW decisions
-- [x] DEGRADE supported (fallback at threshold, HALT at ceiling)
-- [x] TokenBudgetHook: cumulative output/total token ceiling with DEGRADE zone
-- [x] MinimalResponsePolicy: opt-in conciseness constraints for system messages
-- [x] InputCompressionHook: real compression with Compressor protocol + safety guarantees (v0.5.1)
-- [x] AdaptiveBudgetHook: auto-adjusts ceiling based on SafetyEvent history (v0.6.0)
-- [x] TimeAwarePolicy: weekend/off-hours budget multipliers (v0.6.0)
-- [x] Adaptive stabilization: cooldown, smoothing, floor/ceiling, direction lock (v0.7.0)
-- [x] Anomaly tightening: spike detection with temporary ceiling reduction (v0.7.0)
-- [x] Deterministic replay: export/import control state for observability (v0.7.0)
-- [x] ExecutionGraph: first-class runtime execution graph with typed node lifecycle (v0.9.0)
-- [x] Amplification metrics: llm_calls_per_root, tool_calls_per_root, retries_per_root (v0.9.0)
-- [x] Divergence heuristic: repeated-signature detection, warn-only, deduped (v0.9.0)
-- [x] AIcontainer: declarative execution boundary composing all runtime primitives (v0.9.1)
-- [x] PolicyEngine: declarative DENY/REQUIRE_APPROVAL/ALLOW rule set (v0.9.1)
-- [x] AuditLog: append-only JSONL with SHA-256 hash chain + secret masking (v0.9.1)
-- [x] Policy signing: HMAC-SHA256 + ed25519 tamper detection (v0.9.1)
-- [x] CI: release workflow secrets guard fixed (v0.9.2)
-- [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
-- [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
-- [x] VeronicaCallbackHandler: LangChain adapter with pre/post-call policy enforcement (v0.9.5)
-- [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIcontainer (v0.9.6)
-- [x] Thread safety: all core modules fully Lock-protected (v0.9.7)
-- [x] Security: key-pin comparison uses hmac.compare_digest (timing-attack resistant) (v0.9.7)
-- [x] Resource safety: timeout watcher thread joined on context exit (v0.9.7)
-- [x] Auto Cost Calculation: pricing table + response-object extraction for OpenAI/Anthropic/Google (v0.10.0)
-- [x] Distributed Budget: Redis INCRBYFLOAT backend for cross-process cost coordination (v0.10.0)
-- [x] OpenTelemetry Export: SafetyEvent → OTel span events, privacy-safe, opt-in (v0.10.0)
-- [x] Degradation Ladder: 4-tier graceful degradation (model_downgrade → context_trim → rate_limit → halt) (v0.10.0)
-- [x] Multi-agent Context Linking: parent-child ExecutionContext hierarchy with cost propagation (v0.10.0)
-- [x] Security patch: dev-key warning, sandbox credential exclusion, NonceRegistry TTL eviction, exception narrowing, audit-log corruption visibility (v0.10.1)
-- [x] Security hardening: SHELL_ALLOW_COMMANDS exec-flag bypass closed (python -c, cmake -P, make --eval, uv run wrappers), $()/ backtick/newline added to SHELL_DENY_OPERATORS, URL host parser unified to urllib.parse, patch.py threading.Lock added, SandboxRunner stale-data fix, SecretMasker HEX_SECRET upper-bound removed, _load_policy warning on failure (v0.10.2)
-- [x] Security: combined flag bypass, stdin exec path, pip via -m, make --eval closed; fail-closed policy on load error (v0.10.3)
-- [x] Concurrency: atomic budget spend, CircuitBreaker isolation enforcement, per-invocation veronica_guard container (v0.10.4)
-- [x] Adversarial hardening: TokenBudgetHook TOCTOU fix (pending reservation), BudgetWindow boundary off-by-one, frequency-based divergence detection (alternating bypass closed), RetryContainer jitter (thundering herd), event cap + dedup fix, PartialBufferOverflow structured exception, pricing substring match removed (v0.10.5)
-- [x] PyPI auto-publish on GitHub Release
-- [x] Everything is opt-in & non-breaking (default behavior unchanged)
+VERONICA's Security Containment Layer provides a fail-closed enforcement boundary that stops dangerous agent actions at the tool-dispatch and egress level — independently of any upper-layer system prompt or agent rules. It enforces controls against uncontrolled shell execution, sensitive file reads, unauthenticated outbound requests, CI workflow modifications, and risk accumulation leading to automatic SAFE_MODE transition. Policy files are HMAC-SHA256 and ed25519 signed; supply chain changes route to REQUIRE_APPROVAL; runtime attestation detects privilege escalation mid-session.
 
-1253 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
-
----
-
-## Roadmap
-
-### v0.11 (planned)
-- Middleware mode (ASGI/WSGI integration for request-scoped containment)
-- Improved divergence heuristics (cost-rate detection, token-velocity windows)
-- PartialResultBuffer integration with ExecutionContext event stream
-
-### v1.0
-- Stable `ExecutionContext` API with formal deprecation policy
-- Formal containment guarantee documentation
-- `ExecutionGraph` extensibility hooks for external integrations
-- Multi-agent containment primitives (shared budget pools, cross-chain circuit breaker)
-
----
-
-## Install
-
-```bash
-pip install veronica-core
-```
-
-**Development install (contributing):**
-```bash
-git clone https://github.com/amabito/veronica-core
-pip install -e ".[dev]"
-pytest
-```
-
-![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
-![CI](https://img.shields.io/badge/tests-1253%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-blue)
-
----
-
-## Containment Mode
-
-VERONICA's Security Containment Layer provides a **fail-closed enforcement
-boundary** that stops dangerous agent actions at the tool-dispatch and egress
-level — independently of any upper-layer system prompt or agent rules.  Even
-if an adversarial prompt fully bypasses the agent's own guidelines, the
-containment layer intercepts the call and returns `Decision.HALT` or
-`Decision.QUARANTINE` before any action reaches the OS.
-
-The layer enforces: uncontrolled shell execution, sensitive file reads
-(`.env`, SSH keys, cloud credentials), unauthenticated outbound POST/PUT/DELETE
-requests, CI workflow file modifications, and runaway agents that repeatedly
-probe blocked actions (risk accumulation → automatic `SAFE_MODE` transition).
-
-**Policy enforcement features:**
-
-- **Policy signing (G-1)**: `policies/default.yaml` is HMAC-SHA256 signed.
-  Set `VERONICA_POLICY_KEY` (hex) for the production signing key.  Any
-  tampered policy file raises `RuntimeError` at load time.
-- **Supply chain guard (G-2)**: `pip install`, `npm install`, `pnpm add`,
-  `yarn add`, `uv add`, `cargo add`, and lock file writes all route to
-  `REQUIRE_APPROVAL` before execution.  Run `python tools/generate_sbom.py`
-  to produce a `sbom.json` inventory of installed packages.
-- **Runner attestation (G-3)**: `AttestationChecker` captures username,
-  platform, Python path, CWD, and UID at startup and detects mid-session
-  anomalies (container escape, privilege escalation).
-- **Approval fatigue mitigation (H)**: `ApprovalBatcher` deduplicates
-  identical approval requests; `ApprovalRateLimiter` caps throughput at
-  10 approvals/60 s by default.
-
-**Cryptographic integrity features:**
-
-- **Policy signing v2 (I-1)**: `PolicySignerV2` upgrades from HMAC-SHA256
-  (symmetric) to **ed25519 asymmetric signing** via the `cryptography`
-  package.  Only the public key is committed; the private key stays in a
-  secrets manager.  `PolicyEngine` checks `.sig.v2` first; falls back to
-  v1 HMAC if `cryptography` is not installed.  See
-  [docs/SIGNING_GUIDE.md](docs/SIGNING_GUIDE.md) for the full workflow.
-- **Active sandbox probe (I-2)**: `SandboxProbe` actively attempts a
-  protected filesystem read and an outbound network request to verify
-  that sandbox restrictions are **actually enforced** — not just
-  configured.  Any probe that succeeds (sandbox failed to block) emits
-  `SANDBOX_PROBE_FAILURE` and the caller must trigger SAFE_MODE.
-- **SBOM diff gate (I-3)**: `tools/sbom_diff.py` compares two SBOM
-  snapshots and exits non-zero on any package addition, removal, or
-  version change.  An HMAC-SHA256 approval token allows pre-approved
-  diffs to pass the gate without manual intervention.  Integrates into
-  CI as a required check on lock file / `pyproject.toml` changes.
-
-**Additional security hardening (v0.10.2):**
-
-- **Inline exec flag guard (K-1)**: `SHELL_DENY_EXEC_FLAGS` blocks inline code execution
-  flags (`python -c`, `python3 -c`, `cmake -P/-E`, `make --eval`) and the `uv run python -c`
-  wrapper path. Applied before `SHELL_ALLOW_COMMANDS`; `rule_id=SHELL_DENY_INLINE_EXEC`,
-  `risk_score_delta=9`.
-- **Command substitution operators (K-2)**: `$(`, `` ` ``, and `\n` added to
-  `SHELL_DENY_OPERATORS`, closing the command-substitution injection path in allowlisted
-  commands.
-- **URL parser unification (K-3)**: `_url_host()` rewritten to use `urllib.parse.urlparse()`
-  for consistency with `_url_path()`, eliminating host/path parser split that could be
-  exploited with crafted URLs.
-- **patch.py thread safety (K-4)**: `threading.Lock` (`_patches_lock`) guards all reads and
-  writes to `_patches` in `patch_openai()`, `patch_anthropic()`, and `unpatch_all()`.
-- **Sandbox clean-copy enforcement (K-5)**: `SandboxRunner._setup()` removes stale `_repo`
-  before `shutil.copytree` and uses `dirs_exist_ok=False`.
-- **SecretMasker HEX_SECRET no upper bound (K-6)**: `{32,64}` → `{32,}` to catch 65+ char
-  hex secrets (SHA-512, long API tokens).
-- **Policy load warning (K-7)**: `_load_policy()` now emits `logger.warning` on any failure.
-
-**Key management & rollback protection:**
-
-- **Security levels (J-1)**: Auto-detected DEV / CI / PROD tiers control how
-  strictly cryptographic requirements are enforced.  Set `VERONICA_SECURITY_LEVEL`
-  to override; CI/PROD require the `cryptography` package and a valid signature.
-  See `src/veronica_core/security/security_level.py`.
-- **Key pinning (J-2)**: `KeyPinChecker` verifies that the loaded ed25519 public
-  key matches the committed SHA-256 pin in `policies/key_pin.txt` (or
-  `VERONICA_KEY_PIN` env var).  A mismatch in CI/PROD raises `RuntimeError`.
-  See [docs/KEY_ROTATION.md](docs/KEY_ROTATION.md) for the rotation workflow.
-- **Policy rollback protection (J-3)**: `RollbackGuard` scans the audit log
-  backward to detect if an older `policy_version` has been submitted after a
-  newer one (rollback attack).  `policy_checkpoint` events enable fast startup
-  by bounding the backward scan.
-- **xfailed registry (J-4)**: All `xfail`-marked tests are documented in
-  [docs/XFAILED_REGISTRY.md](docs/XFAILED_REGISTRY.md) with a safety risk
-  assessment.  No test with High safety risk may remain as a permanent xfail.
-
-**Quick start — wire `PolicyHook` into `ShieldPipeline`:**
-
-```python
-from veronica_core.security import PolicyEngine, PolicyHook, CapabilitySet
-from veronica_core.shield.pipeline import ShieldPipeline
-from veronica_core.shield.config import ShieldConfig
-
-engine = PolicyEngine()
-hook = PolicyHook(
-    engine=engine,
-    caps=CapabilitySet.ci(),   # restrict to CI capability profile
-    working_dir="/repo",
-    repo_root="/repo",
-    env="ci",
-)
-
-pipeline = ShieldPipeline(
-    config=ShieldConfig(),
-    tool_dispatch=[hook],      # ToolDispatchHook: blocks dangerous tool calls
-    egress=[hook],             # EgressBoundaryHook: blocks outbound HTTP
-)
-```
-
-For full architecture details, audit findings coverage, capability profiles,
-and custom policy configuration, see
-[docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md).
+For full architecture details, audit findings coverage, capability profiles, and custom policy configuration, see [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md).
 
 ---
 
@@ -808,7 +682,7 @@ For the full scenario table, rule IDs, and architecture details, see
 ## Security Guarantees
 
 The following guarantees are verified by the VERONICA test suite on every CI
-run.  The full verifiable claim set is documented in
+run. The full verifiable claim set is documented in
 [docs/SECURITY_CLAIMS.md](docs/SECURITY_CLAIMS.md).
 
 ### Containment (20 red-team scenarios — all blocked)
@@ -844,10 +718,41 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
+## Roadmap
+
+### v0.11 (planned)
+- Middleware mode (ASGI/WSGI integration for request-scoped containment)
+- Improved divergence heuristics (cost-rate detection, token-velocity windows)
+- PartialResultBuffer integration with ExecutionContext event stream
+
+### v1.0
+- Stable `ExecutionContext` API with formal deprecation policy
+- Formal containment guarantee documentation
+- `ExecutionGraph` extensibility hooks for external integrations
+- Multi-agent containment primitives (shared budget pools, cross-chain circuit breaker)
+
+---
+
+## Install
+
+```bash
+pip install veronica-core
+```
+
+**Development install (contributing):**
+```bash
+git clone https://github.com/amabito/veronica-core
+pip install -e ".[dev]"
+pytest
+```
+
+---
+
 ## Version History
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.10.6 | 2026-02-25 | Test suite quality overhaul: Classical Testing alignment, 37 new behavioral tests, aliased import detection |
 | 0.10.5 | 2026-02-23 | Adversarial hardening: TOCTOU fix, PartialBufferOverflow, frequency divergence, jitter, event cap |
 | 0.10.4 | 2026-02-22 | Concurrency & isolation: atomic spend, CircuitBreaker isolation, per-invocation guard |
 | 0.10.3 | 2026-02-22 | Combined flag bypass, stdin exec, pip via -m, fail-closed policy |

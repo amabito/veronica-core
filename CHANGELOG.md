@@ -4,6 +4,59 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.10.6] — 2026-02-25 — Test Suite Quality Overhaul
+
+### Tests
+
+- **Classical Testing alignment**: Removed 6 HIGH-priority anti-pattern categories identified
+  against [Classical vs London-style testing principles](https://zenn.dev/tko_kasai/articles/3f5863e3407891):
+  - **H-1** (`test_aicontainer.py`): Removed object-identity assertion (`is`-check) — implementation
+    detail, not observable behavior.
+  - **H-3** (`test_llm_client_injection.py`): Replaced London-style interaction-verification
+    (call counts) with observable output assertions.
+  - **H-4** (`test_backends.py`, `test_shield_hooks_noop.py`): Deleted trivial CRUD passthrough
+    tests and noop-stub assertions that added no behavioral coverage. `test_shield_hooks_noop.py`
+    deleted entirely.
+  - **H-5** (`test_shield_safe_mode.py`, `test_shield_degrade.py`): Removed ShieldPipeline
+    short-circuit assertions duplicated across files (canonical location: `test_shield_pipeline.py`).
+    Removed TokenBudgetHook HALT duplication across 4 files.
+  - **H-6** (`test_shield_config.py`, `test_shield_types.py`, `test_llm_safety.py`): Removed
+    getter-coverage and enum-value tests that verified data structure shape, not behavior.
+  - **S-5** (`test_execution_coverage.py`, `test_context_linking.py`,
+    `test_v0104_guard_graph.py`): Replaced all private attribute access (`_lock`,
+    `_cancellation_token`, `_timeout_thread`, `_cost_usd_accumulated`) with public-API-only
+    behavioral assertions. Tests now survive internal renames.
+
+- **New behavioral test files** (37 new tests, all passing):
+  - `tests/test_requirements_driven.py` (7): EARS-style requirement-driven tests with
+    explicit `REQUIREMENT:` docstrings — first traceable requirement coverage in the suite.
+  - `tests/test_user_journey.py` (6): Primary user journey end-to-end: budget exhaustion
+    → reset → resume, and degradation → recovery flows.
+  - `tests/test_async_behavior.py` (5): Async observable behavior — async-wrapped functions
+    return correct `Decision`, concurrent `asyncio.gather` calls respect shared budget.
+  - `tests/test_timeout_expiry.py` (6): `timeout_ms` watcher E2E verification — observable
+    `Decision.HALT` return before long-running `fn` completes, no private attribute access.
+  - `tests/security/test_audit_log_thread_safety.py` (4): 10-thread concurrent AuditLog
+    append — hash chain integrity and zero lost writes under race conditions.
+  - `tests/test_fault_injection.py` (9): JSONBackend corrupted-JSON graceful fallback;
+    ShieldPipeline hook-exception behaviour (predictable halt, not silent swallow).
+
+- **Refactoring** (no behavior change):
+  - **M-1**: Renamed 30+ test functions in `test_shield_degrade.py`, `test_adaptive_budget.py`,
+    `test_shield_token_budget.py` from threshold-describing names to business-meaningful names
+    (e.g., `system_degrades_service_when_call_rate_approaches_configured_limit`).
+  - **M-2**: Converted `test_degradation.py`, `test_budget_cgroup.py`, `test_runtime_policy.py`
+    to `@pytest.mark.parametrize` table-driven structure with Given/When/Then comments.
+  - **S-4** (`tests/security/test_lint_no_raw_exec.py`, `tools/lint_no_raw_exec.py`): AST
+    linter extended to detect aliased subprocess imports (`import subprocess as sp; sp.run(...)`).
+
+### Stats
+
+- Test count: 1262 → 1289 (+27 net; +37 new, -13 removed anti-patterns / deleted file)
+- All 1289 tests pass (4 xfailed — pre-existing SHA pin, unrelated to this release)
+
+---
+
 ## [0.10.5] — 2026-02-23 — Adversarial Security Hardening
 
 ### Security
