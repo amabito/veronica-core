@@ -1,92 +1,110 @@
-# Architecture: Executor / Planner Separation
+# Architecture: Runtime Containment Kernel + Execution OS
 
 ## Overview
 
-veronica-core is the **Executor** layer in the VERONICA stack.
+veronica-core is the **Runtime Containment Kernel**.
+[VERONICA](https://github.com/amabito/veronica) is the **Execution OS** built around it.
+
+## Stack
 
 ```
-VERONICA Planner (external, pluggable)
-  - Budget allocation across competing agents
-  - Cost prediction before LLM calls
-  - Arbitration under resource contention
-       |
-       | submits PolicyConfig
-       v
-veronica-core Executor (this library)
-  - Deterministic enforcement
-  - Auditable decision trail
-  - Dependency-light, stable guarantees
-       |
-       | enforce / halt
-       v
-LLM calls
+Application
+     |
+veronica-core --------[policy config]-------- VERONICA (Control Plane)
+     |                                              |
+LLM Providers                              Org Policy / Dashboard /
+                                           Shared State / Audit / Alerts
 ```
 
-## Design Rationale
+**veronica-core is on the critical path. VERONICA is on the management path.**
 
-### Why separate layers?
+The Control Plane manages policy and state asynchronously.
+It does not sit between the application and LLM calls.
+This preserves veronica-core's latency guarantees regardless of VERONICA availability.
 
-The Executor must be deterministic and auditable. Its behavior cannot
-depend on probabilistic components. If the thing that stops runaway
-agents is itself unpredictable, the safety guarantee collapses.
+---
 
-The Planner, by contrast, benefits from being adaptive. Optimal budget
-allocation across competing agents, cost prediction from prompt
-characteristics, and arbitration under contention are all problems where
-AI or statistical models genuinely add value.
+## Layer Responsibilities
 
-Separating the layers preserves both properties:
+### veronica-core (Kernel)
 
-- The Planner can be as sophisticated as needed (AI, ML, rules, human).
-- The Executor's guarantees are unchanged regardless of Planner strategy.
+Enforces bounded execution. Runs local. No cloud required.
 
-### Why not a single system?
+| Primitive | Role |
+|---|---|
+| `ExecutionContext` | Bounded execution scope |
+| `ExecutionGraph` | Multi-chain containment |
+| `ShieldPipeline` | Pre-call enforcement hooks |
+| `BudgetEnforcer` | Cost ceiling per chain |
+| `CircuitBreaker` | Failure isolation |
+| `AdaptiveBudgetHook` | Feedback-based ceiling adjustment |
+| Divergence heuristics | Loop and anomaly detection |
 
-Introducing ML dependencies into veronica-core would:
+OS analogy: scheduler, memory quota, process table, kill signal.
 
-1. Break the "dependency-light" guarantee (current: stdlib + optional extras only)
-2. Couple a fast-evolving experimental layer to a stable, auditable one
-3. Make the Executor itself probabilistic — undermining its core value
+### VERONICA (Control Plane)
 
-The analogy is the Linux kernel scheduler (`kube-scheduler`) vs cgroup
-enforcement (`kubelet`): the scheduler is heuristic and swappable; the
-enforcement is deterministic and kernel-level.
+Manages policy across agents, services, and organizations. Planned.
+
+| Component | Role |
+|---|---|
+| Planner | Execution strategy -- decides what limits to set |
+| Budget allocation | Distributes budget across competing agents |
+| Org policy engine | Organization-wide containment rules |
+| Shared circuit state | Cross-service breaker coordination |
+| Dashboard | Visibility into execution health |
+| Audit / Compliance | Policy enforcement at scale |
+
+OS analogy: control plane, governance plane, management console.
+
+---
+
+## Design Principles
+
+**The kernel enforces. The OS decides.**
+
+veronica-core's guarantees are unconditional. They hold whether VERONICA is present or not.
+VERONICA extends those guarantees across agents, services, and organizations.
+
+**Separation of concerns.**
+
+A probabilistic or adaptive component must not sit inside the enforcement boundary.
+The Planner proposes policy. The kernel enforces it. The Planner has no visibility into enforcement internals.
+
+**Planner scope boundary.**
+
+The Planner decides *what limits to set* -- ceiling, timeout, escalation policy.
+The Planner does not decide *what the agent does* -- routing, model selection, prompt construction.
+Crossing this boundary turns the Planner into an orchestrator. That is a different product.
+
+---
 
 ## PlannerProtocol (planned, v1.0)
 
 veronica-core will expose a minimal `PlannerProtocol` (Python `typing.Protocol`)
-that defines the contract between Planner and Executor.
-
-The Executor accepts a `PolicyConfig` produced by the Planner and enforces it.
-The Planner has no visibility into Executor internals.
+defining the contract between Planner and kernel.
 
 Design goals:
-
-- Minimal surface area (submit config, receive SafetyEvents)
+- Minimal surface area: submit `PolicyConfig`, receive `SafetyEvent` stream
 - No callbacks into Planner during enforcement
-- Planner is stateless from the Executor's perspective
+- Planner is stateless from the kernel's perspective
 
 ## Feedback Loop
 
-The Executor feeds `SafetyEvent` history back to the Planner as
-observability data. The Planner uses this to update future policy
-submissions. The Executor never acts on Planner feedback directly.
-
 ```
-Executor --[SafetyEvents]--> Planner
-Planner  --[PolicyConfig]--> Executor
+veronica-core --[SafetyEvents]--> VERONICA Planner --[PolicyConfig]--> veronica-core
 ```
 
-This is a clean feedback loop with no bidirectional coupling during
-enforcement.
+The kernel never modifies its behavior based on SafetyEvents mid-execution.
+Adaptation always flows via a new PolicyConfig from the Planner.
+
+---
 
 ## Current State
 
-veronica-core (v0.10.x) implements the Executor layer fully.
+veronica-core (v0.10.x) implements the kernel layer fully.
 
-`AdaptiveBudgetHook` is an in-process approximation of the Planner
-function: it observes SafetyEvents and adjusts ceilings. This is
-appropriate for single-process deployments.
+`AdaptiveBudgetHook` is an in-process approximation of the Planner function:
+it observes SafetyEvents and adjusts ceilings. Appropriate for single-process deployments.
 
-For multi-agent, cross-process, or AI-driven allocation, the external
-Planner architecture is the intended path.
+For multi-agent, cross-process, or AI-driven allocation, the VERONICA Control Plane is the intended path.
