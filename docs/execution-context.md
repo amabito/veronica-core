@@ -63,6 +63,11 @@ These invariants hold for the lifetime of an `ExecutionContext` instance:
 ```python
 from veronica_core.containment import ExecutionContext, ExecutionConfig
 from veronica_core.containment import ChainMetadata, WrapOptions, ContextSnapshot
+from veronica_core.containment.execution_context import (
+    attach_partial_buffer,
+    get_current_partial_buffer,
+)
+from veronica_core.partial import PartialResultBuffer
 ```
 
 ### ChainMetadata
@@ -106,6 +111,7 @@ class WrapOptions:
     cost_estimate_hint: float        # Estimated cost in USD; used for pre-flight check
     timeout_ms: int | None           # Per-call timeout; overrides config.timeout_ms
     retry_policy_override: int | None  # Max retries for this call only; overrides chain default
+    partial_buffer: PartialResultBuffer | None  # Streaming output buffer (v0.11)
 ```
 
 ### ExecutionContext
@@ -142,6 +148,8 @@ class ExecutionContext:
     def get_snapshot(self) -> ContextSnapshot: ...
 
     def abort(self, reason: str) -> None: ...
+
+    def get_partial_result(self, node_id: str) -> PartialResultBuffer | None: ...
 ```
 
 #### Method reference
@@ -206,6 +214,7 @@ class NodeRecord:
     ]
     cost_usd: float                     # Actual cost charged (0.0 if not known)
     retries_used: int                   # Retries consumed by this node
+    partial_buffer: PartialResultBuffer | None  # Streaming buffer passed via WrapOptions (v0.11)
 ```
 
 `ContextSnapshot` captures chain-wide state at a point in time:
@@ -248,7 +257,97 @@ corresponding `event_type` value.
 
 ---
 
-## 7. Integration with Existing Components
+## 7. Partial Result Buffers (v0.11)
+
+### 7.1 Purpose
+
+LLM streaming APIs deliver output incrementally. Application code typically
+accumulates chunks into a buffer; that buffer needs to be accessible from the
+streaming callback without passing it through every call stack layer.
+
+`WrapOptions.partial_buffer` provides a structured way to attach a
+`PartialResultBuffer` to a specific `wrap_llm_call` invocation and retrieve
+it later by node ID.
+
+### 7.2 Usage
+
+```python
+from veronica_core.containment import ExecutionContext, ExecutionConfig, WrapOptions
+from veronica_core.containment.execution_context import get_current_partial_buffer
+from veronica_core.partial import PartialResultBuffer
+
+config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
+ctx = ExecutionContext(config=config)
+buf = PartialResultBuffer()
+
+
+def stream_handler():
+    # This runs inside wrap_llm_call, so get_current_partial_buffer() returns buf.
+    current_buf = get_current_partial_buffer()
+    for chunk in llm_stream():
+        current_buf.append(chunk)
+
+
+decision = ctx.wrap_llm_call(fn=stream_handler, options=WrapOptions(partial_buffer=buf))
+
+# After the call, the buffer is marked complete (if no halt or exception).
+assert buf.is_complete
+print(buf.get_partial())  # full accumulated output
+```
+
+### 7.3 ContextVar Lifecycle
+
+- **Before `fn()` is called**: `_current_partial_buffer` `ContextVar` is set to `buf`.
+- **Inside `fn()`**: any code can call `get_current_partial_buffer()` to retrieve `buf`.
+- **After `wrap_llm_call` returns** (success, halt, or exception): the `ContextVar` is
+  reset to `None` via the token returned by `ContextVar.set()`.
+
+The reset happens in a `finally` block, so exceptions in `fn()` do not leak the
+buffer reference.
+
+### 7.4 mark_complete Behaviour
+
+`buf.mark_complete()` is called only on **clean completion** — `fn()` ran without
+raising and the chain returned `Decision.ALLOW`. It is not called when:
+
+- `fn()` raises an exception (buffer stays partial, exception is swallowed per
+  existing `wrap_llm_call` behaviour).
+- Pre-flight check returns `Decision.HALT` (buffer is never touched because `fn()`
+  is never called).
+
+### 7.5 Retrieving Buffers After the Call
+
+```python
+snap = ctx.get_snapshot()
+node_id = snap.nodes[0].node_id          # or iterate snap.nodes to find by name
+
+buf = ctx.get_partial_result(node_id)    # PartialResultBuffer | None
+if buf is not None:
+    print(buf.get_partial())
+```
+
+`get_partial_result` returns `None` for unrecognised node IDs.
+
+### 7.6 `attach_partial_buffer(buf)`
+
+An escape hatch for cases where the buffer is not known at call site:
+
+```python
+from veronica_core.containment.execution_context import attach_partial_buffer
+
+def fn():
+    buf = PartialResultBuffer()
+    attach_partial_buffer(buf)           # registers buf in the current wrap context
+    for chunk in llm_stream():
+        buf.append(chunk)
+```
+
+`attach_partial_buffer` raises `RuntimeError` if called outside an active
+`wrap_llm_call` (i.e., when the ContextVar is `None`).
+
+---
+
+## 8. Integration with Existing Components
 
 ### ShieldPipeline
 
@@ -298,7 +397,7 @@ The combined log is returned by `get_snapshot().events`.
 
 ---
 
-## 8. Backwards Compatibility
+## 9. Backwards Compatibility
 
 - All existing code using `ShieldPipeline` directly continues to work without any changes.
 - `ExecutionContext` is strictly opt-in. Passing `pipeline=None` runs containment checks
@@ -310,7 +409,7 @@ The combined log is returned by `get_snapshot().events`.
 
 ---
 
-## 9. Examples
+## 10. Examples
 
 ### Example 1 — Single request chain
 

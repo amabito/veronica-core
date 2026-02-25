@@ -171,15 +171,132 @@ Future heuristics could address these gaps.  Candidate approaches:
 - **Semantic clustering**: map operation names to canonical groups
   (e.g., all `search_*` tools into one group) before hashing the signature.
 
-These are not implemented.  The current heuristic is intentionally minimal:
-it covers the most common case (stuck in a single repeated call) with O(K)
-cost and zero external dependencies.
+The cycling, near-duplicate, and cross-chain patterns are not implemented.
+The current pattern heuristics are intentionally minimal: they cover the most
+common stuck-loop case with O(K) cost and zero external dependencies.
+
+Two time-based heuristics were added in v0.11 and are documented in
+Section 6 below.
 
 ---
 
-## 6. Example Patterns
+## 6. Time-Based Rate Heuristics (v0.11)
 
-### 6.1 Tool called 3 times in a row -> event emitted once
+### 6.1 Motivation
+
+The consecutive-repeat heuristic catches stuck loops in terms of call *pattern*
+but is blind to spend velocity. An agent that calls different operations on each
+step can accumulate cost at an unsafe rate while never triggering the pattern
+detector.
+
+Two additional heuristics check *rate* rather than pattern:
+
+- `COST_RATE_EXCEEDED` — cost per second is too high.
+- `TOKEN_VELOCITY_EXCEEDED` — output tokens per second is too high.
+
+Both are advisory (`severity = "warn"`); neither halts the chain automatically.
+
+### 6.2 COST_RATE_EXCEEDED
+
+**Trigger:** cumulative chain cost / elapsed seconds since `ExecutionGraph`
+creation exceeds `cost_rate_threshold_usd_per_sec`.
+
+**Check point:** `mark_success` — cost is recorded only on successful node
+completion, so the first check happens after the first node that reports a
+non-zero `cost_usd`.
+
+**Default threshold:** 0.10 USD/s (configurable via constructor).
+
+**Deduplication:** fires at most once per `ExecutionGraph` instance.
+
+**Event shape:**
+```json
+{
+  "event_type": "COST_RATE_EXCEEDED",
+  "severity": "warn",
+  "cost_rate": 12.5,
+  "threshold": 0.1,
+  "node_id": "node-abc",
+  "chain_id": "chain-xyz"
+}
+```
+
+### 6.3 TOKEN_VELOCITY_EXCEEDED
+
+**Trigger:** total output tokens across all completed nodes / elapsed seconds
+exceeds `token_velocity_threshold`.
+
+**Check point:** `mark_success`, same as cost-rate.
+
+**Default threshold:** 500 tok/s (configurable via constructor).
+
+**Deduplication:** fires at most once per `ExecutionGraph` instance.
+
+**Event shape:**
+```json
+{
+  "event_type": "TOKEN_VELOCITY_EXCEEDED",
+  "severity": "warn",
+  "token_velocity": 8200.0,
+  "threshold": 500,
+  "node_id": "node-def",
+  "chain_id": "chain-xyz"
+}
+```
+
+### 6.4 Elapsed Time Measurement
+
+Elapsed time is measured from `ExecutionGraph.__init__` using `time.time()`.
+The same start timestamp is reused for all rate calculations in that graph.
+Nodes that complete before 1 ms has elapsed are skipped to avoid division
+by near-zero values (effectively `elapsed_sec < 0.001`).
+
+### 6.5 Differences from Pattern Heuristics
+
+| Property | Pattern (consecutive) | Rate (cost / token) |
+|---|---|---|
+| Check point | `mark_running` | `mark_success` |
+| Input data | signature only | cost_usd / tokens_out |
+| Dedup key | `(kind, name)` signature | event type string |
+| Event key | `signature`, `repeat_count` | `cost_rate` / `token_velocity` |
+
+### 6.6 Constructor Parameters
+
+```python
+ExecutionGraph(
+    cost_rate_threshold_usd_per_sec: float = 0.10,
+    token_velocity_threshold: float = 500.0,
+    # ... existing parameters ...
+)
+```
+
+Both thresholds are optional. Passing `0` or a negative value disables the
+respective check by making the threshold impossible to exceed (the check
+compares `rate > threshold` so zero or negative means never fires... actually
+a threshold of 0.0 means any nonzero rate triggers it immediately — set a
+large value like `float("inf")` to disable).
+
+### 6.7 `snapshot()` Aggregates
+
+`graph.snapshot()["aggregates"]` now includes:
+
+```python
+{
+    "total_cost_usd":        float,  # existing
+    "total_steps":           int,    # existing
+    "divergence_emitted_count": int, # existing
+    "total_tokens_out":      int,    # new in v0.11
+}
+```
+
+`total_tokens_out` accumulates the `tokens_out` argument passed to each
+`mark_success` call. Nodes that do not report `tokens_out` contribute 0.
+
+---
+
+## 7. Example Patterns
+
+### 7.1 Tool called 3 times in a row -> event emitted once
 
 ```
 mark_running("n2")  # tool/call_api  window=[("tool","call_api")]             consecutive=1  no event
@@ -197,7 +314,7 @@ mark_running("n6")  # tool/call_api  consecutive=5  already in emitted_divergenc
 
 ---
 
-### 6.2 LLM called 5 times in a row -> event emitted once
+### 7.2 LLM called 5 times in a row -> event emitted once
 
 ```
 mark_running("n2")  # llm/generate   consecutive=1  no event
@@ -210,7 +327,7 @@ mark_running("n7")  # llm/generate   consecutive=6  already emitted -> no event
 
 ---
 
-### 6.3 Alternating pattern does NOT trigger
+### 7.3 Alternating pattern does NOT trigger
 
 ```
 mark_running("n2")  # tool/a  window=[("tool","a")]                   consecutive(a)=1
@@ -224,7 +341,7 @@ consecutive trailing entries.
 
 ---
 
-## 7. API Reference
+## 8. API Reference
 
 All methods are on `ExecutionGraph` and are thread-safe (protected by the
 existing `threading.RLock`).
@@ -237,11 +354,21 @@ Returns and clears all pending divergence event dicts.  Should be called by
 ```python
 graph.mark_running(node_id)
 for event in graph.drain_divergence_events():
-    # event["event_type"] == "divergence_suspected"
-    # event["severity"]   == "warn"
-    # event["signature"]  == [kind, name]  (JSON-serializable list)
-    # event["repeat_count"] == int
-    # event["chain_id"]   == str
+    # Pattern events:
+    #   event["event_type"]   == "divergence_suspected"
+    #   event["signature"]    == [kind, name]
+    #   event["repeat_count"] == int
+    #   event["chain_id"]     == str
+    #
+    # Rate events (v0.11):
+    #   event["event_type"]   in ("COST_RATE_EXCEEDED", "TOKEN_VELOCITY_EXCEEDED")
+    #   event["cost_rate"]    == float  (COST_RATE_EXCEEDED only)
+    #   event["token_velocity"] == float  (TOKEN_VELOCITY_EXCEEDED only)
+    #   event["threshold"]    == float
+    #   event["node_id"]      == str
+    #   event["chain_id"]     == str
+    #
+    # All events have: event["severity"] == "warn"
     pipeline.emit_safety_event(event)
 ```
 
