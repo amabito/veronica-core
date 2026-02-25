@@ -4,30 +4,39 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veronica-core"
-version = "0.10.6"
+version = "0.10.7"
 description = "Runtime Containment Layer for LLM Systems. Enforces bounded cost, retries, recursion, wait states, and failure domains."
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
     { name = "amabito" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-keywords = ["llm", "agent", "runtime", "budget", "enforcement", "guardrails"]
+keywords = [
+    "llm", "agent", "runtime", "budget", "enforcement", "guardrails",
+    "safety", "circuit-breaker", "token-budget", "ai-safety",
+    "multi-agent", "containment", "rate-limit",
+]
 
 [project.urls]
+Homepage = "https://veronica-core.dev"
 Repository = "https://github.com/amabito/veronica-core"
 Issues = "https://github.com/amabito/veronica-core/issues"
+Changelog = "https://github.com/amabito/veronica-core/blob/main/CHANGELOG.md"
+Documentation = "https://veronica-core.dev"
 
 [project.optional-dependencies]
 redis = [
