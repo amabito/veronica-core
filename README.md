@@ -8,9 +8,13 @@
 
 **Runtime containment for LLM systems. Enforce cost, step, and retry limits before damage occurs.**
 
+veronica-core is the kernel. [veronica](https://github.com/amabito/veronica) is the control plane.
+
 ```bash
 pip install veronica-core
 ```
+
+> **Scope**: Enforcement is at the process boundary (argv-level). This is not an OS-level sandbox — see [Security Boundary](#security-boundary).
 
 ---
 
@@ -274,7 +278,7 @@ veronica-core operates without network connectivity, external services, or vendo
 
 **veronica-cloud** (forthcoming) provides coordination primitives for multi-agent and multi-tenant deployments: shared budget pools, distributed policy enforcement, and real-time dashboard integration for SafetyEvent streams.
 
-The boundary is functional: cloud enhances visibility and coordination across distributed deployments. It does not enhance safety. Safety properties are enforced by veronica-core at the local layer. An agent running without cloud connectivity is still bounded. An agent running without veronica-core is not.
+The boundary is functional: cloud enhances visibility and coordination across distributed deployments. **It does not enhance safety.** Safety properties are enforced by veronica-core at the local layer. An agent running without cloud connectivity is still bounded. An agent running without veronica-core is not.
 
 ---
 
