@@ -19,6 +19,8 @@ from veronica_core.containment.execution_context import (
     ExecutionContext,
     NodeRecord,
     WrapOptions,
+    get_current_partial_buffer,
+    attach_partial_buffer,
 )
 from veronica_core.containment.execution_graph import ExecutionGraph
 
@@ -31,4 +33,6 @@ __all__ = [
     "ExecutionGraph",
     "NodeRecord",
     "WrapOptions",
+    "get_current_partial_buffer",
+    "attach_partial_buffer",
 ]
