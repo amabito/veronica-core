@@ -781,6 +781,23 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - Formal containment guarantee documentation
 - `ExecutionGraph` extensibility hooks for external integrations
 - Multi-agent containment primitives (shared budget pools, cross-chain circuit breaker)
+- `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
+
+### Beyond v1.0 — The VERONICA Stack
+
+veronica-core is the **Executor** layer: deterministic, auditable, dependency-light.
+
+The **Planner** layer (separate repository, pluggable) handles:
+
+- Budget allocation across competing agents
+- Cost prediction before LLM calls are made
+- Arbitration under resource contention
+
+The Planner submits configuration. veronica-core enforces it.
+The Planner can be AI-driven, rule-based, or human-operated.
+The execution guarantees are unchanged regardless of Planner strategy.
+
+See [docs/architecture.md](docs/architecture.md) for the full design rationale.
 
 ---
 
