@@ -132,6 +132,9 @@ from veronica_core.shield.degradation import DegradationLadder, DegradationConfi
 # PolicyDecision helpers (v0.10.0)
 from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limit_decision
 
+# AG2 AgentCapability-compatible adapters (v0.11.0)
+from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -238,4 +241,6 @@ __all__ = [
     "deny",
     "model_downgrade",
     "rate_limit_decision",
+    # AG2 AgentCapability-compatible adapters (v0.11.0)
+    "CircuitBreakerCapability",
 ]

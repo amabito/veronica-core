@@ -102,7 +102,7 @@ Adaptation always flows via a new PolicyConfig from the Planner.
 
 ## Current State
 
-veronica-core (v0.10.x) implements the kernel layer fully.
+veronica-core (v0.11.0) implements the kernel layer fully.
 
 `AdaptiveBudgetHook` is an in-process approximation of the Planner function:
 it observes SafetyEvents and adjusts ceilings. Appropriate for single-process deployments.

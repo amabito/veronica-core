@@ -1,11 +1,14 @@
 """VERONICA Core + AG2 integration examples.
 
-Four self-contained demos showing how to wrap AG2 agents with VERONICA's
-circuit-breaker, SAFE_MODE, and token-budget enforcement.
-No API key required -- stub agents only.
+Seven self-contained demos.  No API key required -- stub agents only.
 
-Demos:
-    1. demo_circuit_breaker    -- agent fails repeatedly, cooldown activates
+-- CircuitBreakerCapability pattern (recommended) --
+    5. demo_capability_circuit_breaker -- add_to_agent() once; generate_reply() unchanged
+    6. demo_capability_safe_mode       -- system-wide SAFE_MODE via shared VeronicaIntegration
+    7. demo_capability_per_agent       -- two agents, one capability, independent breakers
+
+-- Original wrapper pattern (reference) --
+    1. demo_circuit_breaker    -- guarded_reply wrapper; cooldown activates after failures
     2. demo_safe_mode          -- orchestrator triggers system-wide halt
     3. demo_per_agent_tracking -- healthy vs broken agent tracked independently
     4. demo_token_budget       -- shared token ceiling across agent calls (v0.10.5)
@@ -16,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from veronica_core import TokenBudgetHook, VeronicaIntegration
+from veronica_core import CircuitBreakerCapability, TokenBudgetHook, VeronicaIntegration
 from veronica_core.backends import MemoryBackend
 from veronica_core.shield import Decision, ToolCallContext
 from veronica_core.state import VeronicaState
@@ -293,19 +296,173 @@ def demo_token_budget() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Demo 5: CircuitBreakerCapability — circuit breaker
+# ---------------------------------------------------------------------------
+
+def demo_capability_circuit_breaker() -> None:
+    """Circuit breaker via CircuitBreakerCapability.add_to_agent().
+
+    The key difference from demo_circuit_breaker (wrapper pattern):
+    generate_reply() is called exactly as before -- no guarded_reply
+    wrapper needed.  The circuit breaker is injected once at setup time.
+
+    AG2 equivalent of add_to_agent():
+        agent.register_reply(
+            trigger=None,
+            reply_func=circuit_breaker_intercept,
+            position=0,
+        )
+    """
+    print("\n" + "=" * 60)
+    print("Demo 5: CircuitBreakerCapability (add_to_agent)")
+    print("=" * 60)
+
+    cap = CircuitBreakerCapability(failure_threshold=3, recovery_timeout=60)
+    agent = StubAgent(name="researcher", fail_after=2)
+
+    # Inject once -- no changes to call sites below.
+    cap.add_to_agent(agent)
+
+    messages: list[dict] = [{"role": "user", "content": "Summarise the paper."}]
+
+    for round_num in range(1, 8):
+        print(f"\nRound {round_num}:")
+        # Same call as without the capability -- circuit breaker is transparent.
+        reply = agent.generate_reply(messages)
+        breaker = cap.get_breaker("researcher")
+        print(
+            f"  reply -> {reply!r}  "
+            f"[circuit: {breaker.state.value}, failures: {breaker.failure_count}]"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Demo 6: CircuitBreakerCapability — SAFE_MODE
+# ---------------------------------------------------------------------------
+
+def demo_capability_safe_mode() -> None:
+    """System-wide SAFE_MODE via CircuitBreakerCapability + VeronicaIntegration.
+
+    The orchestrator calls veronica.state.transition(SAFE_MODE) once.
+    All agents sharing the same capability instance are blocked immediately,
+    regardless of their individual circuit state.
+    """
+    print("\n" + "=" * 60)
+    print("Demo 6: CircuitBreakerCapability + SAFE_MODE")
+    print("=" * 60)
+
+    veronica = VeronicaIntegration(
+        cooldown_fails=5,
+        cooldown_seconds=60,
+        backend=MemoryBackend(),
+    )
+    cap = CircuitBreakerCapability(
+        failure_threshold=5,
+        recovery_timeout=60,
+        veronica=veronica,
+    )
+
+    planner = StubAgent(name="planner")
+    executor = StubAgent(name="executor")
+    cap.add_to_agent(planner)
+    cap.add_to_agent(executor)
+
+    messages: list[dict] = [{"role": "user", "content": "Plan and execute the task."}]
+
+    for round_num in range(1, 4):
+        print(f"\nRound {round_num}:")
+
+        if round_num == 3:
+            print("  [orchestrator] Anomaly detected -- triggering SAFE_MODE")
+            veronica.state.transition(
+                VeronicaState.SAFE_MODE,
+                reason="Cost spike detected",
+            )
+
+        print("  planner:")
+        reply = planner.generate_reply(messages)
+        print(f"    reply -> {reply!r}")
+
+        print("  executor:")
+        reply = executor.generate_reply(messages)
+        print(f"    reply -> {reply!r}")
+
+    print("\n  [orchestrator] Anomaly resolved -- clearing SAFE_MODE")
+    veronica.state.transition(VeronicaState.IDLE, reason="Manual review passed")
+    veronica.state.transition(VeronicaState.SCREENING, reason="Resuming after review")
+
+    print("\nRound 4 (after SAFE_MODE cleared):")
+    print("  planner:")
+    print(f"    reply -> {planner.generate_reply(messages)!r}")
+    print("  executor:")
+    print(f"    reply -> {executor.generate_reply(messages)!r}")
+
+
+# ---------------------------------------------------------------------------
+# Demo 7: CircuitBreakerCapability — per-agent independent tracking
+# ---------------------------------------------------------------------------
+
+def demo_capability_per_agent() -> None:
+    """One capability instance, two agents, independent circuit states.
+
+    healthy_agent never returns None -- its circuit stays CLOSED.
+    broken_agent fails immediately -- its circuit opens after 2 failures.
+    Both share the same CircuitBreakerCapability; only broken_agent is blocked.
+    """
+    print("\n" + "=" * 60)
+    print("Demo 7: CircuitBreakerCapability - per-agent tracking")
+    print("=" * 60)
+
+    cap = CircuitBreakerCapability(failure_threshold=2, recovery_timeout=60)
+
+    healthy_agent = StubAgent(name="healthy_agent")
+    broken_agent = StubAgent(name="broken_agent", fail_after=0)
+    cap.add_to_agent(healthy_agent)
+    cap.add_to_agent(broken_agent)
+
+    messages: list[dict] = [{"role": "user", "content": "Do the task."}]
+
+    for round_num in range(1, 6):
+        print(f"\nRound {round_num}:")
+
+        reply = healthy_agent.generate_reply(messages)
+        h_state = cap.get_breaker("healthy_agent").state.value
+        print(f"  healthy_agent  -> {reply!r}  [circuit: {h_state}]")
+
+        reply = broken_agent.generate_reply(messages)
+        b_state = cap.get_breaker("broken_agent").state.value
+        print(f"  broken_agent   -> {reply!r}  [circuit: {b_state}]")
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # -- CircuitBreakerCapability pattern (recommended) --
+    demo_capability_circuit_breaker()
+    demo_capability_safe_mode()
+    demo_capability_per_agent()
+
+    # -- Original wrapper pattern (reference) --
     demo_circuit_breaker()
     demo_safe_mode()
     demo_per_agent_tracking()
     demo_token_budget()
 
     print("\n" + "=" * 60)
-    print("Core pattern (5 lines):")
+    print("Patterns at a glance:")
     print("=" * 60)
     print("""
+  -- CircuitBreakerCapability (recommended) --
+
+    cap = CircuitBreakerCapability(failure_threshold=3, recovery_timeout=60)
+    cap.add_to_agent(agent)
+
+    reply = agent.generate_reply(messages)   # unchanged call site
+
+  -- Original wrapper (reference) --
+
     def guarded_reply(agent, messages):
         if veronica.state.current_state == VeronicaState.SAFE_MODE:
             return None

@@ -44,6 +44,17 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   `ctx.get_partial_result(node_id)` to retrieve it later. `NodeRecord.partial_buffer`
   holds the reference.
 
+- **CircuitBreakerCapability** (`veronica_core.adapters.ag2_capability`): AG2
+  `AgentCapability`-compatible adapter that attaches a per-agent `CircuitBreaker`
+  without requiring call-site changes. Call `cap.add_to_agent(agent)` once;
+  `generate_reply()` is wrapped transparently. Accepts an optional
+  `veronica: VeronicaIntegration` argument for system-wide `SAFE_MODE` propagation
+  across all attached agents. Exported from the top-level package as
+  `from veronica_core import CircuitBreakerCapability`. Updated AG2 example in
+  `examples/integrations/autogen/` extended to 7 demos (demos 5–7 cover
+  `CircuitBreakerCapability`; demos 1–4 retain the original wrapper pattern as
+  reference).
+
 ### Tests
 
 - `tests/test_middleware.py` (8): ASGI lifespan passthrough, normal 200, 429-on-HALT,
@@ -57,6 +68,15 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   sequential calls get separate buffers, exception resets ContextVar, existing wrap
   behavior unchanged, mark_complete on success, multiple buffers per context, HALT
   leaves buffer partial, NodeRecord stores reference.
+- `tests/test_ag2_capability.py` (21): CircuitBreaker attaches via add_to_agent,
+  circuit opens after failure_threshold None replies, open circuit returns None without
+  calling generate_reply, HALF_OPEN probe on recovery, successful probe closes circuit,
+  independent circuits per agent, SAFE_MODE blocks all agents, SAFE_MODE cleared
+  resumes normal operation, no VeronicaIntegration works standalone, failure_count
+  resets on success, get_breaker returns correct instance, multiple add_to_agent calls
+  idempotent, recovery_timeout respected, non-None reply records pass, mixed agents
+  one broken one healthy, circuit state export, failure after partial recovery resets,
+  default parameters, keyword arguments accepted, docstring presence.
 
 ---
 
