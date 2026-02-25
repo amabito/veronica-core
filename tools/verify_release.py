@@ -127,7 +127,7 @@ def check_key_pin(result: CheckResult) -> None:
         result.fail(f"Key pin file missing: {KEY_PIN_PATH}")
         return
 
-    pem_bytes = PUBLIC_KEY_PATH.read_bytes().strip()
+    pem_bytes = PUBLIC_KEY_PATH.read_bytes().replace(b"\r\n", b"\n").strip()
     actual_pin = hashlib.sha256(pem_bytes).hexdigest()
     expected_pin = KEY_PIN_PATH.read_text(encoding="utf-8").strip()
 
