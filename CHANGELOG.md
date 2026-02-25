@@ -2,9 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+Each release entry includes a **Breaking changes** line. Entries marked `none` are safe to upgrade.
+
 ---
 
 ## [0.10.7] — 2026-02-25 — PyPI Metadata & Package Housekeeping
+
+**Breaking changes:** none
 
 ### Packaging
 
@@ -27,6 +31,8 @@ All notable changes to this project will be documented in this file.
 ---
 
 ## [0.10.6] — 2026-02-25 — Test Suite Quality Overhaul
+
+**Breaking changes:** none
 
 ### Tests
 
@@ -80,6 +86,8 @@ All notable changes to this project will be documented in this file.
 ---
 
 ## [0.10.5] — 2026-02-23 — Adversarial Security Hardening
+
+**Breaking changes:** none
 
 ### Security
 
@@ -141,6 +149,8 @@ All notable changes to this project will be documented in this file.
 
 ## [0.10.4] — 2026-02-22 — Concurrency & Isolation Hotfix
 
+**Breaking changes:** none
+
 ### Security
 
 - **CRITICAL** (`budget.py`): `BudgetEnforcer.spend()` now uses check-then-add within a single
@@ -169,6 +179,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.10.3] - 2026-02-22
+
+**Breaking changes:** none
 
 ### Security
 
@@ -212,6 +224,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.10.2] - 2026-02-22
+
+**Breaking changes:** none
 
 ### Security
 
@@ -267,6 +281,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ## [0.10.1] - 2026-02-22
 
+**Breaking changes:** none
+
 ### Security
 
 - **`_load_key()` warning on dev key fallback** (`security/policy_signing.py`): emit
@@ -302,6 +318,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.10.0] - 2026-02-22
+
+**Breaking changes:** none
 
 ### Added
 
@@ -342,6 +360,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ## [0.9.7] - 2026-02-22
 
+**Breaking changes:** none
+
 ### Fixed
 
 - **Thread safety (11 issues):**
@@ -375,6 +395,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ## [0.9.6] - 2026-02-21
 
+**Breaking changes:** none
+
 ### Added
 - `SemanticLoopGuard` — pure-Python semantic loop detection using word-level
   Jaccard similarity; no heavy dependencies required
@@ -395,6 +417,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.9.5] — 2026-02-21
+
+**Breaking changes:** none
 
 ### Added
 - `veronica_core.adapters.langchain` module: LangChain callback handler.
@@ -418,6 +442,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.9.4] — 2026-02-21
+
+**Breaking changes:** none
 
 ### Added
 - `veronica_core.patch` module: opt-in SDK monkey-patching for OpenAI and Anthropic clients.
@@ -443,6 +469,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ## [0.9.3] — 2026-02-21
 
+**Breaking changes:** none
+
 ### Added
 - `veronica_core.inject` module: decorator-based execution boundary injection.
   - `veronica_guard(max_cost_usd, max_steps, max_retries_total, timeout_ms, return_decision)`:
@@ -463,6 +491,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ## [0.9.2] — 2026-02-21
 
+**Breaking changes:** none
+
 ### Fixed
 - `release.yml`: replaced `secrets != ''` if-condition (invalid at workflow parse-time)
   with shell guard `[ -n "${VAR}" ]`; signing step now skips cleanly when key is absent.
@@ -475,6 +505,8 @@ or invocations breaks isolation regardless of per-call policy correctness.
 ---
 
 ## [0.9.1] — 2026-02-21
+
+**Breaking changes:** none
 
 ### Added
 - `AIcontainer` (`veronica_core.container`): declarative execution boundary that composes
