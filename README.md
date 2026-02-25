@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
-![CI](https://img.shields.io/badge/tests-1253%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1289%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -702,6 +702,8 @@ run. The full verifiable claim set is documented in
 | Public key is pinned | SHA-256 pin in `policies/key_pin.txt` | `tests/security/test_key_pin.py` |
 | Policy rollback is detected | `RollbackGuard` checks `policy_version` monotonicity | `tests/security/test_policy_rollback.py` |
 | Release artifacts are verified | `tools/verify_release.py` exits 0 | `tests/tools/test_release_tools.py` |
+| AuditLog hash chain survives concurrent writes | 10-thread concurrent append, chain integrity verified | `tests/security/test_audit_log_thread_safety.py` |
+| Aliased subprocess imports detected | AST linter catches `import subprocess as sp; sp.run(...)` | `tests/security/test_lint_no_raw_exec.py` |
 
 ### Threat Model Coverage
 
@@ -713,6 +715,8 @@ run. The full verifiable claim set is documented in
 | Policy tampering | Ed25519 sig verification at load |
 | Rollback attack | RollbackGuard monotonic version check |
 | Privilege escalation | AttestationChecker mid-session anomaly |
+| Aliased exec bypass (`import os as x; x.system(...)`) | AST linter alias detection |
+| State backend corruption | JSONBackend graceful fallback on corrupted data |
 
 Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
