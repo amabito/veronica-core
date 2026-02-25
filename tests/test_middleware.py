@@ -141,7 +141,7 @@ def test_asgi_passthrough_non_http() -> None:
                 return
 
     middleware = VeronicaASGIMiddleware(_lifespan_app, config=_make_config())
-    asyncio.get_event_loop().run_until_complete(_call_asgi_lifespan(middleware))
+    asyncio.run(_call_asgi_lifespan(middleware))
 
     assert "startup" in reached
     assert "shutdown" in reached
@@ -156,7 +156,7 @@ def test_asgi_allow_request() -> None:
         await _ok_app(scope, receive, send)
 
     middleware = VeronicaASGIMiddleware(_counting_app, config=_make_config())
-    status, body = asyncio.get_event_loop().run_until_complete(_call_asgi_http(middleware))
+    status, body = asyncio.run(_call_asgi_http(middleware))
 
     assert status == 200
     assert body == b"ok"
@@ -172,7 +172,7 @@ def test_asgi_halt_returns_429() -> None:
         await _ok_app(scope, receive, send)
 
     middleware = VeronicaASGIMiddleware(_tracking_app, config=_halting_config())
-    status, _ = asyncio.get_event_loop().run_until_complete(_call_asgi_http(middleware))
+    status, _ = asyncio.run(_call_asgi_http(middleware))
 
     assert status == 429
     assert app_called == [], "inner app must not be called when halted"
@@ -187,7 +187,7 @@ def test_asgi_context_injectable() -> None:
         await _ok_app(scope, receive, send)
 
     middleware = VeronicaASGIMiddleware(_capturing_app, config=_make_config())
-    asyncio.get_event_loop().run_until_complete(_call_asgi_http(middleware))
+    asyncio.run(_call_asgi_http(middleware))
 
     assert len(captured) == 1
     assert isinstance(captured[0], ExecutionContext)
@@ -196,7 +196,7 @@ def test_asgi_context_injectable() -> None:
 def test_asgi_context_none_outside() -> None:
     """get_current_execution_context() returns None after the request completes."""
     middleware = VeronicaASGIMiddleware(_ok_app, config=_make_config())
-    asyncio.get_event_loop().run_until_complete(_call_asgi_http(middleware))
+    asyncio.run(_call_asgi_http(middleware))
 
     assert get_current_execution_context() is None
 
