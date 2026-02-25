@@ -722,7 +722,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
-## Ship Readiness (v0.10.6)
+## Ship Readiness (v0.10.7)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -761,6 +761,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] Concurrency: atomic budget spend, CircuitBreaker isolation, per-invocation guard (v0.10.4)
 - [x] Adversarial hardening: TokenBudgetHook TOCTOU fix, BudgetWindow boundary fix, frequency divergence, RetryContainer jitter, PartialBufferOverflow (v0.10.5)
 - [x] Test suite quality overhaul: Classical Testing alignment, requirement-driven tests, async/E2E/fault-injection coverage, aliased import detection (v0.10.6)
+- [x] PyPI metadata: license display fix, Beta status, AI classifier, expanded keywords, project URLs (v0.10.7)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
@@ -802,6 +803,7 @@ pytest
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.10.7 | 2026-02-25 | PyPI metadata: license fix, Beta status, AI classifier, expanded keywords, project URLs |
 | 0.10.6 | 2026-02-25 | Test suite quality overhaul: Classical Testing alignment, 37 new behavioral tests, aliased import detection |
 | 0.10.5 | 2026-02-23 | Adversarial hardening: TOCTOU fix, PartialBufferOverflow, frequency divergence, jitter, event cap |
 | 0.10.4 | 2026-02-22 | Concurrency & isolation: atomic spend, CircuitBreaker isolation, per-invocation guard |
