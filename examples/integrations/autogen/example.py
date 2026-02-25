@@ -13,12 +13,17 @@ Demos:
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from veronica_core import TokenBudgetHook, VeronicaIntegration
 from veronica_core.backends import MemoryBackend
 from veronica_core.shield import Decision, ToolCallContext
 from veronica_core.state import VeronicaState
+
+# Suppress atexit teardown noise from VeronicaExit (demo-only; real apps keep
+# the exit handler at WARNING so operators can observe graceful shutdown).
+logging.getLogger("veronica_core.exit").setLevel(logging.CRITICAL)
 
 
 # ---------------------------------------------------------------------------
@@ -250,9 +255,9 @@ def demo_token_budget() -> None:
     the budget allows 5000 total, so the agent is halted partway through.
 
     Progression:
-      rounds 1-2 -> ALLOW (usage: 1500, 3000 tokens)
-      round 3    -> DEGRADE zone (80% of 5000 = 4000 tokens reached)
-      round 4    -> HALT (5000 ceiling reached)
+      rounds 1-3 -> ALLOW (running total: 1 500 / 3 000 / 4 500 tokens)
+      round 4    -> DEGRADE zone (4 500 tokens used; threshold 80% = 4 000)
+      round 5    -> HALT (6 000 tokens used; ceiling 5 000)
     """
     print("\n" + "=" * 60)
     print("Demo 4: Token Budget (v0.10.5)")
