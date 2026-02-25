@@ -132,6 +132,13 @@ from veronica_core.shield.degradation import DegradationLadder, DegradationConfi
 # PolicyDecision helpers (v0.10.0)
 from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limit_decision
 
+# ASGI/WSGI Middleware (v0.10.8)
+from veronica_core.middleware import (
+    VeronicaASGIMiddleware,
+    VeronicaWSGIMiddleware,
+    get_current_execution_context,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -238,4 +245,8 @@ __all__ = [
     "deny",
     "model_downgrade",
     "rate_limit_decision",
+    # ASGI/WSGI Middleware (v0.10.8)
+    "VeronicaASGIMiddleware",
+    "VeronicaWSGIMiddleware",
+    "get_current_execution_context",
 ]
