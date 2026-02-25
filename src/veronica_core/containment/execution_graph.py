@@ -31,6 +31,7 @@ Usage::
 #   - Incremental depth tracking
 #   - Aggregate counters updated atomically on status transitions
 #   - snapshot() returns deep-copied JSON-serializable dict
+# v0.11 — cost-rate and token-velocity divergence heuristics added.
 # ---------------------------------------------------------------------------
 
 from __future__ import annotations
@@ -112,7 +113,12 @@ class ExecutionGraph:
             a random UUID is generated.
     """
 
-    def __init__(self, chain_id: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        chain_id: Optional[str] = None,
+        cost_rate_threshold_usd_per_sec: float = 0.10,
+        token_velocity_threshold: float = 500.0,
+    ) -> None:
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()
 
@@ -132,6 +138,12 @@ class ExecutionGraph:
         self._total_tool_calls: int = 0
         self._total_retries: int = 0
         self._max_depth: int = 0
+
+        # Time-based divergence heuristics state.
+        self._init_time: float = time.time()
+        self._cost_rate_threshold_usd_per_sec: float = cost_rate_threshold_usd_per_sec
+        self._token_velocity_threshold: float = token_velocity_threshold
+        self._total_tokens_out: int = 0
 
         # Divergence detection state.
         # _sig_window: ring buffer of the last _K node signatures seen in
@@ -344,6 +356,44 @@ class ExecutionGraph:
                 self._total_llm_calls += 1
             elif node.kind == "tool":
                 self._total_tool_calls += 1
+            # Accumulate output tokens for velocity tracking.
+            if tokens_out is not None:
+                self._total_tokens_out += tokens_out
+            # Check time-based divergence signals using per-node elapsed time.
+            # elapsed_ms: duration of this node in milliseconds (at least 1ms to avoid div-by-zero).
+            elapsed_ms = max(node.end_ts_ms - node.start_ts_ms, 1)
+            if cost_usd > 0:
+                cost_rate = cost_usd / elapsed_ms * 1000  # USD per second
+                cost_key = (("COST_RATE_EXCEEDED", "cost_rate"), "cost_rate")
+                if (
+                    cost_rate > self._cost_rate_threshold_usd_per_sec
+                    and cost_key not in self._emitted_divergences
+                ):
+                    self._emitted_divergences.add(cost_key)
+                    self._pending_divergence_events.append({
+                        "event_type": "COST_RATE_EXCEEDED",
+                        "severity": "warn",
+                        "cost_rate": cost_rate,
+                        "threshold": self._cost_rate_threshold_usd_per_sec,
+                        "node_id": node_id,
+                        "chain_id": self._chain_id,
+                    })
+            if tokens_out is not None and elapsed_ms > 0:
+                token_velocity = tokens_out / elapsed_ms * 1000  # tokens per second
+                velocity_key = (("TOKEN_VELOCITY_EXCEEDED", "token_velocity"), "token_velocity")
+                if (
+                    token_velocity > self._token_velocity_threshold
+                    and velocity_key not in self._emitted_divergences
+                ):
+                    self._emitted_divergences.add(velocity_key)
+                    self._pending_divergence_events.append({
+                        "event_type": "TOKEN_VELOCITY_EXCEEDED",
+                        "severity": "warn",
+                        "token_velocity": token_velocity,
+                        "threshold": self._token_velocity_threshold,
+                        "node_id": node_id,
+                        "chain_id": self._chain_id,
+                    })
 
     def mark_failure(
         self,
@@ -530,6 +580,7 @@ class ExecutionGraph:
                     # consecutive and frequency detections separately.
                     # Ephemeral pending events are NOT included.
                     "divergence_emitted_count": len(self._emitted_divergences),
+                    "total_tokens_out": self._total_tokens_out,
                 },
                 "snapshot_ts_ms": _now_ms(),
             }
