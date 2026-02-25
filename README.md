@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
-![CI](https://img.shields.io/badge/tests-1289%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1303%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -726,7 +726,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
-## Ship Readiness (v0.10.7)
+## Ship Readiness (v0.11.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -766,10 +766,13 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] Adversarial hardening: TokenBudgetHook TOCTOU fix, BudgetWindow boundary fix, frequency divergence, RetryContainer jitter, PartialBufferOverflow (v0.10.5)
 - [x] Test suite quality overhaul: Classical Testing alignment, requirement-driven tests, async/E2E/fault-injection coverage, aliased import detection (v0.10.6)
 - [x] PyPI metadata: license display fix, Beta status, AI classifier, expanded keywords, project URLs (v0.10.7)
+- [x] VeronicaASGIMiddleware / VeronicaWSGIMiddleware: per-request ExecutionContext via ContextVar, 429 on HALT (v0.11.0)
+- [x] Time-based divergence heuristics: COST_RATE_EXCEEDED, TOKEN_VELOCITY_EXCEEDED, deduped per chain (v0.11.0)
+- [x] PartialResultBuffer integration: WrapOptions.partial_buffer, get_partial_result(), auto mark_complete (v0.11.0)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1289 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment.
+1303 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers.
 
 ---
 
@@ -791,10 +794,10 @@ LLM Providers
 
 ## Roadmap
 
-### v0.11 (planned)
-- Middleware mode (ASGI/WSGI integration for request-scoped containment)
-- Improved divergence heuristics (cost-rate detection, token-velocity windows)
-- PartialResultBuffer integration with ExecutionContext event stream
+### v0.11 (released 2026-02-25)
+- [x] Middleware mode (ASGI/WSGI integration for request-scoped containment)
+- [x] Improved divergence heuristics (cost-rate detection, token-velocity windows)
+- [x] PartialResultBuffer integration with ExecutionContext event stream
 
 ### v1.0
 - Stable `ExecutionContext` API with formal deprecation policy

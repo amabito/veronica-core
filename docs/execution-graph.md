@@ -342,6 +342,7 @@ def get_snapshot(self):
     "total_llm_calls": 1,
     "total_tool_calls": 1,
     "total_retries": 0,
+    "total_tokens_out": 820,
     "max_depth": 2
   },
   "snapshot_ts_ms": 1740000002200
@@ -412,6 +413,7 @@ def get_snapshot(self):
     "total_llm_calls": 1,
     "total_tool_calls": 0,
     "total_retries": 0,
+    "total_tokens_out": 3000,
     "max_depth": 1
   },
   "snapshot_ts_ms": 1740000011650
