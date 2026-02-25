@@ -578,22 +578,31 @@ class ExecutionContext:
         # Drain any divergence events produced by mark_running and forward
         # them to the chain-level event log.  Divergence does NOT halt
         # execution; the Decision remains ALLOW unless another condition fires.
+        # Events may be signature-based (consecutive/frequency) or rate-based
+        # (COST_RATE_EXCEEDED, TOKEN_VELOCITY_EXCEEDED); handle both shapes.
         for div_evt in self._graph.drain_divergence_events():
-            safe_evt = SafetyEvent(
-                event_type="divergence_suspected",
-                decision=Decision.ALLOW,
-                reason=(
+            event_type = div_evt.get("event_type", "divergence_suspected")
+            if "signature" in div_evt:
+                reason = (
                     f"repeated {div_evt['signature'][0]}/{div_evt['signature'][1]}"
                     f" x{div_evt['repeat_count']}"
-                ),
-                hook="ExecutionGraph",
-                request_id=self._metadata.request_id,
-                metadata={
+                )
+                metadata: dict[str, Any] = {
                     "signature": div_evt["signature"],
                     "repeat_count": div_evt["repeat_count"],
                     "chain_id": div_evt["chain_id"],
                     "last_node_id": graph_node_id,
-                },
+                }
+            else:
+                reason = event_type
+                metadata = {**div_evt, "last_node_id": graph_node_id}
+            safe_evt = SafetyEvent(
+                event_type=event_type,
+                decision=Decision.ALLOW,
+                reason=reason,
+                hook="ExecutionGraph",
+                request_id=self._metadata.request_id,
+                metadata=metadata,
             )
             with self._lock:
                 if safe_evt not in self._events:
