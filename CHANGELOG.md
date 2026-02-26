@@ -6,19 +6,44 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [1.0.0] — 2026-02-26 — API Polish & Security Hardening
+## [1.0.0] — 2026-02-26 — Production Release & Adversarial Hardening
 
 **Breaking changes:** `on_error()` default changed from ALLOW to HALT. `AIcontainer` renamed to `AIContainer`.
 
-### Security
+### Security (Adversarial Review Fixes)
+
+- **CRITICAL** (`policy_engine.py`): `go run`/`go generate` shell injection blocked.
+  Added `go` to `SHELL_DENY_EXEC_FLAGS` with `frozenset({"run", "generate", "tool", "env"})`.
+- **CRITICAL** (`integration.py`): TOCTOU race in `record_fail()` fixed. State mutation
+  and guard cooldown activation now wrapped in a single `_op_lock`.
+- **CRITICAL** (`execution_context.py`): Redis budget double-spend fixed. Cost
+  reconciliation now uses local delta increment instead of overwriting with Redis
+  global total.
+- **HIGH** (`masking.py`): `SecretMasker` bytes leak fixed. `bytes` values are now
+  decoded to `str` before masking, preventing raw secret bytes in output.
+- **HIGH** (`circuit_breaker.py`): HALF_OPEN state now enforces single concurrent
+  test request via `_half_open_in_flight` counter.
+- **HIGH** (`retry.py`): `RetryContainer` thread-safety added with `threading.Lock`
+  on `_attempt_count` and `_total_retries`.
+- **HIGH** (`policy_engine.py`): Unicode operator bypass blocked via NFKC
+  normalization before shell operator checks.
+- **MEDIUM** (`execution_context.py`): `attach_partial_buffer()` guard prevents
+  overwrite of existing buffer.
+- **MEDIUM** (`state.py`): `from_dict()` shallow-copies mutable dicts to prevent
+  shared reference mutation.
+- **MEDIUM** (`langchain.py`): Zero-token LLM response bypass removed. Responses
+  with `total_tokens=0` are now tracked correctly.
+
+### Security (Design Hardening)
 
 - `ShieldPipeline.on_error()` now defaults to HALT (fail-closed). Pass
   `on_error_policy=Decision.ALLOW` to restore the previous fail-open behavior.
-- `SecretMasker` handles mixed-type lists and nested dicts recursively,
-  preventing partial masking when secret values appear inside nested structures.
 - Redis budget reconciliation on reconnect prevents cost bypass: accumulated
   spend is re-read from Redis on successful reconnect and reconciled against the
   in-process counter before new calls are allowed.
+- `_load_key()` raises `RuntimeError` in non-DEV environments when
+  `VERONICA_POLICY_KEY` is not set, preventing deployment with the publicly-known
+  development key.
 
 ### Breaking Changes
 
@@ -39,6 +64,8 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   cost accounting.
 - OpenClaw integration marked as experimental; available via
   `veronica_core.adapters.openclaw` (import guard present).
+- AG2 `CircuitBreakerCapability` now uses `breaker.check()` instead of direct
+  state access, enforcing HALF_OPEN single-request semantics.
 
 ### Fixed
 
@@ -48,6 +75,8 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   under a `threading.Lock`.
 - Redis fallback reset on successful reconnect: fallback mode is cleared when
   the Redis connection is restored, preventing permanent degraded mode.
+- `get_cooldown_remaining()` race condition: `KeyError` on concurrent cooldown
+  expiry now caught gracefully.
 
 ### Deprecations
 
@@ -55,6 +84,12 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   construction. Use `PersistenceBackend` (`veronica_core.backends`) instead.
 - `AIcontainer`: runtime `DeprecationWarning` emitted on access. Use
   `AIContainer` instead.
+
+### Tests
+
+- 1465 tests passing (was 1415), +46 adversarial regression tests covering
+  concurrency, type variations, TOCTOU races, and shell injection vectors.
+- 4 xfailed (pre-existing SHA pin, unrelated to this release).
 
 ---
 
