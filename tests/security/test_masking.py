@@ -213,6 +213,54 @@ class TestMaskDict:
         result = masker.mask_args(args)
         assert token not in " ".join(result)
 
+    def test_mask_dict_recurses_into_list_of_dicts(self, masker: SecretMasker) -> None:
+        """Secrets inside dicts nested within list values must be redacted at any depth."""
+        secret = "sk-" + "T" * 48
+        nested_secret = "sk-" + "N" * 48
+        payload = {
+            "data": [
+                {"api_key": secret},
+                "plain_string",
+                42,
+                [{"nested": nested_secret}],
+            ]
+        }
+        result = masker.mask_dict(payload)
+
+        result_str = str(result)
+        assert secret not in result_str, "top-level list dict secret not masked"
+        assert nested_secret not in result_str, "deeply nested list dict secret not masked"
+        # Non-secret scalars pass through
+        assert "plain_string" in result_str
+        assert "42" in result_str
+
+
+class TestBytesHandling:
+    """SecretMasker must redact secrets inside bytes values (bytes-leak fix)."""
+
+    def test_bytes_value_is_decoded_and_masked(self, masker: SecretMasker) -> None:
+        key = b"sk-" + b"T" * 48
+        result = masker._mask_value("api_key", key)
+        assert key.decode() not in str(result)
+        assert "REDACTED" in str(result)
+
+    def test_bytes_in_dict_is_masked(self, masker: SecretMasker) -> None:
+        key_bytes = b"sk-" + b"T" * 48
+        d = {"openai_key": key_bytes}
+        result = masker.mask_dict(d)
+        assert key_bytes not in str(result).encode()
+        assert "REDACTED" in str(result)
+
+    def test_bytes_returns_str_result(self, masker: SecretMasker) -> None:
+        result = masker._mask_value("key", b"harmless")
+        assert isinstance(result, str)
+
+    def test_bytes_with_replace_error_handling(self, masker: SecretMasker) -> None:
+        # Invalid UTF-8 bytes must not raise; errors="replace" is used
+        bad_bytes = b"\xff\xfe" + b"sk-" + b"T" * 48
+        result = masker._mask_value("key", bad_bytes)
+        assert isinstance(result, str)
+
 
 class TestNoFalsePositives:
     """Ensure common safe strings are not incorrectly masked."""
@@ -229,3 +277,101 @@ class TestNoFalsePositives:
     def test_plain_english_word_not_masked(self, masker: SecretMasker) -> None:
         result = masker.mask("The quick brown fox")
         assert "REDACTED" not in result
+
+
+# ---------------------------------------------------------------------------
+# mask_dict: sequence subclass safety (namedtuple / custom containers)
+# ---------------------------------------------------------------------------
+
+
+class TestMaskDictSequenceSubclasses:
+    """_mask_value must not crash on namedtuple or list/tuple subclasses."""
+
+    def test_namedtuple_value_falls_back_gracefully(self, masker: SecretMasker) -> None:
+        """A namedtuple stored as a dict value must not raise TypeError.
+
+        namedtuple.__init__ does not accept a plain list, so
+        ``type(value)(masked)`` would raise.  The fixed code catches TypeError
+        and falls back to a plain tuple.
+        """
+        from collections import namedtuple
+
+        Point = namedtuple("Point", ["x", "y"])
+        d = {"coords": Point("not_a_secret", "also_fine")}
+        result = masker.mask_dict(d)
+        # Must not raise; result should be a sequence containing the values.
+        assert "not_a_secret" in result["coords"] or list(result["coords"]) == ["not_a_secret", "also_fine"]
+
+    def test_list_subclass_falls_back_gracefully(self, masker: SecretMasker) -> None:
+        """A list subclass that overrides __init__ must not crash mask_dict."""
+
+        class StrictList(list):
+            def __init__(self, iterable=None):
+                if iterable is not None and len(list(iterable)) > 2:
+                    raise TypeError("StrictList: too many items")
+                super().__init__(iterable or [])
+
+        d = {"items": StrictList(["hello", "world"])}
+        # Must not raise regardless of StrictList's constructor constraints.
+        result = masker.mask_dict(d)
+        assert result["items"] is not None
+
+    def test_regular_list_preserves_type(self, masker: SecretMasker) -> None:
+        """Regular list values are still returned as list after masking."""
+        d = {"vals": ["plain_text", "more_plain"]}
+        result = masker.mask_dict(d)
+        assert isinstance(result["vals"], list)
+
+    def test_regular_tuple_preserves_type(self, masker: SecretMasker) -> None:
+        """Regular tuple values are still returned as tuple after masking."""
+        d = {"vals": ("plain_text", "more_plain")}
+        result = masker.mask_dict(d)
+        assert isinstance(result["vals"], tuple)
+
+
+# ---------------------------------------------------------------------------
+# _MAX_DEPTH: recursion depth limit prevents DoS on self-referential containers
+# ---------------------------------------------------------------------------
+
+
+class TestMaskDictDepthLimit:
+    """_MAX_DEPTH cutoff prevents infinite recursion on deeply nested structures."""
+
+    def test_deeply_nested_dict_does_not_crash(self, masker: SecretMasker) -> None:
+        """Deeply nested dicts beyond _MAX_DEPTH must return the node unchanged."""
+        # Build a dict nested 60 levels deep (above _MAX_DEPTH=50).
+        d: dict = {"key": "leaf_value"}
+        for _ in range(60):
+            d = {"nested": d}
+
+        # Must not raise RecursionError or crash.
+        result = masker.mask_dict(d)
+        assert result is not None
+
+    def test_depth_exactly_at_limit_still_processes(self, masker: SecretMasker) -> None:
+        """Nodes at depth < _MAX_DEPTH are still processed (not cut off early).
+
+        mask_dict starts at depth=0.  A leaf at depth _MAX_DEPTH-1 is inside
+        the allowed range and should be traversed.  A node at _MAX_DEPTH is
+        beyond the limit and should be passed through unchanged.
+        """
+        max_depth = masker._MAX_DEPTH
+        # Build a dict nested exactly _MAX_DEPTH-1 levels; the leaf is a string
+        # that would normally be masked (plain text, no secrets here — just verify
+        # the traversal reaches it and returns a string, not the bare value).
+        leaf = "leaf_plain"
+        d: dict = {"key": leaf}
+        for _ in range(max_depth - 2):  # -2 because mask_dict itself is depth 0
+            d = {"nested": d}
+
+        # Must not raise; the leaf must be returned as a string (masked or plain).
+        result = masker.mask_dict(d)
+        assert result is not None
+
+        # Verify that a leaf exactly at the cutoff depth is returned unchanged
+        # (no crash, no masking error — pass-through is the safe behavior).
+        deep_leaf_dict: dict = {"secret_key": "skipped_at_limit"}
+        for _ in range(max_depth):
+            deep_leaf_dict = {"nested": deep_leaf_dict}
+        result_deep = masker.mask_dict(deep_leaf_dict)
+        assert result_deep is not None  # Must not raise

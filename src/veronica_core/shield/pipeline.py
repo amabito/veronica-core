@@ -10,6 +10,7 @@ via ``get_events()`` / ``clear_events()``.
 from __future__ import annotations
 
 import threading
+from typing import Final, Optional
 
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.hooks import (
@@ -21,8 +22,8 @@ from veronica_core.shield.hooks import (
 )
 from veronica_core.shield.types import Decision, ToolCallContext
 
-# Map hook class names to structured event_type strings.
-_HOOK_EVENT_TYPES: dict[str, str] = {
+# Map hook class names to structured event_type strings (read-only config).
+_HOOK_EVENT_TYPES: Final[dict[str, str]] = {
     "SafeModeHook": "SAFE_MODE",
     "BudgetWindowHook": "BUDGET_WINDOW_EXCEEDED",
     "TokenBudgetHook": "TOKEN_BUDGET_EXCEEDED",
@@ -43,7 +44,17 @@ def _event_type_for(hook: object) -> str:
 
 
 class ShieldPipeline:
-    """Evaluates registered hooks and returns a Decision."""
+    """Evaluates registered hooks and returns a Decision.
+
+    on_error policy changed in v1.0.0:
+        Default changed from ALLOW to HALT (fail-closed).  Any pipeline that
+        has no retry hook registered now halts on unhandled errors rather than
+        allowing execution to continue.
+
+        To restore the old behaviour explicitly::
+
+            pipeline = ShieldPipeline(on_error_policy=Decision.ALLOW)
+    """
 
     def __init__(
         self,
@@ -52,12 +63,17 @@ class ShieldPipeline:
         retry: RetryBoundaryHook | None = None,
         budget: BudgetBoundaryHook | None = None,
         tool_dispatch: ToolDispatchHook | None = None,
+        on_error_policy: Optional[Decision] = None,
     ) -> None:
         self._pre_dispatch = pre_dispatch
         self._egress = egress
         self._retry = retry
         self._budget = budget
         self._tool_dispatch = tool_dispatch
+        # None → use secure default (HALT). Callers can opt in to ALLOW explicitly.
+        self._on_error_policy: Decision = (
+            on_error_policy if on_error_policy is not None else Decision.HALT
+        )
         self._safety_events: list[SafetyEvent] = []
         self._lock = threading.Lock()
 
@@ -129,7 +145,19 @@ class ShieldPipeline:
         return Decision.ALLOW
 
     def on_error(self, ctx: ToolCallContext, err: BaseException) -> Decision:
-        """Evaluate retry boundary hook."""
+        """Evaluate retry boundary hook.
+
+        When a hook is registered:
+          - Hook returns a Decision → use it (record if not ALLOW).
+          - Hook defers (returns None) → ALLOW (explicit no-opinion).
+
+        When no hook is registered:
+          - Uses ``on_error_policy`` (default: HALT, fail-closed).
+          - Pass ``on_error_policy=Decision.ALLOW`` to ShieldPipeline.__init__ to
+            restore the pre-v1.0.0 behaviour explicitly.
+
+        Default changed from ALLOW to HALT in v1.0.0 for fail-closed security.
+        """
         if self._retry is not None:
             result = self._retry.on_error(ctx, err)
             if result is not None:
@@ -141,7 +169,10 @@ class ShieldPipeline:
                         ctx.request_id,
                     )
                 return result
-        return Decision.ALLOW
+            # Hook deferred (returned None) — explicit no-opinion means allow.
+            return Decision.ALLOW
+        # No retry hook: apply the configured policy (default: HALT, fail-closed).
+        return self._on_error_policy
 
     def before_charge(self, ctx: ToolCallContext, cost_usd: float) -> Decision:
         """Evaluate budget boundary hook."""

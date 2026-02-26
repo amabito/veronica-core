@@ -38,7 +38,7 @@ class SemanticLoopGuard:
     Example::
 
         guard = SemanticLoopGuard(window=3, jaccard_threshold=0.92)
-        container = AIcontainer(semantic_guard=guard)
+        container = AIContainer(semantic_guard=guard)
         guard.feed("The answer is 42.")
         guard.feed("The answer is 42.")  # -> deny
     """

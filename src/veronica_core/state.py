@@ -7,7 +7,7 @@ Replaces global variables with proper state management.
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, Optional, List
+from typing import Dict, Final, Optional, List
 import threading
 import time
 import logging
@@ -24,13 +24,14 @@ class VeronicaState(Enum):
     ERROR = "ERROR"         # System error state
 
 
-# Valid state transitions: from_state -> set of allowed to_states
-VALID_TRANSITIONS: Dict[VeronicaState, set] = {
-    VeronicaState.IDLE: {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
-    VeronicaState.SCREENING: {VeronicaState.IDLE, VeronicaState.COOLDOWN, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
-    VeronicaState.COOLDOWN: {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR},
-    VeronicaState.SAFE_MODE: {VeronicaState.IDLE, VeronicaState.ERROR},
-    VeronicaState.ERROR: {VeronicaState.IDLE, VeronicaState.SAFE_MODE},
+# Valid state transitions: from_state -> frozenset of allowed to_states.
+# Final + frozenset values prevents accidental mutation by any caller.
+VALID_TRANSITIONS: Final[Dict[VeronicaState, frozenset]] = {
+    VeronicaState.IDLE: frozenset({VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
+    VeronicaState.SCREENING: frozenset({VeronicaState.IDLE, VeronicaState.COOLDOWN, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
+    VeronicaState.COOLDOWN: frozenset({VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
+    VeronicaState.SAFE_MODE: frozenset({VeronicaState.IDLE, VeronicaState.ERROR}),
+    VeronicaState.ERROR: frozenset({VeronicaState.IDLE, VeronicaState.SAFE_MODE}),
 }
 
 
@@ -97,6 +98,19 @@ class VeronicaStateMachine:
             if pair in self.fail_counts:
                 logger.info(f"[VERONICA_STATE] {pair} fail counter reset (was {self.fail_counts[pair]})")
                 self.fail_counts.pop(pair, None)
+
+    def set_cooldown(self, pair: str, cooldown_until: float) -> None:
+        """Set cooldown expiry timestamp for pair via the state machine.
+
+        Args:
+            pair: Trading pair identifier.
+            cooldown_until: Unix timestamp when the cooldown expires.
+        """
+        with self._lock:
+            self.cooldowns[pair] = cooldown_until
+            logger.info(
+                f"[VERONICA_STATE] {pair} cooldown set until {cooldown_until:.0f}"
+            )
 
     def _cleanup_pair_locked(self, pair: str) -> None:
         """Cleanup cooldown entry for pair. Must be called with _lock held."""
@@ -203,8 +217,8 @@ class VeronicaStateMachine:
             cooldown_fails=data.get("cooldown_fails", 3),
             cooldown_seconds=data.get("cooldown_seconds", 600),
         )
-        instance.fail_counts = data.get("fail_counts", {})
-        instance.cooldowns = data.get("cooldowns", {})
+        instance.fail_counts = dict(data.get("fail_counts", {}))
+        instance.cooldowns = dict(data.get("cooldowns", {}))
         instance.current_state = VeronicaState(data.get("current_state", "IDLE"))
         instance.state_history = [
             StateTransition(

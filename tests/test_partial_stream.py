@@ -260,3 +260,40 @@ def test_node_record_stores_partial_buffer():
     snap = ctx.get_snapshot()
     assert len(snap.nodes) == 1
     assert snap.nodes[0].partial_buffer is buf
+
+
+# ---------------------------------------------------------------------------
+# Test 13: attach_partial_buffer guard — overwrite prevention
+# ---------------------------------------------------------------------------
+
+def test_attach_partial_buffer_same_buffer_is_idempotent():
+    """attach_partial_buffer() with the same buffer as already set must not raise."""
+    ctx = _make_ctx()
+    buf = PartialResultBuffer()
+    calls: list[str] = []
+
+    def fn() -> None:
+        # Calling attach with the same buf object must succeed (idempotent)
+        attach_partial_buffer(buf)
+        calls.append("ok")
+
+    ctx.wrap_llm_call(fn=fn, options=WrapOptions(partial_buffer=buf))
+    assert calls == ["ok"]
+
+
+def test_attach_partial_buffer_different_buffer_raises():
+    """attach_partial_buffer() with a DIFFERENT buffer must raise RuntimeError."""
+    ctx = _make_ctx()
+    buf_original = PartialResultBuffer()
+    buf_interloper = PartialResultBuffer()
+    errors: list[Exception] = []
+
+    def fn() -> None:
+        try:
+            attach_partial_buffer(buf_interloper)
+        except RuntimeError as exc:
+            errors.append(exc)
+
+    ctx.wrap_llm_call(fn=fn, options=WrapOptions(partial_buffer=buf_original))
+    assert len(errors) == 1
+    assert "different buffer" in str(errors[0]).lower() or "already attached" in str(errors[0]).lower()

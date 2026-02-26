@@ -87,19 +87,53 @@ class SecretMasker:
             text = pattern.sub(_replace, text)
         return text
 
-    def mask_dict(self, d: dict[str, Any]) -> dict[str, Any]:
-        """Recursively mask string values inside a dict."""
-        result: dict[str, Any] = {}
-        for key, value in d.items():
-            if isinstance(value, str):
-                result[key] = self.mask(value)
-            elif isinstance(value, dict):
-                result[key] = self.mask_dict(value)
-            elif isinstance(value, list):
-                result[key] = self.mask_args(value) if all(isinstance(v, str) for v in value) else value
-            else:
-                result[key] = value
-        return result
+    # Hard recursion depth limit to prevent infinite loops on self-referential
+    # containers (DoS protection).
+    _MAX_DEPTH: int = 50
+
+    def _mask_value(self, key: str, value: Any, _depth: int = 0) -> Any:
+        """Dispatch masking for a single value based on its type.
+
+        - str → apply secret patterns
+        - dict → recurse via mask_dict
+        - list | tuple → iterate elements, recurse on each
+        - other → pass through unchanged
+
+        Args:
+            key: The dict key associated with this value (for logging context).
+            value: The value to mask.
+            _depth: Internal recursion depth counter; passed automatically.
+        """
+        if _depth >= self._MAX_DEPTH:
+            # Bail out silently — better to skip masking than to crash or loop.
+            return value
+        if isinstance(value, bytes):
+            return self._mask_value(key, value.decode("utf-8", errors="replace"), _depth)
+        if isinstance(value, str):
+            return self.mask(value)
+        if isinstance(value, dict):
+            return {k: self._mask_value(k, v, _depth + 1) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            masked = [self._mask_value(key, item, _depth + 1) for item in value]
+            # Reconstruct as the same concrete type where possible.
+            # namedtuples and custom sequence subclasses may not accept a
+            # single-iterable constructor (TypeError) or may raise other
+            # exceptions — fall back to plain list/tuple in all error cases.
+            try:
+                return type(value)(masked)
+            except Exception:
+                return list(masked) if isinstance(value, list) else tuple(masked)
+        return value
+
+    def mask_dict(self, d: dict[str, Any], _depth: int = 0) -> dict[str, Any]:
+        """Recursively mask secrets in all string values inside a dict.
+
+        Handles arbitrarily nested structures: dicts, lists of dicts,
+        tuples, and mixed-type containers are all traversed fully.
+        Recursion is bounded by ``_MAX_DEPTH`` to prevent DoS via self-referential
+        containers.
+        """
+        return {key: self._mask_value(key, value, _depth) for key, value in d.items()}
 
     def mask_args(self, args: list[str]) -> list[str]:
         """Mask secrets in each element of a list of strings."""

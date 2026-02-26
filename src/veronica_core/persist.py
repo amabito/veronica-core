@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import json
+import warnings
 from pathlib import Path
 from typing import Optional
 import logging
@@ -12,11 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 class VeronicaPersistence:
-    """Persistence layer for VERONICA state."""
+    """Persistence layer for VERONICA state.
+
+    .. deprecated::
+        Use :class:`veronica_core.backends.JSONBackend` (or
+        :class:`veronica_core.backends.PersistenceBackend` for custom backends)
+        instead. ``VeronicaPersistence`` will be removed in a future release.
+    """
 
     DEFAULT_PATH = Path("data/state/veronica_state.json")
 
     def __init__(self, path: Optional[Path] = None):
+        warnings.warn(
+            "VeronicaPersistence is deprecated and will be removed in a future release. "
+            "Use PersistenceBackend (veronica_core.backends) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.path = path or self.DEFAULT_PATH
         self.path.parent.mkdir(parents=True, exist_ok=True)
 

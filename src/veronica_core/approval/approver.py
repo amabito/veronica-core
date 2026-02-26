@@ -16,6 +16,7 @@ import threading
 import time as _time
 import uuid
 import warnings
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -91,7 +92,7 @@ class NonceRegistry:
     def __init__(self, max_size: int = _DEFAULT_NONCE_REGISTRY_MAX_SIZE) -> None:
         # Maps nonce → monotonic timestamp of insertion
         self._used: dict[str, float] = {}
-        self._order: list[str] = []  # insertion-order list for eviction
+        self._order: deque[str] = deque()  # insertion-order deque for O(1) eviction
         self._max_size = max_size
         self._lock = threading.Lock()
 
@@ -117,7 +118,7 @@ class NonceRegistry:
             self._order.append(nonce)
             # Safety net: cap memory if expiry-based eviction leaves too many
             while len(self._order) > self._max_size:
-                oldest = self._order.pop(0)
+                oldest = self._order.popleft()
                 self._used.pop(oldest, None)
             return True
 
@@ -127,7 +128,7 @@ class NonceRegistry:
         while self._order:
             oldest = self._order[0]
             if self._used.get(oldest, now) < cutoff:
-                self._order.pop(0)
+                self._order.popleft()
                 self._used.pop(oldest, None)
             else:
                 break

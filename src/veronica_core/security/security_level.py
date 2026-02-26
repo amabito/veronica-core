@@ -7,6 +7,7 @@ requirements.
 from __future__ import annotations
 
 import os
+import threading
 from enum import Enum, auto
 from typing import Optional
 
@@ -82,6 +83,7 @@ def detect_security_level() -> SecurityLevel:
 # ---------------------------------------------------------------------------
 
 _current_level: Optional[SecurityLevel] = None
+_level_lock: threading.Lock = threading.Lock()
 
 
 def get_security_level() -> SecurityLevel:
@@ -90,29 +92,37 @@ def get_security_level() -> SecurityLevel:
     The result is cached after the first call.  Use
     :func:`reset_security_level` between tests.
 
+    Thread-safe: reads and writes are protected by ``_level_lock``.
+
     Returns:
         The current :class:`SecurityLevel`.
     """
     global _current_level
-    if _current_level is None:
-        _current_level = detect_security_level()
-    return _current_level
+    with _level_lock:
+        if _current_level is None:
+            _current_level = detect_security_level()
+        return _current_level
 
 
 def set_security_level(level: SecurityLevel) -> None:
     """Override the process-wide security level.
 
+    Thread-safe: protected by ``_level_lock``.
+
     Args:
         level: The :class:`SecurityLevel` to set.
     """
     global _current_level
-    _current_level = level
+    with _level_lock:
+        _current_level = level
 
 
 def reset_security_level() -> None:
     """Clear the cached security level so it is re-detected on next access.
 
-    Intended for use in test teardown.
+    Intended for use in test teardown.  Thread-safe: protected by
+    ``_level_lock``.
     """
     global _current_level
-    _current_level = None
+    with _level_lock:
+        _current_level = None

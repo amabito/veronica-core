@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
-![CI](https://img.shields.io/badge/tests-1355%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1415%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -69,7 +69,7 @@ with ExecutionContext(config=ExecutionConfig(
 7. [OSS and Cloud Boundary](#6-oss-and-cloud-boundary)
 8. [Design Philosophy](#7-design-philosophy)
 9. [Quickstart](#quickstart-5-minutes)
-10. [AIcontainer](#aicontainer-v092)
+10. [AIContainer](#aicontainer-v092)
 11. [veronica_guard](#veronica_guard--decorator-injection-v093)
 12. [patch_openai / patch_anthropic](#patch_openai--patch_anthropic--automatic-sdk-injection-v094)
 13. [VeronicaCallbackHandler](#veronicacallbackhandler--langchain-integration-v095)
@@ -403,17 +403,17 @@ with ExecutionContext(config=config) as ctx:
 
 ---
 
-## AIcontainer (v0.9.2)
+## AIContainer (v0.9.2)
 
-`AIcontainer` is a declarative execution boundary that composes veronica-core primitives
+`AIContainer` is a declarative execution boundary that composes veronica-core primitives
 into a single container object. Use it when you want to declare all boundaries upfront
 instead of wiring primitives individually.
 
 ```python
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
 from veronica_core import BudgetEnforcer, CircuitBreaker, RetryContainer
 
-container = AIcontainer(
+container = AIContainer(
     budget=BudgetEnforcer(limit_usd=10.0),
     circuit_breaker=CircuitBreaker(failure_threshold=3),
     retry=RetryContainer(max_retries=2),
@@ -433,7 +433,7 @@ Existing imports (`from veronica_core import BudgetEnforcer`) are unchanged.
 
 ## veronica_guard — Decorator Injection (v0.9.3)
 
-`veronica_guard` wraps any callable in an `AIcontainer` boundary without changing
+`veronica_guard` wraps any callable in an `AIContainer` boundary without changing
 the call site.
 
 ```python
@@ -552,7 +552,7 @@ Detect when an LLM produces semantically repetitive outputs using pure-Python
 word-level Jaccard similarity — no heavy ML dependencies required.
 
 ```python
-from veronica_core import SemanticLoopGuard, AIcontainer
+from veronica_core import SemanticLoopGuard, AIContainer
 
 guard = SemanticLoopGuard(
     window=3,                # rolling window size
@@ -560,8 +560,8 @@ guard = SemanticLoopGuard(
     min_chars=80,            # skip short outputs to avoid false positives
 )
 
-# Attach to AIcontainer
-container = AIcontainer(semantic_guard=guard)
+# Attach to AIContainer
+container = AIContainer(semantic_guard=guard)
 
 # Or use standalone
 result = guard.feed("The answer is 42. " * 5)  # record + check
@@ -726,7 +726,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
-## Ship Readiness (v0.12.0)
+## Ship Readiness (v1.0.0)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
@@ -742,7 +742,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] ExecutionGraph: first-class runtime execution graph with typed node lifecycle (v0.9.0)
 - [x] Amplification metrics: llm_calls_per_root, tool_calls_per_root, retries_per_root (v0.9.0)
 - [x] Divergence heuristic: repeated-signature detection, warn-only, deduped (v0.9.0)
-- [x] AIcontainer: declarative execution boundary composing all runtime primitives (v0.9.1)
+- [x] AIContainer: declarative execution boundary composing all runtime primitives (v0.9.1)
 - [x] PolicyEngine: declarative DENY/REQUIRE_APPROVAL/ALLOW rule set (v0.9.1)
 - [x] AuditLog: append-only JSONL with SHA-256 hash chain + secret masking (v0.9.1)
 - [x] Policy signing: HMAC-SHA256 + ed25519 tamper detection (v0.9.1)
@@ -750,7 +750,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] veronica_guard: decorator-based injection with contextvars guard detection (v0.9.3)
 - [x] patch_openai / patch_anthropic: opt-in SDK patching with guard-context awareness (v0.9.4)
 - [x] VeronicaCallbackHandler: LangChain adapter with pre/post-call policy enforcement (v0.9.5)
-- [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIcontainer (v0.9.6)
+- [x] SemanticLoopGuard: pure-Python word-level Jaccard loop detection, integrated into AIContainer (v0.9.6)
 - [x] Thread safety: all core modules fully Lock-protected (v0.9.7)
 - [x] Security: key-pin comparison uses hmac.compare_digest (timing-attack resistant) (v0.9.7)
 - [x] Resource safety: timeout watcher thread joined on context exit (v0.9.7)
@@ -774,7 +774,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] PyPI auto-publish on GitHub Release
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 
-1355 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability.
+1415 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability.
 
 ---
 
@@ -791,6 +791,15 @@ VERONICA        -- Execution OS (Planner / Cloud / org policy)
      |
 LLM Providers
 ```
+
+---
+
+## Package Architecture
+
+- **veronica-core** (this package): Runtime containment kernel — budget enforcement, circuit breakers, execution graphs, security policies. Install this for LLM cost/execution containment.
+- **veronica-os** (separate package): Execution OS layer — Planner, ControlLoop, Session management. Built on top of veronica-core. See [veronica-os repository].
+
+The `src/veronica/` directory contains a minimal skeleton for veronica-os integration. For the full OS layer, install `veronica-os` separately.
 
 ---
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, TypeVar, Optional, Any
 import random
+import threading
 import time
 import logging
 
@@ -38,6 +39,7 @@ class RetryContainer:
     _attempt_count: int = field(default=0, init=False)
     _total_retries: int = field(default=0, init=False)
     _last_error: Optional[Exception] = field(default=None, init=False, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def execute(
         self,
@@ -58,42 +60,43 @@ class RetryContainer:
         Raises:
             Exception: Last exception if all retries exhausted
         """
-        self._attempt_count = 0
+        with self._lock:
+            self._attempt_count = 0
 
-        for attempt in range(self.max_retries + 1):
-            self._attempt_count = attempt + 1
+            for attempt in range(self.max_retries + 1):
+                self._attempt_count = attempt + 1
 
-            try:
-                result = fn(*args, **kwargs)
-                self._last_error = None  # Clear error state on success
-                if attempt > 0:
+                try:
+                    result = fn(*args, **kwargs)
+                    self._last_error = None  # Clear error state on success
+                    if attempt > 0:
+                        logger.info(
+                            f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}"
+                        )
+                    return result
+
+                except Exception as e:
+                    self._last_error = e
+                    self._total_retries += 1
+
+                    if attempt >= self.max_retries:
+                        logger.warning(
+                            f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {e}"
+                        )
+                        raise
+
+                    base_delay = self.backoff_base * (2**attempt)
+                    if self.jitter > 0.0:
+                        base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
+                    delay = min(max(0.0, base_delay), self.backoff_max)
                     logger.info(
-                        f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}"
+                        f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
+                        f"Retrying in {delay:.1f}s "
+                        f"({self.max_retries - attempt} remaining)"
                     )
-                return result
+                    time.sleep(delay)
 
-            except Exception as e:
-                self._last_error = e
-                self._total_retries += 1
-
-                if attempt >= self.max_retries:
-                    logger.warning(
-                        f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {e}"
-                    )
-                    raise
-
-                base_delay = self.backoff_base * (2**attempt)
-                if self.jitter > 0.0:
-                    base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
-                delay = min(max(0.0, base_delay), self.backoff_max)
-                logger.info(
-                    f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
-                    f"Retrying in {delay:.1f}s "
-                    f"({self.max_retries - attempt} remaining)"
-                )
-                time.sleep(delay)
-
-        raise self._last_error  # type: ignore[misc]
+            raise self._last_error  # type: ignore[misc]
 
     @property
     def attempt_count(self) -> int:
@@ -141,7 +144,8 @@ class RetryContainer:
 
     def reset(self) -> None:
         """Reset retry state for reuse."""
-        self._attempt_count = 0
-        self._total_retries = 0
-        self._last_error = None
+        with self._lock:
+            self._attempt_count = 0
+            self._total_retries = 0
+            self._last_error = None
         logger.info("[VERONICA_RETRY] Retry state reset")

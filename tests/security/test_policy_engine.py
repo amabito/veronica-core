@@ -597,3 +597,134 @@ class TestV0103SecurityFixes:
         absent = tmp_path / "nonexistent_policy.yaml"
         result = PolicyEngine._load_policy(absent)
         assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# v0.10.4 Security Regression Tests — go run/generate shell injection (R-6)
+# ---------------------------------------------------------------------------
+
+
+class TestV0104GoShellInjection:
+    """Regression tests for v0.10.4: go run/generate shell injection (R-6).
+
+    ``go run`` and ``go generate`` allow executing arbitrary code without a
+    compiled binary on disk.  ``go tool`` invokes arbitrary binaries.
+    ``go env -w`` persists environment overrides that can corrupt future builds.
+    ``go test``, ``go build``, and ``go mod`` operate only on checked-in source
+    files and must remain ALLOW.
+    """
+
+    # --- DENY cases ---
+
+    def test_go_run_evil_is_denied(self) -> None:
+        """go run evil.go must be DENY (shell injection via source execution)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "run", "evil.go"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+        assert decision.risk_score_delta == 9
+
+    def test_go_run_dot_is_denied(self) -> None:
+        """go run . must be DENY (executes all Go files in current dir)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "run", "."])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_go_generate_is_denied(self) -> None:
+        """go generate must be DENY (runs arbitrary shell via //go:generate directives)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "generate", "./..."])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_go_generate_no_args_is_denied(self) -> None:
+        """go generate (no args) must be DENY."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "generate"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_go_tool_is_denied(self) -> None:
+        """go tool must be DENY (invokes arbitrary compiled tool binaries)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "tool", "compile", "/tmp/evil.go"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    def test_go_env_w_is_denied(self) -> None:
+        """go env -w must be DENY (persistent environment override, supply chain risk)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "env", "-w", "GONOSUMCHECK=*"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
+
+    # --- ALLOW cases (regression: must not be broken by the R-6 fix) ---
+
+    def test_go_test_is_still_allowed(self) -> None:
+        """go test ./... must remain ALLOW (operates only on checked-in source)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "test", "./..."])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+        assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+    def test_go_build_is_still_allowed(self) -> None:
+        """go build must remain ALLOW (compiles checked-in source, no exec)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "build", "./..."])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+        assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+    def test_go_mod_tidy_is_still_allowed(self) -> None:
+        """go mod tidy must remain ALLOW (dependency management, no code exec)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "mod", "tidy"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+        assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+    def test_go_vet_is_still_allowed(self) -> None:
+        """go vet must remain ALLOW (static analysis, no code exec)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["go", "vet", "./..."])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "ALLOW"
+        assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+
+class TestUnicodeBypassPrevention:
+    """Unicode lookalike operator bypass must be blocked (NFKC normalization fix)."""
+
+    def test_fullwidth_pipe_is_denied(self) -> None:
+        """U+FF5C FULLWIDTH VERTICAL LINE normalizes to '|' via NFKC."""
+        engine = _engine()
+        # \uff5c is fullwidth vertical line — looks like | but is a different codepoint
+        ctx = _ctx("shell", ["pytest", "tests/\uff5c cat /etc/passwd"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+    def test_fullwidth_gt_is_denied(self) -> None:
+        """U+FF1E FULLWIDTH GREATER-THAN SIGN normalizes to '>' via NFKC."""
+        engine = _engine()
+        ctx = _ctx("shell", ["pytest", "tests/\uff1e /tmp/out"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+    def test_ascii_pipe_still_denied(self) -> None:
+        """ASCII pipe must still be blocked (regression)."""
+        engine = _engine()
+        ctx = _ctx("shell", ["pytest", "tests/ | cat /etc/passwd"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_OPERATOR"
+

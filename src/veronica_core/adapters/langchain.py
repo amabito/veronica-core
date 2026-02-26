@@ -39,9 +39,10 @@ from typing import Any, Dict, List, Union
 
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.budget import BudgetEnforcer
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
+from veronica_core.pricing import estimate_cost_usd
 from veronica_core.retry import RetryContainer
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
 
     def __init__(self, config: Union[GuardConfig, ExecutionConfig]) -> None:
         super().__init__()
-        self._container = AIcontainer(
+        self._container = AIContainer(
             budget=BudgetEnforcer(limit_usd=config.max_cost_usd),
             retry=RetryContainer(max_retries=config.max_retries_total),
             step_guard=AgentStepGuard(max_steps=config.max_steps),
@@ -131,16 +132,18 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
     # ------------------------------------------------------------------
 
     @property
-    def container(self) -> AIcontainer:
-        """The underlying AIcontainer (for testing and introspection)."""
+    def container(self) -> AIContainer:
+        """The underlying AIContainer (for testing and introspection)."""
         return self._container
 
 
 def _estimate_cost(response: LLMResult) -> float:
-    """Extract a rough USD cost estimate from a LangChain LLMResult.
+    """Extract a USD cost estimate from a LangChain LLMResult.
 
-    Looks for ``token_usage`` or ``usage`` in ``llm_output``.
-    Returns 0.0 if the field is absent or parsing fails.
+    Uses per-model pricing from pricing.py when the model name is available.
+    Falls back to prompt+completion token split when total_tokens is the only
+    field present (assumes 75% input / 25% output ratio as a conservative estimate).
+    Returns 0.0 if usage cannot be determined.
     """
     try:
         if response.llm_output is None:
@@ -148,7 +151,28 @@ def _estimate_cost(response: LLMResult) -> float:
         usage = response.llm_output.get("token_usage") or response.llm_output.get("usage")
         if not usage:
             return 0.0
-        total = usage.get("total_tokens", 0)
-        return total * 0.000002  # conservative $0.002 / 1K tokens
+
+        model = response.llm_output.get("model_name") or response.llm_output.get("model") or ""
+
+        prompt_tokens = usage.get("prompt_tokens")
+        if prompt_tokens is None:
+            prompt_tokens = usage.get("input_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        if completion_tokens is None:
+            completion_tokens = usage.get("output_tokens")
+
+        if prompt_tokens is not None and completion_tokens is not None:
+            return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))
+
+        # Fall back to total_tokens with 75/25 split heuristic.
+        # Use max(1, ...) so that even total=1 produces a non-zero prompt count,
+        # and derive completion as the exact remainder to guarantee they sum to total.
+        total_raw = usage.get("total_tokens")
+        if total_raw is None:
+            return 0.0
+        total = int(total_raw)
+        tokens_in = max(1, int(total * 0.75))
+        tokens_out = total - tokens_in  # exact complement; no rounding error
+        return estimate_cost_usd(model, tokens_in, tokens_out)
     except Exception:
         return 0.0

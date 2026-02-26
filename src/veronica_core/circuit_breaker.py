@@ -56,6 +56,7 @@ class CircuitBreaker:
     _success_count: int = field(default=0, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _owner_id: Optional[str] = field(default=None, init=False, repr=False)
+    _half_open_in_flight: int = field(default=0, init=False)
 
     @property
     def policy_type(self) -> str:
@@ -112,6 +113,15 @@ class CircuitBreaker:
                     ),
                 )
 
+            if self._state == CircuitState.HALF_OPEN:
+                if self._half_open_in_flight > 0:
+                    return PolicyDecision(
+                        allowed=False,
+                        policy_type=self.policy_type,
+                        reason="Circuit HALF_OPEN: test request already in flight",
+                    )
+                self._half_open_in_flight += 1
+
         return PolicyDecision(allowed=True, policy_type=self.policy_type)
 
     def record_success(self) -> None:
@@ -122,6 +132,7 @@ class CircuitBreaker:
         """
         with self._lock:
             self._success_count += 1
+            self._half_open_in_flight = 0
 
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.CLOSED
@@ -139,6 +150,7 @@ class CircuitBreaker:
         with self._lock:
             self._failure_count += 1
             self._last_failure_time = time.time()
+            self._half_open_in_flight = 0
 
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.OPEN
@@ -174,6 +186,7 @@ class CircuitBreaker:
             self._failure_count = 0
             self._last_failure_time = None
             self._success_count = 0
+            self._half_open_in_flight = 0
         logger.info("[VERONICA_CIRCUIT] Circuit reset")
 
     @property

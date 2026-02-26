@@ -93,42 +93,78 @@ class AuditLog:
     def get_last_policy_version(self) -> int | None:
         """Backward scan of JSONL audit log to find last known policy version.
 
-        Reads lines in reverse, finds first:
+        Reads the file in reverse chunks without loading the entire file into
+        RAM, making it safe for long-lived processes with millions of entries.
+
+        Finds first:
         - ``{"event": "policy_checkpoint", "max_policy_version": N}`` → return N
         - ``{"event": "policy_version_accepted", "policy_version": N}`` → collect all, return max
 
         Returns:
             Last accepted policy version, or None if no policy version events found.
         """
-        try:
-            with open(self._path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-        except FileNotFoundError:
+        if not self._path.exists():
             return None
 
         max_accepted: int | None = None
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError as exc:
-                logger.warning(
-                    "audit_log: corrupted entry in %s — skipping line: %s",
-                    self._path,
-                    exc,
-                )
-                continue
-            # Policy events are stored in the "data" field by write()
-            data = entry.get("data", entry)
-            event = data.get("event") if isinstance(data, dict) else None
-            if event == "policy_checkpoint":
-                return int(data["max_policy_version"])
-            if event == "policy_version_accepted":
-                v = int(data.get("policy_version", 0))
-                if max_accepted is None or v > max_accepted:
-                    max_accepted = v
+        _CHUNK = 8192  # bytes per read when scanning backward
+
+        try:
+            with open(self._path, "rb") as f:
+                f.seek(0, 2)  # seek to EOF
+                file_size = f.tell()
+                remainder = b""
+                pos = file_size
+
+                while pos > 0:
+                    read_size = min(_CHUNK, pos)
+                    pos -= read_size
+                    f.seek(pos)
+                    chunk = f.read(read_size) + remainder
+                    lines = chunk.split(b"\n")
+                    # The first element may be an incomplete line; carry it back.
+                    remainder = lines[0]
+                    # Process complete lines in reverse order (skip first partial).
+                    for raw in reversed(lines[1:]):
+                        line = raw.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                            logger.warning(
+                                "audit_log: corrupted entry in %s — skipping line: %s",
+                                self._path,
+                                exc,
+                            )
+                            continue
+                        data = entry.get("data", entry)
+                        event = data.get("event") if isinstance(data, dict) else None
+                        if event == "policy_checkpoint":
+                            return int(data["max_policy_version"])
+                        if event == "policy_version_accepted":
+                            v = int(data.get("policy_version", 0))
+                            if max_accepted is None or v > max_accepted:
+                                max_accepted = v
+
+                # Process leftover (the very first line of the file).
+                if remainder.strip():
+                    try:
+                        entry = json.loads(remainder)
+                        data = entry.get("data", entry)
+                        event = data.get("event") if isinstance(data, dict) else None
+                        if event == "policy_checkpoint":
+                            return int(data["max_policy_version"])
+                        if event == "policy_version_accepted":
+                            v = int(data.get("policy_version", 0))
+                            if max_accepted is None or v > max_accepted:
+                                max_accepted = v
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+
+        except FileNotFoundError:
+            return None
+
         return max_accepted
 
     def write_policy_checkpoint(self, policy_version: int) -> None:

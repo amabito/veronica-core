@@ -17,7 +17,7 @@ CTX = ToolCallContext(request_id="test")
 
 
 class TestPipelineDefaultsAllow:
-    """Pipeline with no hooks always returns ALLOW."""
+    """Pipeline with no hooks: most methods return ALLOW; on_error returns HALT (fail-closed)."""
 
     def test_before_llm_call(self):
         assert ShieldPipeline().before_llm_call(CTX) is Decision.ALLOW
@@ -25,8 +25,10 @@ class TestPipelineDefaultsAllow:
     def test_before_egress(self):
         assert ShieldPipeline().before_egress(CTX, "https://x", "GET") is Decision.ALLOW
 
-    def test_on_error(self):
-        assert ShieldPipeline().on_error(CTX, RuntimeError("boom")) is Decision.ALLOW
+    def test_on_error_no_hook_halts(self):
+        # No retry hook registered → fail-closed: HALT instead of ALLOW.
+        # An unhandled error with no retry policy is an unsafe configuration.
+        assert ShieldPipeline().on_error(CTX, RuntimeError("boom")) is Decision.HALT
 
     def test_before_charge(self):
         assert ShieldPipeline().before_charge(CTX, 0.01) is Decision.ALLOW

@@ -152,3 +152,53 @@ class TestAIcontainerReset:
         container.reset()
         decision_after = container.check(cost_usd=0.5)
         assert decision_after.allowed is True
+
+
+# ---------------------------------------------------------------------------
+# Deprecation warning: AIcontainer alias must warn via module __getattr__
+# ---------------------------------------------------------------------------
+
+
+class TestAIcontainerDeprecationWarning:
+    """Accessing AIcontainer via the deprecated AIcontainer name must warn."""
+
+    def test_container_module_getattr_emits_deprecation(self) -> None:
+        """Importing AIcontainer from veronica_core.container triggers DeprecationWarning."""
+        import warnings
+        import importlib
+
+        # Force a fresh attribute access on the module (not a cached import).
+        import veronica_core.container as container_mod
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", DeprecationWarning)
+            _ = container_mod.AIcontainer
+        assert any(
+            issubclass(warning.category, DeprecationWarning)
+            and "AIcontainer" in str(warning.message)
+            for warning in w
+        ), "Accessing AIcontainer on container module must emit DeprecationWarning"
+
+    def test_veronica_core_getattr_emits_deprecation(self) -> None:
+        """Accessing AIcontainer on veronica_core top-level module triggers DeprecationWarning."""
+        import warnings
+        import veronica_core
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", DeprecationWarning)
+            _ = veronica_core.AIcontainer
+        assert any(
+            issubclass(warning.category, DeprecationWarning)
+            and "AIcontainer" in str(warning.message)
+            for warning in w
+        ), "Accessing AIcontainer on veronica_core must emit DeprecationWarning"
+
+    def test_aicontainer_still_returns_correct_class(self) -> None:
+        """AIcontainer alias must return the same class as AIContainer."""
+        import warnings
+        import veronica_core
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            klass = veronica_core.AIcontainer
+        from veronica_core.container.aicontainer import AIContainer
+        assert klass is AIContainer

@@ -159,3 +159,71 @@ class TestNestedGuard:
 
         with pytest.raises(VeronicaHalt):
             outer()
+
+
+# ---------------------------------------------------------------------------
+# Test: timeout_ms backward-compat deprecation shim
+# ---------------------------------------------------------------------------
+
+class TestTimeoutMsDeprecation:
+    """timeout_ms is accepted but deprecated; no TypeError, DeprecationWarning emitted."""
+
+    def test_veronica_guard_timeout_ms_warns(self) -> None:
+        with pytest.warns(DeprecationWarning, match="timeout_ms"):
+            @veronica_guard(timeout_ms=5000)
+            def my_func() -> int:
+                return 1
+
+        # Function must still be callable (no TypeError).
+        assert my_func() == 1
+
+    def test_veronica_guard_timeout_ms_none_no_warning(self) -> None:
+        # No warning when timeout_ms is omitted (default None).
+        import warnings as _warnings
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error", DeprecationWarning)
+
+            @veronica_guard()
+            def my_func() -> int:
+                return 2
+
+        assert my_func() == 2
+
+    def test_guard_config_timeout_ms_warns(self) -> None:
+        with pytest.warns(DeprecationWarning, match="timeout_ms"):
+            cfg = GuardConfig(timeout_ms=3000)
+
+        assert cfg.timeout_ms == 3000  # stored but ignored at runtime
+
+    def test_guard_config_timeout_ms_none_no_warning(self) -> None:
+        import warnings as _warnings
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error", DeprecationWarning)
+            cfg = GuardConfig()
+
+        assert cfg.timeout_ms is None
+
+    def test_veronica_guard_timeout_ms_positional_compat(self) -> None:
+        """Legacy positional 4th arg (timeout_ms) must NOT bind to return_decision.
+
+        Before v1.0.0 the signature was:
+            veronica_guard(max_cost_usd, max_steps, max_retries_total, timeout_ms)
+
+        After the fix, parameter order is restored so that positional callers
+        still have timeout_ms in slot 4 (index 3) and return_decision stays a
+        keyword-only–style argument after it.
+        """
+        import warnings as _warnings
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("always", DeprecationWarning)
+            # Pass timeout_ms positionally (4th arg).  This must NOT make
+            # veronica_guard behave as if return_decision=5000 (truthy),
+            # which would cause it to return a PolicyDecision on denial
+            # instead of raising VeronicaHalt.
+            @veronica_guard(1.0, 0, 3, 5000)  # max_steps=0 → will deny
+            def my_func() -> str:
+                return "nope"  # pragma: no cover
+
+        # Should raise VeronicaHalt, not return a PolicyDecision.
+        with pytest.raises(VeronicaHalt):
+            my_func()

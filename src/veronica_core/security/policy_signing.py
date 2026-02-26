@@ -60,10 +60,23 @@ def _load_key() -> bytes:
 
     For secret storage, prefer AWS Secrets Manager, Azure Key Vault, or
     HashiCorp Vault over environment variables where possible.
+
+    Raises:
+        RuntimeError: If the key is not set and the security level is not DEV.
     """
     hex_key = os.environ.get(_ENV_KEY_VAR)
     if hex_key:
         return bytes.fromhex(hex_key)
+
+    from veronica_core.security.security_level import SecurityLevel, get_security_level
+
+    if get_security_level() != SecurityLevel.DEV:
+        raise RuntimeError(
+            f"{_ENV_KEY_VAR} is not set. "
+            "A signing key is required in non-DEV environments. "
+            "Set the env var to a 32-byte hex string before deploying."
+        )
+
     logger.warning(
         "policy_signing: %s is not set; falling back to built-in development "
         "key. This key is publicly known — set the env var before deploying.",
@@ -157,6 +170,11 @@ class PolicySignerV2:
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
+
+    @property
+    def public_key_path(self) -> Path:
+        """Return the path to the public key file."""
+        return self._public_key_path
 
     @property
     def mode(self) -> str:

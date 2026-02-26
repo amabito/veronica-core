@@ -10,6 +10,7 @@ import fnmatch
 import math
 import re
 import threading
+import unicodedata
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,6 +122,14 @@ SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
 SHELL_DENY_EXEC_FLAGS: dict[str, frozenset[str]] = {
     "cmake":   frozenset({"-P", "-E"}),
     "make":    frozenset({"--eval", "-f"}),
+    # "go run"      — executes arbitrary Go source directly, no compiled artifact needed.
+    # "go generate" — runs arbitrary shell commands declared in //go:generate directives.
+    # "go tool"     — invokes arbitrary tool binaries (e.g. go tool compile /tmp/evil.go).
+    # "go env -w"   — can persist environment overrides (e.g. GONOSUMCHECK=*) that affect
+    #                 future module fetches, making supply chain poisoning persistent.
+    # "go test", "go build", "go mod" are intentionally absent — they operate only on
+    # explicitly checked-in source files and do not allow arbitrary code injection.
+    "go":      frozenset({"run", "generate", "tool", "env"}),
 }
 
 # Inline-execution flags scanned inside "uv run <cmd> ..." wrappers.
@@ -174,8 +183,12 @@ SHELL_CREDENTIAL_DENY: tuple[tuple[str, frozenset[str]], ...] = (
 
 
 @dataclass(frozen=True)
-class PolicyContext:
-    """Immutable snapshot describing an action to be evaluated."""
+class ExecPolicyContext:
+    """Immutable snapshot describing an action to be evaluated by PolicyEngine.
+
+    Named ExecPolicyContext (not PolicyContext) to avoid collision with
+    runtime_policy.PolicyContext, which carries LLM call context (cost, steps).
+    """
 
     action: ActionLiteral
     args: list[str]
@@ -187,14 +200,26 @@ class PolicyContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# Backward-compatible alias — prefer ExecPolicyContext in new code.
+PolicyContext = ExecPolicyContext
+
+
 @dataclass(frozen=True)
-class PolicyDecision:
-    """Result of a policy evaluation."""
+class ExecPolicyDecision:
+    """Result of a PolicyEngine evaluation.
+
+    Named ExecPolicyDecision (not PolicyDecision) to avoid collision with
+    runtime_policy.PolicyDecision, which carries allowed/denied LLM call outcome.
+    """
 
     verdict: Literal["ALLOW", "DENY", "REQUIRE_APPROVAL"]
     rule_id: str
     reason: str
     risk_score_delta: int  # 0=safe, 1-5=moderate, 6-10=critical
+
+
+# Backward-compatible alias — prefer ExecPolicyDecision in new code.
+PolicyDecision = ExecPolicyDecision
 
 
 # ---------------------------------------------------------------------------
@@ -309,9 +334,10 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
             risk_score_delta=8,
         )
 
-    # DENY: pipe or redirect operators in any argument
+    # DENY: pipe or redirect operators in any argument (NFKC-normalized to block unicode lookalikes)
+    normalized_cmd = unicodedata.normalize("NFKC", full_cmd)
     for op in SHELL_DENY_OPERATORS:
-        if op in full_cmd:
+        if op in full_cmd or op in normalized_cmd:
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_OPERATOR",
@@ -760,7 +786,7 @@ class PolicyEngine:
                 _log.error("policy_tamper (v2): signature mismatch for %s", policy_path)
                 raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
             # v2 verified — enforce key pin before continuing
-            resolved_pub = public_key_path or signer_v2._public_key_path
+            resolved_pub = public_key_path or signer_v2.public_key_path
             if resolved_pub.exists():
                 try:
                     from veronica_core.security.key_pin import KeyPinChecker

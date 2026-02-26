@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from uuid import uuid4
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.runtime_policy import PolicyContext
 from veronica_core.shield.types import Decision, ToolCallContext
 from veronica_core.state import VeronicaState
 
@@ -158,12 +159,14 @@ class CircuitBreakerCapability:
                     )
                     return None
 
-            # Per-agent circuit check
-            if breaker.state == CircuitState.OPEN:
+            # Per-agent circuit check (uses check() to enforce HALF_OPEN
+            # single-request limit via _half_open_in_flight counter)
+            cb_decision = breaker.check(PolicyContext())
+            if not cb_decision.allowed:
                 logger.debug(
-                    "[VERONICA_CAP] %s blocked: circuit OPEN (%d failures)",
+                    "[VERONICA_CAP] %s blocked: %s",
                     name,
-                    breaker.failure_count,
+                    cb_decision.reason,
                 )
                 return None
 

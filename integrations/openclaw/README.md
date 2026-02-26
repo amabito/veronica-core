@@ -1,5 +1,18 @@
 # OpenClaw + VERONICA Integration Kit
 
+> **EXPERIMENTAL / UNSUPPORTED**
+>
+> This integration is provided as a demonstration and starting point only.
+> It is **not** part of veronica-core's supported public API.
+>
+> - **No stability guarantees**: The interface may change or be removed without notice.
+> - **Not tested in CI**: This integration has no automated tests in the main test suite.
+> - **No issue support**: Bug reports for this integration may not be prioritized.
+> - **OpenClaw compatibility**: Tested only against internal OpenClaw builds; may not work with other versions.
+>
+> For production use, consider implementing a custom integration using veronica-core's
+> stable public API (`AIcontainer`, `ExecutionContext`, `VeronicaGuard`, etc.).
+
 Complete integration guide for wrapping OpenClaw strategy engines with VERONICA's failsafe execution layer.
 
 ---

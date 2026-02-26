@@ -40,6 +40,7 @@ import copy
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
@@ -147,10 +148,10 @@ class ExecutionGraph:
 
         # Divergence detection state.
         # _sig_window: ring buffer of the last _K node signatures seen in
-        # mark_running order.  Oldest entry is popped from the front when the
-        # window exceeds _K entries.
-        self._sig_window: list[NodeSignature] = []
+        # mark_running order.  deque(maxlen=_K) replaces the manual pop(0)
+        # ring buffer for O(1) append and automatic eviction.
         self._K: int = 8
+        self._sig_window: deque[NodeSignature] = deque(maxlen=self._K)
         # Consecutive-repeat thresholds per kind.  "system" is set to 999 so
         # that chain-management nodes never trigger the heuristic.
         self._diverge_thresholds: dict[str, int] = {
@@ -614,9 +615,7 @@ class ExecutionGraph:
             Only the first matching check is returned per invocation to keep
             the pending-events list atomic per call.
         """
-        self._sig_window.append(sig)
-        if len(self._sig_window) > self._K:
-            self._sig_window.pop(0)
+        self._sig_window.append(sig)  # deque(maxlen=_K) auto-evicts oldest entry
 
         # --- Strategy 1: consecutive trailing repeats ---
         consecutive = 0
@@ -682,23 +681,6 @@ class ExecutionGraph:
             return self._nodes[node_id]
         except KeyError:
             raise KeyError(f"Node not found: {node_id!r}") from None
-
-    def _compute_depth(self, node_id: str) -> int:
-        """Return the depth of *node_id* (root = 0).
-
-        Walks the parent chain iteratively. Must be called with self._lock
-        held. Returns -1 if *node_id* is not in the graph.
-        """
-        depth = 0
-        current = node_id
-        while current is not None:
-            node = self._nodes.get(current)
-            if node is None:
-                return -1
-            current = node.parent_id
-            if current is not None:
-                depth += 1
-        return depth
 
 
 # ---------------------------------------------------------------------------

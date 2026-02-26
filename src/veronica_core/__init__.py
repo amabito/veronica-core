@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.12.0"
+__version__ = "1.0.0"
 
 # Core state machine
 from veronica_core.state import (
@@ -97,7 +97,10 @@ from veronica_core.containment import (
 )
 
 # Execution boundary (v0.9.1)
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
+
+# Backward-compat alias: AIcontainer renamed to AIContainer in v1.0.0.
+# DeprecationWarning is emitted via module __getattr__ (defined at bottom of file).
 
 # Decorator-based injection (v0.9.3)
 from veronica_core.inject import (
@@ -153,7 +156,6 @@ __all__ = [
     "PersistenceBackend",
     "JSONBackend",
     "MemoryBackend",
-    "VeronicaPersistence",  # Deprecated
     # Exit
     "ExitTier",
     "VeronicaExit",
@@ -218,7 +220,7 @@ __all__ = [
     "get_current_partial_buffer",
     "attach_partial_buffer",
     # Execution boundary (v0.9.1)
-    "AIcontainer",
+    "AIContainer",
     # Decorator-based injection (v0.9.3)
     "veronica_guard",
     "GuardConfig",
@@ -248,6 +250,7 @@ __all__ = [
     # Degradation Ladder (v0.10.0)
     "DegradationLadder",
     "DegradationConfig",
+    "Trimmer",
     "NoOpTrimmer",
     # PolicyDecision helpers (v0.10.0)
     "allow",
@@ -261,3 +264,18 @@ __all__ = [
     "VeronicaWSGIMiddleware",
     "get_current_execution_context",
 ]
+
+
+def __getattr__(name: str):  # type: ignore[return]
+    """Emit DeprecationWarning for the old AIcontainer name on attribute access."""
+    if name == "AIcontainer":
+        import warnings
+
+        warnings.warn(
+            "AIcontainer is deprecated and will be removed in a future release. "
+            "Use AIContainer instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return AIContainer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

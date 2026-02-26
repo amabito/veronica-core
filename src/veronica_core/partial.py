@@ -6,14 +6,17 @@ with a dedicated streaming buffer for LLM output preservation.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Any, Dict
+from typing import Final, List, Any, Dict
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Hard limits to prevent DoS via unbounded streaming buffers.
-_MAX_CHUNKS: int = 10_000
-_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
+MAX_CHUNKS: Final[int] = 10_000
+MAX_BYTES: Final[int] = 10 * 1024 * 1024  # 10 MB
+# Backward-compatible aliases (deprecated; use MAX_CHUNKS / MAX_BYTES).
+_MAX_CHUNKS = MAX_CHUNKS
+_MAX_BYTES = MAX_BYTES
 
 
 class PartialBufferOverflow(ValueError):
@@ -84,10 +87,10 @@ class PartialResultBuffer:
             PartialBufferOverflow: If chunk count or total byte size limit is
                 exceeded. Subclasses ValueError for backward compatibility.
         """
-        if len(self._chunks) >= _MAX_CHUNKS:
+        if len(self._chunks) >= MAX_CHUNKS:
             self._is_partial_overflow = True
             raise PartialBufferOverflow(
-                f"PartialResultBuffer exceeded max chunk count ({_MAX_CHUNKS}). "
+                f"PartialResultBuffer exceeded max chunk count ({MAX_CHUNKS}). "
                 "Possible streaming DoS.",
                 total_bytes=self._total_bytes,
                 kept_bytes=self._total_bytes,
@@ -96,10 +99,10 @@ class PartialResultBuffer:
                 truncation_point="chunk_count",
             )
         chunk_bytes = len(chunk.encode("utf-8"))
-        if self._total_bytes + chunk_bytes > _MAX_BYTES:
+        if self._total_bytes + chunk_bytes > MAX_BYTES:
             self._is_partial_overflow = True
             raise PartialBufferOverflow(
-                f"PartialResultBuffer exceeded max byte size ({_MAX_BYTES} bytes). "
+                f"PartialResultBuffer exceeded max byte size ({MAX_BYTES} bytes). "
                 "Possible streaming DoS.",
                 total_bytes=self._total_bytes + chunk_bytes,
                 kept_bytes=self._total_bytes,
@@ -153,6 +156,7 @@ class PartialResultBuffer:
         self._metadata.clear()
         self._is_complete = False
         self._total_bytes = 0
+        self._is_partial_overflow = False
 
     def to_dict(self) -> Dict:
         """Serialize buffer state."""

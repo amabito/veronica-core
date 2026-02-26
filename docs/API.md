@@ -1,6 +1,6 @@
 # VERONICA Core API Reference
 
-Version: 0.1.0
+Version: 1.0.0
 
 ## Overview
 
@@ -273,7 +273,7 @@ VeronicaIntegration(
 - `cooldown_fails`: Fail threshold for cooldown
 - `cooldown_seconds`: Cooldown duration (seconds)
 - `auto_save_interval`: Auto-save every N operations (0 = disabled)
-- `backend`: Persistence backend (default: VeronicaPersistence)
+- `backend`: Persistence backend (default: JSONBackend)
 - `guard`: Validation guard (default: PermissiveGuard)
 - `client`: LLM client (optional, default: NullClient - no LLM features)
 
@@ -332,7 +332,7 @@ Exit handler with signal handling and 3-tier shutdown.
 ```python
 VeronicaExit(
     state_machine: VeronicaStateMachine,
-    persistence: Optional[VeronicaPersistence] = None
+    persistence: Optional[JSONBackend] = None
 )
 ```
 
@@ -459,11 +459,18 @@ All methods handle errors gracefully:
 
 ## Thread Safety
 
-VERONICA Core is NOT thread-safe by default. For multi-threaded applications:
+Core primitives (VeronicaStateMachine, BudgetEnforcer, CircuitBreaker) are thread-safe.
+VeronicaIntegration provides thread-safe auto-save and operation counting.
 
-1. Use separate VeronicaIntegration instances per thread
-2. OR implement external locking (threading.Lock)
-3. OR use backend with atomic operations (e.g., Redis with Lua scripts)
+Uses `threading.Lock` for shared state and `ContextVar` for per-request isolation (middleware).
+
+- `VeronicaStateMachine` — all state mutations are protected by `threading.Lock`
+- `VeronicaIntegration` — thread-safe auto-save and operation counting; delegates to state machine
+- `VeronicaASGIMiddleware` / `VeronicaWSGIMiddleware` — per-request `ExecutionContext`
+  via `ContextVar`; no shared mutable state between requests
+
+For legacy (pre-v0.9.7) deployments or custom subclasses that bypass the Lock,
+external synchronization may still be required.
 
 ---
 

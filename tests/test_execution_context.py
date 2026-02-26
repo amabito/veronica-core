@@ -114,3 +114,43 @@ def test_before_charge_skipped_for_tool_calls():
         options=WrapOptions(operation_name="tool", cost_estimate_hint=0.05),
     )
     assert capture.calls == 0, "before_charge must not fire for tool calls"
+
+
+def test_local_cost_accumulation_independent_of_backend_total():
+    """_cost_usd_accumulated must track LOCAL spend only, not the backend global total.
+
+    Regression test for the budget double-spend bug: when a Redis backend
+    returns a cross-process global total from add(), the context must NOT
+    assign that value to _cost_usd_accumulated.  Only the local per-call cost
+    should be added.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+    from veronica_core.distributed import LocalBudgetBackend
+
+    # Seed the backend with a large pre-existing total (simulating other
+    # processes that have already spent budget in a shared Redis namespace).
+    backend = LocalBudgetBackend()
+    backend.add(99.0)  # pre-existing spend from "other processes"
+
+    config = ExecutionConfig(
+        max_cost_usd=200.0,  # high ceiling so limit check doesn't interfere
+        max_steps=10,
+        max_retries_total=5,
+        budget_backend=backend,
+    )
+    ctx = ExecutionContext(config=config)
+
+    # Perform two local calls costing 0.10 and 0.20 USD each.
+    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.10))
+    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.20))
+
+    snap = ctx.get_snapshot()
+    # Local accumulator must equal only what THIS context spent (0.30),
+    # not the backend total (99.30).
+    assert abs(snap.cost_usd_accumulated - 0.30) < 1e-9, (
+        f"Expected local cost 0.30, got {snap.cost_usd_accumulated:.6f}. "
+        "This indicates the backend global total was incorrectly assigned."
+    )

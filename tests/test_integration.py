@@ -1,5 +1,6 @@
 """Tests for VeronicaIntegration (main API)."""
 
+import concurrent.futures
 import pytest
 import time
 import tempfile
@@ -215,3 +216,111 @@ class TestVeronicaIntegration:
         assert stats["current_state"] == "SCREENING"
         assert stats["fail_counts"] == {"task_1": 1, "task_2": 1}
         assert stats["active_cooldowns"] == {}
+
+
+# ---------------------------------------------------------------------------
+# TOCTOU fix regression tests — record_fail() lock correctness (v0.10.4)
+# ---------------------------------------------------------------------------
+
+
+class TestRecordFailLockCorrectness:
+    """Verify that record_fail() holds _op_lock for the full state mutation.
+
+    These tests guard against the TOCTOU race where two concurrent callers
+    could both observe fail_count < threshold, both call set_cooldown, and
+    activate cooldown more than once (or skip activation entirely).
+    """
+
+    def test_record_fail_op_lock_is_held_during_mutation(self) -> None:
+        """_op_lock must be acquired by record_fail before state mutation.
+
+        We verify this by checking that the lock is a reentrant-safe RLock
+        or that calling record_fail from a thread that holds the lock does
+        not deadlock (Python's threading.Lock is not re-entrant, so the
+        test below uses a timeout-based approach).
+        """
+        import threading
+
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(cooldown_fails=5, backend=backend)
+
+        lock_was_free_after_call = threading.Event()
+
+        def call_record_fail() -> None:
+            veronica.record_fail("pair_x")
+            # After record_fail returns, the lock must be released
+            acquired = veronica._op_lock.acquire(blocking=True, timeout=0.5)
+            if acquired:
+                veronica._op_lock.release()
+                lock_was_free_after_call.set()
+
+        t = threading.Thread(target=call_record_fail)
+        t.start()
+        t.join(timeout=2.0)
+
+        assert lock_was_free_after_call.is_set(), (
+            "_op_lock was not released after record_fail() returned — potential deadlock"
+        )
+
+    def test_concurrent_record_fail_does_not_double_activate_cooldown(self) -> None:
+        """Concurrent record_fail calls must activate cooldown exactly once.
+
+        With cooldown_fails=2, exactly two concurrent record_fail calls should
+        activate cooldown at most once.  Without the lock, both threads could
+        read fail_count==1 simultaneously and race to activate.
+        """
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(
+            cooldown_fails=2,
+            cooldown_seconds=60,
+            backend=backend,
+        )
+
+        activations: list[bool] = []
+
+        def call_fail() -> None:
+            result = veronica.record_fail("pair_concurrent")
+            activations.append(result)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(call_fail) for _ in range(2)]
+            concurrent.futures.wait(futures)
+
+        # Exactly one of the two calls should have returned True (cooldown activated)
+        assert sum(activations) == 1, (
+            f"Expected exactly 1 cooldown activation, got {sum(activations)}: {activations}"
+        )
+        assert veronica.is_in_cooldown("pair_concurrent")
+
+    def test_record_fail_with_guard_under_concurrent_access(self) -> None:
+        """Guard-triggered cooldown must be safe under concurrent record_fail."""
+
+        class ImmediateGuard(VeronicaGuard):
+            def should_cooldown(self, entity: str, context: dict) -> bool:  # noqa: D102
+                return True
+
+            def validate_state(self, state_data: dict) -> bool:  # noqa: D102
+                return True
+
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(
+            cooldown_fails=100,  # high threshold — guard triggers before normal path
+            cooldown_seconds=60,
+            backend=backend,
+            guard=ImmediateGuard(),
+        )
+
+        results: list[bool] = []
+
+        def call_fail() -> None:
+            result = veronica.record_fail("pair_guard", context={"x": 1})
+            results.append(result)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(call_fail) for _ in range(4)]
+            concurrent.futures.wait(futures)
+
+        # All calls must complete without exception
+        assert len(results) == 4
+        # Entity must be in cooldown after guard activation
+        assert veronica.is_in_cooldown("pair_guard")

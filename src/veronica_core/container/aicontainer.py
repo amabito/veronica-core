@@ -1,4 +1,4 @@
-"""VERONICA AIcontainer - Composite safety container for LLM agent calls.
+"""VERONICA AIContainer - Composite safety container for LLM agent calls.
 
 Composes BudgetEnforcer, CircuitBreaker, RetryContainer, AgentStepGuard,
 and PartialResultBuffer into a single check-and-reset boundary.
@@ -7,6 +7,7 @@ and PartialResultBuffer into a single check-and-reset boundary.
 from __future__ import annotations
 
 import threading
+import warnings
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -20,7 +21,7 @@ from veronica_core.semantic import SemanticLoopGuard
 
 
 @dataclass
-class AIcontainer:
+class AIContainer:
     """Composite safety container for a single AI agent invocation boundary.
 
     Assembles independent safety primitives into one unified PolicyPipeline.
@@ -29,9 +30,9 @@ class AIcontainer:
     Example::
 
         from veronica_core import BudgetEnforcer, CircuitBreaker
-        from veronica_core.container import AIcontainer
+        from veronica_core.container import AIContainer
 
-        container = AIcontainer(
+        container = AIContainer(
             budget=BudgetEnforcer(limit_usd=5.0),
             circuit_breaker=CircuitBreaker(failure_threshold=3),
         )
@@ -131,3 +132,15 @@ class AIcontainer:
             Ordered list of policy_type strings, e.g. ['budget', 'circuit_breaker'].
         """
         return [p.policy_type for p in self._pipeline.policies]
+
+
+def __getattr__(name: str) -> object:
+    if name == "AIcontainer":
+        warnings.warn(
+            "AIcontainer is deprecated and will be removed in a future release. "
+            "Use AIContainer instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return AIContainer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

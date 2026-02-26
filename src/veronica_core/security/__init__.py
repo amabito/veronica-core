@@ -2,8 +2,10 @@
 from veronica_core.security.capabilities import Capability, CapabilitySet, has_cap
 from veronica_core.security.masking import SecretMasker
 from veronica_core.security.policy_engine import (
-    PolicyContext,
-    PolicyDecision,
+    ExecPolicyContext,
+    ExecPolicyDecision,
+    PolicyContext,  # backward-compatible alias for ExecPolicyContext
+    PolicyDecision,  # backward-compatible alias for ExecPolicyDecision
     PolicyEngine,
     PolicyHook,
 )
@@ -13,6 +15,8 @@ __all__ = [
     "CapabilitySet",
     "has_cap",
     "SecretMasker",
+    "ExecPolicyContext",
+    "ExecPolicyDecision",
     "PolicyContext",
     "PolicyDecision",
     "PolicyEngine",

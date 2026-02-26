@@ -5,12 +5,19 @@ Public API:
     GuardConfig     — dataclass for documentation/IDE autocomplete (unused at runtime)
     VeronicaHalt    — exception raised when a policy denies execution
     is_guard_active — returns True when called from inside a guard boundary
+
+Changelog:
+    v0.12: ``timeout_ms`` parameter deprecated (was silently ignored). It is
+           accepted for backward compatibility and will be removed in v2.0.
+           Use ``ExecutionContext(config=ExecutionConfig(timeout_ms=...))``
+           for real timeout enforcement.
 """
 from __future__ import annotations
 
 import functools
+import warnings
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from veronica_core.runtime_policy import PolicyDecision
@@ -58,20 +65,30 @@ class GuardConfig:
         max_cost_usd: Hard cost ceiling passed to BudgetEnforcer.
         max_steps: Step count ceiling passed to AgentStepGuard.
         max_retries_total: Retry ceiling passed to RetryContainer.
-        timeout_ms: Reserved for future enforcement. Currently unused.
+        timeout_ms: Deprecated. Accepted for backward compatibility but ignored.
+            Use ExecutionContext timeout for real enforcement.
     """
 
     max_cost_usd: float = 1.0
     max_steps: int = 25
     max_retries_total: int = 3
-    timeout_ms: Optional[float] = None
+    timeout_ms: Optional[int] = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.timeout_ms is not None:
+            warnings.warn(
+                "GuardConfig.timeout_ms is deprecated and will be removed in v2.0. "
+                "Use ExecutionContext timeout instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
 
 def veronica_guard(
     max_cost_usd: float = 1.0,
     max_steps: int = 25,
     max_retries_total: int = 3,
-    timeout_ms: Optional[float] = None,  # reserved for future enforcement
+    timeout_ms: Optional[int] = None,
     return_decision: bool = False,
 ) -> Callable:
     """Decorator that wraps a callable inside an AIcontainer execution boundary.
@@ -84,8 +101,9 @@ def veronica_guard(
         max_cost_usd: Hard cost ceiling. Passed to BudgetEnforcer(limit_usd=...).
         max_steps: Step count ceiling. Passed to AgentStepGuard(max_steps=...).
         max_retries_total: Retry ceiling. Passed to RetryContainer(max_retries=...).
-        timeout_ms: Reserved. Currently unused.
         return_decision: If True, return PolicyDecision on denial instead of raising.
+        timeout_ms: Deprecated. Accepted for backward compatibility but ignored.
+            Use ExecutionContext timeout for real enforcement. Will be removed in v2.0.
 
     Returns:
         A decorator that enforces the configured policy on the wrapped function.
@@ -102,13 +120,20 @@ def veronica_guard(
         # Raises VeronicaHalt if policies deny.
         result = call_llm("Hello")
     """
+    if timeout_ms is not None:
+        warnings.warn(
+            "veronica_guard(timeout_ms=...) is deprecated and will be removed in v2.0. "
+            "Use ExecutionContext timeout instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard
-            from veronica_core.container import AIcontainer
+            from veronica_core.container import AIContainer
 
-            container = AIcontainer(
+            container = AIContainer(
                 budget=BudgetEnforcer(limit_usd=max_cost_usd),
                 retry=RetryContainer(max_retries=max_retries_total),
                 step_guard=AgentStepGuard(max_steps=max_steps),

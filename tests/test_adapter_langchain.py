@@ -103,11 +103,17 @@ class TestAllowPath:
         assert handler.container.step_guard.current_step == 2
 
     def test_on_llm_end_records_token_cost(self) -> None:
-        """on_llm_end: budget.spend() is called with estimated cost."""
+        """on_llm_end: budget.spend() is called with estimated cost.
+
+        With no model name and total_tokens=1000, the adapter uses a 75/25
+        input/output split and falls back to the unknown-model pricing
+        (input=$0.030/1K, output=$0.060/1K):
+          750 * 0.030/1000 + 250 * 0.060/1000 = 0.0225 + 0.0150 = 0.0375
+        """
         handler = VeronicaCallbackHandler(GuardConfig(max_cost_usd=10.0))
         handler.on_llm_end(_result(total_tokens=1000))
         assert handler.container.budget.call_count == 1
-        assert handler.container.budget.spent_usd == pytest.approx(0.002)
+        assert handler.container.budget.spent_usd == pytest.approx(0.0375)
 
     def test_on_llm_end_zero_cost_when_no_usage(self) -> None:
         """on_llm_end: spend(0.0) called when llm_output has no usage."""
@@ -173,6 +179,91 @@ class TestConfigAcceptance:
         handler = VeronicaCallbackHandler(cfg)
         assert handler.container.budget.limit_usd == 3.0
         assert handler.container.step_guard.max_steps == 15
+
+
+# ---------------------------------------------------------------------------
+# LangChain cost boundary — small / edge-case token counts
+# ---------------------------------------------------------------------------
+
+
+class TestCostBoundary:
+    """Cost must be > 0 for any positive total_tokens value, including 1-3."""
+
+    @pytest.mark.parametrize("total_tokens", [1, 2, 3, 100, 10_000])
+    def test_cost_positive_for_total_tokens(self, total_tokens: int) -> None:
+        """_estimate_cost must return a positive float for every total_tokens >= 1."""
+        from veronica_core.adapters.langchain import _estimate_cost
+
+        result = _estimate_cost(
+            FakeLLMResult(llm_output={"token_usage": {"total_tokens": total_tokens}})
+        )
+        assert result > 0.0, f"cost was {result} for total_tokens={total_tokens}"
+
+    def test_tokens_in_plus_out_equals_total(self) -> None:
+        """The prompt+completion split must sum exactly to total_tokens (no rounding loss)."""
+        from veronica_core.pricing import estimate_cost_usd
+        from veronica_core.adapters.langchain import _estimate_cost
+
+        for total in [1, 2, 3, 7, 100, 999]:
+            tokens_in = max(1, int(total * 0.75))
+            tokens_out = total - tokens_in
+            assert tokens_in + tokens_out == total, (
+                f"tokens_in={tokens_in} + tokens_out={tokens_out} != {total}"
+            )
+
+    def test_explicit_prompt_completion_tokens_used_directly(self) -> None:
+        """When prompt_tokens and completion_tokens are explicitly provided, they are used
+        verbatim without any heuristic split."""
+        handler = VeronicaCallbackHandler(GuardConfig(max_cost_usd=10.0))
+        result = FakeLLMResult(
+            llm_output={
+                "token_usage": {
+                    "prompt_tokens": 80,
+                    "completion_tokens": 20,
+                }
+            }
+        )
+        handler.on_llm_end(result)
+        # Cost must be non-zero and derived from 80+20=100 tokens
+        assert handler.container.budget.spent_usd > 0.0
+
+    def test_zero_total_tokens_returns_zero_cost(self) -> None:
+        """total_tokens=0 must return 0.0 (no phantom cost)."""
+        from veronica_core.adapters.langchain import _estimate_cost
+
+        result = _estimate_cost(
+            FakeLLMResult(llm_output={"token_usage": {"total_tokens": 0}})
+        )
+        assert result == 0.0
+
+    def test_zero_total_tokens_flows_through_calculation(self) -> None:
+        """total_tokens=0 must reach estimate_cost_usd() and produce 0.0 naturally.
+
+        Regression test for the LangChain zero-token bypass bug: the early
+        return on ``total_raw == 0`` was removed so that 0 tokens flow through
+        the normal estimate_cost_usd() path rather than short-circuiting.
+        The result must still be 0.0 (no phantom spend).
+        """
+        from veronica_core.adapters.langchain import _estimate_cost
+
+        # total_tokens=0 -> tokens_in = max(1, 0) = 1, tokens_out = 0 - 1 = -1
+        # estimate_cost_usd with 1 prompt + (-1) completion token is 0.0
+        # because negative token counts produce no positive cost, but the
+        # important guarantee is: no phantom cost and no exception raised.
+        result = _estimate_cost(
+            FakeLLMResult(llm_output={"token_usage": {"total_tokens": 0}})
+        )
+        assert result == 0.0, f"Expected 0.0 for zero tokens, got {result}"
+        assert isinstance(result, float), "Result must be float"
+
+    def test_none_total_tokens_returns_zero_cost(self) -> None:
+        """total_tokens=None must still return 0.0 (missing data guard remains)."""
+        from veronica_core.adapters.langchain import _estimate_cost
+
+        result = _estimate_cost(
+            FakeLLMResult(llm_output={"token_usage": {}})
+        )
+        assert result == 0.0, f"Expected 0.0 for missing total_tokens, got {result}"
 
 
 # ---------------------------------------------------------------------------

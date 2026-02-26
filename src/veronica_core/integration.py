@@ -165,8 +165,8 @@ class VeronicaIntegration:
                     f"[VERONICA_INTEGRATION] Preserving critical state: {self.state.current_state.value}"
                 )
 
-        # Register exit handler
-        self.exit_handler = VeronicaExit(self.state, self.persistence)
+        # Register exit handler (pass PersistenceBackend if available, else None for default)
+        self.exit_handler = VeronicaExit(self.state, self.backend)
 
         # When using modern backend mode, also register atexit to save via backend
         if self.backend is not None:
@@ -204,17 +204,27 @@ class VeronicaIntegration:
 
         Returns:
             True if cooldown was activated
+
+        Thread-safety: state mutation (record_fail + guard cooldown) is executed
+        inside a single _op_lock acquisition to prevent TOCTOU races where two
+        concurrent callers could both observe fail_count < threshold, both call
+        set_cooldown, and potentially double-activate or skip activation.
+        _maybe_auto_save() is called outside the lock because it has its own
+        internal lock and does not need to be atomic with the state mutation.
         """
-        activated = self.state.record_fail(pair)
+        with self._op_lock:
+            activated = self.state.record_fail(pair)
 
-        # Check guard for early cooldown activation
-        if self.guard and context:
-            if self.guard.should_cooldown(pair, context):
-                logger.info(f"[VERONICA_INTEGRATION] Guard triggered cooldown for {pair}")
-                self.state.cooldowns[pair] = time.time() + self.state.cooldown_seconds
-                self.guard.on_cooldown_activated(pair, context)
-                activated = True
+            # Check guard for early cooldown activation
+            if self.guard and context:
+                if self.guard.should_cooldown(pair, context):
+                    logger.info(f"[VERONICA_INTEGRATION] Guard triggered cooldown for {pair}")
+                    self.state.set_cooldown(pair, time.time() + self.state.cooldown_seconds)
+                    self.guard.on_cooldown_activated(pair, context)
+                    activated = True
 
+        # _maybe_auto_save has its own lock; call outside _op_lock to avoid
+        # potential deadlock if save() ever acquires _op_lock in the future.
         self._maybe_auto_save()
         return activated
 
@@ -247,10 +257,11 @@ class VeronicaIntegration:
         Returns:
             Remaining seconds, or None if not in cooldown
         """
-        if pair not in self.state.cooldowns:
+        try:
+            remaining = self.state.cooldowns[pair] - time.time()
+            return max(0.0, remaining)
+        except KeyError:
             return None
-        remaining = self.state.cooldowns[pair] - time.time()
-        return max(0, remaining)
 
     def save(self) -> bool:
         """Manually save state.

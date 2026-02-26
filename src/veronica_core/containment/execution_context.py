@@ -77,10 +77,19 @@ def attach_partial_buffer(buf: PartialResultBuffer) -> None:
 
     Raises RuntimeError if called outside an active wrap_llm_call (i.e., when
     no ContextVar token is set).
+
+    Raises RuntimeError if a different buffer is already attached to the current
+    context (prevents silent overwrite of an in-progress partial capture).
     """
-    if _current_partial_buffer.get() is None:
+    current = _current_partial_buffer.get()
+    if current is None:
         raise RuntimeError(
             "attach_partial_buffer() called outside an active wrap_llm_call context."
+        )
+    if current is not buf:
+        raise RuntimeError(
+            "attach_partial_buffer() called with a different buffer than the one "
+            "already attached to the current wrap_llm_call context."
         )
     _current_partial_buffer.set(buf)
 
@@ -505,7 +514,6 @@ class ExecutionContext:
         opts = options or WrapOptions()
         node_id = str(uuid.uuid4())
 
-        # Determine parent node (last completed node if any).
         with self._lock:
             parent_id = self._nodes[-1].node_id if self._nodes else None
 
@@ -522,14 +530,79 @@ class ExecutionContext:
             partial_buffer=opts.partial_buffer,
         )
 
-        # Determine graph parent using threading.local() stack.
+        stack, graph_node_id = self._begin_graph_node(kind, opts)
+
+        # Pre-flight: chain-level limit check.
+        halt_reason = self._check_limits()
+        if halt_reason is not None:
+            return self._halt_node(node, stack, graph_node_id, halt_reason)
+
+        # Pre-flight: cost estimate check (before calling fn).
+        if opts.cost_estimate_hint > 0.0:
+            exceeded = self._check_budget_estimate(node, opts)
+            if exceeded:
+                stack.pop()
+                self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
+                return Decision.HALT
+
+        # Pipeline pre-dispatch check.
+        if self._pipeline is not None:
+            pipeline_decision = self._check_pipeline_pre_dispatch(
+                node_id, kind, opts, node, stack, graph_node_id
+            )
+            if pipeline_decision is not None:
+                return pipeline_decision
+
+        # CircuitBreaker pre-dispatch check.
+        if self._circuit_breaker is not None:
+            cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
+            if cb_decision is not None:
+                return cb_decision
+
+        # Dispatch the callable.
+        self._graph.mark_running(graph_node_id)
+        self._forward_divergence_events(graph_node_id)
+
+        _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
+
+        if _fn_exc is not None:
+            return self._handle_fn_error(
+                _fn_exc, node_id, opts, node, stack, graph_node_id
+            )
+
+        # Success path.
+        actual_cost = self._compute_actual_cost(kind, opts)
+
+        # Pipeline budget check (post-call, LLM calls only).
+        if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
+            charge_decision = self._check_before_charge(
+                node_id, opts, actual_cost, node, stack, graph_node_id
+            )
+            if charge_decision is not None:
+                return charge_decision
+
+        return self._finalize_success(node, stack, graph_node_id, actual_cost, opts)
+
+    # ------------------------------------------------------------------
+    # _wrap sub-helpers
+    # ------------------------------------------------------------------
+
+    def _begin_graph_node(
+        self,
+        kind: Literal["llm", "tool"],
+        opts: WrapOptions,
+    ) -> tuple[list[str], str]:
+        """Initialize the thread-local node stack and create a graph node.
+
+        Returns:
+            (stack, graph_node_id) where stack is the per-thread call stack.
+        """
         stack: list[str] = getattr(self._node_stack, "stack", None)
         if stack is None:
             self._node_stack.stack = []
             stack = self._node_stack.stack
         graph_parent_id = stack[-1] if stack else self._root_node_id
 
-        # Create graph node and push onto stack.
         graph_node_id = self._graph.begin_node(
             parent_id=graph_parent_id,
             kind=kind,
@@ -537,94 +610,115 @@ class ExecutionContext:
             model=self._metadata.model if kind == "llm" else None,
         )
         stack.append(graph_node_id)
+        return stack, graph_node_id
 
-        # Pre-flight: chain-level limit check.
-        halt_reason = self._check_limits()
-        if halt_reason is not None:
+    def _halt_node(
+        self,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+        stop_reason: str,
+    ) -> Decision:
+        """Record node as halted and return Decision.HALT."""
+        node.status = "halted"
+        node.end_ts = datetime.now(timezone.utc)
+        with self._lock:
+            self._nodes.append(node)
+        stack.pop()
+        self._graph.mark_halt(graph_node_id, stop_reason=stop_reason)
+        return Decision.HALT
+
+    def _check_budget_estimate(
+        self, node: NodeRecord, opts: WrapOptions
+    ) -> bool:
+        """Check projected cost against ceiling. Records node and emits event if exceeded.
+
+        Returns:
+            True if budget would be exceeded (caller should halt).
+        """
+        with self._lock:
+            projected = self._cost_usd_accumulated + opts.cost_estimate_hint
+            if projected > self._config.max_cost_usd:
+                self._emit_chain_event(
+                    "budget_exceeded",
+                    f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
+                    f"chain ceiling ${self._config.max_cost_usd:.4f}",
+                )
+                node.status = "halted"
+                node.end_ts = datetime.now(timezone.utc)
+                self._nodes.append(node)
+                return True
+        return False
+
+    def _check_pipeline_pre_dispatch(
+        self,
+        node_id: str,
+        kind: Literal["llm", "tool"],
+        opts: WrapOptions,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+    ) -> Decision | None:
+        """Run pipeline before_llm_call / before_tool_call.
+
+        Returns:
+            The pipeline Decision if it is not ALLOW, else None.
+        """
+        tool_ctx = self._make_tool_ctx(node_id, opts)
+        if kind == "llm":
+            pipeline_decision = self._pipeline.before_llm_call(tool_ctx)  # type: ignore[union-attr]
+        else:
+            pipeline_decision = self._pipeline.before_tool_call(tool_ctx)  # type: ignore[union-attr]
+
+        if pipeline_decision != Decision.ALLOW:
+            with self._lock:
+                for ev in self._pipeline.get_events():  # type: ignore[union-attr]
+                    if ev not in self._events:
+                        self._events.append(ev)
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 self._nodes.append(node)
             stack.pop()
-            self._graph.mark_halt(graph_node_id, stop_reason=halt_reason)
-            return Decision.HALT
+            self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
+            return pipeline_decision
+        return None
 
-        # Pre-flight: cost estimate check (before calling fn).
-        # Hold a single lock for the entire read-check-emit-append sequence to
-        # prevent another thread from modifying _cost_usd_accumulated between
-        # the read and the limit comparison.
-        _budget_exceeded = False
-        if opts.cost_estimate_hint > 0.0:
+    def _check_circuit_breaker(
+        self,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+    ) -> Decision | None:
+        """Run CircuitBreaker.check(). Returns Decision.HALT or None."""
+        from veronica_core.runtime_policy import PolicyContext
+        with self._lock:
+            cost = self._cost_usd_accumulated
+            step = self._step_count
+        policy_ctx = PolicyContext(
+            cost_usd=cost,
+            step_count=step,
+            chain_id=self._metadata.chain_id,
+            entity_id=self._metadata.user_id or "",
+        )
+        pd = self._circuit_breaker.check(policy_ctx)  # type: ignore[union-attr]
+        if not pd.allowed:
             with self._lock:
-                projected = self._cost_usd_accumulated + opts.cost_estimate_hint
-                if projected > self._config.max_cost_usd:
-                    _budget_exceeded = True
-                    self._emit_chain_event(
-                        "budget_exceeded",
-                        f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
-                        f"chain ceiling ${self._config.max_cost_usd:.4f}",
-                    )
-                    node.status = "halted"
-                    node.end_ts = datetime.now(timezone.utc)
-                    self._nodes.append(node)
-            if _budget_exceeded:
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
-                return Decision.HALT
+                self._emit_chain_event("circuit_open", f"circuit breaker denied: {pd.reason}")
+            node.status = "halted"
+            node.end_ts = datetime.now(timezone.utc)
+            with self._lock:
+                self._nodes.append(node)
+            stack.pop()
+            self._graph.mark_halt(graph_node_id, stop_reason="circuit_open")
+            return Decision.HALT
+        return None
 
-        # Pipeline pre-dispatch check.
-        if self._pipeline is not None:
-            tool_ctx = self._make_tool_ctx(node_id, opts)
-            if kind == "llm":
-                pipeline_decision = self._pipeline.before_llm_call(tool_ctx)
-            else:
-                pipeline_decision = self._pipeline.before_tool_call(tool_ctx)
-            if pipeline_decision != Decision.ALLOW:
-                # Mirror pipeline events into chain-level log.
-                with self._lock:
-                    for ev in self._pipeline.get_events():
-                        if ev not in self._events:
-                            self._events.append(ev)
-                node.status = "halted"
-                node.end_ts = datetime.now(timezone.utc)
-                with self._lock:
-                    self._nodes.append(node)
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
-                return pipeline_decision
+    def _forward_divergence_events(self, graph_node_id: str) -> None:
+        """Drain divergence events from ExecutionGraph and append to chain log.
 
-        # CircuitBreaker pre-dispatch check.
-        if self._circuit_breaker is not None:
-            from veronica_core.runtime_policy import PolicyContext
-            policy_ctx = PolicyContext(
-                cost_usd=self._cost_usd_accumulated,
-                step_count=self._step_count,
-                chain_id=self._metadata.chain_id,
-                entity_id=self._metadata.user_id or "",
-            )
-            pd = self._circuit_breaker.check(policy_ctx)
-            if not pd.allowed:
-                with self._lock:
-                    self._emit_chain_event(
-                        "circuit_open",
-                        f"circuit breaker denied: {pd.reason}",
-                    )
-                node.status = "halted"
-                node.end_ts = datetime.now(timezone.utc)
-                with self._lock:
-                    self._nodes.append(node)
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="circuit_open")
-                return Decision.HALT
-
-        # Dispatch the callable.
-        self._graph.mark_running(graph_node_id)
-
-        # Drain any divergence events produced by mark_running and forward
-        # them to the chain-level event log.  Divergence does NOT halt
-        # execution; the Decision remains ALLOW unless another condition fires.
-        # Events may be signature-based (consecutive/frequency) or rate-based
-        # (COST_RATE_EXCEEDED, TOKEN_VELOCITY_EXCEEDED); handle both shapes.
+        Divergence does NOT halt execution; events are informational only.
+        """
         for div_evt in self._graph.drain_divergence_events():
             event_type = div_evt.get("event_type", "divergence_suspected")
             if "signature" in div_evt:
@@ -653,14 +747,23 @@ class ExecutionContext:
                 if safe_evt not in self._events:
                     self._events.append(safe_evt)
 
-        # Inject partial buffer into ContextVar so fn() can retrieve it via
-        # get_current_partial_buffer(). Always reset after fn() returns or raises.
+    def _invoke_fn(
+        self,
+        fn: Callable[[], Any],
+        opts: WrapOptions,
+        graph_node_id: str,
+    ) -> tuple["BaseException | None", "Any"]:
+        """Execute fn() under partial buffer context.
+
+        Returns:
+            (exception_or_None, buf_token) where buf_token is the ContextVar
+            token for the partial buffer (already reset on return).
+        """
         _buf_token = None
         if opts.partial_buffer is not None:
             self._partial_buffers[graph_node_id] = opts.partial_buffer
             _buf_token = _current_partial_buffer.set(opts.partial_buffer)
 
-        call_start = time.monotonic()
         _fn_exc: BaseException | None = None
         try:
             fn()
@@ -669,55 +772,66 @@ class ExecutionContext:
         finally:
             if _buf_token is not None:
                 _current_partial_buffer.reset(_buf_token)
+        return _fn_exc, _buf_token
 
-        if _fn_exc is not None:
-            exc = _fn_exc
-            call_elapsed_ms = (time.monotonic() - call_start) * 1000.0
-
-            # Check for timeout-driven cancellation.
-            if self._cancellation_token.is_cancelled:
-                node.status = "timeout"
-                node.end_ts = datetime.now(timezone.utc)
-                with self._lock:
-                    self._nodes.append(node)
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="timeout")
-                return Decision.HALT
-
-            # Pipeline error hook.
-            if self._pipeline is not None:
-                tool_ctx = self._make_tool_ctx(node_id, opts)
-                error_decision = self._pipeline.on_error(tool_ctx, exc)
-            else:
-                error_decision = Decision.RETRY
-
-            if self._circuit_breaker is not None:
-                self._circuit_breaker.record_failure()
-
-            with self._lock:
-                self._retries_used += 1
-                node.retries_used += 1
-
-            node.status = "error"
+    def _handle_fn_error(
+        self,
+        exc: BaseException,
+        node_id: str,
+        opts: WrapOptions,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+    ) -> Decision:
+        """Handle an exception raised by fn(). Returns HALT or RETRY."""
+        if self._cancellation_token.is_cancelled:
+            node.status = "timeout"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 self._nodes.append(node)
             stack.pop()
-            self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
+            self._graph.mark_halt(graph_node_id, stop_reason="timeout")
+            return Decision.HALT
 
-            if error_decision == Decision.HALT:
-                return Decision.HALT
-            return Decision.RETRY
+        if self._pipeline is not None:
+            tool_ctx = self._make_tool_ctx(node_id, opts)
+            error_decision = self._pipeline.on_error(tool_ctx, exc)
+        else:
+            error_decision = Decision.RETRY
 
-        # Success path.
-        call_elapsed_ms = (time.monotonic() - call_start) * 1000.0  # noqa: F841
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.record_failure()
 
+        with self._lock:
+            self._retries_used += 1
+            node.retries_used += 1
+
+        node.status = "error"
+        node.end_ts = datetime.now(timezone.utc)
+        with self._lock:
+            self._nodes.append(node)
+        stack.pop()
+        self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
+
+        if error_decision == Decision.HALT:
+            return Decision.HALT
+        return Decision.RETRY
+
+    def _compute_actual_cost(
+        self, kind: Literal["llm", "tool"], opts: WrapOptions
+    ) -> float:
+        """Determine the actual cost for this call.
+
+        Uses cost_estimate_hint when provided; otherwise attempts auto-pricing
+        from opts.response_hint for LLM calls.
+
+        Returns:
+            Actual cost in USD (0.0 if not determinable).
+        """
         actual_cost = opts.cost_estimate_hint
         if actual_cost == 0.0 and kind == "llm":
             from veronica_core.pricing import estimate_cost_usd, extract_usage_from_response
-            model_name = opts.model or ""
-            if not model_name and hasattr(self, "_metadata") and self._metadata:
-                model_name = self._metadata.model or ""
+            model_name = opts.model or self._metadata.model or ""
             usage = None
             if opts.response_hint is not None:
                 usage = extract_usage_from_response(opts.response_hint)
@@ -727,56 +841,74 @@ class ExecutionContext:
                 _ev = SafetyEvent(
                     event_type="COST_ESTIMATION_SKIPPED",
                     decision=Decision.ALLOW,
-                    reason=f"model={model_name!r} known but response_hint not provided; cost_usd=0.0 recorded",
+                    reason=(
+                        f"model={model_name!r} known but response_hint not provided; "
+                        f"cost_usd=0.0 recorded"
+                    ),
                     hook="AutoPricing",
                 )
                 with self._lock:
                     self._events.append(_ev)
+        return actual_cost
 
-        # Pipeline budget check (post-call, LLM calls only).
-        if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
-            tool_ctx = self._make_tool_ctx(node_id, opts, cost_usd=actual_cost)
-            charge_decision = self._pipeline.before_charge(tool_ctx, actual_cost)
-            if charge_decision != Decision.ALLOW:
-                with self._lock:
-                    for ev in self._pipeline.get_events():
-                        if ev not in self._events:
-                            self._events.append(ev)
-                node.status = "halted"
-                node.end_ts = datetime.now(timezone.utc)
-                with self._lock:
-                    self._nodes.append(node)
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
-                return charge_decision
+    def _check_before_charge(
+        self,
+        node_id: str,
+        opts: WrapOptions,
+        actual_cost: float,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+    ) -> Decision | None:
+        """Run pipeline.before_charge(). Returns non-ALLOW decision or None."""
+        tool_ctx = self._make_tool_ctx(node_id, opts, cost_usd=actual_cost)
+        charge_decision = self._pipeline.before_charge(tool_ctx, actual_cost)  # type: ignore[union-attr]
+        if charge_decision != Decision.ALLOW:
+            with self._lock:
+                for ev in self._pipeline.get_events():  # type: ignore[union-attr]
+                    if ev not in self._events:
+                        self._events.append(ev)
+            node.status = "halted"
+            node.end_ts = datetime.now(timezone.utc)
+            with self._lock:
+                self._nodes.append(node)
+            stack.pop()
+            self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
+            return charge_decision
+        return None
 
+    def _finalize_success(
+        self,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+        actual_cost: float,
+        opts: WrapOptions,
+    ) -> Decision:
+        """Record successful completion: update counters, propagate cost, mark graph."""
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
 
         with self._lock:
             self._step_count += 1
-            new_total = self._budget_backend.add(actual_cost)
-            self._cost_usd_accumulated = new_total
+            self._budget_backend.add(actual_cost)
+            self._cost_usd_accumulated += actual_cost
             node.cost_usd = actual_cost
             node.status = "ok"
             node.end_ts = datetime.now(timezone.utc)
             self._nodes.append(node)
 
-            # Mirror any new pipeline events.
             if self._pipeline is not None:
                 for ev in self._pipeline.get_events():
                     if ev not in self._events:
                         self._events.append(ev)
 
-        # Propagate cost up the parent chain (multi-agent linking).
         if self._parent is not None and actual_cost > 0.0:
             self._parent._propagate_child_cost(actual_cost)
 
         stack.pop()
         self._graph.mark_success(graph_node_id, cost_usd=actual_cost)
 
-        # Mark buffer complete on clean success so callers can tell the stream
-        # finished normally vs. was interrupted.
         if opts.partial_buffer is not None:
             opts.partial_buffer.mark_complete()
 

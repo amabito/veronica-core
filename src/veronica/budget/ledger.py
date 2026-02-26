@@ -1,6 +1,7 @@
 """VERONICA Budget ledger -- in-memory accounting with window keying."""
 from __future__ import annotations
 
+import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,7 @@ class BudgetLedger:
         # Key: (scope.value, scope_id, window_kind.value, window_id)
         self._committed: defaultdict[tuple[str, str, str, str], float] = defaultdict(float)
         self._reserved: defaultdict[tuple[str, str, str, str], float] = defaultdict(float)
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Key helpers
@@ -58,7 +60,8 @@ class BudgetLedger:
     ) -> float:
         """Return total spend (committed + reserved) for the current window."""
         k = self._key(scope, scope_id, window, ts)
-        return self._committed[k] + self._reserved[k]
+        with self._lock:
+            return self._committed[k] + self._reserved[k]
 
     def committed(
         self,
@@ -69,7 +72,8 @@ class BudgetLedger:
     ) -> float:
         """Return only committed (confirmed) spend for the current window."""
         k = self._key(scope, scope_id, window, ts)
-        return self._committed[k]
+        with self._lock:
+            return self._committed[k]
 
     def snapshot(
         self,
@@ -80,15 +84,16 @@ class BudgetLedger:
     ) -> dict[str, Any]:
         """Return a dict suitable for event payloads."""
         k = self._key(scope, scope_id, window, ts)
-        return {
-            "scope": scope.value,
-            "scope_id": scope_id,
-            "window": window.value,
-            "window_id": k[3],
-            "committed_usd": self._committed[k],
-            "reserved_usd": self._reserved[k],
-            "used_usd": self._committed[k] + self._reserved[k],
-        }
+        with self._lock:
+            return {
+                "scope": scope.value,
+                "scope_id": scope_id,
+                "window": window.value,
+                "window_id": k[3],
+                "committed_usd": self._committed[k],
+                "reserved_usd": self._reserved[k],
+                "used_usd": self._committed[k] + self._reserved[k],
+            }
 
     # ------------------------------------------------------------------
     # Write operations
@@ -104,7 +109,8 @@ class BudgetLedger:
     ) -> None:
         """Add a reservation (pre-charge) for the current window."""
         k = self._key(scope, scope_id, window, ts)
-        self._reserved[k] += amount_usd
+        with self._lock:
+            self._reserved[k] += amount_usd
 
     def commit(
         self,
@@ -117,8 +123,9 @@ class BudgetLedger:
     ) -> None:
         """Move reserved_usd from reserved to committed, applying actual_usd."""
         k = self._key(scope, scope_id, window, ts)
-        self._reserved[k] = max(0.0, self._reserved[k] - reserved_usd)
-        self._committed[k] += actual_usd
+        with self._lock:
+            self._reserved[k] = max(0.0, self._reserved[k] - reserved_usd)
+            self._committed[k] += actual_usd
 
     def release(
         self,
@@ -130,4 +137,5 @@ class BudgetLedger:
     ) -> None:
         """Remove a reservation without committing (e.g. on call failure)."""
         k = self._key(scope, scope_id, window, ts)
-        self._reserved[k] = max(0.0, self._reserved[k] - amount_usd)
+        with self._lock:
+            self._reserved[k] = max(0.0, self._reserved[k] - amount_usd)

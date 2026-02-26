@@ -6,6 +6,58 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.0.0] — 2026-02-26 — API Polish & Security Hardening
+
+**Breaking changes:** `on_error()` default changed from ALLOW to HALT. `AIcontainer` renamed to `AIContainer`.
+
+### Security
+
+- `ShieldPipeline.on_error()` now defaults to HALT (fail-closed). Pass
+  `on_error_policy=Decision.ALLOW` to restore the previous fail-open behavior.
+- `SecretMasker` handles mixed-type lists and nested dicts recursively,
+  preventing partial masking when secret values appear inside nested structures.
+- Redis budget reconciliation on reconnect prevents cost bypass: accumulated
+  spend is re-read from Redis on successful reconnect and reconciled against the
+  in-process counter before new calls are allowed.
+
+### Breaking Changes
+
+- `timeout_ms` parameter is deprecated: accepted but ignored, emits
+  `DeprecationWarning`. Full enforcement will be added in a future release.
+- `on_error()` default changed from ALLOW to HALT. Pass
+  `on_error_policy=Decision.ALLOW` to restore old behavior.
+- `AIcontainer` renamed to `AIContainer` (PascalCase convention). The old name
+  still works but emits `DeprecationWarning`. It will be removed in a future
+  release.
+
+### Added
+
+- LlamaIndex adapter (`adapters/llamaindex.py`): `VeronicaLlamaIndexHandler`
+  enforces VERONICA policies on every LLM and embedding call in a LlamaIndex
+  pipeline. Accepts `GuardConfig` or `ExecutionConfig`.
+- LangChain adapter now uses per-model pricing from `pricing.py` for accurate
+  cost accounting.
+- OpenClaw integration marked as experimental; available via
+  `veronica_core.adapters.openclaw` (import guard present).
+
+### Fixed
+
+- O(n) `pop(0)` replaced with `deque.popleft()` in 3 modules for O(1)
+  queue operations.
+- Thread-safe security level management: security level is now read and set
+  under a `threading.Lock`.
+- Redis fallback reset on successful reconnect: fallback mode is cleared when
+  the Redis connection is restored, preventing permanent degraded mode.
+
+### Deprecations
+
+- `VeronicaPersistence`: runtime `DeprecationWarning` now emitted on
+  construction. Use `PersistenceBackend` (`veronica_core.backends`) instead.
+- `AIcontainer`: runtime `DeprecationWarning` emitted on access. Use
+  `AIContainer` instead.
+
+---
+
 ## [0.12.0] — 2026-02-26 — Middleware, Time-Based Divergence, Streaming Buffers
 
 **Breaking changes:** none
