@@ -27,7 +27,7 @@ def tmp_policy(tmp_path: Path) -> Path:
 @pytest.fixture()
 def signer() -> PolicySigner:
     """Return a PolicySigner with the built-in test key."""
-    return PolicySigner()
+    return PolicySigner(key=hashlib.sha256(b"veronica-dev-key").digest())
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +112,16 @@ def test_env_var_overrides_key(tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def test_policy_engine_valid_sig_ok(tmp_policy: Path, signer: PolicySigner) -> None:
+def test_policy_engine_valid_sig_ok(
+    tmp_policy: Path, signer: PolicySigner, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sig = signer.sign(tmp_policy)
     sig_path = Path(str(tmp_policy) + ".sig")
     sig_path.write_text(sig + "\n", encoding="utf-8")
+
+    # PolicyEngine internally creates PolicySigner() which needs a key.
+    dev_key = hashlib.sha256(b"veronica-dev-key").digest()
+    monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
 
     from veronica_core.security.policy_engine import PolicyEngine
 
@@ -129,9 +135,16 @@ def test_policy_engine_valid_sig_ok(tmp_policy: Path, signer: PolicySigner) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_policy_engine_invalid_sig_raises(tmp_policy: Path) -> None:
+def test_policy_engine_invalid_sig_raises(
+    tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sig_path = Path(str(tmp_policy) + ".sig")
     sig_path.write_text("0" * 64 + "\n", encoding="utf-8")
+
+    # PolicyEngine internally creates PolicySigner() which needs a key
+    # in non-DEV environments. Provide the dev key via env var.
+    dev_key = hashlib.sha256(b"veronica-dev-key").digest()
+    monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
 
     from veronica_core.security.policy_engine import PolicyEngine
 
@@ -193,10 +206,15 @@ def test_policy_engine_missing_sig_raises_in_ci(
 # ---------------------------------------------------------------------------
 
 
-def test_policy_engine_tamper_raises_for_caller(tmp_policy: Path) -> None:
+def test_policy_engine_tamper_raises_for_caller(
+    tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """RuntimeError from tampered policy propagates to the caller."""
     sig_path = Path(str(tmp_policy) + ".sig")
     sig_path.write_text("badbadbadbad" + "0" * 52 + "\n", encoding="utf-8")
+
+    dev_key = hashlib.sha256(b"veronica-dev-key").digest()
+    monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
 
     from veronica_core.security.policy_engine import PolicyEngine
 
@@ -223,7 +241,7 @@ def test_default_policy_file_verifies(tmp_path: Path) -> None:
     if not policy_path.exists() or not sig_path.exists():
         pytest.skip("policies/default.yaml or .sig not found")
 
-    signer = PolicySigner()
+    signer = PolicySigner(key=hashlib.sha256(b"veronica-dev-key").digest())
     assert signer.verify(policy_path, sig_path), (
         "policies/default.yaml.sig does not match default.yaml with the test key"
     )
