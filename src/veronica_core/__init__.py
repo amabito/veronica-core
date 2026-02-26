@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "0.11.0"
+__version__ = "0.11.1"
 
 # Core state machine
 from veronica_core.state import (
@@ -60,7 +60,7 @@ from veronica_core.integration import (
 )
 
 # Execution Shield (v0.3 -- opt-in, all features disabled by default)
-from veronica_core.shield import ShieldConfig
+from veronica_core.shield import ShieldConfig, PostDispatchHook
 from veronica_core.shield.config import (
     SafeModeConfig,
     BudgetConfig,
@@ -172,6 +172,7 @@ __all__ = [
     "get_veronica_integration",
     # Execution Shield (v0.3)
     "ShieldConfig",
+    "PostDispatchHook",
     "SafeModeConfig",
     "BudgetConfig",
     "CircuitBreakerConfig",

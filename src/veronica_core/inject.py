@@ -41,7 +41,7 @@ def get_active_container() -> Optional[Any]:
 class VeronicaHalt(RuntimeError):
     """Raised when veronica_guard denies execution due to a policy decision."""
 
-    def __init__(self, reason: str, decision: PolicyDecision) -> None:
+    def __init__(self, reason: str, decision: Optional[PolicyDecision] = None) -> None:
         super().__init__(reason)
         self.reason = reason
         self.decision = decision

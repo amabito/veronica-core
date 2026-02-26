@@ -145,8 +145,9 @@ class BudgetEnforcer:
 
     def to_dict(self) -> Dict:
         """Serialize budget state."""
-        return {
-            "limit_usd": self.limit_usd,
-            "spent_usd": self._spent_usd,
-            "call_count": self._call_count,
-        }
+        with self._lock:
+            return {
+                "limit_usd": self.limit_usd,
+                "spent_usd": self._spent_usd,
+                "call_count": self._call_count,
+            }

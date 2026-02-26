@@ -103,6 +103,11 @@ def patch_openai() -> None:
     Safe to call when openai is not installed (logs a warning, returns).
     Idempotent: subsequent calls after the first are no-ops.
     Thread-safe: all registry writes are protected by _patches_lock.
+
+    Warning:
+        WARNING: If AG2 uses its own ModelClient abstraction internally,
+        this patch may not intercept those calls. A native AG2 LLMMiddleware
+        adapter is planned for a future release.
     """
     with _patches_lock:
         patched_any = False
@@ -145,6 +150,11 @@ def patch_anthropic() -> None:
     Safe to call when anthropic is not installed (logs a warning, returns).
     Idempotent: subsequent calls after the first are no-ops.
     Thread-safe: all registry writes are protected by _patches_lock.
+
+    Warning:
+        WARNING: If AG2 uses its own ModelClient abstraction internally,
+        this patch may not intercept those calls. A native AG2 LLMMiddleware
+        adapter is planned for a future release.
     """
     with _patches_lock:
         if "anthropic" in _patches:

@@ -125,9 +125,18 @@ class VeronicaIntegration:
             loaded_state = self.persistence.load()
             state_data = loaded_state.to_dict() if loaded_state else None
 
-        self.state = VeronicaStateMachine.from_dict(state_data) if state_data else None
-
-        loaded_from_disk = self.state is not None
+        loaded_from_disk = False
+        if state_data:
+            try:
+                self.state = VeronicaStateMachine.from_dict(state_data)
+                loaded_from_disk = True
+            except Exception as exc:
+                logger.warning(
+                    f"[VERONICA_INTEGRATION] Failed to deserialize state, starting fresh: {exc}"
+                )
+                self.state = None
+        else:
+            self.state = None
 
         if self.state is None:
             # Fresh start
@@ -267,12 +276,11 @@ class VeronicaIntegration:
         if self.auto_save_interval <= 0:
             return  # Auto-save disabled
 
-        self._op_lock.acquire()
-        self.operation_count += 1
-        should_save = self.operation_count >= self.auto_save_interval
-        if should_save:
-            self.operation_count = 0
-        self._op_lock.release()
+        with self._op_lock:
+            self.operation_count += 1
+            should_save = self.operation_count >= self.auto_save_interval
+            if should_save:
+                self.operation_count = 0
 
         if should_save:
             logger.debug(

@@ -6,8 +6,11 @@ Estimates are approximate and may differ from actual billing by +/-30%.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,13 @@ def resolve_model_pricing(model: str) -> Pricing:
         Pricing for the matched model or the fallback.
     """
     if not model:
+        logger.warning(
+            "[VERONICA_PRICING] Empty model name — using fallback pricing "
+            "(input=$%.4f/1K, output=$%.4f/1K). "
+            "Add this model to PRICING_TABLE for accurate cost estimation.",
+            _UNKNOWN_MODEL_FALLBACK.input_per_1k,
+            _UNKNOWN_MODEL_FALLBACK.output_per_1k,
+        )
         return _UNKNOWN_MODEL_FALLBACK
 
     # 1. Exact match
@@ -85,6 +95,14 @@ def resolve_model_pricing(model: str) -> Pricing:
         best = max(prefix_matches, key=len)
         return PRICING_TABLE[best]
 
+    logger.warning(
+        "[VERONICA_PRICING] Unknown model %r — using fallback pricing "
+        "(input=$%.4f/1K, output=$%.4f/1K). "
+        "Add this model to PRICING_TABLE for accurate cost estimation.",
+        model,
+        _UNKNOWN_MODEL_FALLBACK.input_per_1k,
+        _UNKNOWN_MODEL_FALLBACK.output_per_1k,
+    )
     return _UNKNOWN_MODEL_FALLBACK
 
 

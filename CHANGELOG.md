@@ -6,6 +6,45 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [0.11.1] — 2026-02-26 — Bug fixes and code quality improvements
+
+**Breaking changes:** none
+
+### Fixed
+
+- **AG2 adapter — TokenBudgetHook always zero**: `CircuitBreakerCapability._guarded_generate_reply()` and
+  `VeronicaConversableAgent.generate_reply()` now call `token_budget_hook.before_llm_call()` before the
+  call and `record_usage()` after, so token budgets are enforced correctly when used with AG2 agents.
+- **AG2 adapter — ToolCallContext not constructed**: `ag2.py` and `patch.py` now build a proper
+  `ToolCallContext` (with `request_id`, `model`, `tool_name`) instead of passing placeholder values.
+- **integration.py — from_dict contradictory state**: On deserialization failure, `loaded_from_disk`
+  is now always `False` when `state` is `None`, eliminating the contradictory state.
+- **inject.py — VeronicaHalt decision type**: `decision` field is now `Optional[PolicyDecision]`
+  to allow `decision=None` callers without a type error.
+- **input_compression.py — ambiguous variable name**: Renamed `l` to `line` (E741).
+- **budget.py — to_dict() thread safety**: Wrapped internal state reads in `with self._lock:`.
+- **integration.py — manual lock management**: Replaced `acquire()/release()` with `with self._lock:`.
+
+### New
+
+- **`PostDispatchHook` protocol** (`veronica_core.shield`): Companion to `PreDispatchHook`.
+  Provides `after_llm_call(ctx, response)` for post-call observation and recording.
+- **`NoopPostDispatchHook`** (`veronica_core.shield`): No-op implementation of `PostDispatchHook`.
+- **`register_veronica_hook()` — AG2 limitation documented**: Docstring now explicitly notes that
+  `register_reply()` provides no after-hook; `CircuitBreakerCapability` is recommended instead.
+- **`patch_openai()` / `patch_anthropic()` — AG2 caveat documented**: Docstring now notes that
+  AG2's internal `ModelClient` abstraction may bypass the patch.
+
+### Improved
+
+- **otel.py — thread safety**: `_otel_enabled` and `_tracer` globals are now protected by a
+  `threading.Lock`.
+- **Token estimation unified**: All `record_usage()` calls use `len(str(reply)) // 4` consistently.
+- **pricing.py — unknown model warning**: Emits `logging.warning()` when falling back to the
+  default price for an unrecognised model name.
+
+---
+
 ## [0.11.0] — 2026-02-25 — Middleware, Time-Based Divergence, Streaming Buffers
 
 **Breaking changes:** none

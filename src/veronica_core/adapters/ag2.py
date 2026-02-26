@@ -47,6 +47,7 @@ except ImportError as _exc:
 
 import logging
 from typing import Any, Dict, List, Optional, Union
+from uuid import uuid4
 
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.budget import BudgetEnforcer
@@ -54,6 +55,7 @@ from veronica_core.container import AIcontainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
 from veronica_core.retry import RetryContainer
+from veronica_core.shield.types import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -129,11 +131,31 @@ class VeronicaConversableAgent(ConversableAgent):
         Raises:
             VeronicaHalt: If any active policy (budget / step / retry) denies.
         """
+        llm_config = getattr(self, "llm_config", None)
+        model = llm_config.get("model") if isinstance(llm_config, dict) else None
+        ctx = ToolCallContext(
+            request_id=str(uuid4()),
+            tool_name="llm",
+            model=model,
+        )
+
+        token_budget_hook = getattr(self._container, "token_budget_hook", None)
+        if token_budget_hook is not None:
+            hook_decision = token_budget_hook.before_llm_call(ctx)
+            if hook_decision is not None:
+                from veronica_core.shield.types import Decision
+                if hook_decision == Decision.HALT:
+                    raise VeronicaHalt("Token budget exceeded", None)
+
         decision = self._container.check(cost_usd=0.0)
         if not decision.allowed:
             raise VeronicaHalt(decision.reason, decision)
 
         reply = super().generate_reply(messages=messages, sender=sender, **kwargs)
+
+        # Record token usage after successful call
+        if token_budget_hook is not None and reply is not None:
+            token_budget_hook.record_usage(output_tokens=len(str(reply)) // 4)
 
         # Increment step counter after successful call
         if self._container.step_guard is not None:
@@ -169,6 +191,11 @@ def register_veronica_hook(
     Raises:
         VeronicaHalt: When a policy denies execution inside the registered hook.
 
+    Note:
+        NOTE: register_reply() provides no after-hook. record_success/failure
+        unavailable via this pattern. Use CircuitBreakerCapability instead for
+        circuit breaking.
+
     Example::
 
         import ag2
@@ -184,7 +211,7 @@ def register_veronica_hook(
         recipient: ConversableAgent,
         messages: Optional[List[Dict[str, Any]]] = None,
         sender: Optional[Any] = None,
-        config: Optional[Any] = None,
+        **_kwargs: Any,
     ) -> tuple[bool, None]:
         """Policy-check reply function registered via register_reply().
 

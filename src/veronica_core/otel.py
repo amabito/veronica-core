@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_lock = threading.Lock()
 _otel_enabled: bool = False
 _tracer: Any = None
 
@@ -45,8 +47,10 @@ def enable_otel(
             os.environ.setdefault("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
 
         trace.set_tracer_provider(provider)
-        _tracer = trace.get_tracer("veronica-core")
-        _otel_enabled = True
+        new_tracer = trace.get_tracer("veronica-core")
+        with _lock:
+            _tracer = new_tracer
+            _otel_enabled = True
         logger.info("VERONICA OTel enabled: service=%r", service_name)
     except ImportError as exc:
         logger.warning("opentelemetry-sdk not installed. OTel disabled. %s", exc)
@@ -55,25 +59,31 @@ def enable_otel(
 def enable_otel_with_tracer(tracer: Any) -> None:
     """Enable OTel using an existing tracer (for testing)."""
     global _otel_enabled, _tracer
-    _tracer = tracer
-    _otel_enabled = True
+    with _lock:
+        _tracer = tracer
+        _otel_enabled = True
 
 
 def is_otel_enabled() -> bool:
     """Return True if OTel is currently enabled."""
-    return _otel_enabled
+    with _lock:
+        return _otel_enabled
 
 
 def disable_otel() -> None:
     """Disable OTel and clear the tracer."""
     global _otel_enabled, _tracer
-    _otel_enabled = False
-    _tracer = None
+    with _lock:
+        _otel_enabled = False
+        _tracer = None
 
 
 def emit_safety_event(event: "SafetyEvent") -> None:
     """Emit SafetyEvent as OTel span event. No-op if OTel not enabled."""
-    if not _otel_enabled or _tracer is None:
+    with _lock:
+        enabled = _otel_enabled
+        tracer = _tracer
+    if not enabled or tracer is None:
         return
     try:
         from opentelemetry import trace
@@ -105,7 +115,10 @@ def emit_containment_decision(
     chain_id: str = "",
 ) -> None:
     """Emit containment decision as OTel event."""
-    if not _otel_enabled or _tracer is None:
+    with _lock:
+        enabled = _otel_enabled
+        tracer = _tracer
+    if not enabled or tracer is None:
         return
     try:
         from opentelemetry import trace

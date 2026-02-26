@@ -6,7 +6,18 @@ Each class satisfies the corresponding Protocol and always returns
 
 from __future__ import annotations
 
+from typing import Any
+
 from veronica_core.shield.types import Decision, ToolCallContext
+
+__all__ = [
+    "NoopPreDispatchHook",
+    "NoopPostDispatchHook",
+    "NoopEgressBoundaryHook",
+    "NoopRetryBoundaryHook",
+    "NoopBudgetBoundaryHook",
+    "NoopToolDispatchHook",
+]
 
 
 class NoopPreDispatchHook:
@@ -14,6 +25,13 @@ class NoopPreDispatchHook:
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
         return None
+
+
+class NoopPostDispatchHook:
+    """Post-dispatch hook that takes no action."""
+
+    def after_llm_call(self, ctx: ToolCallContext, response: Any) -> None:
+        pass
 
 
 class NoopEgressBoundaryHook:

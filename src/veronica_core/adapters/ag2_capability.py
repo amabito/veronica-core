@@ -30,10 +30,15 @@ Example::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+from uuid import uuid4
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.shield.types import Decision, ToolCallContext
 from veronica_core.state import VeronicaState
+
+if TYPE_CHECKING:
+    from veronica_core.shield.token_budget import TokenBudgetHook
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +86,12 @@ class CircuitBreakerCapability:
         failure_threshold: int = 3,
         recovery_timeout: float = 60.0,
         veronica: Optional[Any] = None,
+        token_budget_hook: Optional["TokenBudgetHook"] = None,
     ) -> None:
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
         self._veronica = veronica
+        self._token_budget_hook = token_budget_hook
         self._breakers: Dict[str, CircuitBreaker] = {}
 
     # ------------------------------------------------------------------
@@ -160,8 +167,24 @@ class CircuitBreakerCapability:
                 )
                 return None
 
+            # Token budget check
+            if cap._token_budget_hook is not None:
+                ctx = ToolCallContext(request_id=str(uuid4()), tool_name="llm")
+                decision = cap._token_budget_hook.before_llm_call(ctx)
+                if decision == Decision.HALT:
+                    logger.debug(
+                        "[VERONICA_CAP] %s blocked: token budget HALT", name
+                    )
+                    return None
+
             # Invoke the original generate_reply
             reply = original_generate_reply(*args, **kwargs)
+
+            # Record token usage after successful reply
+            if reply is not None and cap._token_budget_hook is not None:
+                cap._token_budget_hook.record_usage(
+                    output_tokens=len(str(reply)) // 4
+                )
 
             # Record result to drive state transitions
             if reply is None:

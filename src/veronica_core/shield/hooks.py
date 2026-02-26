@@ -7,7 +7,7 @@ the pipeline (when wired) will treat it as ALLOW.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from veronica_core.shield.types import Decision, ToolCallContext
 
@@ -17,6 +17,13 @@ class PreDispatchHook(Protocol):
     """Evaluated before every LLM / tool call."""
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None: ...
+
+
+@runtime_checkable
+class PostDispatchHook(Protocol):
+    """Called after LLM response is received."""
+
+    def after_llm_call(self, ctx: "ToolCallContext", response: Any) -> None: ...
 
 
 @runtime_checkable
@@ -51,3 +58,13 @@ class ToolDispatchHook(Protocol):
     """Evaluated before every tool call (non-LLM dispatch)."""
 
     def before_tool_call(self, ctx: ToolCallContext) -> Decision | None: ...
+
+
+__all__ = [
+    "PreDispatchHook",
+    "PostDispatchHook",
+    "EgressBoundaryHook",
+    "RetryBoundaryHook",
+    "BudgetBoundaryHook",
+    "ToolDispatchHook",
+]

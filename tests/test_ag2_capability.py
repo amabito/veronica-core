@@ -13,6 +13,7 @@ from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 from veronica_core.backends import MemoryBackend
 from veronica_core.circuit_breaker import CircuitState
 from veronica_core.integration import VeronicaIntegration
+from veronica_core.shield.token_budget import TokenBudgetHook
 from veronica_core.state import VeronicaState
 
 
@@ -267,6 +268,39 @@ class TestGetBreaker:
         breaker = cap.get_breaker("a")
         assert breaker.failure_threshold == 7
         assert breaker.recovery_timeout == 120
+
+
+# ---------------------------------------------------------------------------
+# TokenBudgetHook integration
+# ---------------------------------------------------------------------------
+
+
+class TestTokenBudget:
+    def test_token_budget_halt_blocks_call(self) -> None:
+        """When token budget is exhausted (max=0), the call must be blocked."""
+        hook = TokenBudgetHook(max_output_tokens=0)
+        cap = CircuitBreakerCapability(failure_threshold=3, token_budget_hook=hook)
+        agent = StubAgent("a")
+        cap.add_to_agent(agent)
+
+        reply = agent.generate_reply([])
+
+        assert reply is None
+        # Original must not have been called
+        assert agent._call_count == 0
+
+    def test_token_budget_records_usage(self) -> None:
+        """After a successful reply, record_usage() must have been called."""
+        hook = TokenBudgetHook(max_output_tokens=10000)
+        cap = CircuitBreakerCapability(failure_threshold=3, token_budget_hook=hook)
+        agent = StubAgent("a")
+        cap.add_to_agent(agent)
+
+        assert hook.output_total == 0
+        reply = agent.generate_reply([])
+        assert reply is not None
+        # record_usage should have added tokens (word count of reply string)
+        assert hook.output_total > 0
 
 
 # ---------------------------------------------------------------------------

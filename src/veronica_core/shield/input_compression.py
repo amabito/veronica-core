@@ -106,11 +106,11 @@ class TemplateCompressor:
     def compress(self, text: str, target_tokens: int) -> str:
         important, other = _extract_important_lines(text)
 
-        constraints = "\n".join(f"- {l}" for l in important if _CONSTRAINT_RE.search(l))
-        key_data = "\n".join(f"- {l}" for l in important if not _CONSTRAINT_RE.search(l))
+        constraints = "\n".join(f"- {line}" for line in important if _CONSTRAINT_RE.search(line))
+        key_data = "\n".join(f"- {line}" for line in important if not _CONSTRAINT_RE.search(line))
 
         # Purpose: first non-empty line of original (truncated)
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
         purpose_raw = lines[0] if lines else "(none)"
         max_purpose_chars = min(200, target_tokens)
         purpose = purpose_raw[:max_purpose_chars] + ("..." if len(purpose_raw) > max_purpose_chars else "")
