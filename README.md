@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=300)
-![CI](https://img.shields.io/badge/tests-1466%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1349%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -776,7 +776,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] **v1.0.0 Production Release**: adversarial hardening (10 fixes: 3 CRITICAL, 4 HIGH, 3 MEDIUM), fail-closed defaults, LlamaIndex adapter, HALF_OPEN enforcement, NFKC normalization (v1.0.0)
 - [x] `CircuitBreakerCapability.remove_from_agent()`: clean teardown, restores original `generate_reply`, enables hot-swap and test isolation (v1.0.1)
 
-1466 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability.
+1349 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability.
 
 ---
 
@@ -801,7 +801,7 @@ LLM Providers
 - **veronica-core** (this package): Runtime containment kernel — budget enforcement, circuit breakers, execution graphs, security policies. Install this for LLM cost/execution containment.
 - **veronica-os** (separate package): Execution OS layer — Planner, ControlLoop, Session management. Built on top of veronica-core. See [veronica-os repository].
 
-The `src/veronica/` directory contains a minimal skeleton for veronica-os integration. For the full OS layer, install `veronica-os` separately.
+The control plane layer (Planner, ControlLoop, Session management) lives in the separate `veronica-os` repository.
 
 ---
 
