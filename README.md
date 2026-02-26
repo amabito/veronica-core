@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI)
-![CI](https://img.shields.io/badge/tests-1324%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1355%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
