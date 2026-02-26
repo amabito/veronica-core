@@ -6,7 +6,9 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [Unreleased]
+## [0.12.0] — 2026-02-26 — Middleware, Time-Based Divergence, Streaming Buffers
+
+**Breaking changes:** none
 
 ### New
 
