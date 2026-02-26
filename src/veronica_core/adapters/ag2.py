@@ -51,7 +51,7 @@ from uuid import uuid4
 
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.budget import BudgetEnforcer
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
 from veronica_core.retry import RetryContainer
@@ -62,9 +62,9 @@ logger = logging.getLogger(__name__)
 __all__ = ["VeronicaConversableAgent", "register_veronica_hook"]
 
 
-def _build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIcontainer:
-    """Build an AIcontainer from a GuardConfig or ExecutionConfig."""
-    return AIcontainer(
+def _build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:
+    """Build an AIContainer from a GuardConfig or ExecutionConfig."""
+    return AIContainer(
         budget=BudgetEnforcer(limit_usd=config.max_cost_usd),
         retry=RetryContainer(max_retries=config.max_retries_total),
         step_guard=AgentStepGuard(max_steps=config.max_steps),
@@ -157,22 +157,23 @@ class VeronicaConversableAgent(ConversableAgent):
         if token_budget_hook is not None and reply is not None:
             token_budget_hook.record_usage(output_tokens=len(str(reply)) // 4)
 
-        # Increment step counter after successful call
-        if self._container.step_guard is not None:
+        # Increment step counter only when a reply was produced.
+        # None means the agent declined to reply — no LLM call was made.
+        if reply is not None and self._container.step_guard is not None:
             self._container.step_guard.step()
 
         return reply
 
     @property
-    def container(self) -> AIcontainer:
-        """The underlying AIcontainer (for testing and introspection)."""
+    def container(self) -> AIContainer:
+        """The underlying AIContainer (for testing and introspection)."""
         return self._container
 
 
 def register_veronica_hook(
     agent: ConversableAgent,
     config: Union[GuardConfig, ExecutionConfig],
-) -> AIcontainer:
+) -> AIContainer:
     """Register a VERONICA policy-enforcement reply function on an existing agent.
 
     Alternative to subclassing: injects a policy-checking reply function into
@@ -186,7 +187,7 @@ def register_veronica_hook(
             Both expose max_cost_usd, max_steps, max_retries_total.
 
     Returns:
-        The AIcontainer created for this agent (for testing and introspection).
+        The AIContainer created for this agent (for testing and introspection).
 
     Raises:
         VeronicaHalt: When a policy denies execution inside the registered hook.

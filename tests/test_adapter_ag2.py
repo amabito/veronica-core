@@ -223,3 +223,64 @@ class TestImportError:
                 sys.modules[adapter_key] = saved_adapter
             if saved_ag2 is not None:
                 sys.modules["ag2"] = saved_ag2
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCases:
+    def test_exception_in_parent_propagates_without_incrementing_step(self) -> None:
+        """If parent generate_reply raises, step counter must NOT increment."""
+
+        class FailingAgent(VeronicaConversableAgent):
+            def generate_reply(self, messages=None, sender=None, **kwargs):
+                # Bypass VERONICA check by calling grandparent path directly
+                decision = self._container.check(cost_usd=0.0)
+                if not decision.allowed:
+                    from veronica_core.inject import VeronicaHalt
+                    raise VeronicaHalt(decision.reason, decision)
+                raise RuntimeError("upstream failure")
+
+        agent = FailingAgent("assistant", config=GuardConfig(max_steps=10))
+        assert agent.container.step_guard.current_step == 0
+        with pytest.raises(RuntimeError, match="upstream failure"):
+            agent.generate_reply(messages=[])
+        assert agent.container.step_guard.current_step == 0
+
+    def test_none_reply_from_parent_does_not_increment_step(self) -> None:
+        """If parent returns None, step counter must NOT increment."""
+
+        # Patch FakeConversableAgent to return None for this test only
+        original = FakeConversableAgent.generate_reply
+        FakeConversableAgent.generate_reply = lambda self, **kw: None  # type: ignore[method-assign]
+        try:
+            agent = VeronicaConversableAgent(
+                "assistant", config=GuardConfig(max_steps=10)
+            )
+            result = agent.generate_reply(messages=[])
+            assert result is None
+            assert agent.container.step_guard.current_step == 0
+        finally:
+            FakeConversableAgent.generate_reply = original  # type: ignore[method-assign]
+
+    def test_zero_budget_blocks_immediately(self) -> None:
+        """max_cost_usd=0.0 should block on the first call."""
+        agent = VeronicaConversableAgent(
+            "assistant",
+            config=GuardConfig(max_cost_usd=0.0),
+        )
+        agent.container.budget.spend(0.001)
+        with pytest.raises(VeronicaHalt, match="[Bb]udget"):
+            agent.generate_reply(messages=[])
+
+    def test_zero_max_steps_blocks_immediately(self) -> None:
+        """max_steps=1 should block after a single call."""
+        agent = VeronicaConversableAgent(
+            "assistant",
+            config=GuardConfig(max_steps=1),
+        )
+        agent.generate_reply(messages=[])
+        with pytest.raises(VeronicaHalt, match="[Ss]tep"):
+            agent.generate_reply(messages=[])
