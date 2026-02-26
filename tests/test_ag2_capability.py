@@ -325,3 +325,74 @@ class TestKwargsForwarding:
         cap.add_to_agent(agent)
         agent.generate_reply([], extra="value")
         assert received == [{"extra": "value"}]
+
+
+# ---------------------------------------------------------------------------
+# remove_from_agent
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveFromAgent:
+    def test_remove_restores_original_generate_reply(self) -> None:
+        """After remove_from_agent, agent.generate_reply must be the original method.
+
+        Bound methods are not identity-comparable (new object each access), so
+        we verify via __func__ equality on the underlying function object.
+        """
+        agent = StubAgent("r")
+        original_func = agent.generate_reply.__func__  # underlying function
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+        # After wrapping, the method should be the closure, not the original
+        assert not hasattr(agent.generate_reply, "__func__") or \
+            agent.generate_reply.__func__ is not original_func
+        cap.remove_from_agent(agent)
+        # After removal, the underlying function must be the original again
+        assert agent.generate_reply.__func__ is original_func
+
+    def test_remove_original_is_callable_and_works(self) -> None:
+        """Restored generate_reply must return the original reply."""
+        agent = StubAgent("r2")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+        cap.remove_from_agent(agent)
+        reply = agent.generate_reply([])
+        assert reply == "[r2] reply #1"
+
+    def test_remove_clears_breaker(self) -> None:
+        """After remove_from_agent, get_breaker must return None."""
+        agent = StubAgent("r3")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+        assert cap.get_breaker("r3") is not None
+        cap.remove_from_agent(agent)
+        assert cap.get_breaker("r3") is None
+
+    def test_remove_clears_breakers_property(self) -> None:
+        """breakers property must no longer contain removed agent."""
+        a = StubAgent("ra")
+        b = StubAgent("rb")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(a)
+        cap.add_to_agent(b)
+        cap.remove_from_agent(a)
+        assert "ra" not in cap.breakers
+        assert "rb" in cap.breakers
+
+    def test_remove_unregistered_agent_is_noop(self) -> None:
+        """remove_from_agent on an unregistered agent must not raise."""
+        agent = StubAgent("not_registered")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        # Should not raise -- just warn
+        cap.remove_from_agent(agent)
+
+    def test_remove_allows_readd(self) -> None:
+        """After remove, add_to_agent must work again on the same agent."""
+        agent = StubAgent("rr")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+        cap.remove_from_agent(agent)
+        # Re-add must succeed (not treated as duplicate)
+        breaker = cap.add_to_agent(agent)
+        assert breaker is not None
+        assert cap.get_breaker("rr") is breaker

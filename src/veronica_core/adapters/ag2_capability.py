@@ -94,6 +94,7 @@ class CircuitBreakerCapability:
         self._veronica = veronica
         self._token_budget_hook = token_budget_hook
         self._breakers: Dict[str, CircuitBreaker] = {}
+        self._originals: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -148,6 +149,7 @@ class CircuitBreakerCapability:
         self._breakers[name] = breaker
 
         original_generate_reply = agent.generate_reply
+        self._originals[name] = original_generate_reply
         cap = self  # explicit capture to avoid late-binding
 
         def _guarded_generate_reply(*args: Any, **kwargs: Any) -> Optional[Any]:
@@ -201,6 +203,30 @@ class CircuitBreakerCapability:
 
         logger.debug("[VERONICA_CAP] Circuit breaker injected into '%s'", name)
         return breaker
+
+    def remove_from_agent(self, agent: Any) -> None:
+        """Remove the circuit breaker previously injected into *agent*.
+
+        Restores ``agent.generate_reply`` to its original implementation and
+        removes the associated ``CircuitBreaker`` from this capability.
+
+        If *agent* was not registered with this capability, a warning is logged
+        and the call is a no-op.
+
+        Args:
+            agent: The agent from which to remove the circuit breaker.
+                   Must be the same object that was passed to ``add_to_agent``.
+        """
+        name = getattr(agent, "name", repr(agent))
+        if name not in self._originals:
+            logger.warning(
+                "[VERONICA_CAP] remove_from_agent called on unregistered agent '%s' -- skipping",
+                name,
+            )
+            return
+        agent.generate_reply = self._originals.pop(name)
+        del self._breakers[name]
+        logger.debug("[VERONICA_CAP] Circuit breaker removed from '%s'", name)
 
     def get_breaker(self, agent_name: str) -> Optional[CircuitBreaker]:
         """Return the ``CircuitBreaker`` for *agent_name*, or ``None``."""

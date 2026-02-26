@@ -6,6 +6,39 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.0.1] — 2026-02-26 — AG2 Capability: remove_from_agent
+
+**Breaking changes:** none
+
+### Added
+
+- `CircuitBreakerCapability.remove_from_agent(agent)`: restores the original
+  `generate_reply` method and removes the agent's `CircuitBreaker` from the
+  capability. Calling on an unregistered agent logs a warning and returns
+  without raising. Enables clean teardown without side-effects — e.g., for
+  testing, hot-swapping capabilities, or graceful shutdown flows.
+
+### Changed
+
+- `CircuitBreakerCapability.__init__` now initializes `_originals: Dict[str, Any]`
+  alongside `_breakers`. The original `generate_reply` reference is stored on
+  `add_to_agent()` and consumed on `remove_from_agent()`.
+
+### Roadmap (upcoming)
+
+- **v1.1.0**: `CircuitBreakerCapability.conservative()` / `.aggressive()` factory
+  presets; AG2 `GroupChatManager` ↔ per-agent label mapper for isolated budget
+  tracking across group chat participants.
+- **v1.2.0**: Native `ReplyInterceptor` and `LLMCallMiddleware` protocols (pending
+  AG2 upstream discussion — see [RFC issue](https://github.com/ag2ai/ag2/issues)).
+
+### Tests
+
+- 6 new tests for `remove_from_agent` (restore, breaker clear, noop on unregistered,
+  re-add after remove). All 29 AG2 capability tests passing.
+
+---
+
 ## [1.0.0] — 2026-02-26 — Production Release & Adversarial Hardening
 
 **Breaking changes:** `on_error()` default changed from ALLOW to HALT. `AIcontainer` renamed to `AIContainer`.
