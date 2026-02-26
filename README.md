@@ -726,7 +726,7 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
-## Ship Readiness (v1.0.0)
+## Ship Readiness (v1.0.1)
 
 - [x] BudgetWindow stops runaway execution (ceiling enforced)
 - [x] SafetyEvent records structured evidence for non-ALLOW decisions
