@@ -6,6 +6,58 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [Unreleased]
+
+### New
+
+- **ASGI/WSGI middleware** (`veronica_core.middleware`): `VeronicaASGIMiddleware` and
+  `VeronicaWSGIMiddleware` wrap each HTTP request in a fresh `ExecutionContext`. The
+  context is stored in a `ContextVar` so any code within the same request can call
+  `get_current_execution_context()` without passing the object manually. Non-HTTP
+  scopes (lifespan, websocket) pass through to the inner app unchanged. Returns 429
+  on `Decision.HALT` — either pre-flight (limit already exceeded before the app is
+  called) or post-flight (context was aborted during the call). The 429 path skips
+  the inner app entirely on pre-flight; on post-flight it is suppressed if the app
+  has already started sending a response (ASGI protocol constraint).
+
+- **Time-based divergence heuristics** (`ExecutionGraph`): Two rate checks added to
+  the existing consecutive-pattern detector:
+  - `COST_RATE_EXCEEDED` — fires once when cumulative chain cost / elapsed seconds
+    exceeds `cost_rate_threshold_usd_per_sec` (constructor param, default 0.10 USD/s).
+  - `TOKEN_VELOCITY_EXCEEDED` — fires once when total output tokens / elapsed seconds
+    exceeds `token_velocity_threshold` (constructor param, default 500 tok/s).
+  Both fire on `mark_success` (cost and token counts are unavailable before a node
+  completes). Both are deduped per chain — at most one event of each type per
+  `ExecutionGraph` instance. Event shape mirrors existing `divergence_suspected`
+  events but carries `cost_rate` or `token_velocity` fields instead of `signature` /
+  `repeat_count`. `snapshot()["aggregates"]` now includes `"total_tokens_out"`.
+
+- **PartialResultBuffer integration** (`ExecutionContext`): `WrapOptions` gains an
+  optional `partial_buffer: PartialResultBuffer | None` field. When provided,
+  `wrap_llm_call` stores the buffer in a `ContextVar` for the duration of `fn()`,
+  so streaming callbacks can call `get_current_partial_buffer()` without any
+  threading changes. On clean completion, `buf.mark_complete()` is called
+  automatically. On halt or exception the buffer is left as-is. The buffer is
+  registered under the node's `graph_node_id`; call
+  `ctx.get_partial_result(node_id)` to retrieve it later. `NodeRecord.partial_buffer`
+  holds the reference.
+
+### Tests
+
+- `tests/test_middleware.py` (8): ASGI lifespan passthrough, normal 200, 429-on-HALT,
+  ContextVar injection, ContextVar cleanup after request; WSGI normal, 429-on-HALT,
+  `environ["veronica.context"]` injection.
+- `tests/test_divergence_v2.py` (9): cost-rate fires / below-threshold / dedup,
+  token-velocity fires / below-threshold / dedup, both independent, drain clears,
+  `total_tokens_out` aggregate.
+- `tests/test_partial_stream.py` (12): ContextVar carries buffer into fn, cleared
+  after wrap, None when omitted, get_partial_result by node ID, unknown node → None,
+  sequential calls get separate buffers, exception resets ContextVar, existing wrap
+  behavior unchanged, mark_complete on success, multiple buffers per context, HALT
+  leaves buffer partial, NodeRecord stores reference.
+
+---
+
 ## [0.11.1] — 2026-02-26 — Bug fixes and code quality improvements
 
 **Breaking changes:** none
@@ -45,43 +97,11 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [0.11.0] — 2026-02-25 — Middleware, Time-Based Divergence, Streaming Buffers
+## [0.11.0] — 2026-02-25 — CircuitBreakerCapability for AG2
 
 **Breaking changes:** none
 
 ### New
-
-- **ASGI/WSGI middleware** (`veronica_core.middleware`): `VeronicaASGIMiddleware` and
-  `VeronicaWSGIMiddleware` wrap each HTTP request in a fresh `ExecutionContext`. The
-  context is stored in a `ContextVar` so any code within the same request can call
-  `get_current_execution_context()` without passing the object manually. Non-HTTP
-  scopes (lifespan, websocket) pass through to the inner app unchanged. Returns 429
-  on `Decision.HALT` — either pre-flight (limit already exceeded before the app is
-  called) or post-flight (context was aborted during the call). The 429 path skips
-  the inner app entirely on pre-flight; on post-flight it is suppressed if the app
-  has already started sending a response (ASGI protocol constraint).
-
-- **Time-based divergence heuristics** (`ExecutionGraph`): Two rate checks added to
-  the existing consecutive-pattern detector:
-  - `COST_RATE_EXCEEDED` — fires once when cumulative chain cost / elapsed seconds
-    exceeds `cost_rate_threshold_usd_per_sec` (constructor param, default 0.10 USD/s).
-  - `TOKEN_VELOCITY_EXCEEDED` — fires once when total output tokens / elapsed seconds
-    exceeds `token_velocity_threshold` (constructor param, default 500 tok/s).
-  Both fire on `mark_success` (cost and token counts are unavailable before a node
-  completes). Both are deduped per chain — at most one event of each type per
-  `ExecutionGraph` instance. Event shape mirrors existing `divergence_suspected`
-  events but carries `cost_rate` or `token_velocity` fields instead of `signature` /
-  `repeat_count`. `snapshot()["aggregates"]` now includes `"total_tokens_out"`.
-
-- **PartialResultBuffer integration** (`ExecutionContext`): `WrapOptions` gains an
-  optional `partial_buffer: PartialResultBuffer | None` field. When provided,
-  `wrap_llm_call` stores the buffer in a `ContextVar` for the duration of `fn()`,
-  so streaming callbacks can call `get_current_partial_buffer()` without any
-  threading changes. On clean completion, `buf.mark_complete()` is called
-  automatically. On halt or exception the buffer is left as-is. The buffer is
-  registered under the node's `graph_node_id`; call
-  `ctx.get_partial_result(node_id)` to retrieve it later. `NodeRecord.partial_buffer`
-  holds the reference.
 
 - **CircuitBreakerCapability** (`veronica_core.adapters.ag2_capability`): AG2
   `AgentCapability`-compatible adapter that attaches a per-agent `CircuitBreaker`
@@ -96,17 +116,6 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ### Tests
 
-- `tests/test_middleware.py` (8): ASGI lifespan passthrough, normal 200, 429-on-HALT,
-  ContextVar injection, ContextVar cleanup after request; WSGI normal, 429-on-HALT,
-  `environ["veronica.context"]` injection.
-- `tests/test_divergence_v2.py` (9): cost-rate fires / below-threshold / dedup,
-  token-velocity fires / below-threshold / dedup, both independent, drain clears,
-  `total_tokens_out` aggregate.
-- `tests/test_partial_stream.py` (12): ContextVar carries buffer into fn, cleared
-  after wrap, None when omitted, get_partial_result by node ID, unknown node → None,
-  sequential calls get separate buffers, exception resets ContextVar, existing wrap
-  behavior unchanged, mark_complete on success, multiple buffers per context, HALT
-  leaves buffer partial, NodeRecord stores reference.
 - `tests/test_ag2_capability.py` (21): CircuitBreaker attaches via add_to_agent,
   circuit opens after failure_threshold None replies, open circuit returns None without
   calling generate_reply, HALF_OPEN probe on recovery, successful probe closes circuit,
