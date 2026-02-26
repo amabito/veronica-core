@@ -135,6 +135,13 @@ from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limi
 # AG2 AgentCapability-compatible adapters (v0.11.0)
 from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 
+# ASGI/WSGI Middleware (v0.11.0)
+from veronica_core.middleware import (
+    VeronicaASGIMiddleware,
+    VeronicaWSGIMiddleware,
+    get_current_execution_context,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -244,4 +251,8 @@ __all__ = [
     "rate_limit_decision",
     # AG2 AgentCapability-compatible adapters (v0.11.0)
     "CircuitBreakerCapability",
+    # ASGI/WSGI Middleware (v0.11.0)
+    "VeronicaASGIMiddleware",
+    "VeronicaWSGIMiddleware",
+    "get_current_execution_context",
 ]
