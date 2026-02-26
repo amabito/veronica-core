@@ -33,10 +33,13 @@ Usage::
 #   - CircuitBreaker.check() wired before fn() dispatch (breaker_check stage)
 #   - pipeline.before_charge() wired after cost computed, before accumulation
 #   - kind="tool" routes to pipeline.before_tool_call(); before_charge skipped
+# v0.11 — WrapOptions.partial_buffer field; _current_partial_buffer ContextVar;
+#          get_current_partial_buffer(); ExecutionContext.get_partial_result().
 # ---------------------------------------------------------------------------
 
 from __future__ import annotations
 
+import contextvars
 import threading
 import time
 import uuid
@@ -55,6 +58,31 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from veronica_core.circuit_breaker import CircuitBreaker
     from veronica_core.shield.pipeline import ShieldPipeline
+    from veronica_core.partial import PartialResultBuffer
+
+# ContextVar that holds the active PartialResultBuffer for the current wrap call.
+# Reset to None after each wrap call completes (or raises).
+_current_partial_buffer: contextvars.ContextVar[PartialResultBuffer | None] = (
+    contextvars.ContextVar("veronica_partial_buffer", default=None)
+)
+
+
+def get_current_partial_buffer() -> PartialResultBuffer | None:
+    """Return the PartialResultBuffer set for the current wrap call, or None."""
+    return _current_partial_buffer.get()
+
+
+def attach_partial_buffer(buf: PartialResultBuffer) -> None:
+    """Set *buf* as the partial buffer for the current wrap_llm_call context.
+
+    Raises RuntimeError if called outside an active wrap_llm_call (i.e., when
+    no ContextVar token is set).
+    """
+    if _current_partial_buffer.get() is None:
+        raise RuntimeError(
+            "attach_partial_buffer() called outside an active wrap_llm_call context."
+        )
+    _current_partial_buffer.set(buf)
 
 
 __all__ = [
@@ -65,6 +93,8 @@ __all__ = [
     "ExecutionContext",
     "NodeRecord",
     "WrapOptions",
+    "get_current_partial_buffer",
+    "attach_partial_buffer",
 ]
 
 
@@ -164,6 +194,7 @@ class WrapOptions:
     retry_policy_override: int | None = None
     model: str | None = None
     response_hint: Any = None
+    partial_buffer: "PartialResultBuffer | None" = None
 
 
 @dataclass
@@ -183,6 +214,7 @@ class NodeRecord:
     status: Literal["ok", "halted", "aborted", "timeout", "error"]
     cost_usd: float
     retries_used: int
+    partial_buffer: "PartialResultBuffer | None" = None
 
 
 @dataclass(frozen=True)
@@ -294,6 +326,10 @@ class ExecutionContext:
         self._root_node_id = self._graph.create_root("chain_root", {})
         # threading.local() stack for nested parent tracking.
         self._node_stack = threading.local()
+
+        # Partial buffers keyed by graph_node_id. Populated when WrapOptions.partial_buffer
+        # is set; used by get_partial_result() to look up partial text per node.
+        self._partial_buffers: dict[str, PartialResultBuffer] = {}
 
         # Timeout bookkeeping
         self._start_time: float = time.monotonic()
@@ -429,6 +465,14 @@ class ExecutionContext:
         """
         return self._graph.snapshot()
 
+    def get_partial_result(self, node_id: str) -> "PartialResultBuffer | None":
+        """Return the PartialResultBuffer for *node_id*, or None if none was attached.
+
+        Args:
+            node_id: The graph_node_id associated with the wrap call.
+        """
+        return self._partial_buffers.get(node_id)
+
     def abort(self, reason: str) -> None:
         """Cancel all pending work and prevent future wrap calls.
 
@@ -475,6 +519,7 @@ class ExecutionContext:
             status="ok",
             cost_usd=0.0,
             retries_used=0,
+            partial_buffer=opts.partial_buffer,
         )
 
         # Determine graph parent using threading.local() stack.
@@ -608,10 +653,25 @@ class ExecutionContext:
                 if safe_evt not in self._events:
                     self._events.append(safe_evt)
 
+        # Inject partial buffer into ContextVar so fn() can retrieve it via
+        # get_current_partial_buffer(). Always reset after fn() returns or raises.
+        _buf_token = None
+        if opts.partial_buffer is not None:
+            self._partial_buffers[graph_node_id] = opts.partial_buffer
+            _buf_token = _current_partial_buffer.set(opts.partial_buffer)
+
         call_start = time.monotonic()
+        _fn_exc: BaseException | None = None
         try:
             fn()
         except BaseException as exc:
+            _fn_exc = exc
+        finally:
+            if _buf_token is not None:
+                _current_partial_buffer.reset(_buf_token)
+
+        if _fn_exc is not None:
+            exc = _fn_exc
             call_elapsed_ms = (time.monotonic() - call_start) * 1000.0
 
             # Check for timeout-driven cancellation.
@@ -714,6 +774,12 @@ class ExecutionContext:
 
         stack.pop()
         self._graph.mark_success(graph_node_id, cost_usd=actual_cost)
+
+        # Mark buffer complete on clean success so callers can tell the stream
+        # finished normally vs. was interrupted.
+        if opts.partial_buffer is not None:
+            opts.partial_buffer.mark_complete()
+
         return Decision.ALLOW
 
     def _check_limits(self) -> str | None:

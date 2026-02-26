@@ -92,6 +92,8 @@ from veronica_core.containment import (
     ExecutionGraph,
     NodeRecord,
     WrapOptions,
+    get_current_partial_buffer,
+    attach_partial_buffer,
 )
 
 # Execution boundary (v0.9.1)
@@ -212,6 +214,9 @@ __all__ = [
     "ExecutionGraph",
     "NodeRecord",
     "WrapOptions",
+    # Partial buffer helpers (v0.11)
+    "get_current_partial_buffer",
+    "attach_partial_buffer",
     # Execution boundary (v0.9.1)
     "AIcontainer",
     # Decorator-based injection (v0.9.3)
