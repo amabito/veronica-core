@@ -14,7 +14,7 @@ Public API:
 
 Usage (subclass)::
 
-    from ag2 import ConversableAgent
+    from autogen import ConversableAgent
     from veronica_core.adapters.ag2 import VeronicaConversableAgent
     from veronica_core import GuardConfig
 
@@ -27,11 +27,11 @@ Usage (subclass)::
 
 Usage (hook)::
 
-    import ag2
+    from autogen import ConversableAgent
     from veronica_core.adapters.ag2 import register_veronica_hook
     from veronica_core import GuardConfig
 
-    agent = ag2.ConversableAgent("assistant")
+    agent = ConversableAgent("assistant")
     register_veronica_hook(agent, GuardConfig(max_cost_usd=1.0, max_steps=20))
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ try:
 except ImportError as _exc:
     raise ImportError(
         "veronica_core.adapters.ag2 requires ag2. "
-        "Install with: pip install ag2"
+        "Install with: pip install autogen"
     ) from _exc
 
 import logging
@@ -182,7 +182,7 @@ def register_veronica_hook(
     reply function.
 
     Args:
-        agent: An existing ``ag2.ConversableAgent`` instance to instrument.
+        agent: An existing ``autogen.ConversableAgent`` instance to instrument.
         config: GuardConfig or ExecutionConfig specifying limits.
             Both expose max_cost_usd, max_steps, max_retries_total.
 
@@ -199,11 +199,11 @@ def register_veronica_hook(
 
     Example::
 
-        import ag2
+        from autogen import ConversableAgent
         from veronica_core.adapters.ag2 import register_veronica_hook
         from veronica_core import GuardConfig
 
-        agent = ag2.ConversableAgent("assistant")
+        agent = ConversableAgent("assistant")
         container = register_veronica_hook(agent, GuardConfig(max_cost_usd=1.0))
     """
     container = _build_container(config)

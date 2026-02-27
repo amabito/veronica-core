@@ -2,7 +2,7 @@
 
 Follows AG2's AgentCapability.add_to_agent() pattern.
 Does NOT require ag2 to be installed — works with any object that has
-a generate_reply() method (ag2.ConversableAgent, stub agents, etc.).
+a generate_reply() method (autogen.ConversableAgent, stub agents, etc.).
 
 Public API:
     CircuitBreakerCapability -- add_to_agent() injects a circuit breaker
@@ -120,7 +120,7 @@ class CircuitBreakerCapability:
 
             # This method performs the equivalent of:
             agent.register_reply(
-                trigger=None,
+                trigger=lambda _: True,
                 reply_func=self._circuit_breaker_reply,
                 position=0,
             )
@@ -129,7 +129,7 @@ class CircuitBreakerCapability:
 
         Args:
             agent: Any object with a ``generate_reply`` method.
-                   Compatible with ``ag2.ConversableAgent``.
+                   Compatible with ``autogen.ConversableAgent``.
 
         Returns:
             The ``CircuitBreaker`` instance bound to this agent.

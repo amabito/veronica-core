@@ -11,14 +11,12 @@ Run all demos:
     python examples/ag2_circuit_breaker.py
 
 Requirements:
-    pip install ag2 veronica-core
-
-Note: ag2 and autogen are interchangeable package aliases.
+    pip install autogen veronica-core
 """
 
 from __future__ import annotations
 
-import ag2
+from autogen import ConversableAgent
 
 from veronica_core import (
     CircuitBreakerCapability,
@@ -38,11 +36,12 @@ def demo_basic() -> None:
     print("--- Demo 1: Basic circuit breaker ---")
 
     # An agent that always returns None (simulates a degraded LLM endpoint)
-    planner = ag2.ConversableAgent("planner", llm_config=False)
+    planner = ConversableAgent("planner", llm_config=False)
     planner.register_reply(
-        trigger=None,
+        trigger=lambda _: True,
         reply_func=lambda agent, messages, sender, config: (True, None),
         position=0,
+        remove_other_reply_funcs=True,
     )
 
     cap = CircuitBreakerCapability(failure_threshold=3)
@@ -52,16 +51,18 @@ def demo_basic() -> None:
     assert breaker.state == CircuitState.CLOSED, "circuit should start CLOSED"
     print(f"  initial state: {breaker.state.value}")
 
+    msg = [{"role": "user", "content": "test"}]
+
     # Three None replies trip the circuit
     for _ in range(3):
-        planner.generate_reply([])
+        planner.generate_reply(msg)
 
     assert breaker.state == CircuitState.OPEN, "circuit should be OPEN after 3 failures"
     assert breaker.failure_count == 3
     print(f"  after 3 failures: {breaker.state.value}, failure_count={breaker.failure_count}")
 
     # Further calls are short-circuited without invoking the agent
-    reply = planner.generate_reply([])
+    reply = planner.generate_reply(msg)
     assert reply is None, "OPEN circuit returns None without calling agent"
     print(f"  reply when OPEN: {reply!r}")
 
@@ -77,7 +78,7 @@ def demo_safe_mode() -> None:
     print("--- Demo 2: SAFE_MODE (system-wide halt) ---")
 
     def _always_ok(
-        agent: ag2.ConversableAgent,
+        agent: ConversableAgent,
         messages: list,
         sender: object,
         config: object,
@@ -88,29 +89,36 @@ def demo_safe_mode() -> None:
     veronica = VeronicaIntegration(backend=MemoryBackend())
     cap = CircuitBreakerCapability(failure_threshold=5, veronica=veronica)
 
-    planner = ag2.ConversableAgent("planner", llm_config=False)
-    executor = ag2.ConversableAgent("executor", llm_config=False)
+    planner = ConversableAgent("planner", llm_config=False)
+    executor = ConversableAgent("executor", llm_config=False)
     for agent in (planner, executor):
-        agent.register_reply(trigger=None, reply_func=_always_ok, position=0)
+        agent.register_reply(
+            trigger=lambda _: True,
+            reply_func=_always_ok,
+            position=0,
+            remove_other_reply_funcs=True,
+        )
         cap.add_to_agent(agent)
 
+    msg = [{"role": "user", "content": "test"}]
+
     # Both agents reply normally before SAFE_MODE
-    assert planner.generate_reply([]) == "planner: ok"
-    assert executor.generate_reply([]) == "executor: ok"
+    assert planner.generate_reply(msg) == "planner: ok"
+    assert executor.generate_reply(msg) == "executor: ok"
     print("  before SAFE_MODE: both agents healthy")
 
     # Trigger system-wide emergency halt
     # VeronicaIntegration starts in SCREENING; SCREENING -> SAFE_MODE is valid
     veronica.state.transition(VeronicaState.SAFE_MODE, reason="anomaly detected")
-    assert planner.generate_reply([]) is None
-    assert executor.generate_reply([]) is None
+    assert planner.generate_reply(msg) is None
+    assert executor.generate_reply(msg) is None
     print("  during SAFE_MODE: both agents blocked")
 
     # Two-step recovery: SAFE_MODE -> IDLE -> SCREENING
     veronica.state.transition(VeronicaState.IDLE, reason="anomaly resolved")
     veronica.state.transition(VeronicaState.SCREENING, reason="resuming")
-    assert planner.generate_reply([]) == "planner: ok"
-    assert executor.generate_reply([]) == "executor: ok"
+    assert planner.generate_reply(msg) == "planner: ok"
+    assert executor.generate_reply(msg) == "executor: ok"
     print("  after recovery (IDLE -> SCREENING): both agents restored")
 
     print("[PASS] SAFE_MODE blocked all agents, recovery worked\n")
@@ -126,31 +134,35 @@ def demo_isolation() -> None:
 
     cap = CircuitBreakerCapability(failure_threshold=2)
 
-    healthy = ag2.ConversableAgent("healthy", llm_config=False)
+    healthy = ConversableAgent("healthy", llm_config=False)
     healthy.register_reply(
-        trigger=None,
+        trigger=lambda _: True,
         reply_func=lambda agent, messages, sender, config: (True, "healthy: ok"),
         position=0,
+        remove_other_reply_funcs=True,
     )
 
-    broken = ag2.ConversableAgent("broken", llm_config=False)
+    broken = ConversableAgent("broken", llm_config=False)
     broken.register_reply(
-        trigger=None,
+        trigger=lambda _: True,
         reply_func=lambda agent, messages, sender, config: (True, None),
         position=0,
+        remove_other_reply_funcs=True,
     )
 
     cap.add_to_agent(healthy)
     cap.add_to_agent(broken)
 
+    msg = [{"role": "user", "content": "test"}]
+
     # Trip the broken agent's circuit (2 failures)
-    broken.generate_reply([])
-    broken.generate_reply([])
+    broken.generate_reply(msg)
+    broken.generate_reply(msg)
     assert cap.get_breaker("broken").state == CircuitState.OPEN
     print(f"  broken agent: {cap.get_breaker('broken').state.value}")
 
     # Healthy agent is completely unaffected
-    assert healthy.generate_reply([]) == "healthy: ok"
+    assert healthy.generate_reply(msg) == "healthy: ok"
     assert cap.get_breaker("healthy").state == CircuitState.CLOSED
     print(f"  healthy agent: {cap.get_breaker('healthy').state.value}, reply='healthy: ok'")
 

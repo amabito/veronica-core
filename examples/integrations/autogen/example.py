@@ -30,15 +30,15 @@ logging.getLogger("veronica_core.exit").setLevel(logging.CRITICAL)
 
 
 # ---------------------------------------------------------------------------
-# Stub agent (mimics ag2.ConversableAgent for demo purposes)
+# Stub agent (mimics autogen.ConversableAgent for demo purposes)
 # ---------------------------------------------------------------------------
 
 class StubAgent:
-    """Minimal stand-in for ag2.ConversableAgent.
+    """Minimal stand-in for autogen.ConversableAgent.
 
     Real AG2 equivalent:
-        import ag2
-        agent = ag2.ConversableAgent(
+        from autogen import ConversableAgent
+        agent = ConversableAgent(
             name="planner",
             llm_config={"model": "gpt-4o-mini"},
         )
@@ -308,7 +308,7 @@ def demo_capability_circuit_breaker() -> None:
 
     AG2 equivalent of add_to_agent():
         agent.register_reply(
-            trigger=None,
+            trigger=lambda _: True,
             reply_func=circuit_breaker_intercept,
             position=0,
         )

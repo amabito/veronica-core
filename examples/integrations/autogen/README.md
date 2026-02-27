@@ -117,5 +117,5 @@ def guarded_reply(agent, messages):
 
 ```
 pip install veronica-core
-pip install ag2          # optional -- not required for the demos
+pip install autogen      # optional -- not required for the demos
 ```
