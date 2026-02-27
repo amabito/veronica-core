@@ -1,6 +1,7 @@
 """Distributed budget backends and circuit breakers for cross-process coordination."""
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 import time
@@ -324,7 +325,8 @@ if redis.call('EXISTS', key) == 0 then
         'failure_count', 0,
         'success_count', 0,
         'last_failure_time', '',
-        'half_open_in_flight', 0)
+        'half_open_in_flight', 0,
+        'half_open_claimed_at', 0)
     redis.call('EXPIRE', key, ttl)
 end
 
@@ -359,7 +361,8 @@ if redis.call('EXISTS', key) == 0 then
         'failure_count', 0,
         'success_count', 0,
         'last_failure_time', '',
-        'half_open_in_flight', 0)
+        'half_open_in_flight', 0,
+        'half_open_claimed_at', 0)
     redis.call('EXPIRE', key, ttl)
 end
 
@@ -382,6 +385,7 @@ return new_count
 # ARGV[1] = recovery_timeout (float seconds)
 # ARGV[2] = current_time (float, Unix timestamp)
 # ARGV[3] = ttl_seconds (int)
+# ARGV[4] = half_open_slot_timeout (float seconds, 0 = no timeout)
 # Returns: table [state_str, slot_claimed, failure_count]
 #   slot_claimed = 1 if we successfully claimed the HALF_OPEN slot (old in_flight was 0)
 #               = 0 if slot was already taken by another caller
@@ -391,6 +395,7 @@ local key = KEYS[1]
 local recovery_timeout = tonumber(ARGV[1])
 local now = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
+local half_open_slot_timeout = tonumber(ARGV[4])
 
 -- Initialize fields if missing
 if redis.call('EXISTS', key) == 0 then
@@ -399,7 +404,8 @@ if redis.call('EXISTS', key) == 0 then
         'failure_count', 0,
         'success_count', 0,
         'last_failure_time', '',
-        'half_open_in_flight', 0)
+        'half_open_in_flight', 0,
+        'half_open_claimed_at', 0)
     redis.call('EXPIRE', key, ttl)
     return {'CLOSED', 0, 0}
 end
@@ -414,7 +420,8 @@ if state == 'OPEN' and last_failure_time_str ~= nil and last_failure_time_str ~=
     local last_failure_time = tonumber(last_failure_time_str)
     if last_failure_time ~= nil and (now - last_failure_time) >= recovery_timeout then
         state = 'HALF_OPEN'
-        redis.call('HSET', key, 'state', 'HALF_OPEN', 'half_open_in_flight', 0)
+        redis.call('HSET', key, 'state', 'HALF_OPEN', 'half_open_in_flight', 0,
+                   'half_open_claimed_at', 0)
         half_open_in_flight = 0
     end
 end
@@ -423,10 +430,20 @@ end
 -- Return slot_claimed=1 if WE claimed it (old value was 0), 0 if already taken.
 local slot_claimed = 0
 if state == 'HALF_OPEN' then
-    -- old_in_flight is captured BEFORE our potential write
     local old_in_flight = half_open_in_flight
+
+    -- Auto-release stale slot if half_open_slot_timeout is configured and elapsed.
+    -- This prevents permanent lock-out when the claiming process crashes.
+    if old_in_flight == 1 and half_open_slot_timeout > 0 then
+        local claimed_at = tonumber(redis.call('HGET', key, 'half_open_claimed_at') or '0')
+        if claimed_at > 0 and (now - claimed_at) >= half_open_slot_timeout then
+            old_in_flight = 0
+            redis.call('HSET', key, 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
+        end
+    end
+
     if old_in_flight == 0 then
-        redis.call('HSET', key, 'half_open_in_flight', 1)
+        redis.call('HSET', key, 'half_open_in_flight', 1, 'half_open_claimed_at', now)
         slot_claimed = 1
     end
 end
@@ -434,6 +451,18 @@ end
 redis.call('EXPIRE', key, ttl)
 return {state, slot_claimed, failure_count}
 """
+
+
+@dataclasses.dataclass(frozen=True)
+class CircuitSnapshot:
+    """Immutable snapshot of all circuit breaker state in a single read."""
+
+    state: CircuitState
+    failure_count: int
+    success_count: int
+    last_failure_time: Optional[float]
+    distributed: bool
+    circuit_id: str
 
 
 class DistributedCircuitBreaker:
@@ -446,7 +475,28 @@ class DistributedCircuitBreaker:
     Falls back to a local CircuitBreaker if Redis is unreachable, following
     the same pattern as RedisBudgetBackend.
 
-    Example:
+    HALF_OPEN Slot Semantics:
+        When the circuit transitions to HALF_OPEN, exactly one process may claim
+        the test slot. If the claiming process crashes without calling
+        record_success() or record_failure(), the slot is automatically released
+        after ``half_open_slot_timeout`` seconds (default 120s).  Set to 0 to
+        disable the timeout (slot persists until TTL expiry or manual reset()).
+
+    Args:
+        redis_url: Redis connection URL.
+        circuit_id: Unique identifier used as Redis key suffix.
+        failure_threshold: Consecutive failures before opening the circuit.
+        recovery_timeout: Seconds in OPEN state before trying HALF_OPEN.
+        ttl_seconds: Redis key TTL (auto-expire stale circuits).
+        fallback_on_error: Fall back to local CircuitBreaker on Redis failure.
+        half_open_slot_timeout: Seconds before an unclaimed HALF_OPEN slot is
+            auto-released.  Prevents permanent lock-out from process crashes.
+            Recommended: ``2 * max_llm_call_timeout``.  0 = no timeout.
+        redis_client: Optional pre-created ``redis.Redis`` instance for
+            connection pool sharing across multiple breakers.
+
+    Example::
+
         breaker = DistributedCircuitBreaker(
             redis_url="redis://localhost:6379",
             circuit_id="my-llm-service",
@@ -475,6 +525,8 @@ class DistributedCircuitBreaker:
         recovery_timeout: float = 60.0,
         ttl_seconds: int = 3600,
         fallback_on_error: bool = True,
+        half_open_slot_timeout: float = 120.0,
+        redis_client: object = None,
     ) -> None:
         self._redis_url = redis_url
         self._circuit_id = circuit_id
@@ -483,19 +535,31 @@ class DistributedCircuitBreaker:
         self._recovery_timeout = recovery_timeout
         self._ttl = ttl_seconds
         self._fallback_on_error = fallback_on_error
+        self._half_open_slot_timeout = half_open_slot_timeout
         self._fallback = CircuitBreaker(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
         )
         self._using_fallback = False
         self._client = None
+        self._owns_client = redis_client is None
         self._lock = threading.Lock()
         self._last_reconnect_attempt: float = 0.0
         # Compiled Lua scripts (registered after connect)
         self._script_failure = None
         self._script_success = None
         self._script_check = None
-        self._connect()
+        if redis_client is not None:
+            self._client = redis_client
+            self._register_scripts()
+        else:
+            self._connect()
+
+    def _register_scripts(self) -> None:
+        """Register Lua scripts on the current Redis client."""
+        self._script_failure = self._client.register_script(_LUA_RECORD_FAILURE)
+        self._script_success = self._client.register_script(_LUA_RECORD_SUCCESS)
+        self._script_check = self._client.register_script(_LUA_CHECK)
 
     def _connect(self) -> None:
         """Connect to Redis and register Lua scripts."""
@@ -504,9 +568,7 @@ class DistributedCircuitBreaker:
 
             self._client = redis.from_url(self._redis_url, decode_responses=True)
             self._client.ping()
-            self._script_failure = self._client.register_script(_LUA_RECORD_FAILURE)
-            self._script_success = self._client.register_script(_LUA_RECORD_SUCCESS)
-            self._script_check = self._client.register_script(_LUA_CHECK)
+            self._register_scripts()
             self._using_fallback = False
         except Exception as exc:
             if self._fallback_on_error:
@@ -589,14 +651,13 @@ class DistributedCircuitBreaker:
                         last_failure_time if last_failure_time is not None else ""
                     ),
                     "half_open_in_flight": 0,
+                    "half_open_claimed_at": 0,
                 },
             )
             pipe.expire(self._key, self._ttl)
             pipe.execute()
             # Re-register scripts after reconnect
-            self._script_failure = self._client.register_script(_LUA_RECORD_FAILURE)
-            self._script_success = self._client.register_script(_LUA_RECORD_SUCCESS)
-            self._script_check = self._client.register_script(_LUA_CHECK)
+            self._register_scripts()
             logger.info(
                 "DistributedCircuitBreaker: reconciled local state to Redis "
                 "(state=%s, failures=%d).",
@@ -745,6 +806,7 @@ class DistributedCircuitBreaker:
                     self._recovery_timeout,
                     time.time(),
                     self._ttl,
+                    self._half_open_slot_timeout,
                 ],
             )
             state_str = result[0]
@@ -886,6 +948,7 @@ class DistributedCircuitBreaker:
                     "success_count": 0,
                     "last_failure_time": "",
                     "half_open_in_flight": 0,
+                    "half_open_claimed_at": 0,
                 },
             )
             pipe.expire(self._key, self._ttl)
@@ -902,6 +965,69 @@ class DistributedCircuitBreaker:
                 self._fallback.reset()
             else:
                 raise
+
+    def snapshot(self) -> CircuitSnapshot:
+        """Retrieve all circuit state in a single Redis round-trip.
+
+        Prefer this over reading ``state``/``failure_count``/``success_count``
+        individually when you need multiple fields (avoids N+1 Redis reads).
+        """
+        if self._using_fallback or self._client is None:
+            with self._fallback._lock:
+                return CircuitSnapshot(
+                    state=self._fallback._state,
+                    failure_count=self._fallback._failure_count,
+                    success_count=self._fallback._success_count,
+                    last_failure_time=self._fallback._last_failure_time,
+                    distributed=False,
+                    circuit_id=self._circuit_id,
+                )
+        try:
+            data = self._client.hgetall(self._key)
+            if not data:
+                return CircuitSnapshot(
+                    state=CircuitState.CLOSED,
+                    failure_count=0,
+                    success_count=0,
+                    last_failure_time=None,
+                    distributed=True,
+                    circuit_id=self._circuit_id,
+                )
+            state_str = data.get("state", "CLOSED")
+            lft_str = data.get("last_failure_time", "")
+            last_failure_time = float(lft_str) if lft_str else None
+
+            # Apply OPEN -> HALF_OPEN timeout check (read-only, same as state property)
+            if state_str == "OPEN" and last_failure_time is not None:
+                if time.time() - last_failure_time >= self._recovery_timeout:
+                    state_str = "HALF_OPEN"
+
+            try:
+                state = CircuitState(state_str)
+            except ValueError:
+                state = CircuitState.CLOSED
+
+            return CircuitSnapshot(
+                state=state,
+                failure_count=int(data.get("failure_count", 0)),
+                success_count=int(data.get("success_count", 0)),
+                last_failure_time=last_failure_time,
+                distributed=True,
+                circuit_id=self._circuit_id,
+            )
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error("DistributedCircuitBreaker.snapshot failed: %s", exc)
+                with self._fallback._lock:
+                    return CircuitSnapshot(
+                        state=self._fallback._state,
+                        failure_count=self._fallback._failure_count,
+                        success_count=self._fallback._success_count,
+                        last_failure_time=self._fallback._last_failure_time,
+                        distributed=False,
+                        circuit_id=self._circuit_id,
+                    )
+            raise
 
     def to_dict(self) -> Dict:
         """Serialize circuit breaker state."""

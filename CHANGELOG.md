@@ -6,6 +6,35 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.1.1] — 2026-02-27 — DCB Performance & Reliability Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **HALF_OPEN slot permanent lock-out**: When a process crashed after claiming the
+  HALF_OPEN test slot, the slot remained stuck indefinitely (up to TTL expiry,
+  default 3600s). Added `half_open_slot_timeout` parameter (default 120s) with
+  Lua-script-level auto-release of stale slots. The `half_open_claimed_at`
+  timestamp is recorded atomically when claiming the slot.
+
+### Added
+
+- `CircuitSnapshot` frozen dataclass: immutable snapshot of all circuit state
+  (state, failure_count, success_count, last_failure_time, distributed, circuit_id).
+- `DistributedCircuitBreaker.snapshot()` method: retrieves all circuit state in a
+  single Redis `HGETALL` round-trip. Prevents N+1 Redis reads in monitoring code.
+- `redis_client` parameter on `DistributedCircuitBreaker`: inject a pre-created
+  `redis.Redis` instance for connection pool sharing across multiple breakers.
+  Prevents connection proliferation in multi-breaker deployments.
+- `_register_scripts()` internal method: extracted Lua script registration for
+  reuse in both `_connect()` and `redis_client` injection paths.
+- 17 new tests: `TestSnapshot` (7), `TestRedisClientInjection` (2),
+  `TestHalfOpenSlotTimeout` (8) including auto-release verification.
+- Total tests: 1434 (was 1417).
+
+---
+
 ## [1.1.0] — 2026-02-27 — Distributed Circuit Breaker
 
 **Breaking changes:** none

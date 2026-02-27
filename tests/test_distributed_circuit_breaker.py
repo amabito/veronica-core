@@ -10,7 +10,11 @@ import fakeredis
 import pytest
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.distributed import DistributedCircuitBreaker, get_default_circuit_breaker
+from veronica_core.distributed import (
+    CircuitSnapshot,
+    DistributedCircuitBreaker,
+    get_default_circuit_breaker,
+)
 from veronica_core.runtime_policy import PolicyContext
 
 
@@ -29,6 +33,7 @@ def _make_dcb(
     failure_threshold: int = 3,
     recovery_timeout: float = 60.0,
     ttl_seconds: int = 3600,
+    half_open_slot_timeout: float = 120.0,
 ) -> DistributedCircuitBreaker:
     """Create DistributedCircuitBreaker with injected fakeredis client."""
     dcb = DistributedCircuitBreaker.__new__(DistributedCircuitBreaker)
@@ -39,12 +44,14 @@ def _make_dcb(
     dcb._recovery_timeout = recovery_timeout
     dcb._ttl = ttl_seconds
     dcb._fallback_on_error = True
+    dcb._half_open_slot_timeout = half_open_slot_timeout
     dcb._fallback = CircuitBreaker(
         failure_threshold=failure_threshold,
         recovery_timeout=recovery_timeout,
     )
     dcb._using_fallback = False
     dcb._client = fake_client
+    dcb._owns_client = False
     dcb._lock = threading.Lock()
     dcb._last_reconnect_attempt = 0.0
     # Register Lua scripts on the fake client
@@ -831,14 +838,13 @@ class TestAdversarialRedisCorruption:
         decision = dcb.check(_ctx())
         assert not decision.allowed
 
-    def test_half_open_in_flight_stuck_at_1(self, fake_client):
-        """Simulates crashed process that left half_open_in_flight=1 in Redis.
+    def test_half_open_in_flight_stuck_without_slot_timeout(self, fake_client):
+        """With half_open_slot_timeout=0, a crashed process leaves the slot stuck.
 
-        If the process that claimed HALF_OPEN slot crashes without recording
-        success/failure, the slot is permanently stuck. Only reset() or TTL
-        expiry should clear it.
+        Only reset() or TTL expiry should clear it.
         """
-        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=0)
         dcb.record_failure()
         _ = dcb.state  # HALF_OPEN
 
@@ -848,7 +854,7 @@ class TestAdversarialRedisCorruption:
         # Simulate crash: never call record_success/record_failure
         # Second instance tries to check
         dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
-                          recovery_timeout=0.0)
+                          recovery_timeout=0.0, half_open_slot_timeout=0)
         decision = dcb2.check(_ctx())
         assert not decision.allowed, (
             "Stuck half_open_in_flight=1 must deny all subsequent checks"
@@ -858,6 +864,36 @@ class TestAdversarialRedisCorruption:
         dcb.reset()
         decision3 = dcb2.check(_ctx())
         assert decision3.allowed
+
+    def test_half_open_slot_auto_released_after_timeout(self, fake_client):
+        """With half_open_slot_timeout > 0, a stale slot is auto-released.
+
+        Simulates: process claims HALF_OPEN slot, crashes, timeout elapses,
+        next check() auto-releases the slot and allows a new test request.
+        """
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=1.0)
+        dcb.record_failure()
+        _ = dcb.state  # HALF_OPEN
+
+        # Claim slot
+        decision1 = dcb.check(_ctx())
+        assert decision1.allowed
+
+        # Simulate crash: slot is stuck
+        dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
+                          recovery_timeout=0.0, half_open_slot_timeout=1.0)
+        decision2 = dcb2.check(_ctx())
+        assert not decision2.allowed, "Slot still held, should deny"
+
+        # Wait for slot timeout to elapse
+        time.sleep(1.1)
+
+        # Now the stale slot should be auto-released
+        decision3 = dcb2.check(_ctx())
+        assert decision3.allowed, (
+            "After half_open_slot_timeout, stale slot must be auto-released"
+        )
 
 
 class TestAdversarialBoundaryValues:
@@ -1073,3 +1109,182 @@ class TestAdversarialSeedCorruption:
         assert dcb._fallback.state in (
             CircuitState.CLOSED, CircuitState.OPEN, CircuitState.HALF_OPEN
         )
+
+
+class TestSnapshot:
+    """Test CircuitSnapshot — single-RTT state retrieval."""
+
+    def test_snapshot_returns_all_fields(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=3)
+        snap = dcb.snapshot()
+        assert isinstance(snap, CircuitSnapshot)
+        assert snap.state == CircuitState.CLOSED
+        assert snap.failure_count == 0
+        assert snap.success_count == 0
+        assert snap.last_failure_time is None
+        assert snap.distributed is True
+        assert snap.circuit_id == "test"
+
+    def test_snapshot_reflects_failures(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=5)
+        dcb.record_failure()
+        dcb.record_failure()
+        snap = dcb.snapshot()
+        assert snap.failure_count == 2
+        assert snap.state == CircuitState.CLOSED
+
+    def test_snapshot_reflects_open_state(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=2)
+        dcb.record_failure()
+        dcb.record_failure()
+        snap = dcb.snapshot()
+        assert snap.state == CircuitState.OPEN
+        assert snap.failure_count == 2
+        assert snap.last_failure_time is not None
+
+    def test_snapshot_open_to_half_open_timeout(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
+        dcb.record_failure()
+        snap = dcb.snapshot()
+        # recovery_timeout=0.0 means OPEN -> HALF_OPEN immediately
+        assert snap.state == CircuitState.HALF_OPEN
+
+    def test_snapshot_on_fallback(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=3)
+        dcb._using_fallback = True
+        snap = dcb.snapshot()
+        assert snap.distributed is False
+        assert snap.state == CircuitState.CLOSED
+
+    def test_snapshot_on_redis_error_falls_back(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=3)
+        dcb.record_failure()
+
+        # Break Redis
+        def broken(*args, **kwargs):
+            raise ConnectionError("Redis gone")
+
+        dcb._client.hgetall = broken
+        snap = dcb.snapshot()
+        assert snap.distributed is False
+
+    def test_snapshot_is_frozen(self, fake_client):
+        dcb = _make_dcb(fake_client, failure_threshold=3)
+        snap = dcb.snapshot()
+        with pytest.raises(AttributeError):
+            snap.state = CircuitState.OPEN  # type: ignore[misc]
+
+
+class TestRedisClientInjection:
+    """Test redis_client parameter for connection pool sharing."""
+
+    def test_injected_client_used_directly(self, fake_client):
+        """When redis_client is provided, it should be used without creating a new one."""
+        dcb = DistributedCircuitBreaker.__new__(DistributedCircuitBreaker)
+        dcb._redis_url = "redis://fake"
+        dcb._circuit_id = "injected"
+        dcb._key = "veronica:circuit:injected"
+        dcb._failure_threshold = 3
+        dcb._recovery_timeout = 60.0
+        dcb._ttl = 3600
+        dcb._fallback_on_error = True
+        dcb._half_open_slot_timeout = 120.0
+        dcb._fallback = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0)
+        dcb._using_fallback = False
+        dcb._client = fake_client
+        dcb._owns_client = False
+        dcb._lock = threading.Lock()
+        dcb._last_reconnect_attempt = 0.0
+        dcb._register_scripts()
+
+        # Verify it works
+        decision = dcb.check(_ctx())
+        assert decision.allowed
+        assert dcb._owns_client is False
+
+    def test_multiple_breakers_share_client(self, fake_client):
+        """Multiple DCBs with same fake_client should share connection."""
+        dcb1 = _make_dcb(fake_client, circuit_id="breaker-1")
+        dcb2 = _make_dcb(fake_client, circuit_id="breaker-2")
+
+        # Both use same Redis client
+        assert dcb1._client is dcb2._client
+
+        # Independent circuit state
+        dcb1.record_failure()
+        assert dcb1.failure_count == 1
+        assert dcb2.failure_count == 0
+
+
+class TestHalfOpenSlotTimeout:
+    """Test half_open_slot_timeout feature in depth."""
+
+    def test_default_timeout_is_120(self, fake_client):
+        dcb = _make_dcb(fake_client)
+        assert dcb._half_open_slot_timeout == 120.0
+
+    def test_custom_timeout(self, fake_client):
+        dcb = _make_dcb(fake_client, half_open_slot_timeout=30.0)
+        assert dcb._half_open_slot_timeout == 30.0
+
+    def test_zero_timeout_disables_auto_release(self, fake_client):
+        """With timeout=0, slot never auto-releases (original behavior)."""
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=0)
+        dcb.record_failure()
+        dcb.check(_ctx())  # claim slot
+
+        time.sleep(0.1)
+
+        dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
+                          recovery_timeout=0.0, half_open_slot_timeout=0)
+        decision = dcb2.check(_ctx())
+        assert not decision.allowed, "timeout=0 means slot stays stuck"
+
+    def test_slot_not_released_before_timeout(self, fake_client):
+        """Slot must remain held until timeout actually elapses."""
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=10.0)
+        dcb.record_failure()
+        dcb.check(_ctx())  # claim slot
+
+        # Immediately try — should still be held (10s timeout)
+        dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
+                          recovery_timeout=0.0, half_open_slot_timeout=10.0)
+        decision = dcb2.check(_ctx())
+        assert not decision.allowed, "Slot held, timeout not elapsed"
+
+    def test_claimed_at_timestamp_recorded(self, fake_client):
+        """When slot is claimed, half_open_claimed_at must be set."""
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
+        dcb.record_failure()
+        before = time.time()
+        dcb.check(_ctx())  # claim slot
+        after = time.time()
+
+        claimed_at = float(fake_client.hget(dcb._key, "half_open_claimed_at"))
+        assert before <= claimed_at <= after
+
+    def test_slot_released_on_record_success(self, fake_client):
+        """Normal flow: slot is released when record_success is called."""
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
+        dcb.record_failure()
+        dcb.check(_ctx())  # claim slot
+        dcb.record_success()  # release slot, close circuit
+
+        assert dcb.state == CircuitState.CLOSED
+        in_flight = int(fake_client.hget(dcb._key, "half_open_in_flight"))
+        assert in_flight == 0
+
+    def test_slot_released_on_record_failure(self, fake_client):
+        """Normal flow: slot is released when record_failure is called (reopens)."""
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=600.0)
+        dcb.record_failure()
+        # Manually transition to HALF_OPEN for this test
+        fake_client.hset(dcb._key, "state", "HALF_OPEN")
+        dcb.check(_ctx())  # claim slot
+        dcb.record_failure()  # reopen circuit, release slot
+
+        assert dcb.state == CircuitState.OPEN
+        in_flight = int(fake_client.hget(dcb._key, "half_open_in_flight"))
+        assert in_flight == 0
