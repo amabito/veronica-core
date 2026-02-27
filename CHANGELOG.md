@@ -6,6 +6,25 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.0.2] — 2026-02-27 — Fix runtime import for autogen package
+
+**Breaking changes:** none
+
+### Fixed
+
+- Runtime import in `adapters/ag2.py` now tries `from autogen import` first,
+  falling back to `from ag2 import`. The previous `import ag2` failed with
+  `ModuleNotFoundError` when the package was installed via `pip install autogen`
+  (the module is named `autogen`, not `ag2`).
+- Docstrings and examples unified to `from autogen import ConversableAgent` style
+  (`ag2.py`, `ag2_capability.py`, `examples/`).
+- `trigger=None` in docstrings and examples replaced with
+  `trigger=lambda _: True` (AG2 raises `ValueError` on `None`).
+- `generate_reply([])` in examples replaced with
+  `generate_reply([{"role": "user", "content": "test"}])`.
+
+---
+
 ## [1.0.1] — 2026-02-26 — AG2 Capability: remove_from_agent
 
 **Breaking changes:** none

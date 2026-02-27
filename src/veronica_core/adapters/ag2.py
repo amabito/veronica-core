@@ -37,13 +37,15 @@ Usage (hook)::
 from __future__ import annotations
 
 try:
-    import ag2  # type: ignore[import]
-    from ag2 import ConversableAgent  # type: ignore[import]
-except ImportError as _exc:
-    raise ImportError(
-        "veronica_core.adapters.ag2 requires ag2. "
-        "Install with: pip install autogen"
-    ) from _exc
+    from autogen import ConversableAgent  # type: ignore[import]
+except ImportError:
+    try:
+        from ag2 import ConversableAgent  # type: ignore[import]
+    except ImportError as _exc:
+        raise ImportError(
+            "veronica_core.adapters.ag2 requires autogen. "
+            "Install with: pip install autogen"
+        ) from _exc
 
 import logging
 from typing import Any, Dict, List, Optional, Union
