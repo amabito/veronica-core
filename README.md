@@ -858,6 +858,7 @@ pytest
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 1.0.2 | 2026-02-27 | Fix `import ag2` → `from autogen import` fallback, clean up stale docstring patterns |
 | 1.0.1 | 2026-02-26 | AG2 adapter: `remove_from_agent()` for clean teardown, `_originals` dict, 6 new tests |
 | 1.0.0 | 2026-02-26 | Production release: adversarial hardening (go-injection, TOCTOU, Redis double-spend, HALF_OPEN enforcement), `AIContainer` rename, `on_error` default HALT |
 | 0.12.0 | 2026-02-26 | ASGI/WSGI middleware, time-based divergence heuristics (cost-rate, token-velocity), `PartialResultBuffer` ContextVar integration |
