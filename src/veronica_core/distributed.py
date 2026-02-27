@@ -1,9 +1,13 @@
-"""Distributed budget backends for cross-process cost coordination."""
+"""Distributed budget backends and circuit breakers for cross-process coordination."""
 from __future__ import annotations
 
 import logging
 import threading
-from typing import Protocol, runtime_checkable
+import time
+from typing import Dict, Optional, Protocol, runtime_checkable
+
+from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.runtime_policy import PolicyContext, PolicyDecision
 
 logger = logging.getLogger(__name__)
 
@@ -295,3 +299,686 @@ def get_default_backend(
             redis_url=redis_url, chain_id=chain_id, ttl_seconds=ttl_seconds
         )
     return LocalBudgetBackend()
+
+
+# ---------------------------------------------------------------------------
+# Lua scripts for atomic Redis operations
+# ---------------------------------------------------------------------------
+
+# record_failure Lua script:
+# KEYS[1] = hash key
+# ARGV[1] = failure_threshold (int)
+# ARGV[2] = current_time (float, Unix timestamp)
+# ARGV[3] = ttl_seconds (int)
+# Returns: new failure_count (int)
+_LUA_RECORD_FAILURE = """
+local key = KEYS[1]
+local threshold = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+
+-- Initialize fields if missing
+if redis.call('EXISTS', key) == 0 then
+    redis.call('HSET', key,
+        'state', 'CLOSED',
+        'failure_count', 0,
+        'success_count', 0,
+        'last_failure_time', '',
+        'half_open_in_flight', 0)
+    redis.call('EXPIRE', key, ttl)
+end
+
+-- Increment failure count and record time
+local new_count = redis.call('HINCRBY', key, 'failure_count', 1)
+redis.call('HSET', key, 'last_failure_time', now)
+redis.call('HSET', key, 'half_open_in_flight', 0)
+
+local state = redis.call('HGET', key, 'state')
+
+-- Transition to OPEN if threshold reached, or reopen from HALF_OPEN
+if state == 'HALF_OPEN' or new_count >= threshold then
+    redis.call('HSET', key, 'state', 'OPEN')
+end
+
+redis.call('EXPIRE', key, ttl)
+return new_count
+"""
+
+# record_success Lua script:
+# KEYS[1] = hash key
+# ARGV[1] = ttl_seconds (int)
+# Returns: new success_count (int)
+_LUA_RECORD_SUCCESS = """
+local key = KEYS[1]
+local ttl = tonumber(ARGV[1])
+
+-- Initialize fields if missing
+if redis.call('EXISTS', key) == 0 then
+    redis.call('HSET', key,
+        'state', 'CLOSED',
+        'failure_count', 0,
+        'success_count', 0,
+        'last_failure_time', '',
+        'half_open_in_flight', 0)
+    redis.call('EXPIRE', key, ttl)
+end
+
+redis.call('HSET', key, 'half_open_in_flight', 0)
+
+local state = redis.call('HGET', key, 'state')
+if state == 'HALF_OPEN' then
+    redis.call('HSET', key, 'state', 'CLOSED', 'failure_count', 0)
+elseif state == 'CLOSED' then
+    redis.call('HSET', key, 'failure_count', 0)
+end
+
+local new_count = redis.call('HINCRBY', key, 'success_count', 1)
+redis.call('EXPIRE', key, ttl)
+return new_count
+"""
+
+# check Lua script:
+# KEYS[1] = hash key
+# ARGV[1] = recovery_timeout (float seconds)
+# ARGV[2] = current_time (float, Unix timestamp)
+# ARGV[3] = ttl_seconds (int)
+# Returns: table [state_str, slot_claimed, failure_count]
+#   slot_claimed = 1 if we successfully claimed the HALF_OPEN slot (old in_flight was 0)
+#               = 0 if slot was already taken by another caller
+#               = 0 if state is OPEN or CLOSED (not relevant)
+_LUA_CHECK = """
+local key = KEYS[1]
+local recovery_timeout = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+
+-- Initialize fields if missing
+if redis.call('EXISTS', key) == 0 then
+    redis.call('HSET', key,
+        'state', 'CLOSED',
+        'failure_count', 0,
+        'success_count', 0,
+        'last_failure_time', '',
+        'half_open_in_flight', 0)
+    redis.call('EXPIRE', key, ttl)
+    return {'CLOSED', 0, 0}
+end
+
+local state = redis.call('HGET', key, 'state')
+local last_failure_time_str = redis.call('HGET', key, 'last_failure_time')
+local half_open_in_flight = tonumber(redis.call('HGET', key, 'half_open_in_flight') or '0')
+local failure_count = tonumber(redis.call('HGET', key, 'failure_count') or '0')
+
+-- Attempt OPEN -> HALF_OPEN transition if recovery timeout elapsed
+if state == 'OPEN' and last_failure_time_str ~= nil and last_failure_time_str ~= '' then
+    local last_failure_time = tonumber(last_failure_time_str)
+    if last_failure_time ~= nil and (now - last_failure_time) >= recovery_timeout then
+        state = 'HALF_OPEN'
+        redis.call('HSET', key, 'state', 'HALF_OPEN', 'half_open_in_flight', 0)
+        half_open_in_flight = 0
+    end
+end
+
+-- For HALF_OPEN: atomically claim the in-flight slot.
+-- Return slot_claimed=1 if WE claimed it (old value was 0), 0 if already taken.
+local slot_claimed = 0
+if state == 'HALF_OPEN' then
+    -- old_in_flight is captured BEFORE our potential write
+    local old_in_flight = half_open_in_flight
+    if old_in_flight == 0 then
+        redis.call('HSET', key, 'half_open_in_flight', 1)
+        slot_claimed = 1
+    end
+end
+
+redis.call('EXPIRE', key, ttl)
+return {state, slot_claimed, failure_count}
+"""
+
+
+class DistributedCircuitBreaker:
+    """Redis-backed distributed circuit breaker for cross-process failure isolation.
+
+    Shares circuit state (CLOSED/OPEN/HALF_OPEN) across multiple processes via
+    a Redis hash. Uses Lua scripts for atomic state transitions to prevent
+    race conditions.
+
+    Falls back to a local CircuitBreaker if Redis is unreachable, following
+    the same pattern as RedisBudgetBackend.
+
+    Example:
+        breaker = DistributedCircuitBreaker(
+            redis_url="redis://localhost:6379",
+            circuit_id="my-llm-service",
+            failure_threshold=5,
+            recovery_timeout=60.0,
+        )
+        decision = breaker.check(PolicyContext())
+        if decision.allowed:
+            try:
+                result = call_llm()
+                breaker.record_success()
+            except Exception:
+                breaker.record_failure()
+    """
+
+    KEY_PREFIX = "veronica:circuit:"
+
+    # Minimum seconds between reconnect attempts (prevents hot-loop log storms).
+    _RECONNECT_INTERVAL: float = 5.0
+
+    def __init__(
+        self,
+        redis_url: str,
+        circuit_id: str,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0,
+        ttl_seconds: int = 3600,
+        fallback_on_error: bool = True,
+    ) -> None:
+        self._redis_url = redis_url
+        self._circuit_id = circuit_id
+        self._key = f"{self.KEY_PREFIX}{circuit_id}"
+        self._failure_threshold = failure_threshold
+        self._recovery_timeout = recovery_timeout
+        self._ttl = ttl_seconds
+        self._fallback_on_error = fallback_on_error
+        self._fallback = CircuitBreaker(
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+        )
+        self._using_fallback = False
+        self._client = None
+        self._lock = threading.Lock()
+        self._last_reconnect_attempt: float = 0.0
+        # Compiled Lua scripts (registered after connect)
+        self._script_failure = None
+        self._script_success = None
+        self._script_check = None
+        self._connect()
+
+    def _connect(self) -> None:
+        """Connect to Redis and register Lua scripts."""
+        try:
+            import redis
+
+            self._client = redis.from_url(self._redis_url, decode_responses=True)
+            self._client.ping()
+            self._script_failure = self._client.register_script(_LUA_RECORD_FAILURE)
+            self._script_success = self._client.register_script(_LUA_RECORD_SUCCESS)
+            self._script_check = self._client.register_script(_LUA_CHECK)
+            self._using_fallback = False
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.warning(
+                    "DistributedCircuitBreaker: cannot connect to Redis (%s). "
+                    "Falling back to local CircuitBreaker.",
+                    exc,
+                )
+                self._using_fallback = True
+            else:
+                raise
+
+    def _seed_fallback_from_redis(self) -> None:
+        """Read current Redis state and sync the local fallback CircuitBreaker.
+
+        Called while Redis is still live (just before transition to fallback).
+        Safe to skip on error — fallback starts in CLOSED state which is
+        permissive but not crash-inducing.
+        """
+        try:
+            data = self._client.hgetall(self._key)
+            if not data:
+                return
+            state_str = data.get("state", "CLOSED")
+            failure_count = int(data.get("failure_count", 0))
+            last_failure_time_str = data.get("last_failure_time", "")
+            last_failure_time = (
+                float(last_failure_time_str) if last_failure_time_str else None
+            )
+
+            # Mirror state into local fallback
+            with self._fallback._lock:
+                self._fallback._failure_count = failure_count
+                self._fallback._last_failure_time = last_failure_time
+                self._fallback._success_count = int(data.get("success_count", 0))
+                self._fallback._half_open_in_flight = 0
+                try:
+                    self._fallback._state = CircuitState(state_str)
+                except ValueError:
+                    self._fallback._state = CircuitState.CLOSED
+
+            logger.info(
+                "DistributedCircuitBreaker: seeded local fallback from Redis "
+                "(state=%s, failures=%d).",
+                state_str,
+                failure_count,
+            )
+        except Exception as exc:
+            logger.warning(
+                "DistributedCircuitBreaker: could not seed fallback from Redis (%s) — "
+                "fallback starts in CLOSED state.",
+                exc,
+            )
+
+    def _reconcile_on_reconnect(self) -> bool:
+        """Push local fallback state back to Redis after reconnection.
+
+        Writes the local CircuitBreaker state atomically to the Redis hash
+        so that other processes benefit from the local failure history
+        accumulated during the outage.
+
+        Returns:
+            True if reconciliation succeeded, False otherwise.
+        """
+        try:
+            with self._fallback._lock:
+                state_str = self._fallback._state.value
+                failure_count = self._fallback._failure_count
+                success_count = self._fallback._success_count
+                last_failure_time = self._fallback._last_failure_time
+
+            pipe = self._client.pipeline()
+            pipe.hset(
+                self._key,
+                mapping={
+                    "state": state_str,
+                    "failure_count": failure_count,
+                    "success_count": success_count,
+                    "last_failure_time": (
+                        last_failure_time if last_failure_time is not None else ""
+                    ),
+                    "half_open_in_flight": 0,
+                },
+            )
+            pipe.expire(self._key, self._ttl)
+            pipe.execute()
+            # Re-register scripts after reconnect
+            self._script_failure = self._client.register_script(_LUA_RECORD_FAILURE)
+            self._script_success = self._client.register_script(_LUA_RECORD_SUCCESS)
+            self._script_check = self._client.register_script(_LUA_CHECK)
+            logger.info(
+                "DistributedCircuitBreaker: reconciled local state to Redis "
+                "(state=%s, failures=%d).",
+                state_str,
+                failure_count,
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                "DistributedCircuitBreaker: reconciliation failed (%s) — "
+                "fallback state preserved.",
+                exc,
+            )
+            return False
+
+    def _try_reconnect(self) -> bool:
+        """Attempt to reconnect to Redis. Returns True if successful.
+
+        Rate-limited via _last_reconnect_attempt to avoid hot-loop log storms.
+        Only clears _using_fallback after a successful reconciliation.
+        """
+        now = time.monotonic()
+        if now - self._last_reconnect_attempt < self._RECONNECT_INTERVAL:
+            return False
+        self._last_reconnect_attempt = now
+
+        try:
+            self._connect()
+        except Exception:
+            return False
+
+        if self._using_fallback:
+            return False
+
+        # Connected — stay on fallback until reconcile succeeds.
+        self._using_fallback = True
+        reconciled = self._reconcile_on_reconnect()
+        if reconciled:
+            self._using_fallback = False
+            logger.info("DistributedCircuitBreaker: reconnected to Redis successfully.")
+            return True
+        # Reconcile failed — stay on fallback.
+        return False
+
+    # ------------------------------------------------------------------
+    # Public API (drop-in for CircuitBreaker)
+    # ------------------------------------------------------------------
+
+    @property
+    def policy_type(self) -> str:
+        """RuntimePolicy protocol: policy type identifier."""
+        return "circuit_breaker"
+
+    def bind_to_context(self, ctx_id: str) -> None:
+        """No-op for distributed breaker — multiple contexts share this instance."""
+        pass
+
+    @property
+    def state(self) -> CircuitState:
+        """Current circuit state (reads from Redis or fallback)."""
+        if self._using_fallback:
+            return self._fallback.state
+        if self._client is None:
+            return self._fallback.state
+        try:
+            data = self._client.hgetall(self._key)
+            state_str = data.get("state", "CLOSED") if data else "CLOSED"
+            # Apply OPEN -> HALF_OPEN timeout check
+            if state_str == "OPEN":
+                last_str = data.get("last_failure_time", "") if data else ""
+                if last_str:
+                    try:
+                        if time.time() - float(last_str) >= self._recovery_timeout:
+                            state_str = "HALF_OPEN"
+                    except ValueError:
+                        pass
+            try:
+                return CircuitState(state_str)
+            except ValueError:
+                return CircuitState.CLOSED
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.state read failed: %s", exc
+                )
+                return self._fallback.state
+            raise
+
+    @property
+    def failure_count(self) -> int:
+        """Consecutive failure count (reads from Redis or fallback)."""
+        if self._using_fallback or self._client is None:
+            return self._fallback.failure_count
+        try:
+            val = self._client.hget(self._key, "failure_count")
+            return int(val) if val is not None else 0
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.failure_count read failed: %s", exc
+                )
+                return self._fallback.failure_count
+            raise
+
+    @property
+    def success_count(self) -> int:
+        """Total success count (reads from Redis or fallback)."""
+        if self._using_fallback or self._client is None:
+            return self._fallback.success_count
+        try:
+            val = self._client.hget(self._key, "success_count")
+            return int(val) if val is not None else 0
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.success_count read failed: %s", exc
+                )
+                return self._fallback.success_count
+            raise
+
+    def check(self, context: PolicyContext) -> PolicyDecision:
+        """RuntimePolicy protocol: check if circuit allows the operation.
+
+        Atomically reads state, handles OPEN->HALF_OPEN timeout transition,
+        and claims the half-open in-flight slot via Lua script.
+
+        Args:
+            context: PolicyContext (fields unused by circuit breaker)
+
+        Returns:
+            PolicyDecision allowing (CLOSED/HALF_OPEN first request) or denying (OPEN)
+        """
+        # Attempt reconnect if on fallback
+        if self._using_fallback and self._fallback_on_error:
+            with self._lock:
+                if self._using_fallback:
+                    self._try_reconnect()
+
+        if self._using_fallback or self._client is None:
+            return self._fallback.check(context)
+
+        try:
+            result = self._script_check(
+                keys=[self._key],
+                args=[
+                    self._recovery_timeout,
+                    time.time(),
+                    self._ttl,
+                ],
+            )
+            state_str = result[0]
+            slot_claimed = int(result[1])
+            failure_count = int(result[2])
+
+            if state_str == "OPEN":
+                return PolicyDecision(
+                    allowed=False,
+                    policy_type=self.policy_type,
+                    reason=(
+                        f"Circuit OPEN: {failure_count} consecutive failures"
+                    ),
+                )
+
+            if state_str == "HALF_OPEN":
+                # slot_claimed=1 means WE atomically claimed the HALF_OPEN slot
+                # (old in_flight was 0, Lua set it to 1 for us).
+                # slot_claimed=0 means another caller already holds the slot.
+                if slot_claimed == 0:
+                    return PolicyDecision(
+                        allowed=False,
+                        policy_type=self.policy_type,
+                        reason="Circuit HALF_OPEN: test request already in flight",
+                    )
+
+            return PolicyDecision(allowed=True, policy_type=self.policy_type)
+
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.check failed: %s — using local fallback",
+                    exc,
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                return self._fallback.check(context)
+            raise
+
+    def record_success(self) -> None:
+        """Record a successful operation.
+
+        Closes the circuit if currently half-open. Resets failure counter.
+        """
+        # Attempt reconnect if on fallback
+        if self._using_fallback and self._fallback_on_error:
+            with self._lock:
+                if self._using_fallback:
+                    self._try_reconnect()
+
+        if self._using_fallback or self._client is None:
+            self._fallback.record_success()
+            return
+        try:
+            self._script_success(
+                keys=[self._key],
+                args=[self._ttl],
+            )
+            logger.debug(
+                "[VERONICA_CIRCUIT] DistributedCircuitBreaker: success recorded "
+                "(circuit_id=%s)",
+                self._circuit_id,
+            )
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.record_success failed: %s — "
+                    "using local fallback",
+                    exc,
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                self._fallback.record_success()
+            else:
+                raise
+
+    def record_failure(self) -> None:
+        """Record a failed operation.
+
+        Increments failure counter. Opens the circuit if threshold is reached.
+        Reopens from half-open on failure.
+        """
+        # Attempt reconnect if on fallback
+        if self._using_fallback and self._fallback_on_error:
+            with self._lock:
+                if self._using_fallback:
+                    self._try_reconnect()
+
+        if self._using_fallback or self._client is None:
+            self._fallback.record_failure()
+            return
+        try:
+            new_count = self._script_failure(
+                keys=[self._key],
+                args=[
+                    self._failure_threshold,
+                    time.time(),
+                    self._ttl,
+                ],
+            )
+            if int(new_count) >= self._failure_threshold:
+                logger.warning(
+                    "[VERONICA_CIRCUIT] DistributedCircuitBreaker: circuit opened "
+                    "(circuit_id=%s, failures=%d)",
+                    self._circuit_id,
+                    int(new_count),
+                )
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.record_failure failed: %s — "
+                    "using local fallback",
+                    exc,
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                self._fallback.record_failure()
+            else:
+                raise
+
+    def reset(self) -> None:
+        """Reset circuit to CLOSED state."""
+        if self._using_fallback or self._client is None:
+            self._fallback.reset()
+            return
+        try:
+            pipe = self._client.pipeline()
+            pipe.hset(
+                self._key,
+                mapping={
+                    "state": "CLOSED",
+                    "failure_count": 0,
+                    "success_count": 0,
+                    "last_failure_time": "",
+                    "half_open_in_flight": 0,
+                },
+            )
+            pipe.expire(self._key, self._ttl)
+            pipe.execute()
+            logger.info(
+                "[VERONICA_CIRCUIT] DistributedCircuitBreaker: reset (circuit_id=%s)",
+                self._circuit_id,
+            )
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.reset failed: %s", exc
+                )
+                self._fallback.reset()
+            else:
+                raise
+
+    def to_dict(self) -> Dict:
+        """Serialize circuit breaker state."""
+        if self._using_fallback or self._client is None:
+            d = self._fallback.to_dict()
+            d["distributed"] = False
+            d["circuit_id"] = self._circuit_id
+            return d
+        try:
+            data = self._client.hgetall(self._key)
+            if not data:
+                state_str = "CLOSED"
+                failure_count = 0
+                success_count = 0
+                last_failure_time = None
+            else:
+                state_str = data.get("state", "CLOSED")
+                failure_count = int(data.get("failure_count", 0))
+                success_count = int(data.get("success_count", 0))
+                lft = data.get("last_failure_time", "")
+                last_failure_time = float(lft) if lft else None
+            return {
+                "state": state_str,
+                "failure_count": failure_count,
+                "failure_threshold": self._failure_threshold,
+                "recovery_timeout": self._recovery_timeout,
+                "last_failure_time": last_failure_time,
+                "success_count": success_count,
+                "distributed": True,
+                "circuit_id": self._circuit_id,
+            }
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error(
+                    "DistributedCircuitBreaker.to_dict failed: %s", exc
+                )
+                d = self._fallback.to_dict()
+                d["distributed"] = False
+                d["circuit_id"] = self._circuit_id
+                return d
+            raise
+
+    @property
+    def is_using_fallback(self) -> bool:
+        """True if currently operating in local fallback mode."""
+        return self._using_fallback
+
+
+def get_default_circuit_breaker(
+    redis_url: Optional[str] = None,
+    circuit_id: str = "default",
+    failure_threshold: int = 5,
+    recovery_timeout: float = 60.0,
+    ttl_seconds: int = 3600,
+) -> "CircuitBreaker | DistributedCircuitBreaker":
+    """Factory: returns DistributedCircuitBreaker if redis_url given, else CircuitBreaker.
+
+    Args:
+        redis_url: Redis connection URL (e.g., "redis://localhost:6379").
+                   If None, returns a local CircuitBreaker.
+        circuit_id: Unique identifier for this circuit (used as Redis key suffix).
+        failure_threshold: Number of consecutive failures before opening circuit.
+        recovery_timeout: Seconds to wait in OPEN state before trying HALF_OPEN.
+        ttl_seconds: Redis key TTL in seconds (auto-expire stale circuits).
+
+    Returns:
+        DistributedCircuitBreaker if redis_url is provided, else CircuitBreaker.
+    """
+    if redis_url:
+        return DistributedCircuitBreaker(
+            redis_url=redis_url,
+            circuit_id=circuit_id,
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+            ttl_seconds=ttl_seconds,
+        )
+    return CircuitBreaker(
+        failure_threshold=failure_threshold,
+        recovery_timeout=recovery_timeout,
+    )

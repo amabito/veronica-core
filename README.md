@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=300)
-![CI](https://img.shields.io/badge/tests-1350%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1417%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -781,8 +781,9 @@ Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [x] Everything is opt-in & non-breaking (default behavior unchanged)
 - [x] **v1.0.0 Production Release**: adversarial hardening (10 fixes: 3 CRITICAL, 4 HIGH, 3 MEDIUM), fail-closed defaults, LlamaIndex adapter, HALF_OPEN enforcement, NFKC normalization (v1.0.0)
 - [x] `CircuitBreakerCapability.remove_from_agent()`: clean teardown, restores original `generate_reply`, enables hot-swap and test isolation (v1.0.1)
+- [x] `DistributedCircuitBreaker`: Redis-backed cross-process circuit breaker with Lua-atomic state transitions, failover to local, 67 adversarial tests (v1.1.0)
 
-1349 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability.
+1417 tests passing. Minimum production use-case: runaway containment + graceful degrade + auditable events + token budgets + input compression + adaptive ceiling + time-aware scheduling + anomaly detection + execution graph + divergence detection + security containment layer + semantic loop detection + auto cost estimation + distributed budget + OTel export + multi-agent chain containment + ASGI/WSGI middleware + streaming buffers + AG2 circuit-breaker capability + distributed circuit breaker.
 
 ---
 
@@ -818,11 +819,12 @@ The control plane layer (Planner, ControlLoop, Session management) lives in the 
 - [x] Improved divergence heuristics (cost-rate detection, token-velocity windows)
 - [x] PartialResultBuffer integration with ExecutionContext event stream
 
-### v1.0
-- Stable `ExecutionContext` API with formal deprecation policy
+### v1.0 / v1.1 (released)
+- [x] Stable `ExecutionContext` API with formal deprecation policy (v1.0.0)
+- [x] Multi-agent containment: shared budget pools via `RedisBudgetBackend` (v0.10.0)
+- [x] Multi-agent containment: `DistributedCircuitBreaker` for cross-process failure isolation (v1.1.0)
 - Formal containment guarantee documentation
 - `ExecutionGraph` extensibility hooks for external integrations
-- Multi-agent containment primitives (shared budget pools, cross-chain circuit breaker)
 - `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
 
 ### Beyond v1.0 — The VERONICA Stack
@@ -858,6 +860,7 @@ pytest
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 1.1.0 | 2026-02-27 | `DistributedCircuitBreaker`: Redis-backed cross-process circuit breaker with Lua-atomic transitions, failover, 67 tests |
 | 1.0.2 | 2026-02-27 | Fix `import ag2` → `from autogen import` fallback, clean up stale docstring patterns |
 | 1.0.1 | 2026-02-26 | AG2 adapter: `remove_from_agent()` for clean teardown, `_originals` dict, 6 new tests |
 | 1.0.0 | 2026-02-26 | Production release: adversarial hardening (go-injection, TOCTOU, Redis double-spend, HALF_OPEN enforcement), `AIContainer` rename, `on_error` default HALT |

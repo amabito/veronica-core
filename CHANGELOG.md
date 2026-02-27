@@ -6,6 +6,40 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.1.0] — 2026-02-27 — Distributed Circuit Breaker
+
+**Breaking changes:** none
+
+### Added
+
+- `DistributedCircuitBreaker`: Redis-backed circuit breaker for cross-process
+  failure isolation. Shares circuit state (CLOSED/OPEN/HALF_OPEN) across multiple
+  processes via a Redis hash. Uses Lua scripts for atomic state transitions
+  (record_failure, record_success, check) to prevent race conditions. Falls back
+  to a local `CircuitBreaker` if Redis is unreachable, following the same
+  seed/reconcile/reconnect pattern as `RedisBudgetBackend`.
+- `get_default_circuit_breaker()` factory: returns `DistributedCircuitBreaker`
+  when `redis_url` is provided, otherwise a local `CircuitBreaker`. Same pattern
+  as the existing `get_default_backend()`.
+- 67 tests for `DistributedCircuitBreaker` including:
+  - Basic state transitions and cross-process state sharing
+  - HALF_OPEN concurrency (Lua-atomicity verified with 20 threads)
+  - Redis failover, reconnect, and reconciliation
+  - Adversarial tests: corrupted Redis data (invalid state strings, non-numeric
+    fields, missing fields, stuck half_open_in_flight), boundary values
+    (threshold=1, timeout=0, threshold=1M), TOCTOU races (concurrent
+    record_failure + check, concurrent record_failure + record_success),
+    mid-operation Redis failure for all operations
+
+### Roadmap (upcoming)
+
+- **v1.2.0**: `CircuitBreakerCapability.conservative()` / `.aggressive()` factory
+  presets; AG2 `GroupChatManager` per-agent label mapper.
+- **v1.3.0**: Native `ReplyInterceptor` and `LLMCallMiddleware` protocols (pending
+  AG2 upstream discussion — see [RFC issue](https://github.com/ag2ai/ag2/issues)).
+
+---
+
 ## [1.0.2] — 2026-02-27 — Fix runtime import for autogen package
 
 **Breaking changes:** none

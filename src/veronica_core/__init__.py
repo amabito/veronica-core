@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 
 # Core state machine
 from veronica_core.state import (
@@ -126,6 +126,8 @@ from veronica_core.distributed import (
     LocalBudgetBackend,
     RedisBudgetBackend,
     get_default_backend,
+    DistributedCircuitBreaker,
+    get_default_circuit_breaker,
 )
 
 # OpenTelemetry (v0.10.0)
@@ -243,6 +245,9 @@ __all__ = [
     "LocalBudgetBackend",
     "RedisBudgetBackend",
     "get_default_backend",
+    # Distributed Circuit Breaker (v1.1.0)
+    "DistributedCircuitBreaker",
+    "get_default_circuit_breaker",
     # OpenTelemetry (v0.10.0)
     "enable_otel",
     "disable_otel",
