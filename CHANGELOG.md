@@ -6,6 +6,43 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.2.0] — 2026-02-28 — Failure Classification
+
+**Breaking changes:** none
+
+### Added
+
+- **`FailurePredicate`** type alias: `Callable[[BaseException], bool]` — returns
+  `True` to count the failure, `False` to ignore it.
+- **`failure_predicate`** parameter on `CircuitBreaker`, `DistributedCircuitBreaker`,
+  and `get_default_circuit_breaker()` factory.
+- **3 built-in predicate factories**:
+  - `ignore_exception_types(*types)` — ignore user-caused errors (e.g. 400s)
+  - `count_exception_types(*types)` — only count provider failures (e.g. 500s, timeouts)
+  - `ignore_status_codes(*codes)` — filter by HTTP `.status_code` or `.response.status_code`
+- `record_failure(*, error=None) -> bool` on both `CircuitBreaker` and
+  `DistributedCircuitBreaker`. Returns `True` if counted, `False` if filtered.
+  `error=None` always counts (backward compatible with AG2 null-reply detection).
+- Adapters pass `error=` to `record_failure()`: `ExecutionContext` and
+  `VeronicaLlamaIndexHandler.on_llm_error()`.
+- Exported from `veronica_core`: `FailurePredicate`, `ignore_exception_types`,
+  `count_exception_types`, `ignore_status_codes`.
+- 45 tests in `tests/test_failure_classification.py`: predicate factories (10),
+  CircuitBreaker integration (8), DistributedCircuitBreaker (4), adapter (2),
+  adversarial (20), export (1).
+- Total tests: 1501 (was 1456).
+
+### Design
+
+- **Zero Redis overhead**: Predicate evaluated in Python before lock/Lua call.
+  Filtered failures skip Redis entirely (0.14us vs 121us).
+- **Fail-safe**: If predicate raises `Exception`, the failure is counted (deny > allow).
+  `SystemExit`/`KeyboardInterrupt` propagate (not caught).
+- **Backward compatible**: `record_failure()` with no args still works — `error=None`
+  bypasses the predicate entirely.
+
+---
+
 ## [1.1.2] — 2026-02-27 — DCB Lua Bug Fix & Optimization
 
 **Breaking changes:** none
