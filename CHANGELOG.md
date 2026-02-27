@@ -6,6 +6,56 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.1.2] — 2026-02-27 — DCB Lua Bug Fix & Optimization
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Lua in_flight unconditional reset bug**: `_LUA_RECORD_FAILURE` and
+  `_LUA_RECORD_SUCCESS` unconditionally reset `half_open_in_flight` to 0,
+  even when the circuit was in CLOSED or OPEN state. This could break the
+  single-request invariant if a non-slot-holder called `record_failure()`
+  while state was CLOSED. Now gated on `state == 'HALF_OPEN'` only.
+- **Fail-safe design documented**: Any failure during HALF_OPEN reopens the
+  circuit immediately (deny > allow). Per-process slot ownership is
+  intentionally not tracked — if any process reports a failure while testing,
+  the service is still unhealthy.
+
+### Changed
+
+- `state` property: HGETALL (all 7+ fields) replaced with HMGET (2 fields:
+  `state`, `last_failure_time`). Reduces data transfer per read.
+- `to_dict()`: Delegates to `snapshot()` instead of duplicating HGETALL + parse
+  logic. 40 lines reduced to 12 lines.
+- Extracted `_resolve_state_str()` and `_parse_last_failure_time()` helpers
+  to eliminate duplicated state parsing across `state`, `snapshot()`, and
+  `to_dict()`.
+- Removed redundant `import time as _time` in `RedisBudgetBackend._try_reconnect()`.
+- Simplified defensive `getattr(self, "_fallback_seed_base", 0.0)` to direct
+  attribute access.
+
+### Added
+
+- `lupa>=2.6` dev dependency: required for fakeredis Lua scripting support.
+- 5 adversarial tests in `TestAdversarialInFlightInvariant`: multi-process
+  in_flight slot behavior, concurrent failure during HALF_OPEN, slot holder
+  record_failure/record_success.
+- Performance benchmarks: `tests/bench_distributed_circuit_breaker.py` with
+  13 benchmarks covering all operations (check, record, snapshot, full cycle,
+  local fallback, reset).
+- Total tests: 1456 (was 1434).
+
+### Performance
+
+- ~10% overall latency reduction from code waste removal:
+  - `check()` CLOSED: 155 -> 140us (-9.4%)
+  - `record_failure()`: 150 -> 128us (-14.5%)
+  - `reset()`: 130 -> 105us (-19.4%)
+  - Full cycle: 304 -> 272us (-10.5%)
+
+---
+
 ## [1.1.1] — 2026-02-27 — DCB Performance & Reliability Hardening
 
 **Breaking changes:** none

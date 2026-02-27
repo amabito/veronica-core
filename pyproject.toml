@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veronica-core"
-version = "1.1.1"
+version = "1.1.2"
 description = "Runtime Containment Layer for LLM Systems. Enforces bounded cost, retries, recursion, wait states, and failure domains."
 readme = "README.md"
 license = {text = "MIT"}
@@ -75,5 +75,6 @@ show_missing = true
 [dependency-groups]
 dev = [
     "fakeredis>=2.0",
+    "lupa>=2.6",
     "redis>=5.0",
 ]

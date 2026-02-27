@@ -116,7 +116,7 @@ class RedisBudgetBackend:
             False if the Redis write failed (delta is preserved in local fallback).
         """
         fallback_total = self._fallback.get()
-        delta = fallback_total - getattr(self, "_fallback_seed_base", 0.0)
+        delta = fallback_total - self._fallback_seed_base
         if delta <= 0.0:
             # Nothing new to flush; reset local state.
             self._fallback.reset()
@@ -151,9 +151,7 @@ class RedisBudgetBackend:
         Reconnect attempts are rate-limited via ``_last_reconnect_attempt`` to
         avoid hot-loop log storms during extended Redis outages.
         """
-        import time as _time
-
-        now = _time.monotonic()
+        now = time.monotonic()
         last = getattr(self, "_last_reconnect_attempt", 0.0)
         if now - last < self._RECONNECT_INTERVAL:
             return False
@@ -333,12 +331,16 @@ end
 -- Increment failure count and record time
 local new_count = redis.call('HINCRBY', key, 'failure_count', 1)
 redis.call('HSET', key, 'last_failure_time', now)
-redis.call('HSET', key, 'half_open_in_flight', 0)
 
 local state = redis.call('HGET', key, 'state')
 
--- Transition to OPEN if threshold reached, or reopen from HALF_OPEN
-if state == 'HALF_OPEN' or new_count >= threshold then
+-- Fail-safe: ANY failure during HALF_OPEN reopens the circuit immediately.
+-- We do not track per-process slot ownership. If any process reports a failure
+-- while the circuit is testing (HALF_OPEN), the service is still unhealthy.
+-- This is intentional: deny > allow.
+if state == 'HALF_OPEN' then
+    redis.call('HSET', key, 'state', 'OPEN', 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
+elseif new_count >= threshold then
     redis.call('HSET', key, 'state', 'OPEN')
 end
 
@@ -366,11 +368,14 @@ if redis.call('EXISTS', key) == 0 then
     redis.call('EXPIRE', key, ttl)
 end
 
-redis.call('HSET', key, 'half_open_in_flight', 0)
-
 local state = redis.call('HGET', key, 'state')
+
+-- Fail-safe: ANY success during HALF_OPEN closes the circuit.
+-- Same rationale as _LUA_RECORD_FAILURE: no per-process ownership tracking.
+-- If any process succeeds while testing, the service is healthy enough to close.
 if state == 'HALF_OPEN' then
-    redis.call('HSET', key, 'state', 'CLOSED', 'failure_count', 0)
+    redis.call('HSET', key, 'state', 'CLOSED', 'failure_count', 0,
+               'half_open_in_flight', 0, 'half_open_claimed_at', 0)
 elseif state == 'CLOSED' then
     redis.call('HSET', key, 'failure_count', 0)
 end
@@ -703,6 +708,30 @@ class DistributedCircuitBreaker:
         return False
 
     # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_state_str(self, state_str: str, last_failure_time: Optional[float]) -> CircuitState:
+        """Parse state string, applying OPEN->HALF_OPEN timeout if appropriate."""
+        if state_str == "OPEN" and last_failure_time is not None:
+            if time.time() - last_failure_time >= self._recovery_timeout:
+                state_str = "HALF_OPEN"
+        try:
+            return CircuitState(state_str)
+        except ValueError:
+            return CircuitState.CLOSED
+
+    @staticmethod
+    def _parse_last_failure_time(raw: str) -> Optional[float]:
+        """Parse last_failure_time from Redis string, returning None on garbage."""
+        if not raw:
+            return None
+        try:
+            return float(raw)
+        except (ValueError, TypeError):
+            return None
+
+    # ------------------------------------------------------------------
     # Public API (drop-in for CircuitBreaker)
     # ------------------------------------------------------------------
 
@@ -717,27 +746,18 @@ class DistributedCircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
-        """Current circuit state (reads from Redis or fallback)."""
-        if self._using_fallback:
-            return self._fallback.state
-        if self._client is None:
+        """Current circuit state (reads from Redis or fallback).
+
+        Uses HMGET to fetch only ``state`` and ``last_failure_time`` (2 fields)
+        instead of HGETALL (all fields), reducing data transfer.
+        """
+        if self._using_fallback or self._client is None:
             return self._fallback.state
         try:
-            data = self._client.hgetall(self._key)
-            state_str = data.get("state", "CLOSED") if data else "CLOSED"
-            # Apply OPEN -> HALF_OPEN timeout check
-            if state_str == "OPEN":
-                last_str = data.get("last_failure_time", "") if data else ""
-                if last_str:
-                    try:
-                        if time.time() - float(last_str) >= self._recovery_timeout:
-                            state_str = "HALF_OPEN"
-                    except ValueError:
-                        pass
-            try:
-                return CircuitState(state_str)
-            except ValueError:
-                return CircuitState.CLOSED
+            vals = self._client.hmget(self._key, "state", "last_failure_time")
+            state_str = vals[0] or "CLOSED"
+            lft = self._parse_last_failure_time(vals[1] or "")
+            return self._resolve_state_str(state_str, lft)
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error(
@@ -994,18 +1014,10 @@ class DistributedCircuitBreaker:
                     circuit_id=self._circuit_id,
                 )
             state_str = data.get("state", "CLOSED")
-            lft_str = data.get("last_failure_time", "")
-            last_failure_time = float(lft_str) if lft_str else None
-
-            # Apply OPEN -> HALF_OPEN timeout check (read-only, same as state property)
-            if state_str == "OPEN" and last_failure_time is not None:
-                if time.time() - last_failure_time >= self._recovery_timeout:
-                    state_str = "HALF_OPEN"
-
-            try:
-                state = CircuitState(state_str)
-            except ValueError:
-                state = CircuitState.CLOSED
+            last_failure_time = self._parse_last_failure_time(
+                data.get("last_failure_time", "")
+            )
+            state = self._resolve_state_str(state_str, last_failure_time)
 
             return CircuitSnapshot(
                 state=state,
@@ -1030,45 +1042,22 @@ class DistributedCircuitBreaker:
             raise
 
     def to_dict(self) -> Dict:
-        """Serialize circuit breaker state."""
-        if self._using_fallback or self._client is None:
-            d = self._fallback.to_dict()
-            d["distributed"] = False
-            d["circuit_id"] = self._circuit_id
-            return d
-        try:
-            data = self._client.hgetall(self._key)
-            if not data:
-                state_str = "CLOSED"
-                failure_count = 0
-                success_count = 0
-                last_failure_time = None
-            else:
-                state_str = data.get("state", "CLOSED")
-                failure_count = int(data.get("failure_count", 0))
-                success_count = int(data.get("success_count", 0))
-                lft = data.get("last_failure_time", "")
-                last_failure_time = float(lft) if lft else None
-            return {
-                "state": state_str,
-                "failure_count": failure_count,
-                "failure_threshold": self._failure_threshold,
-                "recovery_timeout": self._recovery_timeout,
-                "last_failure_time": last_failure_time,
-                "success_count": success_count,
-                "distributed": True,
-                "circuit_id": self._circuit_id,
-            }
-        except Exception as exc:
-            if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.to_dict failed: %s", exc
-                )
-                d = self._fallback.to_dict()
-                d["distributed"] = False
-                d["circuit_id"] = self._circuit_id
-                return d
-            raise
+        """Serialize circuit breaker state.
+
+        Delegates to snapshot() for a single-RTT read, then enriches with
+        configuration fields (failure_threshold, recovery_timeout).
+        """
+        snap = self.snapshot()
+        return {
+            "state": snap.state.value,
+            "failure_count": snap.failure_count,
+            "failure_threshold": self._failure_threshold,
+            "recovery_timeout": self._recovery_timeout,
+            "last_failure_time": snap.last_failure_time,
+            "success_count": snap.success_count,
+            "distributed": snap.distributed,
+            "circuit_id": snap.circuit_id,
+        }
 
     @property
     def is_using_fallback(self) -> bool:
