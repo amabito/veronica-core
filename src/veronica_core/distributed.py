@@ -7,7 +7,7 @@ import threading
 import time
 from typing import Dict, Optional, Protocol, runtime_checkable
 
-from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.circuit_breaker import CircuitBreaker, CircuitState, FailurePredicate
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
 
 logger = logging.getLogger(__name__)
@@ -532,6 +532,7 @@ class DistributedCircuitBreaker:
         fallback_on_error: bool = True,
         half_open_slot_timeout: float = 120.0,
         redis_client: object = None,
+        failure_predicate: Optional[FailurePredicate] = None,
     ) -> None:
         self._redis_url = redis_url
         self._circuit_id = circuit_id
@@ -541,9 +542,11 @@ class DistributedCircuitBreaker:
         self._ttl = ttl_seconds
         self._fallback_on_error = fallback_on_error
         self._half_open_slot_timeout = half_open_slot_timeout
+        self._failure_predicate = failure_predicate
         self._fallback = CircuitBreaker(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
+            failure_predicate=failure_predicate,
         )
         self._using_fallback = False
         self._client = None
@@ -907,12 +910,39 @@ class DistributedCircuitBreaker:
             else:
                 raise
 
-    def record_failure(self) -> None:
+    def record_failure(self, *, error: Optional[BaseException] = None) -> bool:
         """Record a failed operation.
 
-        Increments failure counter. Opens the circuit if threshold is reached.
-        Reopens from half-open on failure.
+        If a ``failure_predicate`` is configured and *error* is provided, the
+        predicate is evaluated first. If it returns ``False``, the failure is
+        ignored (not counted toward the threshold).  Zero Redis overhead for
+        filtered failures.
+
+        Args:
+            error: The exception that caused the failure.  When ``None``,
+                the failure is always counted (backward compatible with
+                callers that have no exception, e.g. AG2 null-reply detection).
+
+        Returns:
+            ``True`` if the failure was counted, ``False`` if filtered.
         """
+        # Predicate evaluation BEFORE any Redis call (zero overhead for filtered).
+        if error is not None and self._failure_predicate is not None:
+            try:
+                if not self._failure_predicate(error):
+                    logger.debug(
+                        "[VERONICA_CIRCUIT] DistributedCircuitBreaker: failure "
+                        "filtered by predicate (circuit_id=%s, error=%s)",
+                        self._circuit_id,
+                        type(error).__name__,
+                    )
+                    return False
+            except Exception:
+                logger.warning(
+                    "[VERONICA_CIRCUIT] DistributedCircuitBreaker: "
+                    "failure_predicate raised; counting failure as fail-safe"
+                )
+
         # Attempt reconnect if on fallback
         if self._using_fallback and self._fallback_on_error:
             with self._lock:
@@ -920,8 +950,10 @@ class DistributedCircuitBreaker:
                     self._try_reconnect()
 
         if self._using_fallback or self._client is None:
+            # Predicate already evaluated; pass without error to avoid
+            # double-evaluation in the local fallback.
             self._fallback.record_failure()
-            return
+            return True
         try:
             new_count = self._script_failure(
                 keys=[self._key],
@@ -952,6 +984,7 @@ class DistributedCircuitBreaker:
                 self._fallback.record_failure()
             else:
                 raise
+        return True
 
     def reset(self) -> None:
         """Reset circuit to CLOSED state."""
@@ -1071,6 +1104,7 @@ def get_default_circuit_breaker(
     failure_threshold: int = 5,
     recovery_timeout: float = 60.0,
     ttl_seconds: int = 3600,
+    failure_predicate: Optional[FailurePredicate] = None,
 ) -> "CircuitBreaker | DistributedCircuitBreaker":
     """Factory: returns DistributedCircuitBreaker if redis_url given, else CircuitBreaker.
 
@@ -1081,6 +1115,9 @@ def get_default_circuit_breaker(
         failure_threshold: Number of consecutive failures before opening circuit.
         recovery_timeout: Seconds to wait in OPEN state before trying HALF_OPEN.
         ttl_seconds: Redis key TTL in seconds (auto-expire stale circuits).
+        failure_predicate: Optional predicate to filter which exceptions count
+            as failures.  Receives the exception and returns True to count,
+            False to ignore.
 
     Returns:
         DistributedCircuitBreaker if redis_url is provided, else CircuitBreaker.
@@ -1092,8 +1129,10 @@ def get_default_circuit_breaker(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
             ttl_seconds=ttl_seconds,
+            failure_predicate=failure_predicate,
         )
     return CircuitBreaker(
         failure_threshold=failure_threshold,
         recovery_timeout=recovery_timeout,
+        failure_predicate=failure_predicate,
     )

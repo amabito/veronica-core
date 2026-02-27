@@ -51,7 +51,14 @@ from veronica_core.budget import BudgetEnforcer
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.partial import PartialResultBuffer
 from veronica_core.retry import RetryContainer
-from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.circuit_breaker import (
+    CircuitBreaker,
+    CircuitState,
+    FailurePredicate,
+    ignore_exception_types,
+    count_exception_types,
+    ignore_status_codes,
+)
 
 # Integration API (main entry point)
 from veronica_core.integration import (
@@ -181,6 +188,10 @@ __all__ = [
     "RetryContainer",
     "CircuitBreaker",
     "CircuitState",
+    "FailurePredicate",
+    "ignore_exception_types",
+    "count_exception_types",
+    "ignore_status_codes",
     # Integration
     "VeronicaIntegration",
     "get_veronica_integration",

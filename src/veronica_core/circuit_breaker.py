@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 import logging
 import threading
 import time
 
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
+
+# Type alias: predicate receives an exception and returns True if it should
+# count as a circuit-breaker failure, False to ignore.
+FailurePredicate = Callable[[BaseException], bool]
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,7 @@ class CircuitBreaker:
 
     failure_threshold: int = 5
     recovery_timeout: float = 60.0
+    failure_predicate: Optional[FailurePredicate] = None
 
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
     _failure_count: int = field(default=0, init=False)
@@ -141,12 +146,37 @@ class CircuitBreaker:
             elif self._state == CircuitState.CLOSED:
                 self._failure_count = 0
 
-    def record_failure(self) -> None:
+    def record_failure(self, *, error: Optional[BaseException] = None) -> bool:
         """Record a failed operation.
 
-        Increments failure counter. Opens the circuit if threshold
-        is reached. Reopens from half-open on failure.
+        If a ``failure_predicate`` is configured and *error* is provided, the
+        predicate is evaluated first. If it returns ``False``, the failure is
+        ignored (not counted toward the threshold).
+
+        When *error* is ``None``, the failure always counts regardless of the
+        predicate (backward compatible with callers that have no exception).
+
+        Args:
+            error: The exception that caused the failure.  When ``None``,
+                the failure is always counted.
+
+        Returns:
+            ``True`` if the failure was counted, ``False`` if filtered.
         """
+        if error is not None and self.failure_predicate is not None:
+            try:
+                if not self.failure_predicate(error):
+                    logger.debug(
+                        "[VERONICA_CIRCUIT] Failure filtered by predicate: %s",
+                        type(error).__name__,
+                    )
+                    return False
+            except Exception:
+                logger.warning(
+                    "[VERONICA_CIRCUIT] failure_predicate raised; "
+                    "counting failure as fail-safe"
+                )
+
         with self._lock:
             self._failure_count += 1
             self._last_failure_time = time.time()
@@ -160,9 +190,11 @@ class CircuitBreaker:
             elif self._failure_count >= self.failure_threshold:
                 self._state = CircuitState.OPEN
                 logger.warning(
-                    f"[VERONICA_CIRCUIT] Circuit opened: "
-                    f"{self._failure_count} consecutive failures"
+                    "[VERONICA_CIRCUIT] Circuit opened: "
+                    "%d consecutive failures",
+                    self._failure_count,
                 )
+        return True
 
     def _maybe_half_open_locked(self) -> None:
         """Transition from OPEN to HALF_OPEN if recovery timeout elapsed.
@@ -212,3 +244,73 @@ class CircuitBreaker:
                 "last_failure_time": self._last_failure_time,
                 "success_count": self._success_count,
             }
+
+
+# ---------------------------------------------------------------------------
+# Built-in failure predicate factories
+# ---------------------------------------------------------------------------
+
+
+def ignore_exception_types(
+    *exception_types: type,
+) -> FailurePredicate:
+    """Create a predicate that ignores (does not count) the given exception types.
+
+    Useful for filtering out user-caused errors that should not trip the
+    circuit breaker (e.g. bad prompts, invalid parameters).
+
+    Example::
+
+        breaker = CircuitBreaker(
+            failure_predicate=ignore_exception_types(ValueError, BadRequestError),
+        )
+    """
+    def predicate(error: BaseException) -> bool:
+        return not isinstance(error, exception_types)
+    return predicate
+
+
+def count_exception_types(
+    *exception_types: type,
+) -> FailurePredicate:
+    """Create a predicate that only counts the given exception types as failures.
+
+    All other exception types are ignored.  Useful for whitelisting: only
+    provider-side errors (500s, timeouts) trip the breaker.
+
+    Example::
+
+        breaker = CircuitBreaker(
+            failure_predicate=count_exception_types(TimeoutError, ServerError),
+        )
+    """
+    def predicate(error: BaseException) -> bool:
+        return isinstance(error, exception_types)
+    return predicate
+
+
+def ignore_status_codes(*codes: int) -> FailurePredicate:
+    """Create a predicate that ignores HTTP errors with the given status codes.
+
+    Inspects the exception for a ``status_code`` attribute or a
+    ``response.status_code`` attribute.  Non-HTTP exceptions (those without
+    either attribute) always count as failures.
+
+    Example::
+
+        breaker = CircuitBreaker(
+            failure_predicate=ignore_status_codes(400, 404, 422),
+        )
+    """
+    code_set = frozenset(codes)
+
+    def predicate(error: BaseException) -> bool:
+        status = getattr(error, "status_code", None)
+        if status is None:
+            resp = getattr(error, "response", None)
+            if resp is not None:
+                status = getattr(resp, "status_code", None)
+        if status is not None and status in code_set:
+            return False
+        return True
+    return predicate

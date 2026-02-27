@@ -800,7 +800,7 @@ class ExecutionContext:
             error_decision = Decision.RETRY
 
         if self._circuit_breaker is not None:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(error=exc)
 
         with self._lock:
             self._retries_used += 1

@@ -230,7 +230,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         """Error hook: log error and record circuit breaker failure."""
         logger.warning("[VERONICA_LI] LLM error: %s", error)
         if self._circuit_breaker is not None:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(error=error)
 
     # ------------------------------------------------------------------
     # Introspection
