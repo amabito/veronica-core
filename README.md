@@ -108,7 +108,7 @@ veronica-core integrates with [AG2](https://github.com/ag2ai/ag2) via `AgentCapa
 
 Working example: [PR #2430](https://github.com/ag2ai/ag2/pull/2430)
 
-Current integration uses monkey-patching as AG2 does not yet expose before/after hooks on `generate_reply`. See the PR thread for context.
+Current integration uses monkey-patching as AG2 does not expose before/after hooks on `generate_reply`. See the PR thread for context.
 
 ---
 
@@ -154,9 +154,11 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Stats
+## Ship Readiness -- v1.2.0
 
 1501 tests, 92% coverage, zero required dependencies. Python 3.10+.
+
+Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
 ---
 
