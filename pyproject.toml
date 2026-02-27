@@ -51,6 +51,7 @@ dev = [
     "pytest-cov>=5.0",
     "cryptography>=42",
     "fakeredis>=2.0",
+    "lupa>=2.6",
     "opentelemetry-sdk>=1.20",
     "pyyaml>=6.0",
 ]
