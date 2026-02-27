@@ -1,7 +1,7 @@
 # VERONICA
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=300)
-![CI](https://img.shields.io/badge/tests-1349%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1350%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -13,6 +13,12 @@ veronica-core is the kernel. [veronica](https://github.com/amabito/veronica) is 
 ```bash
 pip install veronica-core
 ```
+
+### TL;DR
+
+You set a budget. If an agent tries to exceed it, the call is blocked before it reaches the model. That's it.
+
+No external dependencies. Works with OpenAI, Anthropic, AG2, LangChain, or anything that makes HTTP calls. Everything is opt-in — adding veronica-core to an existing project changes nothing until you configure it.
 
 > **Scope**: Enforcement is at the process boundary (argv-level). This is not an OS-level sandbox — see [Security Boundary](#security-boundary).
 
