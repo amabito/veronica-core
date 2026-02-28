@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.3.0] — 2026-02-28 — ROS2 Adapter
+
+**Breaking changes:** none
+
+### Added
+
+- **ROS2 adapter** (`veronica_core.adapters.ros2`): `SafetyMonitor` and `OperatingMode`
+  for runtime containment in ROS2 callback-based architectures.
+- **`OperatingMode` enum**: 4-tier degradation (FULL_AUTO / CAUTIOUS / SLOW / HALT)
+  with `speed_scale` hint for actuator throttling.
+- **`SafetyMonitor.guard()`** context manager: wraps ROS2 callbacks with automatic
+  fault detection, mode degradation, and recovery.
+- TurtleBot3 Gazebo demo (`examples/ros2/`): LiDAR fault injection with graceful
+  degradation and automatic recovery.
+- 46 tests (25 functional + 21 adversarial) covering concurrent access, reentrant
+  guard, recursive callbacks, SystemExit propagation, and mode thrashing.
+
+### Fixed
+
+- **Infinite recursion in `SafetyMonitor._check_transition`**: `_last_mode` is now
+  updated before invoking `on_mode_change` callback, preventing infinite loops when
+  the callback calls `record_fault()` and state corruption when the callback raises.
+
+---
+
 ## [1.2.0] — 2026-02-28 — Failure Classification
 
 **Breaking changes:** none
