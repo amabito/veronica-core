@@ -230,11 +230,18 @@ class TestImportError:
         import importlib
         import importlib.util
 
-        # Skip if ag2 or autogen is actually installed on disk
-        if (
-            importlib.util.find_spec("autogen") is not None
-            or importlib.util.find_spec("ag2") is not None
-        ):
+        # Skip if ag2 or autogen is actually installed on disk.
+        # find_spec may raise ValueError if a fake module with __spec__=None
+        # is in sys.modules, so we catch that too.
+        try:
+            ag2_on_disk = importlib.util.find_spec("ag2") is not None
+        except (ValueError, ModuleNotFoundError):
+            ag2_on_disk = False
+        try:
+            autogen_on_disk = importlib.util.find_spec("autogen") is not None
+        except (ValueError, ModuleNotFoundError):
+            autogen_on_disk = False
+        if ag2_on_disk or autogen_on_disk:
             pytest.skip("ag2/autogen is installed; cannot test missing-import path")
 
         adapter_key = "veronica_core.adapters.ag2"
