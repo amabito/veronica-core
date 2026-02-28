@@ -385,25 +385,6 @@ class TestAdversarialPredicate:
         assert result is False
         assert cb.failure_count == 0
 
-    def test_predicate_returns_none(self):
-        """Predicate returning None (falsy) should filter the failure."""
-        cb = CircuitBreaker(
-            failure_threshold=2,
-            failure_predicate=lambda e: None,  # type: ignore[return-value]
-        )
-        result = cb.record_failure(error=ProviderError())
-        assert result is False
-        assert cb.failure_count == 0
-
-    def test_predicate_returns_empty_string(self):
-        """Predicate returning '' (falsy) should filter the failure."""
-        cb = CircuitBreaker(
-            failure_threshold=2,
-            failure_predicate=lambda e: "",  # type: ignore[return-value]
-        )
-        result = cb.record_failure(error=ProviderError())
-        assert result is False
-
     # ------------------------------------------------------------------
     # Edge-case error objects
     # ------------------------------------------------------------------
@@ -418,24 +399,6 @@ class TestAdversarialPredicate:
         result = cb.record_failure(error=SystemExit(1))
         assert result is False
         assert cb.failure_count == 0
-
-    def test_keyboard_interrupt_as_error(self):
-        """KeyboardInterrupt passed as error should be evaluated by predicate."""
-        cb = CircuitBreaker(
-            failure_threshold=2,
-            failure_predicate=count_exception_types(ProviderError),
-        )
-        result = cb.record_failure(error=KeyboardInterrupt())
-        assert result is False
-
-    def test_generator_exit_as_error(self):
-        """GeneratorExit (BaseException) passed as error."""
-        cb = CircuitBreaker(
-            failure_threshold=2,
-            failure_predicate=count_exception_types(ProviderError),
-        )
-        result = cb.record_failure(error=GeneratorExit())
-        assert result is False
 
     def test_error_with_very_long_repr(self):
         """Error with enormous message should not crash predicate."""

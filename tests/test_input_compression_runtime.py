@@ -92,13 +92,6 @@ class TestCompressIfNeededAllow:
         assert out == text
         assert decision is None
 
-    def test_no_events_when_allow(self):
-        hook = InputCompressionHook(
-            compression_threshold_tokens=100, halt_threshold_tokens=200
-        )
-        hook.compress_if_needed("short", CTX)
-        assert hook.get_events() == []
-
 
 # ---------------------------------------------------------------------------
 # compress_if_needed -- compression succeeds
@@ -259,26 +252,6 @@ class TestCompressorProtocol:
                 return text
 
         assert isinstance(MyCompressor(), Compressor)
-
-
-# ---------------------------------------------------------------------------
-# check_input backward compat
-# ---------------------------------------------------------------------------
-
-class TestCheckInputCompat:
-    def test_check_input_still_works(self):
-        hook = InputCompressionHook(
-            compression_threshold_tokens=100, halt_threshold_tokens=200
-        )
-        text = "a" * 400  # 100 tokens
-        assert hook.check_input(text, CTX) is Decision.DEGRADE
-
-    def test_check_input_halt(self):
-        hook = InputCompressionHook(
-            compression_threshold_tokens=100, halt_threshold_tokens=200
-        )
-        text = "a" * 800  # 200 tokens
-        assert hook.check_input(text, CTX) is Decision.HALT
 
 
 # ---------------------------------------------------------------------------

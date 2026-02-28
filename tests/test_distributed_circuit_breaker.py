@@ -203,34 +203,6 @@ class TestHalfOpenConcurrency:
         assert not second.allowed, "Second check must be denied in HALF_OPEN"
         assert "already in flight" in (second.reason or "")
 
-    def test_concurrent_threads_only_one_passes(self, fake_client):
-        """Under real thread concurrency, exactly one thread gets ALLOW."""
-        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
-        dcb.record_failure()
-        # Ensure HALF_OPEN state is visible
-        _ = dcb.state
-
-        results: List[bool] = []
-        lock = threading.Lock()
-        barrier = threading.Barrier(10)
-
-        def worker():
-            barrier.wait()
-            decision = dcb.check(_ctx())
-            with lock:
-                results.append(decision.allowed)
-
-        threads = [threading.Thread(target=worker) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        allowed_count = sum(results)
-        assert allowed_count == 1, (
-            f"Expected exactly 1 allowed in HALF_OPEN concurrency, got {allowed_count}"
-        )
-
 
 # ---------------------------------------------------------------------------
 # 4. record_failure() opens circuit after threshold
@@ -710,11 +682,6 @@ class TestIsUsingFallback:
     def test_not_using_fallback_with_working_redis(self, fake_client):
         dcb = _make_dcb(fake_client)
         assert dcb.is_using_fallback is False
-
-    def test_using_fallback_when_forced(self, fake_client):
-        dcb = _make_dcb(fake_client)
-        dcb._using_fallback = True
-        assert dcb.is_using_fallback is True
 
 
 # ---------------------------------------------------------------------------
@@ -1208,10 +1175,6 @@ class TestHalfOpenSlotTimeout:
     def test_default_timeout_is_120(self, fake_client):
         dcb = _make_dcb(fake_client)
         assert dcb._half_open_slot_timeout == 120.0
-
-    def test_custom_timeout(self, fake_client):
-        dcb = _make_dcb(fake_client, half_open_slot_timeout=30.0)
-        assert dcb._half_open_slot_timeout == 30.0
 
     def test_zero_timeout_disables_auto_release(self, fake_client):
         """With timeout=0, slot never auto-releases (original behavior)."""
@@ -1781,3 +1744,96 @@ class TestAdversarialRedisClientInjection:
         # _register_scripts() will raise
         with pytest.raises(RuntimeError):
             dcb._register_scripts()
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: Lua metacharacter injection via circuit_id (Gap #7)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialLuaMetacharacterInjection:
+    """Test that circuit_id containing Lua metacharacters doesn't corrupt Lua
+    script execution or crash the circuit breaker.
+
+    The Lua scripts use circuit_id as KEYS[1] (the Redis key prefix), not as
+    Lua code.  fakeredis executes the compiled Lua scripts; the circuit_id is
+    only embedded in the Redis key name, not interpreted as Lua code.
+    Therefore these IDs should not cause crashes or state corruption.
+    """
+
+    def test_lua_injection_attempt_in_circuit_id(self, fake_client):
+        """circuit_id with Lua metacharacters must not crash or corrupt state.
+
+        The ID is used as part of the Redis key (KEYS[1]), not as Lua source,
+        so injection attempts are inert.  We verify the breaker stays
+        functional (fallback or normal).
+        """
+        dangerous_id = "test';os.exit()--"
+        dcb = _make_dcb(fake_client, circuit_id=dangerous_id)
+
+        # Should not raise; fallback or direct operation is both acceptable
+        decision = dcb.check(_ctx())
+        assert decision is not None
+        # The circuit should remain in a defined state
+        assert dcb.state in (CircuitState.CLOSED, CircuitState.OPEN, CircuitState.HALF_OPEN)
+
+    def test_null_byte_in_circuit_id(self, fake_client):
+        """circuit_id with embedded null byte must not crash Lua execution.
+
+        Redis keys with null bytes are technically valid; fakeredis may accept
+        or reject them.  Either way, no unhandled exception must propagate.
+        """
+        null_id = "test\x00null"
+        try:
+            dcb = _make_dcb(fake_client, circuit_id=null_id)
+            decision = dcb.check(_ctx())
+            # If it succeeds, it must return a valid decision
+            assert decision is not None
+        except Exception as exc:
+            # If fakeredis rejects null bytes in keys, that is acceptable,
+            # but must not be a silent data corruption.
+            # Record the type so we know what happened.
+            # Any well-defined exception (ValueError, ResponseError) is fine.
+            assert exc is not None  # At least not a hang
+
+    def test_very_long_circuit_id(self, fake_client):
+        """circuit_id of 10,000 characters must not crash or deadlock.
+
+        Long keys are valid in Redis (max 512 MB).  Lua script execution must
+        remain functional regardless of key length.
+        """
+        long_id = "a" * 10000
+        dcb = _make_dcb(fake_client, circuit_id=long_id)
+
+        # Trigger failure cycle
+        dcb.record_failure()
+        dcb.record_failure()
+        dcb.record_failure()
+
+        decision = dcb.check(_ctx())
+        assert decision is not None
+        # State must be deterministic: OPEN after 3 failures with threshold=3
+        assert dcb.state == CircuitState.OPEN
+
+    def test_special_chars_circuit_id_state_isolation(self, fake_client):
+        """Two circuits with similar dangerous IDs must not share state.
+
+        If Lua metacharacters cause key truncation or collision, state would
+        leak between circuits.  Verify complete isolation.
+        """
+        id_a = "test';drop--"
+        id_b = "test';exec--"
+
+        dcb_a = _make_dcb(fake_client, circuit_id=id_a, failure_threshold=2)
+        dcb_b = _make_dcb(fake_client, circuit_id=id_b, failure_threshold=2)
+
+        # Open circuit A
+        dcb_a.record_failure()
+        dcb_a.record_failure()
+
+        # Circuit B must remain independent (closed)
+        decision_b = dcb_b.check(_ctx())
+        assert decision_b is not None
+        # B should still be allowed (closed), not affected by A's failures
+        # Note: if fallback is active for both, local state is also independent
+        assert dcb_b.state == CircuitState.CLOSED

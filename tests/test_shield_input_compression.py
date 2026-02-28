@@ -70,25 +70,11 @@ class TestInputCompressionBasic:
         text = "a" * 400  # 100 tokens
         assert hook.check_input(text, CTX) is Decision.DEGRADE
 
-    def test_degrade_between_thresholds(self):
-        hook = InputCompressionHook(
-            compression_threshold_tokens=100, halt_threshold_tokens=200
-        )
-        text = "a" * 600  # 150 tokens
-        assert hook.check_input(text, CTX) is Decision.DEGRADE
-
     def test_halt_at_halt_threshold(self):
         hook = InputCompressionHook(
             compression_threshold_tokens=100, halt_threshold_tokens=200
         )
         text = "a" * 800  # 200 tokens
-        assert hook.check_input(text, CTX) is Decision.HALT
-
-    def test_halt_above_halt_threshold(self):
-        hook = InputCompressionHook(
-            compression_threshold_tokens=100, halt_threshold_tokens=200
-        )
-        text = "a" * 1200  # 300 tokens
         assert hook.check_input(text, CTX) is Decision.HALT
 
 

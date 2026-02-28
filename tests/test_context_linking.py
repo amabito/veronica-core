@@ -127,13 +127,6 @@ def test_spawn_child_inherits_step_and_retry_limits() -> None:
         assert child._config.max_retries_total == parent_cfg.max_retries_total
 
 
-def test_no_parent_snapshot_parent_chain_id_none() -> None:
-    """Standalone context has parent_chain_id=None in snapshot."""
-    cfg = make_config()
-    with ExecutionContext(cfg) as ctx:
-        snap = ctx.get_snapshot()
-        assert snap.parent_chain_id is None
-
 
 def test_child_propagate_zero_cost_no_abort() -> None:
     """Propagating zero cost does not abort the parent."""

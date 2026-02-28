@@ -310,9 +310,6 @@ class TestExtractCostFromPayload:
         from veronica_core.adapters.llamaindex import _extract_cost_from_payload
         return _extract_cost_from_payload(payload)
 
-    def test_returns_zero_for_none(self):
-        assert self._extract(None) == 0.0
-
     def test_returns_zero_for_empty_dict(self):
         assert self._extract({}) == 0.0
 

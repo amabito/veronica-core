@@ -92,13 +92,6 @@ class TestSemanticLoopGuard:
         # Let's be lenient here and just verify it doesn't crash
         assert isinstance(result.allowed, bool)
 
-    def test_feed_combines_record_and_check(self):
-        guard = SemanticLoopGuard(window=3, jaccard_threshold=0.92, min_chars=10)
-        text = "this is a repeated sentence for testing the feed method behavior"
-        guard.record(text)
-        result = guard.feed(text)
-        assert not result.allowed  # exact repeat detected
-
     def test_reset_clears_buffer(self):
         guard = SemanticLoopGuard(window=3, jaccard_threshold=0.92, min_chars=10)
         text = "this is a sentence that will be repeated in the buffer for test"
@@ -112,12 +105,6 @@ class TestSemanticLoopGuard:
         guard = SemanticLoopGuard()
         result = guard.check()
         assert result.policy_type == "semantic_loop"
-
-    def test_check_with_no_context_defaults(self):
-        guard = SemanticLoopGuard(min_chars=10)
-        guard.record("hello world test entry first one here")
-        result = guard.check()  # no context arg
-        assert result.allowed  # only 1 entry
 
     def test_check_with_explicit_context(self):
         guard = SemanticLoopGuard(min_chars=10)

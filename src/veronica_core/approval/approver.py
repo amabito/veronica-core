@@ -17,9 +17,9 @@ import time as _time
 import uuid
 import warnings
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from veronica_core.audit.log import AuditLog
@@ -307,6 +307,52 @@ class CLIApprover:
         ).hexdigest()
         return hmac.compare_digest(token.signature, expected)
 
+    def _check_approval_conditions(
+        self,
+        token: ApprovalToken,
+        deny: Callable[[str], bool],
+    ) -> bool | None:
+        """Run all approval checks; return False on failure, None to continue to GRANTED.
+
+        Args:
+            token: Token being verified.
+            deny: Callable that logs APPROVAL_DENIED and returns False.
+
+        Returns:
+            False if any check fails, None if all pass.
+        """
+        if not self.verify(token):
+            return deny("invalid_signature")
+
+        if token.expiry:
+            try:
+                expiry_at = datetime.fromisoformat(token.expiry)
+            except ValueError:
+                return deny("invalid_expiry_format")
+            if expiry_at.tzinfo is None:
+                expiry_at = expiry_at.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_at:
+                return deny("token_expired")
+        else:
+            try:
+                issued_at = datetime.fromisoformat(token.timestamp)
+            except ValueError:
+                return deny("invalid_timestamp_format")
+            if issued_at.tzinfo is None:
+                issued_at = issued_at.replace(tzinfo=timezone.utc)
+            age_seconds = (datetime.now(timezone.utc) - issued_at).total_seconds()
+            if age_seconds > _TOKEN_MAX_AGE_SECONDS:
+                return deny("token_expired")
+
+        if token.nonce and token.scope:
+            expected_scope = f"{token.action}:{token.args_hash}"
+            if token.scope != expected_scope:
+                return deny("scope_mismatch")
+            if not self._nonce_registry.consume(token.nonce):
+                return deny("nonce_replayed")
+
+        return None
+
     def approve(
         self,
         token: ApprovalToken,
@@ -341,43 +387,9 @@ class CLIApprover:
                 })
             return False
 
-        # Step 1: Verify HMAC signature
-        if not self.verify(token):
-            return _deny("invalid_signature")
-
-        # Step 2: Check expiry / age
-        if token.expiry:
-            # v2: use explicit expiry field
-            try:
-                expiry_at = datetime.fromisoformat(token.expiry)
-            except ValueError:
-                return _deny("invalid_expiry_format")
-            if expiry_at.tzinfo is None:
-                expiry_at = expiry_at.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) > expiry_at:
-                return _deny("token_expired")
-        else:
-            # v1 fallback: check timestamp age
-            try:
-                issued_at = datetime.fromisoformat(token.timestamp)
-            except ValueError:
-                return _deny("invalid_timestamp_format")
-            if issued_at.tzinfo is None:
-                issued_at = issued_at.replace(tzinfo=timezone.utc)
-            age_seconds = (datetime.now(timezone.utc) - issued_at).total_seconds()
-            if age_seconds > _TOKEN_MAX_AGE_SECONDS:
-                return _deny("token_expired")
-
-        # v2-only checks
-        if token.nonce and token.scope:
-            # Step 3: Verify scope matches operation
-            expected_scope = f"{token.action}:{token.args_hash}"
-            if token.scope != expected_scope:
-                return _deny("scope_mismatch")
-
-            # Step 4: Consume nonce (replay prevention)
-            if not self._nonce_registry.consume(token.nonce):
-                return _deny("nonce_replayed")
+        result = self._check_approval_conditions(token, _deny)
+        if result is not None:
+            return result
 
         if audit_log is not None:
             audit_log.write("APPROVAL_GRANTED", {

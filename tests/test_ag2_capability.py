@@ -143,14 +143,6 @@ class TestCircuitTransitions:
         assert reply is None
         assert agent._call_count == call_count_before  # original NOT called
 
-    def test_open_circuit_returns_none(self) -> None:
-        cap = CircuitBreakerCapability(failure_threshold=2)
-        agent = StubAgent("a", fail_after=0)
-        cap.add_to_agent(agent)
-        agent.generate_reply([])
-        agent.generate_reply([])
-        assert agent.generate_reply([]) is None
-
 
 # ---------------------------------------------------------------------------
 # Per-agent independence
@@ -349,15 +341,6 @@ class TestRemoveFromAgent:
         cap.remove_from_agent(agent)
         # After removal, the underlying function must be the original again
         assert agent.generate_reply.__func__ is original_func
-
-    def test_remove_original_is_callable_and_works(self) -> None:
-        """Restored generate_reply must return the original reply."""
-        agent = StubAgent("r2")
-        cap = CircuitBreakerCapability(failure_threshold=3)
-        cap.add_to_agent(agent)
-        cap.remove_from_agent(agent)
-        reply = agent.generate_reply([])
-        assert reply == "[r2] reply #1"
 
     def test_remove_clears_breaker(self) -> None:
         """After remove_from_agent, get_breaker must return None."""

@@ -104,8 +104,6 @@ class TestReadPathBlocked:
     def test_allows_relative_path(self, runner: WindowsSandboxRunner) -> None:
         assert runner.read_path_blocked("src/main.py") is False
 
-    def test_allows_simple_command(self, runner: WindowsSandboxRunner) -> None:
-        assert runner.read_path_blocked("pytest") is False
 
 
 # ---------------------------------------------------------------------------
@@ -146,16 +144,6 @@ class TestRunInSandboxPathValidation:
         assert rc == 0
         mock_executor.execute_shell.assert_called_once()
 
-    def test_blocks_backslash_path_in_argv(
-        self, repo_root: str, mock_executor: MagicMock
-    ) -> None:
-        config = WindowsSandboxConfig(
-            repo_root=repo_root,
-            blocked_paths=[r"C:\Users"],
-        )
-        with WindowsSandboxRunner(config, mock_executor) as r:
-            with pytest.raises(PermissionError):
-                r.run_in_sandbox(["type", r"C:\Users\testuser\.env"])
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=300)
-![CI](https://img.shields.io/badge/tests-1547%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-1780%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -101,7 +101,8 @@ No required dependencies. Works with any LLM provider.
 | LangChain | `VeronicaCallbackHandler` | [examples/integrations/langchain/](examples/integrations/langchain/) |
 | AG2 (AutoGen) | `CircuitBreakerCapability` | [examples/ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) |
 | LlamaIndex | `VeronicaLlamaIndexHandler` | -- |
-| CrewAI | decorator injection | [examples/integrations/crewai/](examples/integrations/crewai/) |
+| CrewAI | `VeronicaCrewAIListener` | [examples/integrations/crewai/](examples/integrations/crewai/) |
+| LangGraph | `VeronicaLangGraphListener` | -- |
 | ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
 | ROS2 | `SafetyMonitor` / `OperatingMode` | [examples/ros2/](examples/ros2/) |
 
@@ -155,9 +156,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v1.3.0
+## Ship Readiness -- v1.4.0
 
-1547 tests, 92% coverage, zero required dependencies. Python 3.10+.
+1780 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 

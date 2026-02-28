@@ -107,3 +107,101 @@ class TestThreadSafety:
         # Exactly max_tokens successes, the rest denied
         successes = sum(1 for r in results if r)
         assert successes == max_tokens
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: concurrent acquire() + reset() race (Gap #9)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialRateLimiter:
+    """Adversarial tests for ApprovalRateLimiter -- attacker mindset.
+
+    Focus: concurrent acquire() + reset() race condition.
+    Goal: no crashes, counter never negative, limiter always in valid state.
+    """
+
+    def test_concurrent_acquire_and_reset_no_crash(self) -> None:
+        """10 acquirers + 2 resetters simultaneously must not crash.
+
+        Race: reset() clears timestamps while acquire() reads/writes them.
+        Both operations hold the lock, so no data race should occur.
+        """
+        limiter = ApprovalRateLimiter(max_per_window=5, window_seconds=60.0)
+        errors: list[Exception] = []
+        barrier = threading.Barrier(12)  # 10 acquirers + 2 resetters
+
+        def acquirer() -> None:
+            barrier.wait()
+            try:
+                limiter.acquire()
+            except Exception as exc:
+                errors.append(exc)
+
+        def resetter() -> None:
+            barrier.wait()
+            try:
+                limiter.reset()
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = (
+            [threading.Thread(target=acquirer) for _ in range(10)]
+            + [threading.Thread(target=resetter) for _ in range(2)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert len(errors) == 0, f"Unexpected errors: {errors}"
+
+    def test_counter_never_negative_after_concurrent_reset(self) -> None:
+        """available_tokens() must never return a negative value after
+        concurrent acquire() + reset() calls.
+
+        The sliding-window implementation uses a timestamp list; reset()
+        clears it entirely.  Concurrent access must not leave the list in
+        a state where len(timestamps) > max (which would make available=0,
+        not negative, but we also confirm it stays >= 0).
+        """
+        limiter = ApprovalRateLimiter(max_per_window=3, window_seconds=60.0)
+        errors: list[Exception] = []
+        available_readings: list[int] = []
+        lock = threading.Lock()
+
+        def worker() -> None:
+            for _ in range(20):
+                try:
+                    limiter.acquire()
+                    tokens = limiter.available_tokens()
+                    with lock:
+                        available_readings.append(tokens)
+                except Exception as exc:
+                    errors.append(exc)
+
+        def resetter() -> None:
+            for _ in range(10):
+                try:
+                    limiter.reset()
+                    time.sleep(0.001)
+                except Exception as exc:
+                    errors.append(exc)
+
+        threads = (
+            [threading.Thread(target=worker) for _ in range(5)]
+            + [threading.Thread(target=resetter) for _ in range(2)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert len(errors) == 0, f"Unexpected errors: {errors}"
+        # Every reading must be non-negative
+        assert all(v >= 0 for v in available_readings), (
+            f"Negative available_tokens detected: {[v for v in available_readings if v < 0]}"
+        )
+        # After all threads finish, limiter must be in a valid state
+        final_available = limiter.available_tokens()
+        assert 0 <= final_available <= 3

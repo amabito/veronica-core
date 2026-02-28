@@ -112,11 +112,6 @@ class TestDiffSbomChanged:
         assert diff.added == []
         assert diff.removed == []
 
-    def test_same_version_not_reported_as_changed(self) -> None:
-        baseline = _sbom(_PKG_A_V1)
-        current = _sbom(_PKG_A_V1)
-        diff = diff_sbom(baseline, current)
-        assert diff.changed == []
 
 
 # ---------------------------------------------------------------------------

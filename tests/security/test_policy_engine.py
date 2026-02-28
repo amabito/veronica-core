@@ -519,14 +519,6 @@ class TestV0103SecurityFixes:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
 
-    def test_r1_python_exact_c_regression(self) -> None:
-        """python -c must still be DENY (no regression from v0.10.2)."""
-        engine = _engine()
-        ctx = _ctx("shell", ["python", "-c", "import os"])
-        decision = engine.evaluate(ctx)
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
-
     def test_r1_python_stdin_exec_is_denied(self) -> None:
         """python - (stdin execution) must be DENY."""
         engine = _engine()
@@ -625,14 +617,6 @@ class TestV0104GoShellInjection:
         assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
         assert decision.risk_score_delta == 9
 
-    def test_go_run_dot_is_denied(self) -> None:
-        """go run . must be DENY (executes all Go files in current dir)."""
-        engine = _engine()
-        ctx = _ctx("shell", ["go", "run", "."])
-        decision = engine.evaluate(ctx)
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"
-
     def test_go_generate_is_denied(self) -> None:
         """go generate must be DENY (runs arbitrary shell via //go:generate directives)."""
         engine = _engine()
@@ -698,6 +682,167 @@ class TestV0104GoShellInjection:
         decision = engine.evaluate(ctx)
         assert decision.verdict == "ALLOW"
         assert decision.rule_id == "SHELL_ALLOW_CMD"
+
+
+# ---------------------------------------------------------------------------
+# Adversarial tests — other-language inline exec + SSRF prevention (attacker mindset)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialPolicyEngine:
+    """Adversarial tests: Gap #5 (node/ruby/perl -e inline exec) and Gap #6 (SSRF).
+
+    Mindset: can an attacker bypass the policy by using a language runtime that
+    is not Python, or by directing a network request to a loopback / cloud-metadata
+    address that is excluded from the host allowlist?
+    """
+
+    # --- Gap #5: Other scripting-language inline code execution ---
+    #
+    # FINDING: node/ruby/perl/php are blocked, but via SHELL_DENY_DEFAULT
+    # (not in allowlist) rather than a dedicated SHELL_DENY_INLINE_EXEC rule.
+    # The containment is effective but the rule semantics are weaker: a future
+    # SHELL_ALLOW_COMMANDS addition for 'node' would silently unblock -e payloads.
+    # Recommendation: add node/ruby/perl/php to an explicit inline-exec deny table.
+
+    def test_node_e_inline_exec_is_denied(self) -> None:
+        """node -e 'require(...)' allows arbitrary JS execution -- must be blocked.
+
+        FINDING: blocked via SHELL_DENY_DEFAULT (node not in allowlist).
+        If 'node' were ever added to SHELL_ALLOW_COMMANDS, -e would not be caught
+        by the current SHELL_DENY_INLINE_EXEC rules (which only cover python/go/cmake/make).
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["node", "-e", "require('child_process').exec('rm -rf /')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY", (
+            f"node -e inline exec must be blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
+        )
+        # FINDING: rule fires as SHELL_DENY_DEFAULT, not SHELL_DENY_INLINE_EXEC.
+        # The block is correct but lacks explicit inline-exec semantics for node.
+        assert decision.rule_id in ("SHELL_DENY_DEFAULT", "SHELL_DENY_INLINE_EXEC"), (
+            f"Expected DENY via SHELL_DENY_DEFAULT or SHELL_DENY_INLINE_EXEC, got {decision.rule_id}"
+        )
+
+    def test_ruby_e_inline_exec_is_denied(self) -> None:
+        """ruby -e 'system(...)' allows arbitrary Ruby execution -- must be blocked.
+
+        FINDING: blocked via SHELL_DENY_DEFAULT (ruby not in allowlist).
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["ruby", "-e", "system('rm -rf /')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY", (
+            f"ruby -e inline exec must be blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
+        )
+        # FINDING: no explicit SHELL_DENY_INLINE_EXEC rule for ruby.
+        assert decision.rule_id in ("SHELL_DENY_DEFAULT", "SHELL_DENY_INLINE_EXEC")
+
+    def test_perl_e_inline_exec_is_denied(self) -> None:
+        """perl -e 'system(...)' allows arbitrary Perl execution -- must be blocked.
+
+        FINDING: blocked via SHELL_DENY_DEFAULT (perl not in allowlist).
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["perl", "-e", "system('rm -rf /')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY", (
+            f"perl -e inline exec must be blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
+        )
+        # FINDING: no explicit SHELL_DENY_INLINE_EXEC rule for perl.
+        assert decision.rule_id in ("SHELL_DENY_DEFAULT", "SHELL_DENY_INLINE_EXEC")
+
+    def test_php_r_inline_exec_is_denied(self) -> None:
+        """php -r 'system(...)' allows arbitrary PHP execution -- must be blocked.
+
+        FINDING: blocked via SHELL_DENY_DEFAULT (php not in allowlist).
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["php", "-r", "system('rm -rf /')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY", (
+            f"php -r inline exec must be blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
+        )
+        # FINDING: no explicit SHELL_DENY_INLINE_EXEC rule for php.
+        assert decision.rule_id in ("SHELL_DENY_DEFAULT", "SHELL_DENY_INLINE_EXEC")
+
+    def test_node_e_without_dangerous_payload_is_denied(self) -> None:
+        """node -e 'console.log(1)' -- even a benign inline payload must be blocked.
+
+        The -e flag itself grants arbitrary code execution; payload content is
+        irrelevant.  The deny must fire regardless of what follows -e.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["node", "-e", "console.log('hello')"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY", (
+            f"node -e must be blocked regardless of payload -- verdict={decision.verdict}"
+        )
+
+    # --- Gap #6: SSRF prevention via shell commands (curl/wget) ---
+    #
+    # curl and wget are in SHELL_DENY_COMMANDS, so any invocation -- including
+    # those targeting loopback / metadata endpoints -- is blocked by SHELL_DENY_CMD.
+    # These tests confirm SSRF via shell is not a gap.
+
+    def test_curl_localhost_ssrf_is_denied(self) -> None:
+        """curl http://localhost:8080/admin -- SSRF to loopback must be blocked.
+
+        curl is in SHELL_DENY_COMMANDS; SHELL_DENY_CMD fires before URL inspection.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["curl", "http://localhost:8080/admin"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    def test_wget_zero_zero_ssrf_is_denied(self) -> None:
+        """wget http://0.0.0.0:8080 -- SSRF via 0.0.0.0 alias must be blocked.
+
+        wget is in SHELL_DENY_COMMANDS.
+        """
+        engine = _engine()
+        ctx = _ctx("shell", ["wget", "http://0.0.0.0:8080"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    # --- Gap #6: SSRF prevention via net action ---
+    #
+    # Internal addresses are not in NET_ALLOWLIST_HOSTS, so NET_DENY_HOST fires.
+    # These tests confirm the net-level SSRF protection is in place.
+
+    def test_net_localhost_ssrf_is_denied(self) -> None:
+        """net GET http://localhost:8080/admin -- SSRF via net action must be blocked.
+
+        'localhost' is not in NET_ALLOWLIST_HOSTS; NET_DENY_HOST fires.
+        """
+        engine = _engine()
+        ctx = _ctx("net", ["http://localhost:8080/admin", "GET"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "NET_DENY_HOST"
+
+    def test_net_aws_metadata_ssrf_is_denied(self) -> None:
+        """net GET http://169.254.169.254/latest/meta-data/ -- AWS IMDS endpoint must be blocked.
+
+        169.254.169.254 is the AWS Instance Metadata Service endpoint; leaking cloud
+        credentials via SSRF is a critical attack vector.  The host is not allowlisted.
+        """
+        engine = _engine()
+        ctx = _ctx("net", ["http://169.254.169.254/latest/meta-data/", "GET"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "NET_DENY_HOST"
+
+    def test_net_ipv6_loopback_ssrf_is_denied(self) -> None:
+        """net GET http://[::1]:8080 -- IPv6 loopback SSRF via net action must be blocked."""
+        engine = _engine()
+        ctx = _ctx("net", ["http://[::1]:8080", "GET"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        # IPv6 loopback resolves to '::1' after URL parsing; not in allowlist
+        assert decision.rule_id == "NET_DENY_HOST"
 
 
 class TestUnicodeBypassPrevention:

@@ -44,6 +44,11 @@ class BudgetEnforcer:
             ValueError: If amount_usd is negative.
         """
         with self._lock:
+            import math
+            if math.isnan(amount_usd) or math.isinf(amount_usd):
+                raise ValueError(
+                    f"amount must be a finite number, got {amount_usd}"
+                )
             if amount_usd < 0:
                 raise ValueError(
                     f"amount must be non-negative, got {amount_usd}"

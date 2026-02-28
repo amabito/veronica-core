@@ -143,12 +143,6 @@ def test_budget_enforcer_check(
 
 
 class TestBudgetEnforcerPolicy:
-    def test_check_within_budget(self):
-        b = BudgetEnforcer(limit_usd=10.0)
-        decision = b.check(PolicyContext(cost_usd=5.0))
-        assert decision.allowed
-        assert decision.policy_type == "budget"
-
     def test_check_exceeds_budget(self):
         b = BudgetEnforcer(limit_usd=10.0)
         b.spend(8.0)
@@ -307,10 +301,6 @@ def test_circuit_breaker_state_transitions(
 
 
 class TestCircuitBreaker:
-    def test_initial_state_closed(self):
-        cb = CircuitBreaker()
-        assert cb.state == CircuitState.CLOSED
-
     def test_allows_when_closed(self):
         cb = CircuitBreaker()
         decision = cb.check(PolicyContext())

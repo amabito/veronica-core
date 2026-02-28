@@ -375,3 +375,201 @@ class TestMaskDictDepthLimit:
             deep_leaf_dict = {"nested": deep_leaf_dict}
         result_deep = masker.mask_dict(deep_leaf_dict)
         assert result_deep is not None  # Must not raise
+
+
+# ---------------------------------------------------------------------------
+# Adversarial tests — attacker mindset
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialMasking:
+    """Adversarial tests for SecretMasker — type variation, concurrency, and
+    self-referential containers that could crash or leak secrets."""
+
+    # ------------------------------------------------------------------
+    # Gap #1: type variation — non-str values in mask_dict
+    # ------------------------------------------------------------------
+
+    def test_int_value_under_sensitive_key_passes_through(self, masker: SecretMasker) -> None:
+        """int values must not crash mask_dict.
+
+        NOTE: The current implementation passes non-str/bytes/dict/list/tuple
+        values through unchanged (_mask_value returns `value` as-is for 'other'
+        types). An int under a sensitive key like 'api_key' is NOT masked —
+        this is the documented pass-through behavior.
+        """
+        d = {"api_key": 12345678}
+        result = masker.mask_dict(d)
+        # Must not crash; value passes through as int
+        assert result["api_key"] == 12345678
+
+    def test_none_value_passes_through(self, masker: SecretMasker) -> None:
+        """None under any key must not crash mask_dict."""
+        d = {"api_key": None, "password": None}
+        result = masker.mask_dict(d)
+        assert result["api_key"] is None
+        assert result["password"] is None
+
+    def test_nan_value_passes_through(self, masker: SecretMasker) -> None:
+        """float('nan') must not crash mask_dict (pass-through behavior)."""
+        import math
+
+        d = {"token": float("nan")}
+        result = masker.mask_dict(d)
+        assert math.isnan(result["token"])
+
+    def test_bytes_secret_value_is_masked(self, masker: SecretMasker) -> None:
+        """bytes under a sensitive key must be decoded and masked."""
+        secret_bytes = b"sk-" + b"T" * 48
+        d = {"api_key": secret_bytes}
+        result = masker.mask_dict(d)
+        # Implementation decodes bytes then runs mask() — secret must be redacted
+        result_str = str(result)
+        assert secret_bytes.decode() not in result_str
+        assert "REDACTED" in result_str
+
+    def test_bytes_non_secret_value_returns_string(self, masker: SecretMasker) -> None:
+        """Harmless bytes values are decoded and returned as str (not bytes)."""
+        d = {"name": b"harmless_value"}
+        result = masker.mask_dict(d)
+        # After bytes decoding, result is a str
+        assert isinstance(result["name"], str)
+        assert "harmless_value" in result["name"]
+
+    def test_list_value_with_secret_is_masked(self, masker: SecretMasker) -> None:
+        """list containing a secret string must be recursed and masked."""
+        secret = "sk-" + "T" * 48
+        d = {"credentials": [secret, "plain_value"]}
+        result = masker.mask_dict(d)
+        result_str = str(result)
+        assert secret not in result_str
+        assert "REDACTED" in result_str
+        assert "plain_value" in result_str
+
+    def test_nested_dict_with_non_str_leaf_does_not_crash(self, masker: SecretMasker) -> None:
+        """Nested dicts mixing str and non-str values must not crash."""
+        d = {
+            "outer": {
+                "api_key": "sk-" + "T" * 48,  # str — must be masked
+                "count": 42,                    # int — passes through
+                "ratio": 0.75,                  # float — passes through
+                "active": True,                 # bool — passes through
+                "tag": None,                    # None — passes through
+            }
+        }
+        result = masker.mask_dict(d)
+        outer = result["outer"]
+        # Secret str must be redacted
+        assert "REDACTED" in str(outer["api_key"])
+        # Non-str scalars must be unchanged
+        assert outer["count"] == 42
+        assert outer["ratio"] == 0.75
+        assert outer["active"] is True
+        assert outer["tag"] is None
+
+    # ------------------------------------------------------------------
+    # Gap #3: concurrent thread safety
+    # ------------------------------------------------------------------
+
+    def test_concurrent_mask_dict_20_threads_no_corruption(self, masker: SecretMasker) -> None:
+        """20 threads calling mask_dict() simultaneously must not corrupt results.
+
+        mask_dict and mask() are stateless: they read from module-level
+        _PATTERNS (read-only after import) and create new objects on each call.
+        There is no shared mutable state, so this should be thread-safe.
+        """
+        import threading
+
+        secret = "sk-" + "T" * 48
+        num_threads = 20
+        results: list[dict | None] = [None] * num_threads
+        errors: list[Exception | None] = [None] * num_threads
+        barrier = threading.Barrier(num_threads)
+
+        def worker(idx: int) -> None:
+            d = {
+                "api_key": secret,
+                "user": f"thread-{idx}",
+                "count": idx,
+            }
+            try:
+                barrier.wait()  # All threads start simultaneously
+                results[idx] = masker.mask_dict(d)
+            except Exception as exc:
+                errors[idx] = exc
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # No thread should have raised an exception
+        assert all(e is None for e in errors), f"Thread errors: {[e for e in errors if e]}"
+
+        # All results must be dicts with the secret redacted
+        for i, result in enumerate(results):
+            assert result is not None, f"Thread {i} produced no result"
+            assert secret not in str(result["api_key"]), f"Thread {i} leaked secret"
+            assert "REDACTED" in str(result["api_key"]), f"Thread {i} did not redact"
+            # Non-str pass-through must be correct
+            assert result["count"] == i
+
+    def test_concurrent_mask_str_20_threads_no_corruption(self, masker: SecretMasker) -> None:
+        """20 threads calling mask() on different inputs must each get correct output."""
+        import threading
+
+        num_threads = 20
+        results: list[str | None] = [None] * num_threads
+        errors: list[Exception | None] = [None] * num_threads
+        barrier = threading.Barrier(num_threads)
+
+        def worker(idx: int) -> None:
+            secret = f"sk-{'T' * 48}-thread{idx}"
+            try:
+                barrier.wait()
+                results[idx] = masker.mask(f"Bearer {secret}")
+            except Exception as exc:
+                errors[idx] = exc
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert all(e is None for e in errors), f"Thread errors: {[e for e in errors if e]}"
+        for i, result in enumerate(results):
+            assert result is not None, f"Thread {i} produced no result"
+            assert "REDACTED" in result, f"Thread {i} did not redact"
+
+    # ------------------------------------------------------------------
+    # Gap #4: circular / self-referential dict
+    # ------------------------------------------------------------------
+
+    def test_self_referential_dict_does_not_infinite_loop(self, masker: SecretMasker) -> None:
+        """A dict that contains itself must not cause infinite recursion.
+
+        Python dicts can be made self-referential via d['self'] = d.
+        The _MAX_DEPTH=50 guard stops infinite recursion; the call returns
+        the node unchanged once the depth limit is hit.
+        """
+        d: dict = {"key": "value"}
+        d["self"] = d  # type: ignore[assignment]  # Self-reference
+
+        # Must complete without RecursionError or hanging
+        result = masker.mask_dict(d)
+        assert result is not None
+        # The non-circular key must still be present
+        assert result["key"] == "value"
+
+    def test_mutually_referential_dicts_do_not_crash(self, masker: SecretMasker) -> None:
+        """Two dicts referencing each other must not cause infinite recursion."""
+        a: dict = {"name": "dict_a"}
+        b: dict = {"name": "dict_b", "other": a}
+        a["other"] = b  # type: ignore[assignment]  # Mutual reference
+
+        # Must complete without RecursionError
+        result = masker.mask_dict(a)
+        assert result is not None
+        assert result["name"] == "dict_a"

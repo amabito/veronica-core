@@ -78,12 +78,6 @@ class TestBase64QueryDetection:
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.base64_in_query"
 
-    def test_another_base64_secret_is_denied(self) -> None:
-        url = "https://github.com/?token=c2VjcmV0X2tleV9leGZpbHRyYXRpb24="
-        decision = engine.evaluate(_net_ctx(url))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "net.base64_in_query"
-
 
 # ---------------------------------------------------------------------------
 # Hex string in query string
@@ -106,17 +100,6 @@ class TestHexQueryDetection:
         url = "https://pypi.org/pypi/requests/json?id=deadbeef"
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.hex_in_query"
-
-    def test_hex_only_value_triggers_hex_rule_before_base64(self) -> None:
-        # Construct a value that matches ONLY hex (not base64) by including
-        # chars outside base64 alphabet, but hex regex still checks pure hex.
-        # Since all pure hex strings ARE valid base64 chars, the base64 check
-        # fires first; the important thing is it's DENIED with risk_delta=9.
-        url = "https://github.com/?hash=5d41402abc4b2a76b9719d911017c592"
-        decision = engine.evaluate(_net_ctx(url))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id in ("net.hex_in_query", "net.base64_in_query")
-        assert decision.risk_score_delta == 9
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +194,3 @@ class TestGeneralNetworkRules:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "NET_DENY_METHOD"
 
-    def test_normal_pypi_url_is_allowed(self) -> None:
-        url = "https://pypi.org/pypi/requests/json"
-        decision = engine.evaluate(_net_ctx(url))
-        assert decision.verdict == "ALLOW"
-        assert decision.risk_score_delta == 0

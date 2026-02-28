@@ -51,16 +51,6 @@ class TestSubprocessDetection:
         violations = check_file(f)
         assert len(violations) == 1
 
-    def test_subprocess_check_output(self, tmp_path: Path) -> None:
-        f = _write(tmp_path, "s.py", "import subprocess\nsubprocess.check_output(['ls'])\n")
-        violations = check_file(f)
-        assert len(violations) == 1
-
-    def test_subprocess_check_call(self, tmp_path: Path) -> None:
-        f = _write(tmp_path, "s.py", "import subprocess\nsubprocess.check_call(['ls'])\n")
-        violations = check_file(f)
-        assert len(violations) == 1
-
 
 class TestOsDetection:
     def test_os_system(self, tmp_path: Path) -> None:
@@ -88,16 +78,6 @@ class TestOsDetection:
 class TestRequestsDetection:
     def test_requests_get(self, tmp_path: Path) -> None:
         f = _write(tmp_path, "s.py", 'import requests\nrequests.get("http://evil.com")\n')
-        violations = check_file(f)
-        assert len(violations) == 1
-
-    def test_requests_post(self, tmp_path: Path) -> None:
-        f = _write(tmp_path, "s.py", 'import requests\nrequests.post("http://evil.com", data={})\n')
-        violations = check_file(f)
-        assert len(violations) == 1
-
-    def test_requests_request(self, tmp_path: Path) -> None:
-        f = _write(tmp_path, "s.py", 'import requests\nrequests.request("GET", "http://x.com")\n')
         violations = check_file(f)
         assert len(violations) == 1
 

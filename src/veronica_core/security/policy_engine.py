@@ -316,25 +316,23 @@ def _url_path(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Rule evaluators
+# Rule evaluators — shell sub-functions
 # ---------------------------------------------------------------------------
 
-def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
-    """Evaluate shell action rules. Returns decision or None to continue."""
-    args = ctx.args
-    argv0 = args[0].lower() if args else ""
-    full_cmd = " ".join(args)
+def _check_shell_deny_commands(argv0: str) -> PolicyDecision | None:
+    """Return DENY if argv0 is a globally blocked command."""
+    if argv0 not in SHELL_DENY_COMMANDS:
+        return None
+    return PolicyDecision(
+        verdict="DENY",
+        rule_id="SHELL_DENY_CMD",
+        reason=f"Command '{argv0}' is blocked by policy",
+        risk_score_delta=8,
+    )
 
-    # DENY: dangerous commands
-    if argv0 in SHELL_DENY_COMMANDS:
-        return PolicyDecision(
-            verdict="DENY",
-            rule_id="SHELL_DENY_CMD",
-            reason=f"Command '{argv0}' is blocked by policy",
-            risk_score_delta=8,
-        )
 
-    # DENY: pipe or redirect operators in any argument (NFKC-normalized to block unicode lookalikes)
+def _check_shell_operators(full_cmd: str) -> PolicyDecision | None:
+    """Return DENY if any shell pipe/redirect operator is present (NFKC-normalized)."""
     normalized_cmd = unicodedata.normalize("NFKC", full_cmd)
     for op in SHELL_DENY_OPERATORS:
         if op in full_cmd or op in normalized_cmd:
@@ -344,9 +342,11 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                 reason=f"Shell operator '{op}' is blocked by policy",
                 risk_score_delta=6,
             )
+    return None
 
-    # DENY: credential sub-commands (git credential, gh auth, npm token, pip config, etc.)
-    argv1 = args[1].lower() if len(args) > 1 else ""
+
+def _check_credentials_in_args(argv0: str, argv1: str) -> PolicyDecision | None:
+    """Return DENY if a credential sub-command is detected (git credential, gh auth, etc.)."""
     for cmd, blocked_subcmds in SHELL_CREDENTIAL_DENY:
         if argv0 == cmd and argv1 in blocked_subcmds:
             return PolicyDecision(
@@ -355,57 +355,61 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                 reason=f"Subcommand '{argv0} {argv1}' is blocked (credential access)",
                 risk_score_delta=9,
             )
+    return None
 
-    # DENY / GATE: python/python3 — combined-flag-aware inline exec, stdin
-    # execution, and module-based package installation (R-1 and R-2, v0.10.3).
-    #
-    # This block replaces the old SHELL_DENY_EXEC_FLAGS["python"] entry (which
-    # only matched exact "-c") to also catch combined short-option clusters such
-    # as "-Sc", "-cS", and "-ISc" that Python's own argument parser expands into
-    # individual flags.
-    if argv0 in ("python", "python3"):
-        # 1. Inline code execution via -c (exact token or combined cluster).
-        for token in args[1:]:
-            if token == "-c" or _has_combined_short_flag(token, "c"):
-                return PolicyDecision(
-                    verdict="DENY",
-                    rule_id="SHELL_DENY_INLINE_EXEC",
-                    reason=(
-                        f"Inline code execution flag '{token}' "
-                        f"(contains -c) blocked for '{argv0}'"
-                    ),
-                    risk_score_delta=9,
-                )
 
-        # 2. Stdin code execution: 'python -' reads and executes code from stdin.
-        if "-" in args[1:]:
+def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | None:
+    """Return DENY/REQUIRE_APPROVAL for python/python3 inline-exec and pkg-install patterns.
+
+    Handles:
+    - ``-c`` / combined clusters (e.g. ``-Sc``) → DENY (inline code exec)
+    - ``-`` stdin exec → DENY
+    - ``-m pip/pip3/ensurepip`` → REQUIRE_APPROVAL (supply chain)
+    """
+    if argv0 not in ("python", "python3"):
+        return None
+
+    for token in args[1:]:
+        if token == "-c" or _has_combined_short_flag(token, "c"):
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_INLINE_EXEC",
-                reason=f"Stdin code execution ('-') blocked for '{argv0}'",
+                reason=f"Inline code execution flag '{token}' (contains -c) blocked for '{argv0}'",
                 risk_score_delta=9,
             )
 
-        # 3. Package installation via -m (e.g. 'python -m pip install X').
-        #    argv0 is "python" so SHELL_PKG_INSTALL (which checks argv0=="pip")
-        #    would not fire; gate it here under the same REQUIRE_APPROVAL verdict.
-        if "-m" in args[1:]:
-            m_idx = args.index("-m")
-            module = args[m_idx + 1].lower() if m_idx + 1 < len(args) else ""
-            if module in _PYTHON_MODULE_PKG_MANAGERS:
-                return PolicyDecision(
-                    verdict="REQUIRE_APPROVAL",
-                    rule_id="SHELL_PKG_INSTALL",
-                    reason=(
-                        f"Package installation via '{argv0} -m {module}' "
-                        "requires approval (supply chain risk)"
-                    ),
-                    risk_score_delta=4,
-                )
+    if "-" in args[1:]:
+        return PolicyDecision(
+            verdict="DENY",
+            rule_id="SHELL_DENY_INLINE_EXEC",
+            reason=f"Stdin code execution ('-') blocked for '{argv0}'",
+            risk_score_delta=9,
+        )
 
-    # DENY: per-command inline code execution flags (cmake, make — defense-in-depth).
-    # Must run before SHELL_ALLOW_COMMANDS so that allowlisted commands cannot
-    # execute arbitrary code without a file on disk.
+    if "-m" in args[1:]:
+        m_idx = args.index("-m")
+        module = args[m_idx + 1].lower() if m_idx + 1 < len(args) else ""
+        if module in _PYTHON_MODULE_PKG_MANAGERS:
+            return PolicyDecision(
+                verdict="REQUIRE_APPROVAL",
+                rule_id="SHELL_PKG_INSTALL",
+                reason=(
+                    f"Package installation via '{argv0} -m {module}' "
+                    "requires approval (supply chain risk)"
+                ),
+                risk_score_delta=4,
+            )
+
+    return None
+
+
+def _check_pkg_install(argv0: str, argv1: str, args: list[str]) -> PolicyDecision | None:
+    """Return REQUIRE_APPROVAL for package installation commands.
+
+    Covers pip/pip3/npm/pnpm/yarn/cargo and uv add/pip install patterns.
+    Also covers cmake/make/go exec-flag denials (defense-in-depth).
+    """
+    # DENY: per-command inline code execution flags (cmake, make, go — defense-in-depth)
     if argv0 in SHELL_DENY_EXEC_FLAGS:
         deny_flags = SHELL_DENY_EXEC_FLAGS[argv0]
         matched = deny_flags.intersection(args[1:])
@@ -413,30 +417,22 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_INLINE_EXEC",
-                reason=(
-                    f"Inline code execution flag(s) {sorted(matched)} "
-                    f"are blocked for '{argv0}'"
-                ),
+                reason=f"Inline code execution flag(s) {sorted(matched)} are blocked for '{argv0}'",
                 risk_score_delta=9,
             )
 
-    # DENY: uv run wrapping inline code execution (e.g. "uv run python -c '...'").
-    # argv0=uv is allowlisted but the inner python still executes inline code.
+    # DENY: uv run wrapping inline code execution
     if argv0 == "uv" and argv1 == "run":
         matched = _UVR_INLINE_EXEC_FLAGS.intersection(args[2:])
         if matched:
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_INLINE_EXEC",
-                reason=(
-                    f"Inline code execution via 'uv run' is blocked "
-                    f"(flag(s): {sorted(matched)})"
-                ),
+                reason=f"Inline code execution via 'uv run' is blocked (flag(s): {sorted(matched)})",
                 risk_score_delta=9,
             )
 
-    # REQUIRE_APPROVAL: package installation (G-2 supply chain guard)
-    # Standard package managers: pip/pip3/npm/pnpm/yarn/cargo
+    # REQUIRE_APPROVAL: standard package managers
     for cmd, install_subcmds in SHELL_PKG_INSTALL_APPROVAL:
         if argv0 == cmd and argv1 in install_subcmds:
             return PolicyDecision(
@@ -445,7 +441,8 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                 reason=f"Package installation '{argv0} {argv1}' requires approval (supply chain risk)",
                 risk_score_delta=4,
             )
-    # uv add → install; uv pip install → install
+
+    # REQUIRE_APPROVAL: uv add / uv pip install
     if argv0 == "uv":
         if argv1 == "add":
             return PolicyDecision(
@@ -463,6 +460,35 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
                     reason=f"Package installation 'uv pip {argv2}' requires approval (supply chain risk)",
                     risk_score_delta=4,
                 )
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Rule evaluators
+# ---------------------------------------------------------------------------
+
+def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
+    """Evaluate shell action rules. Returns decision or None to continue."""
+    args = ctx.args
+    argv0 = args[0].lower() if args else ""
+    argv1 = args[1].lower() if len(args) > 1 else ""
+    full_cmd = " ".join(args)
+
+    if decision := _check_shell_deny_commands(argv0):
+        return decision
+
+    if decision := _check_shell_operators(full_cmd):
+        return decision
+
+    if decision := _check_credentials_in_args(argv0, argv1):
+        return decision
+
+    if decision := _check_python_exec_flags(argv0, args):
+        return decision
+
+    if decision := _check_pkg_install(argv0, argv1, args):
+        return decision
 
     # REQUIRE_APPROVAL: large file count change
     file_count = ctx.metadata.get("file_count")
@@ -541,12 +567,8 @@ def _eval_file_write(ctx: PolicyContext) -> PolicyDecision | None:
     )
 
 
-def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
-    """Evaluate net action rules."""
-    url = ctx.args[0] if ctx.args else ""
-    method = ctx.args[1].upper() if len(ctx.args) > 1 else "GET"
-
-    # DENY: mutating HTTP methods
+def _check_host_restrictions(url: str, method: str) -> PolicyDecision | None:
+    """Return DENY for mutating methods, over-long URLs, or non-allowlisted hosts."""
     if method in NET_DENY_METHODS:
         return PolicyDecision(
             verdict="DENY",
@@ -554,8 +576,6 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
             reason=f"HTTP method '{method}' is not allowed",
             risk_score_delta=6,
         )
-
-    # DENY: URL length exceeds limit
     if len(url) > NET_URL_MAX_LENGTH:
         return PolicyDecision(
             verdict="DENY",
@@ -563,8 +583,6 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
             reason=f"URL length {len(url)} exceeds maximum {NET_URL_MAX_LENGTH}",
             risk_score_delta=8,
         )
-
-    # DENY: GET to non-allowlisted host
     host = _url_host(url)
     if host not in NET_ALLOWLIST_HOSTS:
         return PolicyDecision(
@@ -573,13 +591,31 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
             reason=f"Host '{host}' is not in the allowlist",
             risk_score_delta=5,
         )
+    return None
 
-    # For GET requests: inspect query string for exfiltration indicators
+
+def _check_protocol_rules(url: str, host: str) -> PolicyDecision | None:
+    """Return DENY if the URL path is not in the per-host path allowlist."""
+    allowed_paths = NET_PATH_ALLOWLIST.get(host)
+    if allowed_paths is None:
+        return None
+    path = _url_path(url)
+    if not any(path.startswith(prefix) for prefix in allowed_paths):
+        return PolicyDecision(
+            verdict="DENY",
+            rule_id="net.path_not_allowed",
+            reason=f"Path '{path}' is not permitted for host '{host}'",
+            risk_score_delta=6,
+        )
+    return None
+
+
+def _check_data_exfil(url: str) -> PolicyDecision | None:
+    """Return DENY if the query string contains base64, hex, or high-entropy data."""
     parsed = urllib.parse.urlparse(url)
     qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
     for values in qs.values():
         for value in values:
-            # Base64-encoded data check
             if _RE_BASE64.match(value):
                 return PolicyDecision(
                     verdict="DENY",
@@ -587,7 +623,6 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
                     reason="Query string contains base64-encoded data (potential exfiltration)",
                     risk_score_delta=9,
                 )
-            # Hex string check
             if _RE_HEX.match(value):
                 return PolicyDecision(
                     verdict="DENY",
@@ -595,7 +630,6 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
                     reason="Query string contains hex-encoded data (potential exfiltration)",
                     risk_score_delta=9,
                 )
-            # High-entropy value check
             if len(value) > NET_ENTROPY_MIN_LEN and _shannon_entropy(value) > NET_ENTROPY_THRESHOLD:
                 return PolicyDecision(
                     verdict="DENY",
@@ -603,18 +637,24 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
                     reason=f"Query string value has high entropy ({_shannon_entropy(value):.2f} bits)",
                     risk_score_delta=9,
                 )
+    return None
 
-    # DENY: path not in per-host allowlist
-    allowed_paths = NET_PATH_ALLOWLIST.get(host)
-    if allowed_paths is not None:
-        path = _url_path(url)
-        if not any(path.startswith(prefix) for prefix in allowed_paths):
-            return PolicyDecision(
-                verdict="DENY",
-                rule_id="net.path_not_allowed",
-                reason=f"Path '{path}' is not permitted for host '{host}'",
-                risk_score_delta=6,
-            )
+
+def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
+    """Evaluate net action rules."""
+    url = ctx.args[0] if ctx.args else ""
+    method = ctx.args[1].upper() if len(ctx.args) > 1 else "GET"
+
+    if decision := _check_host_restrictions(url, method):
+        return decision
+
+    host = _url_host(url)
+
+    if decision := _check_data_exfil(url):
+        return decision
+
+    if decision := _check_protocol_rules(url, host):
+        return decision
 
     return PolicyDecision(
         verdict="ALLOW",
@@ -743,6 +783,95 @@ class PolicyEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _emit_policy_audit(event: str, payload: dict) -> None:
+        """Write a policy-related audit event (best-effort, never raises)."""
+        try:
+            import tempfile
+
+            from veronica_core.audit.log import AuditLog
+            audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
+            audit_log = AuditLog(audit_dir / "policy.jsonl")
+            audit_log.write(event, payload)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _validate_jwk_format(
+        policy_path: Path,
+        sig_v2_path: Path,
+        public_key_path: Path | None,
+    ) -> None:
+        """Verify ed25519 (v2) signature and enforce key pin.
+
+        Raises RuntimeError on tamper or key-pin violation.
+        """
+        import logging as _logging
+
+        from veronica_core.security.policy_signing import PolicySignerV2
+
+        _log = _logging.getLogger(__name__)
+        signer_v2 = PolicySignerV2(public_key_path=public_key_path)
+
+        if not signer_v2.verify(policy_path, sig_v2_path):
+            PolicyEngine._emit_policy_audit(
+                "policy_tamper", {"policy_path": str(policy_path), "version": "v2"}
+            )
+            _log.error("policy_tamper (v2): signature mismatch for %s", policy_path)
+            raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
+
+        resolved_pub = public_key_path or signer_v2.public_key_path
+        if not resolved_pub.exists():
+            return
+
+        try:
+            from veronica_core.security.key_pin import KeyPinChecker
+            import tempfile
+            from veronica_core.audit.log import AuditLog
+            audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
+            audit_log: Any
+            try:
+                audit_log = AuditLog(audit_dir / "policy.jsonl")
+            except Exception:
+                audit_log = None
+            pub_pem = resolved_pub.read_bytes()
+            KeyPinChecker(audit_log).enforce(pub_pem)
+        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            _log.warning("key_pin check failed unexpectedly: %s", exc)
+
+    @staticmethod
+    def _verify_jws_signature(
+        policy_path: Path,
+        sig_v1_path: Path,
+    ) -> None:
+        """Verify HMAC-SHA256 (v1) signature.
+
+        Raises RuntimeError on tamper.
+        """
+        import logging as _logging
+
+        from veronica_core.security.policy_signing import PolicySigner
+
+        _log = _logging.getLogger(__name__)
+        signer = PolicySigner()
+
+        if signer.verify(policy_path, sig_v1_path):
+            return
+
+        try:
+            actual = sig_v1_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            actual = "<unreadable>"
+        expected = signer.sign(policy_path)
+        PolicyEngine._emit_policy_audit(
+            "policy_tamper",
+            {"policy_path": str(policy_path), "expected": expected, "actual": actual},
+        )
+        _log.error("policy_tamper: signature mismatch for %s", policy_path)
+        raise RuntimeError(f"Policy tamper detected: {policy_path}")
+
+    @staticmethod
     def _verify_policy_signature(
         policy_path: Path,
         public_key_path: Path | None = None,
@@ -759,77 +888,20 @@ class PolicyEngine:
         """
         import logging as _logging
 
-        from veronica_core.security.policy_signing import PolicySigner, PolicySignerV2
-
         _log = _logging.getLogger(__name__)
 
         sig_v2_path = Path(str(policy_path) + ".sig.v2")
         sig_v1_path = Path(str(policy_path) + ".sig")
 
-        def _emit_audit(event: str, payload: dict) -> None:
-            try:
-                from veronica_core.audit.log import AuditLog
-                import tempfile
-                audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
-                audit_log = AuditLog(audit_dir / "policy.jsonl")
-                audit_log.write(event, payload)
-            except Exception:
-                pass
-
-        # ------------------------------------------------------------------
-        # v2: ed25519
-        # ------------------------------------------------------------------
         if sig_v2_path.exists():
-            signer_v2 = PolicySignerV2(public_key_path=public_key_path)
-            if not signer_v2.verify(policy_path, sig_v2_path):
-                _emit_audit("policy_tamper", {"policy_path": str(policy_path), "version": "v2"})
-                _log.error("policy_tamper (v2): signature mismatch for %s", policy_path)
-                raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
-            # v2 verified — enforce key pin before continuing
-            resolved_pub = public_key_path or signer_v2.public_key_path
-            if resolved_pub.exists():
-                try:
-                    from veronica_core.security.key_pin import KeyPinChecker
-                    pub_pem = resolved_pub.read_bytes()
-                    audit_log = None
-                    try:
-                        from veronica_core.audit.log import AuditLog
-                        import tempfile
-                        audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
-                        audit_log = AuditLog(audit_dir / "policy.jsonl")
-                    except Exception:
-                        pass
-                    KeyPinChecker(audit_log).enforce(pub_pem)
-                except Exception as exc:
-                    if isinstance(exc, RuntimeError):
-                        raise
-                    _log.warning("key_pin check failed unexpectedly: %s", exc)
-            # skip v1 check
+            PolicyEngine._validate_jwk_format(policy_path, sig_v2_path, public_key_path)
             return
 
-        # ------------------------------------------------------------------
-        # v1: HMAC-SHA256
-        # ------------------------------------------------------------------
         if sig_v1_path.exists():
-            signer = PolicySigner()
-            if not signer.verify(policy_path, sig_v1_path):
-                try:
-                    actual = sig_v1_path.read_text(encoding="utf-8").strip()
-                except OSError:
-                    actual = "<unreadable>"
-                expected = signer.sign(policy_path)
-                _emit_audit(
-                    "policy_tamper",
-                    {"policy_path": str(policy_path), "expected": expected, "actual": actual},
-                )
-                _log.error("policy_tamper: signature mismatch for %s", policy_path)
-                raise RuntimeError(f"Policy tamper detected: {policy_path}")
+            PolicyEngine._verify_jws_signature(policy_path, sig_v1_path)
             return
 
-        # ------------------------------------------------------------------
-        # No signature file found
-        # ------------------------------------------------------------------
-        _emit_audit("policy_sig_missing", {"policy_path": str(policy_path)})
+        PolicyEngine._emit_policy_audit("policy_sig_missing", {"policy_path": str(policy_path)})
         _log.warning("policy_sig_missing: no signature file found for %s", policy_path)
 
     @staticmethod

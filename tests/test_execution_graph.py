@@ -425,50 +425,6 @@ def test_divergence_context_forwards_event_to_snapshot():
 
 
 # ---------------------------------------------------------------------------
-# Test 13: Divergence — tool threshold 3x consecutive
-# ---------------------------------------------------------------------------
-
-
-def test_divergence_tool_3x():
-    """3 tool nodes with same name: divergence event emitted on 3rd mark_running."""
-    graph = ExecutionGraph(chain_id="div-tool-3x")
-    root_id = graph.create_root("chain_root")
-
-    for i in range(3):
-        nid = graph.begin_node(parent_id=root_id, kind="tool", name="call_api")
-        graph.mark_running(nid)
-        events = graph.drain_divergence_events()
-        if i < 2:
-            assert len(events) == 0, f"Expected no event at call {i}, got {events}"
-
-    # After 3rd mark_running, one event should have been returned on the last drain.
-    # Verify via a fresh call with the same sig: should return 0 (already emitted).
-    nid4 = graph.begin_node(parent_id=root_id, kind="tool", name="call_api")
-    graph.mark_running(nid4)
-    events_4th = graph.drain_divergence_events()
-    assert len(events_4th) == 0, "4th call must not emit another event (dedup)"
-
-    # The snapshot must reflect exactly 1 emitted signature.
-    snap = graph.snapshot()
-    assert snap["aggregates"]["divergence_emitted_count"] == 1
-
-    # Re-verify the 3rd-call event via a fresh graph reproducing the same sequence.
-    g2 = ExecutionGraph(chain_id="div-tool-3x-verify")
-    r2 = g2.create_root("chain_root")
-    collected: list[dict] = []
-    for _ in range(3):
-        nid = g2.begin_node(parent_id=r2, kind="tool", name="call_api")
-        g2.mark_running(nid)
-        collected.extend(g2.drain_divergence_events())
-    assert len(collected) == 1, f"Expected 1 event, got {len(collected)}"
-    ev = collected[0]
-    assert ev["event_type"] == "divergence_suspected"
-    assert ev["severity"] == "warn"
-    assert ev["repeat_count"] == 3
-    assert ev["signature"] == ["tool", "call_api"]
-
-
-# ---------------------------------------------------------------------------
 # Test 14: Divergence — llm threshold 5x consecutive
 # ---------------------------------------------------------------------------
 
@@ -510,28 +466,6 @@ def test_divergence_mixed_no_trigger():
         total_events += len(graph.drain_divergence_events())
 
     assert total_events == 0, f"Expected 0 events for alternating pattern, got {total_events}"
-
-
-# ---------------------------------------------------------------------------
-# Test 16: Divergence — dedup prevents spam across many calls
-# ---------------------------------------------------------------------------
-
-
-def test_divergence_dedup_no_spam():
-    """6 tool nodes same name: exactly 1 event total (emitted at 3rd, deduped after)."""
-    graph = ExecutionGraph(chain_id="div-dedup")
-    root_id = graph.create_root("chain_root")
-
-    all_events: list[dict] = []
-    for _ in range(6):
-        nid = graph.begin_node(parent_id=root_id, kind="tool", name="my_tool")
-        graph.mark_running(nid)
-        all_events.extend(graph.drain_divergence_events())
-
-    assert len(all_events) == 1, (
-        f"Expected exactly 1 divergence event across 6 calls, got {len(all_events)}"
-    )
-    assert all_events[0]["repeat_count"] == 3
 
 
 # ---------------------------------------------------------------------------

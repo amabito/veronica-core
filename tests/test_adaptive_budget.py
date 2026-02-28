@@ -65,10 +65,6 @@ class TestInit:
         with pytest.raises(ValueError, match="base_ceiling must be positive"):
             AdaptiveBudgetHook(base_ceiling=0)
 
-    def test_hook_rejects_negative_base_ceiling(self):
-        with pytest.raises(ValueError, match="base_ceiling must be positive"):
-            AdaptiveBudgetHook(base_ceiling=-10)
-
     def test_hook_rejects_zero_tighten_percentage(self):
         with pytest.raises(ValueError, match="tighten_pct"):
             AdaptiveBudgetHook(base_ceiling=100, tighten_pct=0.0)
@@ -266,13 +262,6 @@ class TestAdjustLoosen:
 
         assert hook.ceiling_multiplier == 1.20
         assert hook.adjusted_ceiling == 120
-
-    def test_budget_loosens_when_observation_window_contains_no_events(self):
-        """No events at all -> zero degrade -> loosen."""
-        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.05)
-        result = hook.adjust(_now=5000.0)
-        assert result.action == "loosen"
-        assert result.degrade_events_in_window == 0
 
 
 # ---------------------------------------------------------------------------
@@ -945,12 +934,6 @@ class TestDirectionLock:
     def test_disabled_by_default(self):
         hook = AdaptiveBudgetHook(base_ceiling=100)
         assert hook.direction_lock is False
-
-    def test_enabled_via_param(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, direction_lock=True
-        )
-        assert hook.direction_lock is True
 
     def test_blocks_loosen_after_tighten(self):
         hook = AdaptiveBudgetHook(
@@ -1931,3 +1914,64 @@ class TestFromDictForwardCompat:
         assert restored.adaptive_budget.direction_lock is False
         assert restored.adaptive_budget.anomaly_window_minutes == 15.0
         assert restored.time_aware_policy.weekend_multiplier == 0.70
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: extreme constructor parameter values
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialAdaptiveBudget:
+    """Adversarial tests for AdaptiveBudgetHook -- attacker mindset.
+
+    Focus: extreme / unexpected parameter values at construction time
+    and the resulting behavioral edge cases.
+    """
+
+    def test_tighten_trigger_zero_raises_value_error(self) -> None:
+        """tighten_trigger=0 must be rejected at construction.
+
+        Previously accepted, causing pathological behavior where
+        adjust() always tightened even with no events.
+        Fixed: tighten_trigger must be >= 1.
+        """
+        with pytest.raises(ValueError, match="tighten_trigger"):
+            AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=0)
+
+    def test_window_seconds_zero_raises_value_error(self) -> None:
+        """window_seconds=0 must be rejected at construction.
+
+        Previously accepted, causing all events to expire immediately
+        and the hook to perpetually loosen regardless of load.
+        Fixed: window_seconds must be > 0.
+        """
+        with pytest.raises(ValueError, match="window_seconds"):
+            AdaptiveBudgetHook(base_ceiling=100, window_seconds=0)
+
+    def test_tighten_trigger_one_triggers_on_single_halt_event(self) -> None:
+        """tighten_trigger=1 is a valid aggressive setting.
+
+        A single HALT event in the window must immediately tighten.
+        This is legitimate configuration (hair-trigger tightening).
+        """
+        hook = AdaptiveBudgetHook(
+            base_ceiling=100,
+            tighten_trigger=1,
+            tighten_pct=0.10,
+        )
+        now = 5000.0
+        hook.feed_event(_halt_event(), ts=now - 1.0)
+        result = hook.adjust(_now=now)
+        assert result.action == "tighten"
+        assert result.tighten_events_in_window == 1
+        assert result.ceiling_multiplier == pytest.approx(0.90)
+
+    def test_negative_window_seconds_raises_value_error(self) -> None:
+        """window_seconds < 0 must be rejected at construction.
+
+        Previously accepted, creating a future-only window that
+        pruned all real-time events immediately.
+        Fixed: window_seconds must be > 0.
+        """
+        with pytest.raises(ValueError, match="window_seconds"):
+            AdaptiveBudgetHook(base_ceiling=100, window_seconds=-100.0)

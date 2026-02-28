@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 
 import pytest
@@ -51,6 +52,68 @@ def test_negative_spend_raises() -> None:
     budget = BudgetEnforcer(limit_usd=100.0)
     with pytest.raises(ValueError, match="non-negative"):
         budget.spend(-1.0)
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: IEEE special value inputs to spend()
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialBudgetEnforcer:
+    """Adversarial tests for BudgetEnforcer -- attacker mindset.
+
+    Focus: IEEE 754 special values (inf, nan, -inf) passed to spend().
+    """
+
+    def test_spend_positive_inf_raises_value_error(self) -> None:
+        """spend(+inf) must raise ValueError -- infinite amounts are invalid."""
+        budget = BudgetEnforcer(limit_usd=100.0)
+        with pytest.raises(ValueError, match="finite"):
+            budget.spend(float("inf"))
+        assert budget.spent_usd == 0.0
+
+    def test_spend_negative_inf_raises_value_error(self) -> None:
+        """spend(-inf) must raise ValueError -- infinite amounts are invalid."""
+        budget = BudgetEnforcer(limit_usd=100.0)
+        with pytest.raises(ValueError, match="finite"):
+            budget.spend(float("-inf"))
+
+    def test_spend_nan_raises_value_error(self) -> None:
+        """spend(nan) must raise ValueError to prevent state corruption.
+
+        Previously nan bypassed the negative guard (nan < 0 is False)
+        and corrupted _spent_usd, disabling the budget entirely.
+        Fixed: explicit isnan/isinf check before negative guard.
+        """
+        budget = BudgetEnforcer(limit_usd=100.0)
+        with pytest.raises(ValueError, match="finite"):
+            budget.spend(float("nan"))
+        # State must remain clean after rejected nan
+        assert budget.spent_usd == 0.0
+        assert budget.is_exceeded is False
+
+    def test_spend_nan_no_longer_corrupts_subsequent_spends(self) -> None:
+        """After nan rejection, budget continues to function correctly."""
+        budget = BudgetEnforcer(limit_usd=1.0)
+        with pytest.raises(ValueError):
+            budget.spend(float("nan"))
+        # Budget still works after rejected nan
+        assert budget.spend(0.5) is True
+        assert budget.spent_usd == 0.5
+        assert budget.spend(0.6) is False  # 0.5 + 0.6 > 1.0
+
+    def test_spend_zero_is_a_no_op_that_increments_call_count(self) -> None:
+        """spend(0.0) is valid: no cost is recorded, returns True.
+
+        The call_count increments to record that a zero-cost call occurred.
+        spent_usd and remaining_usd are unchanged.
+        """
+        budget = BudgetEnforcer(limit_usd=50.0)
+        result = budget.spend(0.0)
+        assert result is True
+        assert budget.spent_usd == 0.0
+        assert budget.remaining_usd == 50.0
+        assert budget.call_count == 1  # zero-cost call is still a call
 
 
 # ---------------------------------------------------------------------------

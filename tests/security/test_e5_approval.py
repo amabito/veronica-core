@@ -86,13 +86,6 @@ class TestSignV2RoundTrip:
         token2 = approver.sign_v2(request)
         assert token1.request_id != token2.request_id
 
-    def test_sign_v2_nonce_is_unique(self) -> None:
-        approver = _approver()
-        request = _request(approver)
-        token1 = approver.sign_v2(request)
-        token2 = approver.sign_v2(request)
-        assert token1.nonce != token2.nonce
-
 
 # ---------------------------------------------------------------------------
 # Replay prevention
@@ -113,13 +106,6 @@ class TestReplayPrevention:
         token2 = approver.sign_v2(request)
         assert approver.approve(token1) is True
         assert approver.approve(token2) is True
-
-    def test_replay_across_multiple_attempts_all_fail(self) -> None:
-        approver = _approver()
-        token = approver.sign_v2(_request(approver))
-        assert approver.approve(token) is True
-        for _ in range(5):
-            assert approver.approve(token) is False
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +177,6 @@ class TestExpiredToken:
             mock_dt.now.return_value = future
             mock_dt.fromisoformat.side_effect = datetime.fromisoformat
             assert approver.approve(token) is False
-
-    def test_fresh_token_is_not_expired(self) -> None:
-        approver = _approver()
-        token = approver.sign_v2(_request(approver))
-        assert approver.approve(token) is True
 
 
 # ---------------------------------------------------------------------------

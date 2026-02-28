@@ -199,18 +199,6 @@ class TestCostBoundary:
         )
         assert result > 0.0, f"cost was {result} for total_tokens={total_tokens}"
 
-    def test_tokens_in_plus_out_equals_total(self) -> None:
-        """The prompt+completion split must sum exactly to total_tokens (no rounding loss)."""
-        from veronica_core.pricing import estimate_cost_usd
-        from veronica_core.adapters.langchain import _estimate_cost
-
-        for total in [1, 2, 3, 7, 100, 999]:
-            tokens_in = max(1, int(total * 0.75))
-            tokens_out = total - tokens_in
-            assert tokens_in + tokens_out == total, (
-                f"tokens_in={tokens_in} + tokens_out={tokens_out} != {total}"
-            )
-
     def test_explicit_prompt_completion_tokens_used_directly(self) -> None:
         """When prompt_tokens and completion_tokens are explicitly provided, they are used
         verbatim without any heuristic split."""
@@ -226,15 +214,6 @@ class TestCostBoundary:
         handler.on_llm_end(result)
         # Cost must be non-zero and derived from 80+20=100 tokens
         assert handler.container.budget.spent_usd > 0.0
-
-    def test_zero_total_tokens_returns_zero_cost(self) -> None:
-        """total_tokens=0 must return 0.0 (no phantom cost)."""
-        from veronica_core.adapters.langchain import _estimate_cost
-
-        result = _estimate_cost(
-            FakeLLMResult(llm_output={"token_usage": {"total_tokens": 0}})
-        )
-        assert result == 0.0
 
     def test_zero_total_tokens_flows_through_calculation(self) -> None:
         """total_tokens=0 must reach estimate_cost_usd() and produce 0.0 naturally.

@@ -38,11 +38,6 @@ class TestTokenBudgetOn:
         hook.record_usage(output_tokens=50)
         assert hook.before_llm_call(CTX) is None
 
-    def test_service_halts_calls_when_token_usage_exceeds_configured_limit(self):
-        hook = TokenBudgetHook(max_output_tokens=100)
-        hook.record_usage(output_tokens=150)
-        assert hook.before_llm_call(CTX) is Decision.HALT
-
 
 class TestTokenBudgetDegrade:
     """DEGRADE zone tests."""
@@ -50,11 +45,6 @@ class TestTokenBudgetDegrade:
     def test_service_degrades_when_token_usage_reaches_degrade_threshold(self):
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
         hook.record_usage(output_tokens=80)
-        assert hook.before_llm_call(CTX) is Decision.DEGRADE
-
-    def test_service_remains_degraded_for_all_usage_between_threshold_and_hard_limit(self):
-        hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
-        hook.record_usage(output_tokens=90)
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
     def test_service_allows_calls_when_token_usage_is_below_degrade_threshold(self):

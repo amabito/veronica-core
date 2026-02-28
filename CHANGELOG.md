@@ -6,6 +6,53 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.4.0] — 2026-02-28 — Adapter Consolidation & Hardening
+
+**Breaking changes:** none
+
+### Added
+
+- **CrewAI adapter** (`veronica_core.adapters.crewai`): `VeronicaCrewAIListener`
+  wraps CrewAI event bus with budget, step, and retry enforcement.
+- **LangGraph adapter** (`veronica_core.adapters.langgraph`): `VeronicaLangGraphListener`
+  wraps LangGraph event hooks with the same containment guarantees.
+- **Shared adapter helpers** (`veronica_core.adapters._shared`): `build_container()`
+  and `cost_from_total_tokens()` centralized to eliminate DRY violations across adapters.
+- **Quickstart API** (`veronica_core.quickstart`): 2-line setup via `init("$5.00")` /
+  `shutdown()` for instant cost containment.
+- **Compliance exporter** (`veronica_core.compliance`): `ComplianceExporter` with
+  JSON/CSV serialization and optional `httpx` webhook delivery.
+- **`[compliance]` extra**: `pip install veronica-core[compliance]` for `httpx` dependency.
+- **BudgetEnforcer**: rejects NaN / Inf amounts with `ValueError`.
+- **AdaptiveBudgetHook**: validates `tighten_trigger >= 1` and `window_seconds > 0`
+  at construction; extracted `_prune_event_buffer`, `_count_tighten_events` helpers.
+- **ApprovalRateLimiter**: adversarial tests for concurrent `acquire()` + `reset()` race.
+- **PolicyEngine**: refactored shell rule evaluation into focused sub-functions
+  (`_check_shell_deny_commands`, `_check_shell_operators`, `_check_credentials_in_args`).
+- **DistributedCircuitBreaker**: extracted `_attempt_reconnect_if_on_fallback` and
+  `_activate_fallback` helpers; refactored `check()` / `record_failure()` / `record_success()`
+  to use shared helper for Redis error handling.
+- **ExecutionGraph**: extracted `_update_graph_metrics`, `_check_cost_rate_divergence`,
+  `_check_token_velocity_divergence` from monolithic `close_node()`.
+
+### Changed
+
+- **Test suite audit**: 85 duplicate/low-value tests removed (1865 -> 1780). All
+  removed tests were same-branch duplicates, tautological mirrors, strict subsets,
+  or cross-file duplicates. Zero adversarial, boundary, thread-safety, or regression
+  tests deleted.
+
+### Fixed
+
+- **CrewAI adapter**: narrowed bare `except` to specific exception types
+  (`AttributeError`, `TypeError`, `ValueError`, `KeyError`, `OverflowError`, `RuntimeError`).
+
+### Stats
+
+- 1780 tests (was 1865), 92% coverage, 0 failures.
+
+---
+
 ## [1.3.0] — 2026-02-28 — ROS2 Adapter
 
 **Breaking changes:** none

@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 # Core state machine
 from veronica_core.state import (
@@ -157,6 +157,12 @@ from veronica_core.middleware import (
     get_current_execution_context,
 )
 
+# Compliance Export (v1.4.0)
+from veronica_core.compliance import ComplianceExporter
+
+# Quickstart API (v1.4.0 -- 2-line setup shortcut)
+from veronica_core.quickstart import init, shutdown, get_context
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -281,6 +287,12 @@ __all__ = [
     "VeronicaASGIMiddleware",
     "VeronicaWSGIMiddleware",
     "get_current_execution_context",
+    # Compliance Export (v1.4.0)
+    "ComplianceExporter",
+    # Quickstart API (v1.4.0)
+    "init",
+    "shutdown",
+    "get_context",
 ]
 
 

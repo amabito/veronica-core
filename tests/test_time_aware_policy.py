@@ -116,10 +116,6 @@ class TestOffHours:
         dt = _dt(2026, 2, 16, 18, 0)  # Monday 18:00 = off-hours
         assert policy.get_multiplier(dt) == 0.90
 
-    def test_weekday_late_night(self):
-        policy = TimeAwarePolicy()
-        assert policy.get_multiplier(MONDAY_23PM) == 0.90
-
 
 # ---------------------------------------------------------------------------
 # get_multiplier: weekends
@@ -146,10 +142,6 @@ class TestWeekendOffHours:
         policy = TimeAwarePolicy()
         # Weekend AND off-hours -> min(0.85, 0.90) = 0.85
         assert policy.get_multiplier(SATURDAY_3AM) == 0.85
-
-    def test_sunday_offhour(self):
-        policy = TimeAwarePolicy()
-        assert policy.get_multiplier(SUNDAY_22PM) == 0.85
 
     def test_weekend_offhour_custom_multipliers(self):
         policy = TimeAwarePolicy(

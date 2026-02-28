@@ -41,7 +41,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 
@@ -350,51 +350,93 @@ class ExecutionGraph:
             node.cost_usd = cost_usd
             node.tokens_in = tokens_in
             node.tokens_out = tokens_out
-            # Update aggregates.
-            self._total_cost_usd += cost_usd
-            self._total_retries += node.retries_used
-            if node.kind == "llm":
-                self._total_llm_calls += 1
-            elif node.kind == "tool":
-                self._total_tool_calls += 1
-            # Accumulate output tokens for velocity tracking.
-            if tokens_out is not None:
-                self._total_tokens_out += tokens_out
-            # Check time-based divergence signals using per-node elapsed time.
-            # elapsed_ms: duration of this node in milliseconds (at least 1ms to avoid div-by-zero).
+            self._update_graph_metrics(node)
             elapsed_ms = max(node.end_ts_ms - node.start_ts_ms, 1)
-            if cost_usd > 0:
-                cost_rate = cost_usd / elapsed_ms * 1000  # USD per second
-                cost_key = (("COST_RATE_EXCEEDED", "cost_rate"), "cost_rate")
-                if (
-                    cost_rate > self._cost_rate_threshold_usd_per_sec
-                    and cost_key not in self._emitted_divergences
-                ):
-                    self._emitted_divergences.add(cost_key)
-                    self._pending_divergence_events.append({
-                        "event_type": "COST_RATE_EXCEEDED",
-                        "severity": "warn",
-                        "cost_rate": cost_rate,
-                        "threshold": self._cost_rate_threshold_usd_per_sec,
-                        "node_id": node_id,
-                        "chain_id": self._chain_id,
-                    })
-            if tokens_out is not None and elapsed_ms > 0:
-                token_velocity = tokens_out / elapsed_ms * 1000  # tokens per second
-                velocity_key = (("TOKEN_VELOCITY_EXCEEDED", "token_velocity"), "token_velocity")
-                if (
-                    token_velocity > self._token_velocity_threshold
-                    and velocity_key not in self._emitted_divergences
-                ):
-                    self._emitted_divergences.add(velocity_key)
-                    self._pending_divergence_events.append({
-                        "event_type": "TOKEN_VELOCITY_EXCEEDED",
-                        "severity": "warn",
-                        "token_velocity": token_velocity,
-                        "threshold": self._token_velocity_threshold,
-                        "node_id": node_id,
-                        "chain_id": self._chain_id,
-                    })
+            self._check_cost_rate_divergence(cost_usd, elapsed_ms, node_id)
+            self._check_token_velocity_divergence(tokens_out, elapsed_ms, node_id)
+
+    def _update_graph_metrics(self, node: "Node") -> None:
+        """Accumulate aggregate counters from a completed node.
+
+        Must be called with ``self._lock`` held.
+
+        Args:
+            node: The node whose metrics should be added to graph totals.
+        """
+        self._total_cost_usd += node.cost_usd
+        self._total_retries += node.retries_used
+        if node.kind == "llm":
+            self._total_llm_calls += 1
+        elif node.kind == "tool":
+            self._total_tool_calls += 1
+        if node.tokens_out is not None:
+            self._total_tokens_out += node.tokens_out
+
+    def _check_cost_rate_divergence(
+        self,
+        cost_usd: float,
+        elapsed_ms: int,
+        node_id: str,
+    ) -> None:
+        """Emit a COST_RATE_EXCEEDED divergence event if the rate threshold is breached.
+
+        Must be called with ``self._lock`` held.
+
+        Args:
+            cost_usd: Actual cost for this node in USD.
+            elapsed_ms: Duration of this node in milliseconds (>= 1).
+            node_id: Node identifier for the emitted event payload.
+        """
+        if cost_usd <= 0:
+            return
+        cost_rate = cost_usd / elapsed_ms * 1000  # USD per second
+        cost_key = (("COST_RATE_EXCEEDED", "cost_rate"), "cost_rate")
+        if cost_rate <= self._cost_rate_threshold_usd_per_sec:
+            return
+        if cost_key in self._emitted_divergences:
+            return
+        self._emitted_divergences.add(cost_key)
+        self._pending_divergence_events.append({
+            "event_type": "COST_RATE_EXCEEDED",
+            "severity": "warn",
+            "cost_rate": cost_rate,
+            "threshold": self._cost_rate_threshold_usd_per_sec,
+            "node_id": node_id,
+            "chain_id": self._chain_id,
+        })
+
+    def _check_token_velocity_divergence(
+        self,
+        tokens_out: Optional[int],
+        elapsed_ms: int,
+        node_id: str,
+    ) -> None:
+        """Emit a TOKEN_VELOCITY_EXCEEDED divergence event if the velocity threshold is breached.
+
+        Must be called with ``self._lock`` held.
+
+        Args:
+            tokens_out: Output token count for this node (None = skip check).
+            elapsed_ms: Duration of this node in milliseconds (>= 1).
+            node_id: Node identifier for the emitted event payload.
+        """
+        if tokens_out is None or elapsed_ms <= 0:
+            return
+        token_velocity = tokens_out / elapsed_ms * 1000  # tokens per second
+        velocity_key = (("TOKEN_VELOCITY_EXCEEDED", "token_velocity"), "token_velocity")
+        if token_velocity <= self._token_velocity_threshold:
+            return
+        if velocity_key in self._emitted_divergences:
+            return
+        self._emitted_divergences.add(velocity_key)
+        self._pending_divergence_events.append({
+            "event_type": "TOKEN_VELOCITY_EXCEEDED",
+            "severity": "warn",
+            "token_velocity": token_velocity,
+            "threshold": self._token_velocity_threshold,
+            "node_id": node_id,
+            "chain_id": self._chain_id,
+        })
 
     def mark_failure(
         self,
@@ -541,50 +583,76 @@ class ExecutionGraph:
             JSON-serializable dict describing the full graph state.
         """
         with self._lock:
-            nodes_dict: dict[str, Any] = {}
-            for nid, node in self._nodes.items():
-                nodes_dict[nid] = {
-                    "node_id": node.node_id,
-                    "parent_id": node.parent_id,
-                    "kind": node.kind,
-                    "name": node.name,
-                    "start_ts_ms": node.start_ts_ms,
-                    "end_ts_ms": node.end_ts_ms,
-                    "status": node.status,
-                    "model": node.model,
-                    "retries_used": node.retries_used,
-                    "cost_usd": node.cost_usd,
-                    "tokens_in": node.tokens_in,
-                    "tokens_out": node.tokens_out,
-                    "stop_reason": node.stop_reason,
-                    "error_class": node.error_class,
-                    "metadata": copy.deepcopy(node.metadata),
-                }
-            # root_count is always 1; expressed as a float so the division
-            # remains meaningful if multi-root support is added later.
-            root_count: float = 1.0
+            nodes_dict = {
+                nid: self._build_node_snapshot(node)
+                for nid, node in self._nodes.items()
+            }
             return {
                 "chain_id": self._chain_id,
                 "root_id": self._root_id,
                 "nodes": nodes_dict,
-                "aggregates": {
-                    "total_cost_usd": self._total_cost_usd,
-                    "total_llm_calls": self._total_llm_calls,
-                    "total_tool_calls": self._total_tool_calls,
-                    "total_retries": self._total_retries,
-                    "max_depth": self._max_depth,
-                    "llm_calls_per_root": self._total_llm_calls / root_count,
-                    "tool_calls_per_root": self._total_tool_calls / root_count,
-                    "retries_per_root": self._total_retries / root_count,
-                    # Count of unique (signature, mode) pairs for which a
-                    # divergence_suspected event has been emitted.  Counts
-                    # consecutive and frequency detections separately.
-                    # Ephemeral pending events are NOT included.
-                    "divergence_emitted_count": len(self._emitted_divergences),
-                    "total_tokens_out": self._total_tokens_out,
-                },
+                "aggregates": self._build_aggregates_snapshot(),
                 "snapshot_ts_ms": _now_ms(),
             }
+
+    @staticmethod
+    def _build_node_snapshot(node: "Node") -> dict[str, Any]:
+        """Serialize a single Node to a JSON-serializable dict.
+
+        Deep-copies ``metadata`` so the caller may mutate the result safely.
+
+        Args:
+            node: The node to serialize.
+
+        Returns:
+            Dict with all node fields.
+        """
+        return {
+            "node_id": node.node_id,
+            "parent_id": node.parent_id,
+            "kind": node.kind,
+            "name": node.name,
+            "start_ts_ms": node.start_ts_ms,
+            "end_ts_ms": node.end_ts_ms,
+            "status": node.status,
+            "model": node.model,
+            "retries_used": node.retries_used,
+            "cost_usd": node.cost_usd,
+            "tokens_in": node.tokens_in,
+            "tokens_out": node.tokens_out,
+            "stop_reason": node.stop_reason,
+            "error_class": node.error_class,
+            "metadata": copy.deepcopy(node.metadata),
+        }
+
+    def _build_aggregates_snapshot(self) -> dict[str, Any]:
+        """Build the "aggregates" sub-dict for the graph snapshot.
+
+        Must be called with ``self._lock`` held.
+
+        root_count is always 1; expressed as a float so the division
+        remains meaningful if multi-root support is added later.
+
+        Returns:
+            Dict of aggregate counters and derived per-root ratios.
+        """
+        root_count: float = 1.0
+        return {
+            "total_cost_usd": self._total_cost_usd,
+            "total_llm_calls": self._total_llm_calls,
+            "total_tool_calls": self._total_tool_calls,
+            "total_retries": self._total_retries,
+            "max_depth": self._max_depth,
+            "llm_calls_per_root": self._total_llm_calls / root_count,
+            "tool_calls_per_root": self._total_tool_calls / root_count,
+            "retries_per_root": self._total_retries / root_count,
+            # Count of unique (signature, mode) pairs for which a
+            # divergence_suspected event has been emitted.  Counts
+            # consecutive and frequency detections separately.
+            # Ephemeral pending events are NOT included.
+            "divergence_emitted_count": len(self._emitted_divergences),
+            "total_tokens_out": self._total_tokens_out,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers

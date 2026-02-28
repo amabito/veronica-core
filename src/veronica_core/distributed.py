@@ -714,6 +714,38 @@ class DistributedCircuitBreaker:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _attempt_reconnect_if_on_fallback(self) -> None:
+        """Try to reconnect to Redis when currently using the local fallback.
+
+        Double-checked locking: the outer check avoids lock acquisition on
+        the fast path (already using Redis); the inner check guards against
+        concurrent threads both entering the reconnect path.
+        """
+        if self._using_fallback and self._fallback_on_error:
+            with self._lock:
+                if self._using_fallback:
+                    self._try_reconnect()
+
+    def _activate_fallback(self, exc: Exception, method_name: str) -> None:
+        """Switch to the local fallback circuit breaker and log the error.
+
+        Idempotent: subsequent calls when already on fallback are no-ops
+        because ``_using_fallback`` is checked under the lock.
+
+        Args:
+            exc: The exception that triggered the fallback transition.
+            method_name: Name of the calling method (for the log message).
+        """
+        logger.error(
+            "DistributedCircuitBreaker.%s failed: %s — using local fallback",
+            method_name,
+            exc,
+        )
+        with self._lock:
+            if not self._using_fallback:
+                self._seed_fallback_from_redis()
+                self._using_fallback = True
+
     def _resolve_state_str(self, state_str: str, last_failure_time: Optional[float]) -> CircuitState:
         """Parse state string, applying OPEN->HALF_OPEN timeout if appropriate."""
         if state_str == "OPEN" and last_failure_time is not None:
@@ -813,11 +845,7 @@ class DistributedCircuitBreaker:
         Returns:
             PolicyDecision allowing (CLOSED/HALF_OPEN first request) or denying (OPEN)
         """
-        # Attempt reconnect if on fallback
-        if self._using_fallback and self._fallback_on_error:
-            with self._lock:
-                if self._using_fallback:
-                    self._try_reconnect()
+        self._attempt_reconnect_if_on_fallback()
 
         if self._using_fallback or self._client is None:
             return self._fallback.check(context)
@@ -832,55 +860,51 @@ class DistributedCircuitBreaker:
                     self._half_open_slot_timeout,
                 ],
             )
-            state_str = result[0]
-            slot_claimed = int(result[1])
-            failure_count = int(result[2])
-
-            if state_str == "OPEN":
-                return PolicyDecision(
-                    allowed=False,
-                    policy_type=self.policy_type,
-                    reason=(
-                        f"Circuit OPEN: {failure_count} consecutive failures"
-                    ),
-                )
-
-            if state_str == "HALF_OPEN":
-                # slot_claimed=1 means WE atomically claimed the HALF_OPEN slot
-                # (old in_flight was 0, Lua set it to 1 for us).
-                # slot_claimed=0 means another caller already holds the slot.
-                if slot_claimed == 0:
-                    return PolicyDecision(
-                        allowed=False,
-                        policy_type=self.policy_type,
-                        reason="Circuit HALF_OPEN: test request already in flight",
-                    )
-
-            return PolicyDecision(allowed=True, policy_type=self.policy_type)
-
+            return self._interpret_check_result(result)
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.check failed: %s — using local fallback",
-                    exc,
-                )
-                with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                self._activate_fallback(exc, "check")
                 return self._fallback.check(context)
             raise
+
+    def _interpret_check_result(self, result: list) -> PolicyDecision:
+        """Convert the Lua script result into a PolicyDecision.
+
+        Args:
+            result: [state_str, slot_claimed, failure_count] from the Lua check script.
+
+        Returns:
+            PolicyDecision with allowed=True (CLOSED or HALF_OPEN slot claimed)
+            or allowed=False (OPEN or HALF_OPEN slot already taken).
+        """
+        state_str = result[0]
+        slot_claimed = int(result[1])
+        failure_count = int(result[2])
+
+        if state_str == "OPEN":
+            return PolicyDecision(
+                allowed=False,
+                policy_type=self.policy_type,
+                reason=f"Circuit OPEN: {failure_count} consecutive failures",
+            )
+
+        # slot_claimed=1 means WE atomically claimed the HALF_OPEN slot.
+        # slot_claimed=0 means another caller already holds the slot.
+        if state_str == "HALF_OPEN" and slot_claimed == 0:
+            return PolicyDecision(
+                allowed=False,
+                policy_type=self.policy_type,
+                reason="Circuit HALF_OPEN: test request already in flight",
+            )
+
+        return PolicyDecision(allowed=True, policy_type=self.policy_type)
 
     def record_success(self) -> None:
         """Record a successful operation.
 
         Closes the circuit if currently half-open. Resets failure counter.
         """
-        # Attempt reconnect if on fallback
-        if self._using_fallback and self._fallback_on_error:
-            with self._lock:
-                if self._using_fallback:
-                    self._try_reconnect()
+        self._attempt_reconnect_if_on_fallback()
 
         if self._using_fallback or self._client is None:
             self._fallback.record_success()
@@ -897,15 +921,7 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.record_success failed: %s — "
-                    "using local fallback",
-                    exc,
-                )
-                with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                self._activate_fallback(exc, "record_success")
                 self._fallback.record_success()
             else:
                 raise
@@ -943,11 +959,7 @@ class DistributedCircuitBreaker:
                     "failure_predicate raised; counting failure as fail-safe"
                 )
 
-        # Attempt reconnect if on fallback
-        if self._using_fallback and self._fallback_on_error:
-            with self._lock:
-                if self._using_fallback:
-                    self._try_reconnect()
+        self._attempt_reconnect_if_on_fallback()
 
         if self._using_fallback or self._client is None:
             # Predicate already evaluated; pass without error to avoid
@@ -972,15 +984,7 @@ class DistributedCircuitBreaker:
                 )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.record_failure failed: %s — "
-                    "using local fallback",
-                    exc,
-                )
-                with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                self._activate_fallback(exc, "record_failure")
                 self._fallback.record_failure()
             else:
                 raise

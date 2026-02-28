@@ -68,9 +68,10 @@ veronica-events.jsonl
 data/
 logs/
 
-# Session archives (J.A.R.V.I.S. intermediate files)
+# Session archives (J.A.R.V.I.S. / F.R.I.D.A.Y. intermediate files)
 .archive/
 .jarvis/
+.friday/
 
 # Internal launch strategy docs (not for public)
 RUNTIME_POLICY_CONTROL_STRATEGY.md

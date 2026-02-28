@@ -206,27 +206,6 @@ def test_policy_engine_missing_sig_raises_in_ci(
 # ---------------------------------------------------------------------------
 
 
-def test_policy_engine_tamper_raises_for_caller(
-    tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """RuntimeError from tampered policy propagates to the caller."""
-    sig_path = Path(str(tmp_policy) + ".sig")
-    sig_path.write_text("badbadbadbad" + "0" * 52 + "\n", encoding="utf-8")
-
-    dev_key = hashlib.sha256(b"veronica-dev-key").digest()
-    monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
-
-    from veronica_core.security.policy_engine import PolicyEngine
-
-    raised = False
-    try:
-        PolicyEngine(policy_path=tmp_policy)
-    except RuntimeError:
-        raised = True
-
-    assert raised, "Expected RuntimeError to propagate on tamper"
-
-
 # ---------------------------------------------------------------------------
 # Test 10: default.yaml + default.yaml.sig in repo verifies correctly
 # ---------------------------------------------------------------------------

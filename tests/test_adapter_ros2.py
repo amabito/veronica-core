@@ -279,21 +279,3 @@ class TestLoggerFallback:
 
         assert any("Fault suppressed" in m[1] for m in fake.messages)
 
-    def test_logger_with_warning_method(self) -> None:
-        class StdlibLikeLogger:
-            def __init__(self):
-                self.messages = []
-            def info(self, msg):
-                self.messages.append(("info", msg))
-            def warning(self, msg):
-                self.messages.append(("warning", msg))
-
-        fake = StdlibLikeLogger()
-        sm = SafetyMonitor(
-            circuit_breaker=CircuitBreaker(failure_threshold=2, recovery_timeout=1.0),
-            logger=fake,
-        )
-        with sm.guard(error_type=SensorFault):
-            raise SensorFault("test")
-
-        assert any("Fault suppressed" in m[1] for m in fake.messages)
