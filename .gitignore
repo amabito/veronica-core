@@ -75,6 +75,8 @@ logs/
 
 # Internal launch strategy docs (not for public)
 RUNTIME_POLICY_CONTROL_STRATEGY.md
+METRICS_QUICKSTART.md
+MIGRATION.md
 docs/COMMUNITY_HN.md
 docs/LAUNCH_POSTS.md
 docs/FINAL_REDDIT.md
@@ -86,4 +88,14 @@ docs/LAUNCH_READY_DISCORD.md
 docs/LAUNCH_READY_HN.md
 docs/LAUNCH_READY_REDDIT.md
 docs/LAUNCH_READY_TWITTER.md
+docs/RELEASE_v0_1_0.md
+docs/devto_article.md
+docs/devto_article_ja.md
+docs/v0.4.0-technical-artifacts.md
 docs/plans/
+
+# Standalone apps (not part of core library)
+apps/
+
+# Promo scripts (not part of core library)
+scripts/gen_diagrams.py
