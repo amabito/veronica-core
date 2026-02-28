@@ -96,3 +96,6 @@ docs/plans/
 
 # Promo scripts (not part of core library)
 scripts/gen_diagrams.py
+
+# SaaS app (local development only, not published)
+src/veronica_core/compliance/app/
