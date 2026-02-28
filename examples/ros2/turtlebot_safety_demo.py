@@ -32,7 +32,7 @@ from __future__ import annotations
 import math
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TwistStamped
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
@@ -52,6 +52,10 @@ class SafeTurtleBot(Node):
     NAN_THRESHOLD = 0.3
     # Normal cruise speed (m/s)
     CRUISE_SPEED = 0.22
+    # Obstacle avoidance: minimum safe distance (m)
+    SAFE_DISTANCE = 0.35
+    # Turn speed when avoiding obstacles (rad/s)
+    TURN_SPEED = 1.0
 
     def __init__(self) -> None:
         super().__init__("veronica_safety_demo")
@@ -69,7 +73,8 @@ class SafeTurtleBot(Node):
         self.create_subscription(Bool, "/scan_fault", self._on_fault_toggle, 10)
 
         # Publisher for velocity override
-        self._vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
+        # Gazebo gz-sim bridge expects TwistStamped on /cmd_vel
+        self._vel_pub = self.create_publisher(TwistStamped, "/cmd_vel", 10)
 
         # Fault injection state
         self._fault_active = False
@@ -86,15 +91,22 @@ class SafeTurtleBot(Node):
     def _on_scan(self, msg: LaserScan) -> None:
         """Process each LiDAR scan through the safety monitor."""
         with self.safety.guard(error_type=SensorFault) as mode:
+            if mode == OperatingMode.HALT:
+                return  # Skip processing entirely when halted
+
+            # Check for injected fault
+            if self._fault_active:
+                raise SensorFault("Injected sensor fault active")
+
             # Check for corrupted data
-            if self._fault_active or self._is_corrupted(msg):
+            if self._is_corrupted(msg):
                 raise SensorFault(
                     f"LiDAR corruption: "
                     f"{self._nan_fraction(msg):.0%} NaN readings"
                 )
 
-            # Apply speed based on current operating mode
-            self._apply_speed(mode)
+            # Apply speed with obstacle avoidance
+            self._apply_speed(mode, msg)
 
     def _on_fault_toggle(self, msg: Bool) -> None:
         """Toggle simulated sensor fault injection."""
@@ -130,14 +142,41 @@ class SafeTurtleBot(Node):
         nan_count = sum(1 for r in msg.ranges if math.isnan(r))
         return nan_count / len(msg.ranges)
 
-    def _apply_speed(self, mode: OperatingMode) -> None:
+    def _min_front_distance(self, scan: LaserScan) -> float:
+        """Return minimum distance in front 60-degree arc."""
+        if not scan.ranges:
+            return float("inf")
+        n = len(scan.ranges)
+        # Front arc: -30deg to +30deg (indices wrap around 0)
+        arc = n // 6  # 60deg out of 360deg
+        front_ranges = list(scan.ranges[:arc]) + list(scan.ranges[-arc:])
+        valid = [r for r in front_ranges if not math.isnan(r) and r > 0.01]
+        return min(valid) if valid else float("inf")
+
+    def _apply_speed(
+        self, mode: OperatingMode, scan: LaserScan | None = None
+    ) -> None:
         """Publish velocity command scaled by operating mode."""
-        twist = Twist()
-        twist.linear.x = self.CRUISE_SPEED * mode.speed_scale
-        # Stop rotation when degraded
-        if mode != OperatingMode.FULL_AUTO:
-            twist.angular.z = 0.0
-        self._vel_pub.publish(twist)
+        cmd = TwistStamped()
+        cmd.header.stamp = self.get_clock().now().to_msg()
+        cmd.header.frame_id = "base_link"
+
+        speed = self.CRUISE_SPEED * mode.speed_scale
+
+        # Obstacle avoidance: turn if something is close ahead
+        if scan is not None and speed > 0:
+            front_dist = self._min_front_distance(scan)
+            if front_dist < self.SAFE_DISTANCE:
+                # Stop forward, turn in place
+                speed = 0.0
+                cmd.twist.angular.z = self.TURN_SPEED
+            else:
+                cmd.twist.angular.z = 0.0
+        elif mode != OperatingMode.FULL_AUTO:
+            cmd.twist.angular.z = 0.0
+
+        cmd.twist.linear.x = speed
+        self._vel_pub.publish(cmd)
 
 
 def main() -> None:
