@@ -177,13 +177,18 @@ class SafetyMonitor:
     def _check_transition(self) -> None:
         new_mode = self.current_mode
         if new_mode != self._last_mode:
+            old_mode = self._last_mode
+            # Update _last_mode BEFORE invoking callback to prevent
+            # infinite recursion when the callback calls record_fault()
+            # and to ensure _last_mode is consistent even if the
+            # callback raises an exception.
+            self._last_mode = new_mode
             self._log_info(
-                f"Mode transition: {self._last_mode.name} -> {new_mode.name} "
+                f"Mode transition: {old_mode.name} -> {new_mode.name} "
                 f"(speed_scale={new_mode.speed_scale})"
             )
             if self.on_mode_change is not None:
-                self.on_mode_change(self._last_mode, new_mode)
-            self._last_mode = new_mode
+                self.on_mode_change(old_mode, new_mode)
 
     def _log_info(self, msg: str) -> None:
         _logger = self.logger
