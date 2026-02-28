@@ -94,8 +94,5 @@ docs/devto_article_ja.md
 docs/v0.4.0-technical-artifacts.md
 docs/plans/
 
-# Standalone apps (not part of core library)
-apps/
-
 # Promo scripts (not part of core library)
 scripts/gen_diagrams.py
