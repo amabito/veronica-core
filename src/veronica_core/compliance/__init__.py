@@ -1,7 +1,8 @@
-"""Compliance export module for veronica-core.
+"""Compliance module for veronica-core.
 
-Provides async batch export of SafetyEvents and chain snapshots
-to a compliance backend (e.g. veronica-risk-audit SaaS).
+Provides:
+- ComplianceExporter: async batch export of SafetyEvents to a compliance backend
+- Risk Audit UI: browser-based 9-question agent risk assessment (compliance/app/)
 
 Usage::
 

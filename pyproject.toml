@@ -64,6 +64,7 @@ include = ["src/veronica", "src/veronica_core"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veronica", "src/veronica_core"]
+exclude = ["src/veronica_core/compliance/app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
