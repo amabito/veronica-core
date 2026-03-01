@@ -67,12 +67,6 @@ class TestFinding:
 
 
 class TestCIGuardScan:
-    def test_github_actions_token_detected(self, guard: CIGuard) -> None:
-        text = f"token: ghs_{'A' * 36}"
-        findings = guard.scan(text)
-        names = [f.pattern_name for f in findings]
-        assert "GITHUB_ACTIONS_TOKEN" in names
-
     def test_github_actions_token_severity_is_critical(self, guard: CIGuard) -> None:
         text = f"ghs_{'B' * 40}"
         findings = guard.scan(text)
@@ -80,24 +74,12 @@ class TestCIGuardScan:
         assert ci_findings, "GITHUB_ACTIONS_TOKEN finding expected"
         assert ci_findings[0].severity == "CRITICAL"
 
-    def test_gitlab_ci_token_detected(self, guard: CIGuard) -> None:
-        text = f"glcbt-{'a' * 25}"
-        findings = guard.scan(text)
-        names = [f.pattern_name for f in findings]
-        assert "GITLAB_CI_TOKEN" in names
-
     def test_gitlab_ci_token_severity_is_critical(self, guard: CIGuard) -> None:
         text = f"glcbt-{'z' * 20}"
         findings = guard.scan(text)
         ci_findings = [f for f in findings if f.pattern_name == "GITLAB_CI_TOKEN"]
         assert ci_findings
         assert ci_findings[0].severity == "CRITICAL"
-
-    def test_docker_auth_detected(self, guard: CIGuard) -> None:
-        text = '"auth": "dXNlcjpwYXNzd29yZA=="'
-        findings = guard.scan(text)
-        names = [f.pattern_name for f in findings]
-        assert "DOCKER_AUTH" in names
 
     def test_docker_auth_severity_is_critical(self, guard: CIGuard) -> None:
         text = '"auth": "c29tZWxvbmdiYXNlNjRzdHJpbmc="'

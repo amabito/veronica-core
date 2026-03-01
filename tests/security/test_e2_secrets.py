@@ -50,64 +50,25 @@ def _ctx(
 class TestFileReadCredentialPatterns:
     """file_read of credential/secret files must be DENIED."""
 
-    def test_npmrc_is_denied(self) -> None:
+    @pytest.mark.parametrize(
+        "path",
+        [
+            pytest.param("/home/user/.npmrc", id="npmrc"),
+            pytest.param("/home/user/.pypirc", id="pypirc"),
+            pytest.param("/home/user/.netrc", id="netrc"),
+            pytest.param("/home/user/.ssh/id_rsa", id="id_rsa"),
+            # id_rsa.pub also matches **/*id_rsa*
+            pytest.param("/home/user/.ssh/id_rsa.pub", id="id_rsa_pub_variant"),
+            pytest.param("/home/user/.ssh/id_ed25519", id="id_ed25519"),
+            pytest.param("/certs/server.pem", id="pem_file"),
+            pytest.param("/secrets/private.key", id="key_file"),
+            pytest.param("/certs/bundle.p12", id="p12_file"),
+            pytest.param("/certs/identity.pfx", id="pfx_file"),
+        ],
+    )
+    def test_sensitive_file_is_denied(self, path: str) -> None:
         engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.npmrc"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_pypirc_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.pypirc"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_netrc_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.netrc"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_id_rsa_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.ssh/id_rsa"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_id_rsa_pub_variant_is_denied(self) -> None:
-        # id_rsa.pub also matches **/*id_rsa*
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.ssh/id_rsa.pub"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_id_ed25519_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/home/user/.ssh/id_ed25519"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_pem_file_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/certs/server.pem"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_key_file_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/secrets/private.key"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_p12_file_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/certs/bundle.p12"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
-
-    def test_pfx_file_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("file_read", ["/certs/identity.pfx"]))
+        decision = engine.evaluate(_ctx("file_read", [path]))
         assert decision.verdict == "DENY"
         assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
 
@@ -120,63 +81,24 @@ class TestFileReadCredentialPatterns:
 class TestShellCredentialSubcommands:
     """Credential sub-commands must be DENIED with rule SHELL_DENY_CREDENTIAL_SUBCMD."""
 
-    def test_git_credential_store_is_denied(self) -> None:
+    @pytest.mark.parametrize(
+        "args",
+        [
+            pytest.param(["git", "credential", "store"], id="git_credential_store"),
+            pytest.param(["git", "credentials"], id="git_credentials"),
+            pytest.param(["gh", "auth", "login"], id="gh_auth_login"),
+            pytest.param(["gh", "token"], id="gh_token"),
+            pytest.param(["gh", "secret", "list"], id="gh_secret_list"),
+            pytest.param(["npm", "token", "list"], id="npm_token_list"),
+            pytest.param(["npm", "login"], id="npm_login"),
+            pytest.param(["npm", "adduser"], id="npm_adduser"),
+            pytest.param(["pip", "config", "set"], id="pip_config_set"),
+            pytest.param(["pip", "config", "get", "global.index-url"], id="pip_config_get"),
+        ],
+    )
+    def test_credential_subcmd_is_denied(self, args: list[str]) -> None:
         engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["git", "credential", "store"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_git_credentials_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["git", "credentials"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_gh_auth_login_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["gh", "auth", "login"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_gh_token_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["gh", "token"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_gh_secret_list_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["gh", "secret", "list"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_npm_token_list_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["npm", "token", "list"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_npm_login_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["npm", "login"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_npm_adduser_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["npm", "adduser"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_pip_config_set_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["pip", "config", "set"]))
-        assert decision.verdict == "DENY"
-        assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
-
-    def test_pip_config_get_is_denied(self) -> None:
-        engine = _engine()
-        decision = engine.evaluate(_ctx("shell", ["pip", "config", "get", "global.index-url"]))
+        decision = engine.evaluate(_ctx("shell", args))
         assert decision.verdict == "DENY"
         assert decision.rule_id == "SHELL_DENY_CREDENTIAL_SUBCMD"
 
@@ -229,16 +151,17 @@ class TestMaskingNewPatterns:
         assert token not in result
         assert "REDACTED:GITHUB_CLI_TOKEN" in result
 
-    def test_ssh_openssh_private_key_header_masked(self, masker: SecretMasker) -> None:
-        text = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk..."
+    @pytest.mark.parametrize(
+        "header",
+        [
+            pytest.param("-----BEGIN OPENSSH PRIVATE KEY-----", id="openssh"),
+            pytest.param("-----BEGIN DSA PRIVATE KEY-----", id="dsa"),
+        ],
+    )
+    def test_ssh_private_key_header_masked(self, masker: SecretMasker, header: str) -> None:
+        text = f"{header}\nMIIBvAIBAAKBgQC..."
         result = masker.mask(text)
-        assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in result
-        assert "REDACTED:SSH_PRIVATE_KEY" in result
-
-    def test_ssh_dsa_private_key_header_masked(self, masker: SecretMasker) -> None:
-        text = "-----BEGIN DSA PRIVATE KEY-----\nMIIBvAIBAAKBgQC..."
-        result = masker.mask(text)
-        assert "-----BEGIN DSA PRIVATE KEY-----" not in result
+        assert header not in result
         assert "REDACTED:SSH_PRIVATE_KEY" in result
 
     def test_netrc_password_masked(self, masker: SecretMasker) -> None:

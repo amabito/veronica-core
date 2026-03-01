@@ -35,27 +35,20 @@ def _clean_state():
 
 
 class TestParseBudget:
-    def test_dollar_sign_with_cents(self) -> None:
-        assert _parse_budget("$5.00") == pytest.approx(5.0)
-
-    def test_string_float_no_dollar(self) -> None:
-        assert _parse_budget("5.0") == pytest.approx(5.0)
-
-    def test_integer_string(self) -> None:
-        assert _parse_budget("10") == pytest.approx(10.0)
-
-    def test_tiny_value(self) -> None:
-        assert _parse_budget("$0.01") == pytest.approx(0.01)
-
-    def test_large_value(self) -> None:
-        assert _parse_budget("$10000") == pytest.approx(10000.0)
-
-    def test_whitespace_stripped(self) -> None:
-        assert _parse_budget("  $5.00  ") == pytest.approx(5.0)
-
-    def test_internal_whitespace_after_dollar(self) -> None:
-        # "$ 5.00" -- after lstrip("$"), strip() removes leading space
-        assert _parse_budget("$ 5.00") == pytest.approx(5.0)
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            pytest.param("$5.00", 5.0, id="dollar_with_cents"),
+            pytest.param("5.0", 5.0, id="float_no_dollar"),
+            pytest.param("10", 10.0, id="integer_string"),
+            pytest.param("$0.01", 0.01, id="tiny_value"),
+            pytest.param("$10000", 10000.0, id="large_value"),
+            pytest.param("  $5.00  ", 5.0, id="outer_whitespace_stripped"),
+            pytest.param("$ 5.00", 5.0, id="internal_whitespace_after_dollar"),
+        ],
+    )
+    def test_valid_budget_parsed(self, raw: str, expected: float) -> None:
+        assert _parse_budget(raw) == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -159,54 +152,29 @@ class TestAdversarialQuickstart:
     # Corrupted budget strings
     # ------------------------------------------------------------------
 
-    def test_empty_string_raises(self) -> None:
+    @pytest.mark.parametrize(
+        "bad_input",
+        [
+            pytest.param("", id="empty_string"),
+            pytest.param("$", id="dollar_only"),
+            pytest.param("-$5", id="negative_value"),
+            pytest.param("$0", id="zero_value"),
+            pytest.param("nan", id="nan_string"),
+            pytest.param("inf", id="inf_string"),
+            pytest.param("-inf", id="negative_inf_string"),
+            pytest.param("five dollars", id="word"),
+            pytest.param("EUR5", id="currency_prefix_eur"),
+            pytest.param("5abc", id="letters_mixed"),
+        ],
+    )
+    def test_invalid_budget_raises_value_error(self, bad_input: str) -> None:
         with pytest.raises(ValueError):
-            _parse_budget("")
+            _parse_budget(bad_input)
 
-    def test_dollar_only_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("$")
-
-    def test_negative_value_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("-$5")
-
-    def test_zero_value_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("$0")
-
-    def test_nan_string_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("nan")
-
-    def test_inf_string_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("inf")
-
-    def test_negative_inf_string_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("-inf")
-
-    def test_word_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("five dollars")
-
-    def test_currency_prefix_eur_raises(self) -> None:
-        # "EUR5" -- after lstrip("$") = "EUR5", float("EUR5") fails
-        with pytest.raises(ValueError):
-            _parse_budget("EUR5")
-
-    def test_double_dollar_sign_raises(self) -> None:
-        # "$$5" -> lstrip("$") = "5", should actually parse fine because
-        # lstrip removes ALL leading '$'. Verify actual behavior.
-        # lstrip("$") on "$$5" removes both $ -> "5" -> 5.0 is valid.
-        # So this should succeed, not raise.
+    def test_double_dollar_sign_parses_as_valid(self) -> None:
+        # "$$5" -> lstrip("$") removes both $ -> "5" -> 5.0 is valid (not an error).
         result = _parse_budget("$$5")
         assert result == pytest.approx(5.0)
-
-    def test_letters_mixed_raises(self) -> None:
-        with pytest.raises(ValueError):
-            _parse_budget("5abc")
 
     # ------------------------------------------------------------------
     # init() with invalid budget (integration path)
