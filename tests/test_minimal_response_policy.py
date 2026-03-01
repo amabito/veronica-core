@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from veronica_core.policies.minimal_response import MinimalResponsePolicy
 from veronica_core.shield.types import Decision
@@ -70,7 +69,7 @@ class TestWrapRequest:
     def test_does_not_mutate_input(self):
         policy = MinimalResponsePolicy(enabled=True)
         req = {"system": "Original"}
-        result = policy.wrap_request(req)
+        policy.wrap_request(req)
         assert req.get("_original_system") is None  # Input not mutated
 
     def test_missing_system_key_returns_unchanged(self):

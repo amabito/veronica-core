@@ -1,7 +1,6 @@
 """Tests for LLM safety modules: budget, agent guard, partial result, retry."""
 
 import pytest
-import time
 
 from veronica_core.budget import BudgetEnforcer
 from veronica_core.agent_guard import AgentStepGuard

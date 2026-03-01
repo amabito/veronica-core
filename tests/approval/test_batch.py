@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import threading
 
-import pytest
 
 from veronica_core.approval.batch import ApprovalBatcher, BatchedRequest
 

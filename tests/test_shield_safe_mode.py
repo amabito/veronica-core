@@ -1,6 +1,6 @@
 """Tests for SafeModeHook."""
 
-from veronica_core.shield import Decision, SafeModeHook, ShieldPipeline, ToolCallContext
+from veronica_core.shield import Decision, SafeModeHook, ToolCallContext
 from veronica_core.shield.config import SafeModeConfig, ShieldConfig
 from veronica_core.shield.hooks import PreDispatchHook, RetryBoundaryHook
 

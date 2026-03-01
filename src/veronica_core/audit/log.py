@@ -16,7 +16,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from veronica_core.security.masking import SecretMasker
+from veronica_core.security.masking import SecretMasker  # noqa: E402
 
 
 _GENESIS_HASH = "0" * 64

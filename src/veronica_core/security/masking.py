@@ -74,8 +74,6 @@ class SecretMasker:
     def mask(self, text: str) -> str:
         """Replace detected secrets in *text* with ``[REDACTED:<type>]``."""
         for label, pattern in _PATTERNS:
-            replacement = f"[REDACTED:{label}]"
-
             def _replace(m: re.Match[str], _label: str = label) -> str:  # noqa: E731
                 # If the pattern has a capture group, replace only the group
                 if m.lastindex:

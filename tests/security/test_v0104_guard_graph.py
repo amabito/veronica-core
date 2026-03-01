@@ -8,7 +8,6 @@ Test matrix:
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -181,7 +180,6 @@ class TestAIcontainerLock:
     def test_reset_rebuilds_pipeline(self) -> None:
         """reset() must still rebuild the pipeline correctly under the lock."""
         container = AIcontainer(budget=BudgetEnforcer(limit_usd=1.0))
-        before = container._pipeline
         container.reset()
         after = container._pipeline
         # Pipeline is rebuilt — it may be a new object

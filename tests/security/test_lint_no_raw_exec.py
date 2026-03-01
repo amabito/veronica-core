@@ -4,12 +4,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 
 # Allow importing tools/lint_no_raw_exec without installing as a package
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 from lint_no_raw_exec import (  # noqa: E402
-    Violation,
     check_file,
     format_violation,
     main,

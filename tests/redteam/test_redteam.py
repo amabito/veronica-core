@@ -13,7 +13,6 @@ Test setup: PolicyEngine with CapabilitySet.dev(), fake repo_root=/tmp/testrepo.
 """
 from __future__ import annotations
 
-import pytest
 
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.policy_engine import PolicyContext, PolicyDecision, PolicyEngine

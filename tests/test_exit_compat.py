@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import warnings
 from typing import Optional
-from unittest.mock import MagicMock
 
 import pytest
 
-from veronica_core.backends import MemoryBackend, PersistenceBackend
+from veronica_core.backends import MemoryBackend
 from veronica_core.exit import VeronicaExit
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.types import Decision, ToolCallContext

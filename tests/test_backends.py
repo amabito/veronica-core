@@ -86,7 +86,7 @@ class TestJSONBackend:
     def test_auto_create_parent_directory(self, temp_dir):
         """Test backend creates parent directory if missing."""
         path = temp_dir / "nested" / "dir" / "state.json"
-        backend = JSONBackend(path)
+        JSONBackend(path)
 
         # Parent should be created automatically
         assert path.parent.exists()

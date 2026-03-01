@@ -10,13 +10,11 @@ import queue
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, List
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from veronica_core.compliance.exporter import ComplianceExporter, _SHUTDOWN
-from veronica_core.compliance.serializers import serialize_snapshot
 from veronica_core.containment.execution_context import (
     ChainMetadata,
     ContextSnapshot,
@@ -704,7 +702,6 @@ class TestAdversarialExporter:
         exporter = _make_exporter()
 
         call_count = 0
-        original_send = exporter._send_one.__func__  # noqa: SIM118
 
         def patched_send(self_inner, payload):
             nonlocal call_count

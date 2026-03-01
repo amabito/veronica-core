@@ -99,9 +99,9 @@ class VeronicaExit:
         logger.warning(f"[VERONICA_EXIT] Signal received: {signal_name}")
 
         if signum == signal.SIGTERM:
-            self.request_exit(ExitTier.GRACEFUL, f"SIGTERM received")
+            self.request_exit(ExitTier.GRACEFUL, "SIGTERM received")
         elif signum == signal.SIGINT:
-            self.request_exit(ExitTier.EMERGENCY, f"SIGINT (Ctrl+C) received")
+            self.request_exit(ExitTier.EMERGENCY, "SIGINT (Ctrl+C) received")
 
     def _atexit_handler(self) -> None:
         """Atexit fallback (process termination)."""

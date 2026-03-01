@@ -1,11 +1,9 @@
 """Tests for CLIApprover: sign/verify/approve round-trip and edge cases."""
 from __future__ import annotations
 
-import time
 import warnings
 from datetime import datetime, timezone, timedelta
 
-import pytest
 
 from veronica_core.approval.approver import (
     ApprovalRequest,
@@ -161,7 +159,7 @@ class TestEphemeralKey:
     def test_ephemeral_key_emits_warning(self) -> None:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            approver = CLIApprover(secret_key=None)
+            CLIApprover(secret_key=None)
         assert any("ephemeral" in str(warning.message).lower() for warning in w)
 
     def test_ephemeral_key_sign_verify_works(self) -> None:

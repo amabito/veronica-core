@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, time, timezone
-from typing import Any
 
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision, ToolCallContext

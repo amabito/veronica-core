@@ -56,12 +56,12 @@ FakeLLMResult = _build_fake_langchain()
 # Now safe to import the adapter (langchain_core is already in sys.modules)
 # ---------------------------------------------------------------------------
 
-import pytest
+import pytest  # noqa: E402
 
-from veronica_core import GuardConfig
-from veronica_core.adapters.langchain import VeronicaCallbackHandler
-from veronica_core.containment import ExecutionConfig
-from veronica_core.inject import VeronicaHalt
+from veronica_core import GuardConfig  # noqa: E402
+from veronica_core.adapters.langchain import VeronicaCallbackHandler  # noqa: E402
+from veronica_core.containment import ExecutionConfig  # noqa: E402
+from veronica_core.inject import VeronicaHalt  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

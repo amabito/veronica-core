@@ -11,7 +11,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from veronica_core.pricing import (
-    Pricing,
     PRICING_TABLE,
     _UNKNOWN_MODEL_FALLBACK,
     estimate_cost_usd,

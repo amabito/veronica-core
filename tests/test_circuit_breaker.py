@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import threading
-import time
-from unittest.mock import patch
 
-import pytest
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
 from veronica_core.runtime_policy import PolicyContext

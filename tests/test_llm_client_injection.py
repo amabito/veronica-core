@@ -3,7 +3,6 @@
 import pytest
 from veronica_core import (
     VeronicaIntegration,
-    LLMClient,
     NullClient,
     DummyClient,
 )

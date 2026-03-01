@@ -14,7 +14,7 @@ import atexit
 from veronica_core.state import VeronicaStateMachine, VeronicaState
 from veronica_core.persist import VeronicaPersistence
 from veronica_core.exit import VeronicaExit
-from veronica_core.backends import PersistenceBackend, JSONBackend
+from veronica_core.backends import PersistenceBackend
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
 from veronica_core.clients import LLMClient, NullClient
 from veronica_core.shield.budget_window import BudgetWindowHook
@@ -23,7 +23,6 @@ from veronica_core.shield.input_compression import InputCompressionHook
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.token_budget import TokenBudgetHook
-from veronica_core.policies.minimal_response import MinimalResponsePolicy
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +294,7 @@ class VeronicaIntegration:
 
         if should_save:
             logger.debug(
-                f"[VERONICA_INTEGRATION] Auto-save triggered"
+                "[VERONICA_INTEGRATION] Auto-save triggered"
             )
             self.save()  # Use save() method (includes guard validation)
 

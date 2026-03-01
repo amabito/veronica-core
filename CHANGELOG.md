@@ -6,6 +6,42 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.5.0] — 2026-03-01 — Enterprise Key Providers & CI Guard
+
+**Breaking changes:** none
+
+### Added
+
+- **KeyProvider Protocol** (`veronica_core.security.key_providers`): pluggable key
+  material sourcing for `PolicySignerV2` and `PolicyEngine`.
+  - `FileKeyProvider`: load PEM from disk (default, wraps existing behavior).
+  - `EnvKeyProvider`: load PEM from environment variable (`VERONICA_PUBLIC_KEY_PEM`).
+  - `VaultKeyProvider`: fetch from HashiCorp Vault transit engine (requires `hvac`).
+- **`[vault]` extra**: `pip install veronica-core[vault]` for `hvac>=2.0` dependency.
+- **`PolicySignerV2`**: accepts `key_provider` parameter; verify() delegates to
+  provider instead of reading PEM file directly.
+- **`PolicyEngine`**: accepts `key_provider` parameter; passes it through to
+  `_verify_policy_signature` and `_validate_jwk_format`.
+- **CIGuard** (`veronica_core.security.ci_guard`): CI-specific secret leak detection
+  combining SecretMasker's 28 patterns with 7 CI-specific patterns (GitHub Actions,
+  GitLab CI, Docker auth, CircleCI, Jenkins, Artifactory, Buildkite).
+  - `scan()`: returns deduplicated `Finding` list with line number and severity.
+  - `scan_file()`: scan a file for leaked secrets.
+  - `protect_output()`: mask all secrets (CI patterns first, then base).
+  - `is_ci()`: detect CI/PROD environment via `SecurityLevel`.
+- **104 new tests** (1780 -> 1884): 46 KeyProvider tests + 58 CIGuard tests,
+  including 40 adversarial tests (ReDoS, concurrent access, corrupted input,
+  boundary abuse, exception coverage).
+
+### Fixed
+
+- **`PolicySignerV2.verify()`**: broadened exception handling from
+  `except (OSError, RuntimeError)` to `except Exception`. External `KeyProvider`
+  implementations may raise `KeyError`, `TypeError`, `AttributeError`, etc.;
+  all now safely return `False` instead of crashing.
+
+---
+
 ## [1.4.0] — 2026-02-28 — Adapter Consolidation & Hardening
 
 **Breaking changes:** none

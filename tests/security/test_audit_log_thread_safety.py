@@ -9,7 +9,6 @@ import sys
 import threading
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
@@ -115,8 +114,6 @@ class TestAuditLogThreadSafety:
         WHEN both finish,
         THEN no two consecutive entries share the same prev_hash (no race in chain linking).
         """
-        import json
-
         log_path = tmp_path / "dedup_chain.jsonl"
         log = AuditLog(path=log_path)
 
@@ -140,7 +137,6 @@ class TestAuditLogThreadSafety:
         assert len(lines) == 100
 
         # Verify prev_hash chain is sequential (no two entries share same prev_hash)
-        prev_hashes = [json.loads(line)["prev_hash"] for line in lines]
         # Each prev_hash should appear exactly once as a "previous" pointer
         # (except genesis "000...0" which is the first)
         assert log.verify_chain() is True, "Chain must be valid with no race conditions"

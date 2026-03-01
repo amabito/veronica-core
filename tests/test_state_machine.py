@@ -1,8 +1,7 @@
 """Tests for VeronicaStateMachine."""
 
-import pytest
 import time
-from veronica_core.state import VeronicaState, VeronicaStateMachine, StateTransition
+from veronica_core.state import VeronicaState, VeronicaStateMachine
 
 
 class TestVeronicaStateMachine:

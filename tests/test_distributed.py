@@ -298,7 +298,6 @@ def test_seeded_failover_reconcile_does_not_double_count():
     4. Reconnect → _reconcile_on_reconnect should flush ONLY 5.0 (the delta).
     5. Redis must be 10.0 + 5.0 = 15.0, NOT 10.0 + 15.0 = 25.0.
     """
-    from unittest.mock import patch
 
     server = fakeredis.FakeServer()
     fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)

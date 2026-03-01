@@ -551,11 +551,6 @@ class TestBackwardCompatibility:
             AgentStepGuard,
             PartialResultBuffer,
             RetryContainer,
-            VeronicaStateMachine,
-            VeronicaState,
-            VeronicaIntegration,
-            VeronicaGuard,
-            PermissiveGuard,
         )
         # Just verify they're importable
         assert BudgetEnforcer is not None
@@ -567,11 +562,8 @@ class TestBackwardCompatibility:
         """v0.2 new exports are accessible."""
         from veronica_core import (
             RuntimePolicy,
-            PolicyContext,
-            PolicyDecision,
             PolicyPipeline,
             CircuitBreaker,
-            CircuitState,
         )
         assert RuntimePolicy is not None
         assert PolicyPipeline is not None

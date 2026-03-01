@@ -11,7 +11,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from veronica_core.containment import ExecutionConfig, ExecutionContext, WrapOptions
-from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.types import Decision
 
 

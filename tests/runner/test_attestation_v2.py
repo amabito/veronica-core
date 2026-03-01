@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from veronica_core.runner.attestation import ProbeResult, SandboxProbe
 
@@ -116,7 +115,6 @@ class TestProbeNet:
 
     def test_generic_exception_means_blocked(self) -> None:
         """Timeout or other exception -> treat as blocked -> passed=True."""
-        import urllib.error
 
         probe = SandboxProbe(net_target="http://example.com")
         with patch("veronica_core.runner.attestation.urllib.request.urlopen") as mock_open:

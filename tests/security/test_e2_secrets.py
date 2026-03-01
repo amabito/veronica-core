@@ -11,7 +11,7 @@ import pytest
 
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.masking import SecretMasker
-from veronica_core.security.policy_engine import PolicyContext, PolicyDecision, PolicyEngine
+from veronica_core.security.policy_engine import PolicyContext, PolicyEngine
 
 
 # ---------------------------------------------------------------------------

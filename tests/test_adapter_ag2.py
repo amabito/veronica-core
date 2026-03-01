@@ -59,13 +59,13 @@ def _ag2_installed() -> bool:
 # Now safe to import the adapter (ag2 is already in sys.modules)
 # ---------------------------------------------------------------------------
 
-import pytest
+import pytest  # noqa: E402
 
-from veronica_core import GuardConfig
-from veronica_core.adapters.ag2 import VeronicaConversableAgent, register_veronica_hook
-from veronica_core.container import AIcontainer
-from veronica_core.containment import ExecutionConfig
-from veronica_core.inject import VeronicaHalt
+from veronica_core import GuardConfig  # noqa: E402
+from veronica_core.adapters.ag2 import VeronicaConversableAgent, register_veronica_hook  # noqa: E402
+from veronica_core.container import AIcontainer  # noqa: E402
+from veronica_core.containment import ExecutionConfig  # noqa: E402
+from veronica_core.inject import VeronicaHalt  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

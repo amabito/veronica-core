@@ -5,9 +5,7 @@ Uses a minimal stub agent -- ag2 is not required.
 from __future__ import annotations
 
 from typing import Optional
-from unittest.mock import MagicMock
 
-import pytest
 
 from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 from veronica_core.backends import MemoryBackend

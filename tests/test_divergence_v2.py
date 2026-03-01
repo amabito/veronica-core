@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
 
 from veronica_core.containment.execution_graph import ExecutionGraph
 

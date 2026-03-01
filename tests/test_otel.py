@@ -7,7 +7,6 @@ from veronica_core.otel import (
     disable_otel,
     emit_containment_decision,
     emit_safety_event,
-    enable_otel,
     enable_otel_with_tracer,
     is_otel_enabled,
 )
@@ -24,7 +23,6 @@ def reset_otel():
 
 def _setup_test_otel():
     """Create an in-memory OTel tracer for testing."""
-    from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -155,7 +153,6 @@ def test_emit_containment_decision_with_tracer():
 
 def test_pipeline_emits_otel_on_halt():
     """ShieldPipeline._record should emit OTel event when OTel is enabled."""
-    from unittest.mock import MagicMock
 
     from veronica_core.shield.hooks import PreDispatchHook
     from veronica_core.shield.pipeline import ShieldPipeline

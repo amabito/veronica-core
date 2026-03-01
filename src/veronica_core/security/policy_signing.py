@@ -14,6 +14,10 @@ import hmac
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from veronica_core.security.key_providers import KeyProvider
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,6 @@ _ENV_KEY_VAR = "VERONICA_POLICY_KEY"
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PrivateKey,
-        Ed25519PublicKey,
     )
     from cryptography.hazmat.primitives.serialization import (
         Encoding,
@@ -164,8 +167,18 @@ class PolicySignerV2:
                          Defaults to ``policies/public_key.pem``.
     """
 
-    def __init__(self, public_key_path: Path | None = None) -> None:
-        self._public_key_path = public_key_path or _DEFAULT_PUBLIC_KEY_PATH
+    def __init__(
+        self,
+        public_key_path: Path | None = None,
+        key_provider: "KeyProvider | None" = None,
+    ) -> None:
+        if key_provider is not None:
+            self._key_provider = key_provider
+            self._public_key_path = public_key_path or _DEFAULT_PUBLIC_KEY_PATH
+        else:
+            from veronica_core.security.key_providers import FileKeyProvider
+            self._public_key_path = public_key_path or _DEFAULT_PUBLIC_KEY_PATH
+            self._key_provider = FileKeyProvider(self._public_key_path)
 
     # ------------------------------------------------------------------
     # Properties
@@ -272,12 +285,16 @@ class PolicySignerV2:
             content = self._normalize(policy_path.read_bytes())
             sig_b64 = sig_path.read_text(encoding="utf-8").strip()
             raw_sig = base64.b64decode(sig_b64)
-            pub_pem = self._public_key_path.read_bytes()
-        except OSError:
-            return False
-        except ValueError:
-            # Malformed base64 in signature file
-            logger.debug("policy_signing_v2: failed to decode signature data")
+            pub_pem = self._key_provider.get_public_key_pem()
+        except Exception as exc:
+            # Broad catch: key_provider is an external Protocol implementation
+            # that may raise any exception type (KeyError, TypeError,
+            # AttributeError, ConnectionError, etc.).  All failures during
+            # data loading must result in verify() returning False.
+            logger.debug(
+                "policy_signing_v2: failed to load verification data (%s)",
+                type(exc).__name__,
+            )
             return False
 
         try:

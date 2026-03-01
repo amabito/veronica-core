@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "tools"
 SIGN_SCRIPT = TOOLS_DIR / "release_sign_policy.py"

@@ -7,7 +7,7 @@ Replaces global variables with proper state management.
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, Final, Optional, List
+from typing import Dict, Final, List
 import threading
 import time
 import logging

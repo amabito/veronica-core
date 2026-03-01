@@ -7,7 +7,6 @@ Command injection is prevented by enforcing shell=False.
 from __future__ import annotations
 
 import hashlib
-import os
 import subprocess
 import urllib.request
 from dataclasses import dataclass, field

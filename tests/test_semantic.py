@@ -1,7 +1,6 @@
 """Tests for SemanticLoopGuard."""
 from __future__ import annotations
 
-import pytest
 
 from veronica_core import AIcontainer, SemanticLoopGuard
 from veronica_core.runtime_policy import PolicyContext

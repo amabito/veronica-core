@@ -10,7 +10,6 @@ Covers:
 """
 from __future__ import annotations
 
-import pytest
 
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.policy_engine import PolicyContext, PolicyEngine

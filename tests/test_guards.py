@@ -1,6 +1,5 @@
 """Tests for guard interface."""
 
-import pytest
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
 
 

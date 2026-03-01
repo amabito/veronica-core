@@ -33,7 +33,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 from uuid import uuid4
 
-from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
+from veronica_core.circuit_breaker import CircuitBreaker
 from veronica_core.runtime_policy import PolicyContext
 from veronica_core.shield.types import Decision, ToolCallContext
 from veronica_core.state import VeronicaState

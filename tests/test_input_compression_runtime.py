@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import os
-from unittest.mock import MagicMock
 
-import pytest
 
 from veronica_core.shield.input_compression import (
     Compressor,
@@ -62,16 +59,16 @@ class TestTemplateCompressor:
 class TestExtractImportantLines:
     def test_numbers_are_important(self):
         imp, oth = _extract_important_lines("budget is 5000\nhello world")
-        assert any("5000" in l for l in imp)
-        assert any("hello" in l for l in oth)
+        assert any("5000" in line for line in imp)
+        assert any("hello" in line for line in oth)
 
     def test_dates_are_important(self):
         imp, _ = _extract_important_lines("deadline 2026-01-15\nfoo bar")
-        assert any("2026-01-15" in l for l in imp)
+        assert any("2026-01-15" in line for line in imp)
 
     def test_constraints_are_important(self):
         imp, _ = _extract_important_lines("must not exceed limit\nrandom stuff")
-        assert any("must" in l for l in imp)
+        assert any("must" in line for line in imp)
 
     def test_empty_lines_skipped(self):
         imp, oth = _extract_important_lines("\n\n\nhello\n\n")

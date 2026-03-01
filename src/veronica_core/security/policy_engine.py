@@ -729,6 +729,7 @@ class PolicyEngine:
         self,
         policy_path: Path | None = None,
         public_key_path: Path | None = None,
+        key_provider: Any = None,
     ) -> None:
         """Initialize the engine.
 
@@ -753,6 +754,7 @@ class PolicyEngine:
 
         self._policy_path = policy_path
         self._public_key_path = public_key_path
+        self._key_provider = key_provider
         self._policy: dict[str, Any] = {}
         self._audit_log = None
 
@@ -774,7 +776,11 @@ class PolicyEngine:
                         f"Policy signature file missing in {level.name} environment: "
                         f"{policy_path}"
                     )
-            self._verify_policy_signature(policy_path, public_key_path=public_key_path)
+            self._verify_policy_signature(
+                policy_path,
+                public_key_path=public_key_path,
+                key_provider=key_provider,
+            )
             self._policy = self._load_policy(policy_path)
             self._check_rollback()
 
@@ -800,6 +806,7 @@ class PolicyEngine:
         policy_path: Path,
         sig_v2_path: Path,
         public_key_path: Path | None,
+        key_provider: Any = None,
     ) -> None:
         """Verify ed25519 (v2) signature and enforce key pin.
 
@@ -810,7 +817,7 @@ class PolicyEngine:
         from veronica_core.security.policy_signing import PolicySignerV2
 
         _log = _logging.getLogger(__name__)
-        signer_v2 = PolicySignerV2(public_key_path=public_key_path)
+        signer_v2 = PolicySignerV2(public_key_path=public_key_path, key_provider=key_provider)
 
         if not signer_v2.verify(policy_path, sig_v2_path):
             PolicyEngine._emit_policy_audit(
@@ -875,6 +882,7 @@ class PolicyEngine:
     def _verify_policy_signature(
         policy_path: Path,
         public_key_path: Path | None = None,
+        key_provider: Any = None,
     ) -> None:
         """Verify policy signature for *policy_path*.
 
@@ -885,6 +893,7 @@ class PolicyEngine:
         Args:
             policy_path: Path to the YAML policy file.
             public_key_path: Optional path to the ed25519 public key PEM.
+            key_provider: Optional KeyProvider for pluggable key material.
         """
         import logging as _logging
 
@@ -894,7 +903,9 @@ class PolicyEngine:
         sig_v1_path = Path(str(policy_path) + ".sig")
 
         if sig_v2_path.exists():
-            PolicyEngine._validate_jwk_format(policy_path, sig_v2_path, public_key_path)
+            PolicyEngine._validate_jwk_format(
+                policy_path, sig_v2_path, public_key_path, key_provider
+            )
             return
 
         if sig_v1_path.exists():
