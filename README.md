@@ -184,6 +184,7 @@ Optional extras:
 ```bash
 pip install veronica-core[redis]   # DistributedCircuitBreaker, RedisBudgetBackend
 pip install veronica-core[otel]    # OpenTelemetry export
+pip install veronica-core[vault]   # VaultKeyProvider (HashiCorp Vault)
 ```
 
 Development:
