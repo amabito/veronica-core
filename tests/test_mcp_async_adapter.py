@@ -466,7 +466,7 @@ class TestFailurePredicate:
             predicate = lambda exc: isinstance(exc, RuntimeError)  # noqa: E731
             adapter = _make_adapter(failure_predicate=predicate)
             await adapter.wrap_tool_call("tool", {}, value_error_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["tool"]
 
         stats = asyncio.run(run())
@@ -496,7 +496,7 @@ class TestStatsTracking:
             adapter = _make_adapter()
             await adapter.wrap_tool_call("search", {}, _echo_fn)
             await adapter.wrap_tool_call("search", {}, _echo_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].call_count
 
         assert asyncio.run(run()) == 2
@@ -505,7 +505,7 @@ class TestStatsTracking:
         async def run() -> int:
             adapter = _make_adapter()
             await adapter.wrap_tool_call("search", {}, _raise_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].call_count
 
         assert asyncio.run(run()) == 1
@@ -514,7 +514,7 @@ class TestStatsTracking:
         async def run() -> int:
             adapter = _make_adapter()
             await adapter.wrap_tool_call("search", {}, _raise_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].error_count
 
         assert asyncio.run(run()) == 1
@@ -523,7 +523,7 @@ class TestStatsTracking:
         async def run() -> int:
             adapter = _make_adapter()
             await adapter.wrap_tool_call("search", {}, _echo_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].error_count
 
         assert asyncio.run(run()) == 0
@@ -533,7 +533,7 @@ class TestStatsTracking:
             adapter = _make_adapter(default_cost_per_call=0.01)
             await adapter.wrap_tool_call("search", {}, _echo_fn)
             await adapter.wrap_tool_call("search", {}, _echo_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].total_cost_usd
 
         assert asyncio.run(run()) == pytest.approx(0.02)
@@ -542,7 +542,7 @@ class TestStatsTracking:
         async def run() -> float:
             adapter = _make_adapter(default_cost_per_call=0.01)
             await adapter.wrap_tool_call("search", {}, _raise_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].total_cost_usd
 
         assert asyncio.run(run()) == pytest.approx(0.0)
@@ -551,7 +551,7 @@ class TestStatsTracking:
         async def run() -> float:
             adapter = _make_adapter()
             await adapter.wrap_tool_call("search", {}, _echo_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].avg_duration_ms
 
         assert asyncio.run(run()) >= 0.0
@@ -562,7 +562,7 @@ class TestStatsTracking:
             await adapter.wrap_tool_call("tool_a", {}, _echo_fn)
             await adapter.wrap_tool_call("tool_b", {}, _echo_fn)
             await adapter.wrap_tool_call("tool_a", {}, _echo_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["tool_a"].call_count, stats["tool_b"].call_count
 
         a_count, b_count = asyncio.run(run())
@@ -572,9 +572,9 @@ class TestStatsTracking:
     def test_get_tool_stats_returns_snapshot(self) -> None:
         async def run() -> tuple[bool, bool]:
             adapter = _make_adapter()
-            stats1 = await adapter.get_tool_stats()
+            stats1 = adapter.get_tool_stats()
             await adapter.wrap_tool_call("new_tool", {}, _echo_fn)
-            stats2 = await adapter.get_tool_stats()
+            stats2 = adapter.get_tool_stats()
             return "new_tool" not in stats1, "new_tool" in stats2
 
         not_in_first, in_second = asyncio.run(run())
@@ -641,7 +641,7 @@ class TestConcurrentAsync:
                 for _ in range(10)
             ]
             await asyncio.gather(*tasks)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["search"].call_count
 
         count = asyncio.run(run())

@@ -6,6 +6,39 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.0] — 2026-03-02 — MCP Adapter Hardening
+
+**Breaking changes:** none
+
+### Changed
+
+- **Sync adapter: `nonlocal` closure refactoring** (`MCPContainmentAdapter`): replaced
+  single-element list closures (`call_result[0]`, `call_error[0]`, `duration_ms[0]`)
+  with Python 3 `nonlocal` declarations. No behavioral change; eliminates per-call
+  list allocations and improves readability.
+
+### Added
+
+- **Stats memory defense**: both `MCPContainmentAdapter` and `AsyncMCPContainmentAdapter`
+  now emit a `WARNING`-level log when the number of distinct tracked tool names exceeds
+  10,000. Alerts operators to unbounded tool-name generation (e.g. attacker-controlled
+  input) without breaking containment.
+- **60 new adversarial tests** covering 14 gap categories for MCP adapters:
+  `_extract_token_count` dict keys, steps exhaustion boundary, CB HALF_OPEN transitions,
+  cost on exception, `isError` truthy non-bool values, `BaseException` propagation,
+  `wrap_mcp_server` edge cases (None/empty/duplicate tools), concurrent `_ensure_stats`
+  race, negative `cost_per_token`, async two-phase budget, sync post-call timeout,
+  deeply nested results, async concurrent CB trip race, sync fn returning coroutine.
+
+### Internal
+
+- Simplify code review (3-agent parallel): code reuse, quality, efficiency.
+  Findings: 10 sync/async duplications catalogued (deferred to v2.0 base class
+  extraction), `isError` detection already unified, `asyncio.Lock` already removed.
+- AG2 RFC impact analysis: zero impact from v1.7.0 MCP changes. AG2 tests 42/42 pass.
+
+---
+
 ## [1.7.0] — 2026-03-02 — Async MCP Containment
 
 **Breaking changes:** none

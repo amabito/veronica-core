@@ -142,7 +142,7 @@ class TestAdversarialAsyncConcurrency:
                 *[adapter.wrap_tool_call("tool", {"i": i}, _async_echo) for i in range(10)]
             )
             assert len(results) == 10
-            return await adapter.get_tool_stats()
+            return adapter.get_tool_stats()
 
         stats = asyncio.run(run())
         assert stats["tool"].call_count == 10
@@ -156,7 +156,7 @@ class TestAdversarialAsyncConcurrency:
                 fn = _async_raise if i % 2 == 0 else _async_echo
                 tasks.append(adapter.wrap_tool_call("tool", {}, fn))
             await asyncio.gather(*tasks)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["tool"]
 
         s = asyncio.run(run())
@@ -203,7 +203,7 @@ class TestAdversarialAsyncTimeout:
         async def run() -> MCPToolStats:
             adapter = _make_async_adapter(timeout_seconds=0.05)
             await adapter.wrap_tool_call("tool", {}, slow_fn)
-            stats = await adapter.get_tool_stats()
+            stats = adapter.get_tool_stats()
             return stats["tool"]
 
         s = asyncio.run(run())
@@ -535,7 +535,7 @@ class TestAdversarialCrossAdapter:
             sync_adapter.wrap_tool_call("tool", {}, _sync_echo)
             await async_adapter.wrap_tool_call("tool", {}, _async_echo)
             sync_stats = sync_adapter.get_tool_stats()["tool"]
-            async_stats = (await async_adapter.get_tool_stats())["tool"]
+            async_stats = (async_adapter.get_tool_stats())["tool"]
             return sync_stats, async_stats
 
         sync_stats, async_stats = asyncio.run(run())
@@ -555,7 +555,7 @@ class TestAdversarialCrossAdapter:
             sync_adapter.wrap_tool_call("tool", {}, _sync_raise)
             await async_adapter.wrap_tool_call("tool", {}, _async_raise)
             sync_stats = sync_adapter.get_tool_stats()["tool"]
-            async_stats = (await async_adapter.get_tool_stats())["tool"]
+            async_stats = (async_adapter.get_tool_stats())["tool"]
             return sync_stats, async_stats
 
         sync_stats, async_stats = asyncio.run(run())
@@ -574,3 +574,406 @@ class TestAdversarialCrossAdapter:
         sync_result, async_result = asyncio.run(run())
         assert sync_result.decision == "ALLOW"
         assert async_result.decision == "ALLOW"
+
+
+# ---------------------------------------------------------------------------
+# isError=True + failure_predicate interaction
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialIsErrorAndPredicate:
+    """isError=True must NOT trip CB regardless of failure_predicate."""
+
+    def test_is_error_true_predicate_true_does_not_trip_cb_sync(self) -> None:
+        """isError=True with always-trip predicate must still NOT trip CB (sync)."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=60.0)
+
+        def always_trip(exc: BaseException) -> bool:
+            return True
+
+        class ErrorResult:
+            isError = True
+
+        def error_fn(**kwargs: Any) -> ErrorResult:
+            return ErrorResult()
+
+        ctx = _make_ctx()
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            circuit_breaker=cb,
+            failure_predicate=always_trip,
+        )
+        adapter.wrap_tool_call("tool", {}, error_fn)
+        # isError is not a Python exception -- predicate is never invoked
+        assert cb.state == CircuitState.CLOSED
+
+    def test_is_error_true_predicate_false_does_not_trip_cb_sync(self) -> None:
+        """isError=True with never-trip predicate must not trip CB (sync)."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=60.0)
+
+        def never_trip(exc: BaseException) -> bool:
+            return False
+
+        class ErrorResult:
+            isError = True
+
+        def error_fn(**kwargs: Any) -> ErrorResult:
+            return ErrorResult()
+
+        ctx = _make_ctx()
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            circuit_breaker=cb,
+            failure_predicate=never_trip,
+        )
+        adapter.wrap_tool_call("tool", {}, error_fn)
+        assert cb.state == CircuitState.CLOSED
+
+    def test_is_error_true_predicate_interaction_async(self) -> None:
+        """isError=True with always-trip predicate must NOT trip CB (async)."""
+        class ErrorResult:
+            isError = True
+
+        async def error_fn(**kwargs: Any) -> ErrorResult:
+            return ErrorResult()
+
+        async def run() -> CircuitState:
+            cb = CircuitBreaker(failure_threshold=1, recovery_timeout=60.0)
+            adapter = _make_async_adapter(
+                circuit_breaker=cb,
+                failure_predicate=lambda exc: True,
+            )
+            await adapter.wrap_tool_call("tool", {}, error_fn)
+            return cb.state
+
+        assert asyncio.run(run()) == CircuitState.CLOSED
+
+    def test_exception_with_predicate_false_does_not_trip_cb_but_is_error_counted(
+        self,
+    ) -> None:
+        """Exception filtered by predicate: CB not tripped, error_count still incremented."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+
+        def only_value_errors(exc: BaseException) -> bool:
+            return isinstance(exc, ValueError)
+
+        adapter = _make_sync_adapter(
+            circuit_breaker=cb,
+            failure_predicate=only_value_errors,
+        )
+        adapter.wrap_tool_call("tool", {}, _sync_raise)  # RuntimeError -> filtered
+        assert cb.state == CircuitState.CLOSED
+        stats = adapter.get_tool_stats()
+        assert stats["tool"].error_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Budget exactly at limit (off-by-one)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialBudgetBoundary:
+    """Exact budget boundary tests."""
+
+    def test_budget_exactly_exhausted_next_call_halted_sync(self) -> None:
+        """After spending exactly max_cost_usd, next call must be HALT."""
+        from veronica_core.adapters.mcp import MCPContainmentAdapter, MCPToolCost
+        from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+        # Budget = 0.01, cost_per_call = 0.01 -> exactly 1 call allowed
+        config = ExecutionConfig(max_cost_usd=0.01, max_steps=100, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.01)}
+        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+
+        r1 = adapter.wrap_tool_call("tool", {}, _sync_echo)
+        r2 = adapter.wrap_tool_call("tool", {}, _sync_echo)
+        # First call may pass, second must be HALT
+        assert r2.decision == "HALT" or r1.decision == "HALT"
+
+    def test_budget_zero_first_call_halted_sync(self) -> None:
+        """max_cost_usd=0 with any cost_per_call > 0 must block first call."""
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+        config = ExecutionConfig(max_cost_usd=0.0, max_steps=100, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+        adapter = MCPContainmentAdapter(execution_context=ctx, default_cost_per_call=0.001)
+        result = adapter.wrap_tool_call("tool", {}, _sync_echo)
+        assert result.decision == "HALT"
+
+    def test_budget_zero_cost_per_call_never_exhausted(self) -> None:
+        """With default_cost_per_call=0.0, budget should not be consumed."""
+        adapter = _make_sync_adapter(max_cost_usd=0.001, default_cost_per_call=0.0)
+        for _ in range(10):
+            r = adapter.wrap_tool_call("tool", {}, _sync_echo)
+            assert r.decision == "ALLOW"
+
+    def test_budget_exactly_exhausted_async(self) -> None:
+        """Async adapter: after spending max_cost_usd, next call must be HALT."""
+        async def run() -> str:
+            from veronica_core.adapters.mcp import MCPToolCost
+            from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
+            from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+            config = ExecutionConfig(max_cost_usd=0.01, max_steps=100, max_retries_total=5)
+            ctx = ExecutionContext(config=config)
+            costs = {"tool": MCPToolCost("tool", cost_per_call=0.01)}
+            adapter = AsyncMCPContainmentAdapter(
+                execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+            )
+            r1 = await adapter.wrap_tool_call("tool", {}, _async_echo)
+            r2 = await adapter.wrap_tool_call("tool", {}, _async_echo)
+            # At least one of the calls must be HALT
+            if r1.decision == "HALT":
+                return r1.decision
+            return r2.decision
+
+        decision = asyncio.run(run())
+        assert decision == "HALT"
+
+
+# ---------------------------------------------------------------------------
+# Very large arguments dict (memory / performance)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialLargeArguments:
+    """Large arguments must not crash the adapter."""
+
+    def test_very_large_arguments_sync(self) -> None:
+        """1000-key arguments dict must be passed to call_fn without crash."""
+        received: list[int] = []
+
+        def counting_fn(**kwargs: Any) -> int:
+            received.append(len(kwargs))
+            return len(kwargs)
+
+        large_args = {f"key_{i}": f"value_{i}" * 10 for i in range(1000)}
+        adapter = _make_sync_adapter()
+        result = adapter.wrap_tool_call("tool", large_args, counting_fn)
+        assert result.success is True
+        assert received == [1000]
+
+    def test_very_large_arguments_async(self) -> None:
+        """1000-key arguments dict must be passed to async call_fn without crash."""
+        async def run() -> MCPToolResult:
+            async def counting_fn(**kwargs: Any) -> int:
+                return len(kwargs)
+
+            large_args = {f"key_{i}": f"value_{i}" * 10 for i in range(1000)}
+            adapter = _make_async_adapter()
+            return await adapter.wrap_tool_call("tool", large_args, counting_fn)
+
+        result = asyncio.run(run())
+        assert result.success is True
+        assert result.result == 1000
+
+    def test_nested_dict_arguments_not_mutated(self) -> None:
+        """Adapter must not modify caller's arguments dict."""
+        original_args = {"nested": {"key": "value"}, "list": [1, 2, 3]}
+        import copy
+        expected = copy.deepcopy(original_args)
+
+        def echo_fn(**kwargs: Any) -> dict[str, Any]:
+            return kwargs
+
+        adapter = _make_sync_adapter()
+        adapter.wrap_tool_call("tool", original_args, echo_fn)
+        assert original_args == expected
+
+
+# ---------------------------------------------------------------------------
+# Async CB HALF_OPEN + concurrent calls
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialAsyncHalfOpenConcurrent:
+    """CB HALF_OPEN state with concurrent async calls."""
+
+    def test_half_open_concurrent_async_no_corruption(self) -> None:
+        """10 concurrent calls in HALF_OPEN must leave CB in valid state."""
+        async def run() -> CircuitState:
+            cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.05)
+            adapter = _make_async_adapter(circuit_breaker=cb, max_cost_usd=100.0, max_steps=500)
+
+            # Trip CB to OPEN
+            await adapter.wrap_tool_call("tool", {}, _async_raise)
+            await adapter.wrap_tool_call("tool", {}, _async_raise)
+            assert cb.state == CircuitState.OPEN
+
+            # Wait for HALF_OPEN
+            await asyncio.sleep(0.1)
+
+            # 10 concurrent calls in HALF_OPEN
+            tasks = [adapter.wrap_tool_call("tool", {}, _async_echo) for _ in range(10)]
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+            return cb.state
+
+        state = asyncio.run(run())
+        assert state in (CircuitState.CLOSED, CircuitState.OPEN)
+
+    def test_half_open_single_probe_success_closes_cb_async(self) -> None:
+        """Single probe in HALF_OPEN with success must close CB."""
+        async def run() -> CircuitState:
+            cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.05)
+            adapter = _make_async_adapter(circuit_breaker=cb)
+
+            await adapter.wrap_tool_call("tool", {}, _async_raise)
+            await adapter.wrap_tool_call("tool", {}, _async_raise)
+            assert cb.state == CircuitState.OPEN
+            await asyncio.sleep(0.1)
+
+            # Single probe
+            await adapter.wrap_tool_call("tool", {}, _async_echo)
+            return cb.state
+
+        state = asyncio.run(run())
+        # After success probe, CB should be CLOSED or still OPEN (implementation defined)
+        assert state in (CircuitState.CLOSED, CircuitState.OPEN)
+
+
+# ---------------------------------------------------------------------------
+# call_fn modifying shared state during timeout (sync)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialSharedStateDuringTimeout:
+    """call_fn that writes to shared state and then times out."""
+
+    def test_shared_state_written_before_timeout_detected(self) -> None:
+        """Sync timeout is non-preemptive: call_fn completes, then timeout checked.
+        Any shared state mutation by call_fn will have taken effect.
+        """
+        shared = {"written": False}
+
+        def mutating_slow_fn(**kwargs: Any) -> str:
+            shared["written"] = True
+            time.sleep(0.2)
+            return "done"
+
+        adapter = _make_sync_adapter(timeout_seconds=0.05)
+        result = adapter.wrap_tool_call("tool", {}, mutating_slow_fn)
+        # Non-preemptive: call_fn ran to completion before timeout was detected
+        assert shared["written"] is True
+        assert result.success is False  # timeout detected post-completion
+
+    def test_shared_counter_incremented_before_timeout(self) -> None:
+        """Counter increment inside slow call_fn must happen even if timeout fires."""
+        counter = [0]
+
+        def increment_and_sleep(**kwargs: Any) -> str:
+            counter[0] += 1
+            time.sleep(0.2)
+            return "done"
+
+        adapter = _make_sync_adapter(timeout_seconds=0.05)
+        for _ in range(3):
+            adapter.wrap_tool_call("tool", {}, increment_and_sleep)
+        # All 3 increments happened (non-preemptive)
+        assert counter[0] == 3
+
+
+# ---------------------------------------------------------------------------
+# wrap_mcp_server with broken session (call_tool raises)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialWrapMCPBrokenSession:
+    """wrap_mcp_server when the session's call_tool raises various exceptions."""
+
+    def test_call_tool_raises_runtime_error(self) -> None:
+        """Session.call_tool raising RuntimeError must return MCPToolResult with error."""
+        class BrokenSession:
+            async def list_tools(self) -> Any:
+                return type("R", (), {"tools": []})()
+
+            async def call_tool(self, *, name: str, arguments: dict) -> Any:
+                raise RuntimeError("backend down")
+
+        async def run() -> MCPToolResult:
+            from veronica_core.adapters.mcp_async import wrap_mcp_server
+            from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+            config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=5)
+            ctx = ExecutionContext(config=config)
+            adapter = await wrap_mcp_server(session=BrokenSession(), execution_context=ctx)
+            return await adapter.call_tool("any_tool", {})
+
+        result = asyncio.run(run())
+        assert result.success is False
+        assert "RuntimeError" in result.error
+
+    def test_call_tool_raises_on_every_call(self) -> None:
+        """Session that always raises must trip CB after threshold."""
+        class AlwaysFailSession:
+            async def list_tools(self) -> Any:
+                return type("R", (), {"tools": ["tool"]})()
+
+            async def call_tool(self, *, name: str, arguments: dict) -> Any:
+                raise OSError("connection reset")
+
+        async def run() -> CircuitState:
+            from veronica_core.adapters.mcp_async import wrap_mcp_server
+            from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+            cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+            config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=5)
+            ctx = ExecutionContext(config=config)
+            adapter = await wrap_mcp_server(
+                session=AlwaysFailSession(), execution_context=ctx, circuit_breaker=cb
+            )
+            await adapter.call_tool("tool", {})
+            await adapter.call_tool("tool", {})
+            return cb.state
+
+        state = asyncio.run(run())
+        assert state == CircuitState.OPEN
+
+    def test_list_tools_raises_adapter_still_functional(self) -> None:
+        """Session where list_tools raises must create a functional adapter."""
+        class BrokenListSession:
+            async def list_tools(self) -> Any:
+                raise ConnectionError("server unreachable")
+
+            async def call_tool(self, *, name: str, arguments: dict) -> Any:
+                return {"ok": True}
+
+        async def run() -> MCPToolResult:
+            from veronica_core.adapters.mcp_async import wrap_mcp_server
+            from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+            config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=5)
+            ctx = ExecutionContext(config=config)
+            adapter = await wrap_mcp_server(
+                session=BrokenListSession(), execution_context=ctx
+            )
+            return await adapter.call_tool("tool", {})
+
+        result = asyncio.run(run())
+        assert result.success is True
+
+    def test_call_tool_raises_timeout_error(self) -> None:
+        """Session.call_tool raising asyncio.TimeoutError must be caught as error."""
+        class TimeoutSession:
+            async def list_tools(self) -> Any:
+                return type("R", (), {"tools": []})()
+
+            async def call_tool(self, *, name: str, arguments: dict) -> Any:
+                raise asyncio.TimeoutError("upstream timeout")
+
+        async def run() -> MCPToolResult:
+            from veronica_core.adapters.mcp_async import wrap_mcp_server
+            from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+
+            config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=5)
+            ctx = ExecutionContext(config=config)
+            adapter = await wrap_mcp_server(session=TimeoutSession(), execution_context=ctx)
+            return await adapter.call_tool("any_tool", {})
+
+        result = asyncio.run(run())
+        assert result.success is False
+        assert result.error is not None

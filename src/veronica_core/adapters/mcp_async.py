@@ -46,6 +46,7 @@ from veronica_core.adapters.mcp import (
     MCPToolCost,
     MCPToolResult,
     MCPToolStats,
+    _STATS_WARN_LIMIT,
     _extract_token_count,
 )
 from veronica_core.circuit_breaker import CircuitBreaker, FailurePredicate
@@ -70,7 +71,7 @@ class AsyncMCPContainmentAdapter:
     - ``call_fn`` must be an async callable (``async def``); it is awaited.
     - ``timeout_seconds`` adds an ``asyncio.wait_for`` timeout around the call.
     - ``failure_predicate`` restricts which exceptions trip the circuit breaker.
-    - Stats are protected with ``asyncio.Lock`` instead of ``threading.Lock``.
+    - Stats mutations are synchronous (no await between them) so no lock is needed.
 
     Args:
         execution_context: Chain-level containment context. Controls budget
@@ -109,8 +110,9 @@ class AsyncMCPContainmentAdapter:
         self._failure_predicate = failure_predicate
 
         # Per-tool stats; keyed by tool_name.
+        # No lock needed: all mutations are synchronous (no await between them),
+        # so concurrent coroutines cannot interleave within a stats update.
         self._stats: dict[str, MCPToolStats] = {}
-        self._stats_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -142,7 +144,7 @@ class AsyncMCPContainmentAdapter:
             MCPToolResult with success/failure, raw result, decision, and
             cost charged for this invocation.
         """
-        await self._ensure_stats(tool_name)
+        self._ensure_stats(tool_name)
 
         # Circuit breaker pre-check.
         if self._circuit_breaker is not None:
@@ -153,8 +155,7 @@ class AsyncMCPContainmentAdapter:
                     tool_name,
                     cb_decision.reason,
                 )
-                async with self._stats_lock:
-                    self._stats[tool_name].call_count += 1
+                self._stats[tool_name].call_count += 1
                 return MCPToolResult(
                     success=False,
                     error=f"Circuit breaker open: {cb_decision.reason}",
@@ -182,8 +183,7 @@ class AsyncMCPContainmentAdapter:
 
         if ec_decision == Decision.HALT:
             logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
-            async with self._stats_lock:
-                self._stats[tool_name].call_count += 1
+            self._stats[tool_name].call_count += 1
             return MCPToolResult(
                 success=False,
                 error="Budget limit exceeded",
@@ -192,58 +192,50 @@ class AsyncMCPContainmentAdapter:
             )
 
         # Phase 2: await call_fn.
-        call_result: list[Any] = [None]
-        call_error: list[Optional[BaseException]] = [None]
-        duration_ms_holder: list[float] = [0.0]
+        call_error: Optional[BaseException] = None
+        result_value: Any = None
         t0 = time.monotonic()
         try:
             if self._timeout_seconds is not None:
-                raw_result = await asyncio.wait_for(
+                result_value = await asyncio.wait_for(
                     call_fn(**arguments), timeout=self._timeout_seconds
                 )
             else:
-                raw_result = await call_fn(**arguments)
-            call_result[0] = raw_result
+                result_value = await call_fn(**arguments)
         except Exception as exc:  # noqa: BLE001
-            call_error[0] = exc
+            call_error = exc
         finally:
-            duration_ms_holder[0] = (time.monotonic() - t0) * 1000.0
-
-        async with self._stats_lock:
-            self._stats[tool_name].call_count += 1
+            duration_ms = (time.monotonic() - t0) * 1000.0
 
         # Handle errors raised inside call_fn.
-        if call_error[0] is not None:
-            exc = call_error[0]
+        if call_error is not None:
             logger.debug(
                 "[ASYNC_MCP_ADAPTER] tool=%s raised %s: %s",
                 tool_name,
-                type(exc).__name__,
-                exc,
+                type(call_error).__name__,
+                call_error,
             )
             if self._circuit_breaker is not None:
-                should_trip = (
-                    self._failure_predicate is None or self._failure_predicate(exc)
-                )
-                if should_trip:
-                    self._circuit_breaker.record_failure(error=exc)
-            async with self._stats_lock:
-                self._stats[tool_name].error_count += 1
+                if self._failure_predicate is None or self._failure_predicate(call_error):
+                    self._circuit_breaker.record_failure(error=call_error)
+            stats = self._stats[tool_name]
+            stats.call_count += 1
+            stats.error_count += 1
             return MCPToolResult(
                 success=False,
-                error=f"{type(exc).__name__}: {exc}",
+                error=f"{type(call_error).__name__}: {call_error}",
                 decision="ALLOW",
                 cost_usd=cost_estimate,
             )
 
         # isError detection: application-level error, not a CB trip.
-        result_value = call_result[0]
-        if hasattr(result_value, "isError") and result_value.isError:
+        if getattr(result_value, "isError", False):
             logger.debug(
                 "[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name
             )
-            async with self._stats_lock:
-                self._stats[tool_name].error_count += 1
+            stats = self._stats[tool_name]
+            stats.call_count += 1
+            stats.error_count += 1
             return MCPToolResult(
                 success=False,
                 result=result_value,
@@ -262,16 +254,16 @@ class AsyncMCPContainmentAdapter:
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
 
-        async with self._stats_lock:
-            stats = self._stats[tool_name]
-            stats.total_cost_usd += actual_cost
-            stats._total_duration_ms += duration_ms_holder[0]
-            successful_calls = stats.call_count - stats.error_count
-            stats.avg_duration_ms = (
-                stats._total_duration_ms / successful_calls
-                if successful_calls > 0
-                else 0.0
-            )
+        stats = self._stats[tool_name]
+        stats.call_count += 1
+        stats.total_cost_usd += actual_cost
+        stats._total_duration_ms += duration_ms
+        successful_calls = stats.call_count - stats.error_count
+        stats.avg_duration_ms = (
+            stats._total_duration_ms / successful_calls
+            if successful_calls > 0
+            else 0.0
+        )
 
         return MCPToolResult(
             success=True,
@@ -280,24 +272,28 @@ class AsyncMCPContainmentAdapter:
             cost_usd=actual_cost,
         )
 
-    async def get_tool_stats(self) -> dict[str, MCPToolStats]:
+    def get_tool_stats(self) -> dict[str, MCPToolStats]:
         """Return a snapshot of per-tool usage statistics.
 
         Returns:
             Mapping of tool_name -> MCPToolStats.
         """
-        async with self._stats_lock:
-            return dict(self._stats)
+        return dict(self._stats)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _ensure_stats(self, tool_name: str) -> None:
+    def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""
-        async with self._stats_lock:
-            if tool_name not in self._stats:
-                self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
+        if tool_name not in self._stats:
+            if len(self._stats) >= _STATS_WARN_LIMIT:
+                logger.warning(
+                    "Async MCP adapter stats tracking %d+ distinct tool names; "
+                    "this may indicate unbounded tool-name generation",
+                    _STATS_WARN_LIMIT,
+                )
+            self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
 
 
 # ---------------------------------------------------------------------------

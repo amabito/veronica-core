@@ -47,6 +47,11 @@ from veronica_core.shield.types import Decision
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of distinct tool names tracked in stats before emitting a
+# warning.  Does not prevent tracking — the limit exists to alert operators of
+# unbounded tool-name generation (e.g. from attacker-controlled input).
+_STATS_WARN_LIMIT = 10_000
+
 __all__ = [
     "MCPToolCost",
     "MCPToolResult",
@@ -244,25 +249,26 @@ class MCPContainmentAdapter:
             tool_cost.cost_per_call if tool_cost is not None else self._default_cost_per_call
         )
 
-        # Capture result from inside the wrap context via closure.
-        call_result: list[Any] = [None]
-        call_error: list[Optional[BaseException]] = [None]
-        duration_ms_holder: list[float] = [0.0]
+        # Capture result from inside the wrap context via nonlocal closure.
+        call_result: Any = None
+        call_error: Optional[BaseException] = None
+        call_duration_ms: float = 0.0
 
         def _execute() -> None:
+            nonlocal call_result, call_error, call_duration_ms
             t0 = time.monotonic()
             try:
-                call_result[0] = call_fn(**arguments)
+                call_result = call_fn(**arguments)
             except Exception as exc:  # noqa: BLE001
-                call_error[0] = exc
+                call_error = exc
             finally:
-                duration_ms_holder[0] = (time.monotonic() - t0) * 1000.0
+                call_duration_ms = (time.monotonic() - t0) * 1000.0
                 if (
-                    call_error[0] is None
+                    call_error is None
                     and self._timeout_seconds is not None
-                    and duration_ms_holder[0] > self._timeout_seconds * 1000.0
+                    and call_duration_ms > self._timeout_seconds * 1000.0
                 ):
-                    call_error[0] = TimeoutError(
+                    call_error = TimeoutError(
                         f"Tool call exceeded {self._timeout_seconds}s timeout"
                     )
 
@@ -286,13 +292,9 @@ class MCPContainmentAdapter:
                 cost_usd=0.0,
             )
 
-        with self._stats_lock:
-            stats = self._stats[tool_name]
-            stats.call_count += 1
-
         # Handle errors raised inside call_fn.
-        if call_error[0] is not None:
-            exc = call_error[0]
+        if call_error is not None:
+            exc = call_error
             logger.debug(
                 "[MCP_ADAPTER] tool=%s raised %s: %s",
                 tool_name,
@@ -303,7 +305,9 @@ class MCPContainmentAdapter:
                 if self._failure_predicate is None or self._failure_predicate(exc):
                     self._circuit_breaker.record_failure(error=exc)
             with self._stats_lock:
-                self._stats[tool_name].error_count += 1
+                stats = self._stats[tool_name]
+                stats.call_count += 1
+                stats.error_count += 1
             return MCPToolResult(
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
@@ -312,13 +316,15 @@ class MCPContainmentAdapter:
             )
 
         # Check if MCP tool itself reported an error via isError flag.
-        is_error = getattr(call_result[0], "isError", False)
-        if is_error:
+        result_value = call_result
+        if getattr(result_value, "isError", False):
             with self._stats_lock:
-                self._stats[tool_name].error_count += 1
+                stats = self._stats[tool_name]
+                stats.call_count += 1
+                stats.error_count += 1
             return MCPToolResult(
                 success=False,
-                result=call_result[0],
+                result=result_value,
                 error="MCP tool returned isError=True",
                 decision="ALLOW",
                 cost_usd=cost_estimate,
@@ -327,7 +333,7 @@ class MCPContainmentAdapter:
         # Compute variable per-token cost if configured.
         actual_cost = cost_estimate
         if tool_cost is not None and tool_cost.cost_per_token > 0:
-            token_count = _extract_token_count(call_result[0])
+            token_count = _extract_token_count(result_value)
             actual_cost += token_count * tool_cost.cost_per_token
 
         # Record success in circuit breaker and stats.
@@ -336,9 +342,9 @@ class MCPContainmentAdapter:
 
         with self._stats_lock:
             stats = self._stats[tool_name]
+            stats.call_count += 1
             stats.total_cost_usd += actual_cost
-            prev_total = stats._total_duration_ms
-            stats._total_duration_ms = prev_total + duration_ms_holder[0]
+            stats._total_duration_ms += call_duration_ms
             successful_calls = stats.call_count - stats.error_count
             stats.avg_duration_ms = (
                 stats._total_duration_ms / successful_calls
@@ -348,7 +354,7 @@ class MCPContainmentAdapter:
 
         return MCPToolResult(
             success=True,
-            result=call_result[0],
+            result=result_value,
             decision="ALLOW",
             cost_usd=actual_cost,
         )
@@ -371,6 +377,14 @@ class MCPContainmentAdapter:
 
     def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""
+        if tool_name in self._stats:  # fast path: no lock needed for read under GIL
+            return
         with self._stats_lock:
-            if tool_name not in self._stats:
+            if tool_name not in self._stats:  # double-check after acquiring lock
+                if len(self._stats) >= _STATS_WARN_LIMIT:
+                    logger.warning(
+                        "MCP adapter stats tracking %d+ distinct tool names; "
+                        "this may indicate unbounded tool-name generation",
+                        _STATS_WARN_LIMIT,
+                    )
                 self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
