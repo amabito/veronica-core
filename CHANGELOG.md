@@ -6,6 +6,34 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.7.0] — 2026-03-02 — Async MCP Containment
+
+**Breaking changes:** none
+
+### Added
+
+- **AsyncMCPContainmentAdapter** (`veronica_core.adapters.mcp_async`): async counterpart
+  of `MCPContainmentAdapter` for `asyncio`-based MCP tool calls.
+  - `timeout_seconds` parameter via `asyncio.wait_for()`.
+  - `failure_predicate` for selective circuit breaker tripping.
+  - `isError` detection on MCP tool results (does not trip CB).
+  - `asyncio.Lock`-based thread-safe stats.
+- **`wrap_mcp_server()`** helper: creates a pre-configured `AsyncMCPContainmentAdapter`
+  from an MCP `ClientSession`, with optional tool discovery via `list_tools()`.
+- **Sync adapter hardening** (`MCPContainmentAdapter`):
+  - Async guard: `TypeError` when `call_fn` is a coroutine function.
+  - `timeout_seconds` parameter (elapsed-time check).
+  - `failure_predicate` parameter for selective CB tripping.
+  - `isError` handling on MCP tool results.
+- **`mcp` optional dependency**: `pip install veronica-core[mcp]`.
+
+### Tests
+
+- 115 new tests (49 async adapter, 20 sync hardening, 16 wrap_mcp_server, 30 adversarial).
+- Total: 2172 tests passing.
+
+---
+
 ## [1.6.1] — 2026-03-02 — MCP Adapter Docs Fix
 
 **Breaking changes:** none

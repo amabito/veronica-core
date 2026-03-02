@@ -642,3 +642,291 @@ class TestAdversarialMCP:
         adapter = _make_adapter(tool_costs=costs)
         result = adapter.wrap_tool_call("tool", {}, big_token_fn)
         assert result.cost_usd == pytest.approx(1000.0)
+
+
+# ---------------------------------------------------------------------------
+# Async guard: passing a coroutine function raises TypeError
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncGuard:
+    """Async function passed to wrap_tool_call must raise TypeError immediately."""
+
+    def test_async_fn_raises_type_error(self) -> None:
+        async def async_fn(**kwargs: Any) -> str:
+            return "async result"
+
+        adapter = _make_adapter()
+        with pytest.raises(TypeError, match="coroutine function"):
+            adapter.wrap_tool_call("tool", {}, async_fn)
+
+    def test_async_fn_error_message_mentions_async_adapter(self) -> None:
+        async def async_fn(**kwargs: Any) -> None:
+            pass
+
+        adapter = _make_adapter()
+        with pytest.raises(TypeError) as exc_info:
+            adapter.wrap_tool_call("tool", {}, async_fn)
+        assert "AsyncMCPContainmentAdapter" in str(exc_info.value)
+
+    def test_sync_fn_does_not_raise_type_error(self) -> None:
+        adapter = _make_adapter()
+        # Must not raise TypeError for a normal sync function
+        result = adapter.wrap_tool_call("tool", {}, _echo_fn)
+        assert result.success is True
+
+    def test_async_fn_does_not_call_fn_before_raising(self) -> None:
+        called = [False]
+
+        async def async_fn(**kwargs: Any) -> None:
+            called[0] = True
+
+        adapter = _make_adapter()
+        with pytest.raises(TypeError):
+            adapter.wrap_tool_call("tool", {}, async_fn)
+        assert called[0] is False
+
+
+# ---------------------------------------------------------------------------
+# Timeout: elapsed-time check (non-preemptive)
+# ---------------------------------------------------------------------------
+
+
+class TestTimeout:
+    """timeout_seconds parameter: calls that exceed the limit are marked as timeout errors."""
+
+    def test_slow_fn_triggers_timeout(self) -> None:
+        import time as _time
+
+        def slow_fn(**kwargs: Any) -> str:
+            _time.sleep(0.2)
+            return "done"
+
+        ctx = _make_ctx()
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        timed_adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            timeout_seconds=0.05,
+        )
+        result = timed_adapter.wrap_tool_call("slow_tool", {}, slow_fn)
+        assert result.success is False
+        assert "TimeoutError" in result.error or "timeout" in result.error.lower()
+
+    def test_fast_fn_no_timeout(self) -> None:
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        ctx = _make_ctx()
+        timed_adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            timeout_seconds=5.0,
+        )
+        result = timed_adapter.wrap_tool_call("fast_tool", {}, _echo_fn)
+        assert result.success is True
+
+    def test_no_timeout_by_default(self) -> None:
+        import time as _time
+
+        def slow_fn(**kwargs: Any) -> str:
+            _time.sleep(0.05)
+            return "done"
+
+        # No timeout_seconds set -- slow fn must succeed
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("slow_tool", {}, slow_fn)
+        assert result.success is True
+
+    def test_timeout_increments_error_count(self) -> None:
+        import time as _time
+
+        def slow_fn(**kwargs: Any) -> str:
+            _time.sleep(0.2)
+            return "done"
+
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        ctx = _make_ctx()
+        timed_adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            timeout_seconds=0.05,
+        )
+        timed_adapter.wrap_tool_call("slow_tool", {}, slow_fn)
+        stats = timed_adapter.get_tool_stats()
+        assert stats["slow_tool"].error_count == 1
+
+
+# ---------------------------------------------------------------------------
+# FailurePredicate: selective circuit breaker tripping
+# ---------------------------------------------------------------------------
+
+
+class TestFailurePredicate:
+    """failure_predicate controls which exceptions trip the circuit breaker."""
+
+    def test_predicate_false_does_not_trip_cb(self) -> None:
+        """When predicate returns False, exception must not trip CB."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+
+        def never_trip(exc: BaseException) -> bool:
+            return False
+
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            circuit_breaker=cb,
+            failure_predicate=never_trip,
+        )
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        # CB should still be CLOSED -- predicate filtered out failures
+        assert cb.state == CircuitState.CLOSED
+
+    def test_predicate_true_trips_cb(self) -> None:
+        """When predicate returns True, exception must trip CB."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+
+        def always_trip(exc: BaseException) -> bool:
+            return True
+
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            circuit_breaker=cb,
+            failure_predicate=always_trip,
+        )
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        assert cb.state == CircuitState.OPEN
+
+    def test_predicate_filters_by_exception_type(self) -> None:
+        """Predicate can selectively ignore certain exception types."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+
+        def only_value_errors(exc: BaseException) -> bool:
+            return isinstance(exc, ValueError)
+
+        def runtime_error_fn(**kwargs: Any) -> Any:
+            raise RuntimeError("transient")
+
+        from veronica_core.adapters.mcp import MCPContainmentAdapter
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx,
+            circuit_breaker=cb,
+            failure_predicate=only_value_errors,
+        )
+        # RuntimeError is not ValueError -- must not trip CB
+        adapter.wrap_tool_call("tool", {}, runtime_error_fn)
+        adapter.wrap_tool_call("tool", {}, runtime_error_fn)
+        assert cb.state == CircuitState.CLOSED
+
+    def test_no_predicate_trips_cb_on_any_error(self) -> None:
+        """Without predicate, any exception trips the CB (existing behavior)."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+        adapter = _make_adapter(circuit_breaker=cb)
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        adapter.wrap_tool_call("tool", {}, _raise_fn)
+        assert cb.state == CircuitState.OPEN
+
+
+# ---------------------------------------------------------------------------
+# isError handling: MCP tool reporting error via isError flag
+# ---------------------------------------------------------------------------
+
+
+class TestIsErrorHandling:
+    """MCP tool results with isError=True must be treated as failures."""
+
+    def test_is_error_true_returns_failure(self) -> None:
+        class ErrorResult:
+            isError = True
+
+        def error_result_fn(**kwargs: Any) -> ErrorResult:
+            return ErrorResult()
+
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, error_result_fn)
+        assert result.success is False
+
+    def test_is_error_true_error_message(self) -> None:
+        class ErrorResult:
+            isError = True
+
+        def error_result_fn(**kwargs: Any) -> "ErrorResult":
+            return ErrorResult()
+
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, error_result_fn)
+        assert result.error is not None
+        assert "isError" in result.error
+
+    def test_is_error_true_decision_allow_not_halt(self) -> None:
+        """isError is a tool-level error, not a budget halt -- decision stays ALLOW."""
+        class ErrorResult:
+            isError = True
+
+        def error_result_fn(**kwargs: Any) -> "ErrorResult":
+            return ErrorResult()
+
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, error_result_fn)
+        assert result.decision == "ALLOW"
+
+    def test_is_error_true_result_passed_through(self) -> None:
+        """The raw result object must be accessible even when isError=True."""
+        class ErrorResult:
+            isError = True
+            message = "something went wrong"
+
+        obj = ErrorResult()
+
+        def error_result_fn(**kwargs: Any) -> "ErrorResult":
+            return obj
+
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, error_result_fn)
+        assert result.result is obj
+
+    def test_is_error_false_returns_success(self) -> None:
+        class OkResult:
+            isError = False
+
+        def ok_result_fn(**kwargs: Any) -> "OkResult":
+            return OkResult()
+
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, ok_result_fn)
+        assert result.success is True
+
+    def test_is_error_missing_attr_returns_success(self) -> None:
+        """Objects without isError attribute must be treated as success."""
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("tool", {}, _echo_fn)
+        assert result.success is True
+
+    def test_is_error_true_increments_error_count(self) -> None:
+        class ErrorResult:
+            isError = True
+
+        def error_result_fn(**kwargs: Any) -> "ErrorResult":
+            return ErrorResult()
+
+        adapter = _make_adapter()
+        adapter.wrap_tool_call("tool", {}, error_result_fn)
+        stats = adapter.get_tool_stats()
+        assert stats["tool"].error_count == 1
+
+    def test_is_error_true_does_not_trip_cb(self) -> None:
+        """isError=True does not trip circuit breaker (no exception raised)."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+
+        class ErrorResult:
+            isError = True
+
+        def error_result_fn(**kwargs: Any) -> "ErrorResult":
+            return ErrorResult()
+
+        adapter = _make_adapter(circuit_breaker=cb)
+        adapter.wrap_tool_call("tool", {}, error_result_fn)
+        adapter.wrap_tool_call("tool", {}, error_result_fn)
+        # CB should still be CLOSED -- isError is not an exception
+        assert cb.state == CircuitState.CLOSED

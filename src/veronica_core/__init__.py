@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "1.6.1"
+__version__ = "1.7.0"
 
 # Core state machine
 from veronica_core.state import (
@@ -164,6 +164,12 @@ from veronica_core.adapters.mcp import (
     MCPToolStats,
 )
 
+# Async MCP containment (v1.7.0)
+from veronica_core.adapters.mcp_async import (
+    AsyncMCPContainmentAdapter,
+    wrap_mcp_server,
+)
+
 # ASGI/WSGI Middleware (v0.11.0)
 from veronica_core.middleware import (
     VeronicaASGIMiddleware,
@@ -319,6 +325,9 @@ __all__ = [
     "MCPToolCost",
     "MCPToolResult",
     "MCPToolStats",
+    # Async MCP containment (v1.7.0)
+    "AsyncMCPContainmentAdapter",
+    "wrap_mcp_server",
     # ASGI/WSGI Middleware (v0.11.0)
     "VeronicaASGIMiddleware",
     "VeronicaWSGIMiddleware",

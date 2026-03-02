@@ -33,13 +33,14 @@ Example::
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from veronica_core.circuit_breaker import CircuitBreaker
+from veronica_core.circuit_breaker import CircuitBreaker, FailurePredicate
 from veronica_core.containment.execution_context import ExecutionContext, WrapOptions
 from veronica_core.runtime_policy import PolicyContext
 from veronica_core.shield.types import Decision
@@ -51,6 +52,7 @@ __all__ = [
     "MCPToolResult",
     "MCPToolStats",
     "MCPContainmentAdapter",
+    "FailurePredicate",
 ]
 
 
@@ -163,6 +165,8 @@ class MCPContainmentAdapter:
         tool_costs: Optional[dict[str, MCPToolCost]] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
         default_cost_per_call: float = 0.001,
+        timeout_seconds: Optional[float] = None,
+        failure_predicate: Optional[FailurePredicate] = None,
     ) -> None:
         if default_cost_per_call < 0:
             raise ValueError("default_cost_per_call must be >= 0")
@@ -170,6 +174,8 @@ class MCPContainmentAdapter:
         self._tool_costs: dict[str, MCPToolCost] = tool_costs or {}
         self._circuit_breaker = circuit_breaker
         self._default_cost_per_call = default_cost_per_call
+        self._timeout_seconds = timeout_seconds
+        self._failure_predicate = failure_predicate
 
         # Per-tool stats; keyed by tool_name.
         self._stats: dict[str, MCPToolStats] = {}
@@ -207,6 +213,11 @@ class MCPContainmentAdapter:
             MCPToolResult with success/failure, the raw result, decision, and
             cost charged for this invocation.
         """
+        if inspect.iscoroutinefunction(call_fn):
+            raise TypeError(
+                "call_fn is a coroutine function; use AsyncMCPContainmentAdapter instead"
+            )
+
         self._ensure_stats(tool_name)
 
         # Circuit breaker pre-check (per-server, before touching budget).
@@ -246,6 +257,14 @@ class MCPContainmentAdapter:
                 call_error[0] = exc
             finally:
                 duration_ms_holder[0] = (time.monotonic() - t0) * 1000.0
+                if (
+                    call_error[0] is None
+                    and self._timeout_seconds is not None
+                    and duration_ms_holder[0] > self._timeout_seconds * 1000.0
+                ):
+                    call_error[0] = TimeoutError(
+                        f"Tool call exceeded {self._timeout_seconds}s timeout"
+                    )
 
         # Delegate to ExecutionContext for budget tracking.
         opts = WrapOptions(
@@ -281,12 +300,26 @@ class MCPContainmentAdapter:
                 exc,
             )
             if self._circuit_breaker is not None:
-                self._circuit_breaker.record_failure(error=exc)
+                if self._failure_predicate is None or self._failure_predicate(exc):
+                    self._circuit_breaker.record_failure(error=exc)
             with self._stats_lock:
                 self._stats[tool_name].error_count += 1
             return MCPToolResult(
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
+                decision="ALLOW",
+                cost_usd=cost_estimate,
+            )
+
+        # Check if MCP tool itself reported an error via isError flag.
+        is_error = getattr(call_result[0], "isError", False)
+        if is_error:
+            with self._stats_lock:
+                self._stats[tool_name].error_count += 1
+            return MCPToolResult(
+                success=False,
+                result=call_result[0],
+                error="MCP tool returned isError=True",
                 decision="ALLOW",
                 cost_usd=cost_estimate,
             )
