@@ -214,8 +214,10 @@ class VeronicaIntegration:
         with self._op_lock:
             activated = self.state.record_fail(pair)
 
-            # Check guard for early cooldown activation
-            if self.guard and context:
+            # Check guard for early cooldown activation.
+            # Use `is not None` instead of truthiness: an empty dict {} is a
+            # valid context payload and must not skip the guard check.
+            if self.guard and context is not None:
                 if self.guard.should_cooldown(pair, context):
                     logger.info(f"[VERONICA_INTEGRATION] Guard triggered cooldown for {pair}")
                     self.state.set_cooldown(pair, time.time() + self.state.cooldown_seconds)
@@ -248,19 +250,26 @@ class VeronicaIntegration:
 
     def get_fail_count(self, pair: str) -> int:
         """Get current fail count for pair (for logging/debugging)."""
-        return self.state.fail_counts.get(pair, 0)
+        # Access fail_counts through the state machine's lock to avoid a
+        # read/write race with concurrent record_fail/record_pass mutations.
+        with self.state._lock:
+            return self.state.fail_counts.get(pair, 0)
 
     def get_cooldown_remaining(self, pair: str) -> Optional[float]:
         """Get remaining cooldown seconds for pair.
 
         Returns:
-            Remaining seconds, or None if not in cooldown
+            Remaining seconds (>= 0.0), or None if not in cooldown.
+            Uses is_in_cooldown() which handles expiry cleanup, so an expired
+            cooldown correctly returns None rather than 0.0.
         """
-        try:
-            remaining = self.state.cooldowns[pair] - time.time()
-            return max(0.0, remaining)
-        except KeyError:
+        if not self.state.is_in_cooldown(pair):
             return None
+        with self.state._lock:
+            expiry = self.state.cooldowns.get(pair)
+            if expiry is None:
+                return None
+            return max(0.0, expiry - time.time())
 
     def save(self) -> bool:
         """Manually save state.

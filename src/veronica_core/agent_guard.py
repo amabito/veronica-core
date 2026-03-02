@@ -43,7 +43,6 @@ class AgentStepGuard:
             self._current_step += 1
             if result is not None:
                 self._last_result = result
-
             if self._current_step >= self.max_steps:
                 logger.warning(
                     f"[VERONICA_AGENT] Step limit reached: "

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict
 import logging
+import math
 import threading
 
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
@@ -44,7 +45,6 @@ class BudgetEnforcer:
             ValueError: If amount_usd is negative.
         """
         with self._lock:
-            import math
             if math.isnan(amount_usd) or math.isinf(amount_usd):
                 raise ValueError(
                     f"amount must be a finite number, got {amount_usd}"
@@ -136,7 +136,17 @@ class BudgetEnforcer:
                         f"${self._spent_usd:.2f} / ${self.limit_usd:.2f}"
                     ),
                 )
-            projected = self._spent_usd + context.cost_usd
+            # Validate cost_usd: NaN compares as False in > checks, letting
+            # invalid costs through silently; negative values reduce projected
+            # spend and bypass limits near the ceiling.
+            cost = context.cost_usd
+            if math.isnan(cost) or math.isinf(cost) or cost < 0:
+                return PolicyDecision(
+                    allowed=False,
+                    policy_type=self.policy_type,
+                    reason=f"Invalid cost_usd in context: {cost!r}",
+                )
+            projected = self._spent_usd + cost
             if projected > self.limit_usd:
                 return PolicyDecision(
                     allowed=False,

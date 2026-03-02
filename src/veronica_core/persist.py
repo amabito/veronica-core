@@ -30,7 +30,12 @@ class VeronicaPersistence:
             DeprecationWarning,
             stacklevel=2,
         )
-        self.path = path or self.DEFAULT_PATH
+        # Coerce str to Path so callers passing a string do not hit an
+        # AttributeError on .parent.mkdir() below.
+        if path is None:
+            self.path: Path = self.DEFAULT_PATH
+        else:
+            self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def save(self, state: VeronicaStateMachine) -> bool:

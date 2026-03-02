@@ -170,6 +170,13 @@ class CircuitBreaker:
                         "[VERONICA_CIRCUIT] Failure filtered by predicate: %s",
                         type(error).__name__,
                     )
+                    # Release the HALF_OPEN in-flight slot so the circuit can
+                    # allow the next test request.  Without this, a filtered
+                    # failure leaves the slot permanently occupied and the
+                    # circuit can never recover.
+                    with self._lock:
+                        if self._state == CircuitState.HALF_OPEN:
+                            self._half_open_in_flight = 0
                     return False
             except Exception:
                 logger.warning(

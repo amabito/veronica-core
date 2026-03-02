@@ -10,8 +10,10 @@ get_current_execution_context().
 # ---------------------------------------------------------------------------
 # Added VeronicaASGIMiddleware: ASGI3 middleware that creates an
 #   ExecutionContext per HTTP request and stores it in a ContextVar.
-#   Returns HTTP 429 when Decision.HALT is produced or the context is
+#   Returns HTTP 429 when context is already aborted on pre-flight or
 #   aborted after the call. Non-HTTP scopes pass through unchanged.
+# Fix: replaced pre-flight wrap_llm_call(no-op) with get_snapshot().aborted
+#   to avoid burning step_count on every HTTP request.
 # Added VeronicaWSGIMiddleware: WSGI middleware with identical semantics
 #   for synchronous WSGI apps.
 # Added get_current_execution_context(): returns the ExecutionContext
@@ -24,7 +26,6 @@ import contextvars
 from typing import Any, Callable, Iterable
 
 from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
-from veronica_core.shield.types import Decision
 
 from typing import TYPE_CHECKING
 
@@ -68,9 +69,9 @@ class VeronicaASGIMiddleware:
     Non-HTTP scopes (lifespan, websocket) are passed through to the
     wrapped app without creating an ExecutionContext.
 
-    On Decision.HALT (pre-flight limit hit) or when the context is found
-    to be aborted after the app call completes, the middleware responds
-    with HTTP 429 instead of forwarding the app's response.
+    When the context is already aborted on pre-flight (limits already hit),
+    or when the context is found to be aborted after the app call completes,
+    the middleware responds with HTTP 429 instead of forwarding the app's response.
     """
 
     def __init__(
@@ -106,9 +107,13 @@ class VeronicaASGIMiddleware:
                     response_started = True
                 await send(message)
 
-            # Pre-flight: check limits before calling the app.
-            decision = ctx.wrap_llm_call(fn=lambda: None)
-            if decision == Decision.HALT:
+            # Pre-flight: check if context is already at limits without
+            # consuming a step count (unlike wrap_llm_call).
+            snap = ctx.get_snapshot()
+            if snap.aborted or (
+                self._config.max_cost_usd is not None
+                and snap.cost_usd_accumulated >= self._config.max_cost_usd
+            ):
                 halted = True
             else:
                 try:
@@ -150,9 +155,9 @@ class VeronicaWSGIMiddleware:
     in a ContextVar so application code can call
     get_current_execution_context().
 
-    On Decision.HALT (pre-flight limit hit) or when the context is found
-    to be aborted after the app call completes, responds with
-    '429 Too Many Requests'.
+    When the context is already aborted on pre-flight (limits already hit),
+    or when the context is found to be aborted after the app call completes,
+    responds with '429 Too Many Requests'.
     """
 
     def __init__(
@@ -174,9 +179,13 @@ class VeronicaWSGIMiddleware:
         token = _current_execution_context.set(ctx)
         environ["veronica.context"] = ctx
         try:
-            # Pre-flight containment check.
-            decision = ctx.wrap_llm_call(fn=lambda: None)
-            if decision == Decision.HALT:
+            # Pre-flight: check if context is already at limits without
+            # consuming a step count (unlike wrap_llm_call).
+            snap = ctx.get_snapshot()
+            if snap.aborted or (
+                self._config.max_cost_usd is not None
+                and snap.cost_usd_accumulated >= self._config.max_cost_usd
+            ):
                 return _wsgi_429(start_response)
 
             result = self._app(environ, start_response)
