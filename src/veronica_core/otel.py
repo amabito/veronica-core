@@ -245,8 +245,8 @@ class OTelExecutionGraphObserver:
         _emit_graph_event(
             "veronica.node.failed",
             {
-                "veronica.node_id": node_id,
-                "veronica.error": error[:500],
+                "veronica.node_id": str(node_id or ""),
+                "veronica.error": str(error or "")[:500],
             },
         )
 
@@ -255,9 +255,9 @@ class OTelExecutionGraphObserver:
         _emit_graph_event(
             "veronica.node.decision",
             {
-                "veronica.node_id": node_id,
-                "veronica.decision": decision,
-                "veronica.reason": reason[:500],
+                "veronica.node_id": str(node_id or ""),
+                "veronica.decision": str(decision or ""),
+                "veronica.reason": str(reason or "")[:500],
             },
         )
 

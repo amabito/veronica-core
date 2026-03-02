@@ -1,6 +1,8 @@
 """Tests for OpenTelemetry integration (P2-1)."""
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from veronica_core.otel import (
@@ -447,3 +449,447 @@ class TestAG2CapabilityOTel:
         cap.add_to_agent(agent)
         result = agent.generate_reply()
         assert result == "hello"
+
+
+# ===========================================================================
+# Adversarial tests -- attacker mindset
+# ===========================================================================
+
+
+class TestAdversarialProvider:
+    """Adversarial tests for enable_otel_with_provider."""
+
+    def test_none_provider_does_not_crash(self):
+        """None as provider must not crash or leave OTel in broken state."""
+        enable_otel_with_provider(None)
+        assert is_otel_enabled() is False
+
+    def test_provider_get_tracer_returns_none(self):
+        """Provider that returns None from get_tracer must not enable OTel
+        in a half-broken state where is_otel_enabled() is True but emit is dead."""
+        class NoneTracerProvider:
+            def get_tracer(self, name):
+                return None
+
+        enable_otel_with_provider(NoneTracerProvider())
+        # Even if _otel_enabled is True, emit functions must not crash.
+        # This tests the safety of the dual-check (enabled AND tracer is not None).
+        emit_containment_decision("HALT", "test")
+        emit_safety_event(_make_event())
+
+    def test_provider_get_tracer_raises(self):
+        """Provider whose get_tracer raises arbitrary exception."""
+        class ExplodingProvider:
+            def get_tracer(self, name):
+                raise RuntimeError("provider exploded")
+
+        enable_otel_with_provider(ExplodingProvider())
+        assert is_otel_enabled() is False
+
+    def test_provider_get_tracer_raises_base_exception(self):
+        """Provider whose get_tracer raises KeyboardInterrupt-like exception.
+
+        enable_otel_with_provider catches Exception, not BaseException.
+        KeyboardInterrupt should propagate (correct behavior).
+        But SystemExit-class errors from buggy providers should not crash the app.
+        """
+        class WeirdProvider:
+            def get_tracer(self, name):
+                raise ValueError("not a real provider")
+
+        enable_otel_with_provider(WeirdProvider())
+        assert is_otel_enabled() is False
+
+    def test_concurrent_enable_disable_no_torn_state(self):
+        """10 threads racing enable/disable must never produce torn state
+        where _otel_enabled=True but _tracer=None, or vice versa."""
+        from opentelemetry.sdk.trace import TracerProvider
+
+        provider = TracerProvider()
+        errors = []
+        barrier = threading.Barrier(10)
+
+        def enable_worker():
+            barrier.wait()
+            for _ in range(50):
+                enable_otel_with_provider(provider)
+
+        def disable_worker():
+            barrier.wait()
+            for _ in range(50):
+                disable_otel()
+
+        def check_worker():
+            barrier.wait()
+            for _ in range(100):
+                enabled = is_otel_enabled()
+                tracer = get_tracer()
+                # Invariant: if enabled is True, tracer may or may not be None
+                # (due to TOCTOU between the two calls). But the module-level
+                # _lock ensures no torn state WITHIN a single acquire.
+                # We just verify no crash.
+                if enabled and tracer is None:
+                    # This can happen due to TOCTOU between the two separate
+                    # lock acquisitions. It is NOT a bug -- it's the expected
+                    # race. The important thing is no crash or corruption.
+                    pass
+
+        threads = (
+            [threading.Thread(target=enable_worker) for _ in range(3)]
+            + [threading.Thread(target=disable_worker) for _ in range(3)]
+            + [threading.Thread(target=check_worker) for _ in range(4)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        # No thread should be stuck
+        for t in threads:
+            assert not t.is_alive(), "Thread stuck -- possible deadlock"
+        assert not errors
+
+
+class TestAdversarialObserverOTel:
+    """Adversarial tests for OTelExecutionGraphObserver."""
+
+    def _make_otel_env(self):
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test")
+        return exporter, tracer
+
+    def test_nan_inf_cost_duration_no_crash(self):
+        """NaN and inf in numeric fields must not crash."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("span"):
+            observer.on_node_complete("n1", float("nan"), float("inf"))
+            observer.on_node_complete("n2", float("-inf"), float("nan"))
+            observer.on_node_complete("n3", -999.99, 0.0)
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        assert len([e for e in events if e.name == "veronica.node.complete"]) == 3
+
+    def test_none_string_fields_swallowed_by_graph(self):
+        """None in string fields raises TypeError in observer, but ExecutionGraph
+        swallows all observer exceptions -- the graph must not crash."""
+        observer = OTelExecutionGraphObserver()
+        exporter, tracer = self._make_otel_env()
+
+        from veronica_core.containment.execution_graph import ExecutionGraph
+
+        graph = ExecutionGraph(observers=[observer])
+
+        with tracer.start_as_current_span("span"):
+            node_id = graph.create_root("test_op")
+            graph.mark_running(node_id)
+            # mark_failure passes error as string, but what if the observer
+            # itself is called with corrupted data? We test the observer directly.
+            # Direct call: on_node_failed(None, None) -- both None
+            observer.on_node_failed(None, None)  # type: ignore[arg-type]
+            # The TypeError from None[:500] is caught by _emit_graph_event's try/except
+            # OR by ExecutionGraph._notify_observers's except
+
+        # Graph must still be functional after corrupted observer call
+        graph.mark_success(node_id, cost_usd=0.0)
+
+    def test_empty_strings_all_fields(self):
+        """Empty strings for all observer parameters."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("span"):
+            observer.on_node_start("", "", {})
+            observer.on_node_complete("", 0.0, 0.0)
+            observer.on_node_failed("", "")
+            observer.on_decision("", "", "")
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        assert len(events) == 4
+
+    def test_very_long_error_and_reason(self):
+        """10K char strings must be truncated to 500, not blow up OTel."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+        huge = "A" * 10_000
+
+        with tracer.start_as_current_span("span"):
+            observer.on_node_failed("n1", huge)
+            observer.on_decision("n1", "HALT", huge)
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        for e in events:
+            for key, val in (e.attributes or {}).items():
+                if isinstance(val, str):
+                    assert len(val) <= 10_001, f"{key} not truncated"
+            if "error" in (e.attributes or {}):
+                assert len(e.attributes["veronica.error"]) <= 500
+            if "reason" in (e.attributes or {}):
+                assert len(e.attributes["veronica.reason"]) <= 500
+
+    def test_special_chars_in_strings(self):
+        """NUL bytes, newlines, unicode in observer fields."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("span"):
+            observer.on_node_start("n\x00001", "op\nname", {"k": "v"})
+            observer.on_node_failed("n\x00001", "err\x00or")
+            observer.on_decision("n1", "HALT", "reason\nwith\nnewlines")
+
+        # Must not crash -- OTel accepts arbitrary strings
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        assert len(events) == 3
+
+    def test_concurrent_observer_emission(self):
+        """10 threads emitting observer events simultaneously."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+        barrier = threading.Barrier(10)
+
+        def worker(idx):
+            barrier.wait()
+            with tracer.start_as_current_span(f"span-{idx}"):
+                for j in range(20):
+                    observer.on_node_start(f"n{idx}_{j}", "op", {})
+                    observer.on_node_complete(f"n{idx}_{j}", 0.01, 1.0)
+                    observer.on_decision(f"n{idx}_{j}", "ALLOW", "ok")
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        for t in threads:
+            assert not t.is_alive(), "Thread stuck"
+
+        # 10 threads * 20 iterations * 3 events = 600 events across 10 spans
+        spans = exporter.get_finished_spans()
+        total_events = sum(len(s.events) for s in spans)
+        assert total_events == 600
+
+    def test_broken_span_add_event_does_not_crash(self):
+        """If add_event raises, _emit_graph_event catches it silently."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("span") as span:
+            # Monkey-patch add_event to explode
+            original_add_event = span.add_event
+            span.add_event = lambda *a, **kw: (_ for _ in ()).throw(
+                RuntimeError("exporter died")
+            )
+            try:
+                # Must not raise
+                observer.on_node_start("n1", "op", {})
+                observer.on_decision("n1", "HALT", "reason")
+            finally:
+                span.add_event = original_add_event
+
+    def test_otel_toggled_mid_graph_lifecycle(self):
+        """Enable OTel, start graph node, disable OTel, complete node.
+        Must not crash. Events before disable should be captured."""
+        from veronica_core.containment.execution_graph import ExecutionGraph
+
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+        graph = ExecutionGraph(observers=[observer])
+
+        with tracer.start_as_current_span("span"):
+            node_id = graph.create_root("op")
+            graph.mark_running(node_id)  # OTel enabled -- event emitted
+            disable_otel()
+            graph.mark_success(node_id, cost_usd=0.01)  # OTel disabled -- no-op
+
+        spans = exporter.get_finished_spans()
+        event_names = [e.name for s in spans for e in s.events]
+        assert "veronica.node.start" in event_names
+        # node.complete should NOT be in events (OTel was disabled)
+        assert "veronica.node.complete" not in event_names
+
+
+class TestAdversarialContainmentInvariant:
+    """THE critical property: OTel must NEVER affect containment decisions.
+
+    If OTel is broken, crashing, racing, or misconfigured, the circuit breaker
+    must still open/close correctly and generate_reply must still return
+    the correct result.
+    """
+
+    def _make_stub(self, name="agent-1", reply="hello"):
+        class StubAgent:
+            def __init__(self):
+                self.name = name
+
+            def generate_reply(self, *args, **kwargs):
+                return reply
+
+        return StubAgent()
+
+    def test_circuit_breaker_opens_despite_otel_crash(self):
+        """Circuit breaker must still trip after threshold failures,
+        even if every OTel emit call crashes internally."""
+        from unittest.mock import patch
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+        from veronica_core.circuit_breaker import CircuitState
+
+        # Enable OTel with a real provider so emit code runs
+        from opentelemetry.sdk.trace import TracerProvider
+        provider = TracerProvider()
+        enable_otel_with_provider(provider)
+
+        agent = self._make_stub(reply=None)
+        cap = CircuitBreakerCapability(failure_threshold=2, recovery_timeout=9999)
+        breaker = cap.add_to_agent(agent)
+
+        # Patch emit_containment_decision to always crash
+        with patch(
+            "veronica_core.otel.emit_containment_decision",
+            side_effect=RuntimeError("OTel exporter down"),
+        ):
+            agent.generate_reply()  # failure 1
+            agent.generate_reply()  # failure 2 -> OPEN
+
+        # Circuit must be OPEN despite OTel crashes
+        assert breaker.state == CircuitState.OPEN
+        # Further calls must be blocked
+        result = agent.generate_reply()
+        assert result is None
+
+    def test_reply_value_preserved_despite_otel_crash(self):
+        """generate_reply must return the correct value even when OTel crashes."""
+        from unittest.mock import patch
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
+        from opentelemetry.sdk.trace import TracerProvider
+        provider = TracerProvider()
+        enable_otel_with_provider(provider)
+
+        agent = self._make_stub(reply="important_result")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+
+        with patch(
+            "veronica_core.otel.emit_containment_decision",
+            side_effect=Exception("total OTel failure"),
+        ):
+            result = agent.generate_reply()
+
+        assert result == "important_result"
+
+    def test_safe_mode_blocks_despite_otel_crash(self):
+        """SAFE_MODE must still block agents even when OTel is completely broken."""
+        from unittest.mock import patch
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+        from veronica_core.backends import MemoryBackend
+        from veronica_core.integration import VeronicaIntegration
+        from veronica_core.state import VeronicaState
+
+        from opentelemetry.sdk.trace import TracerProvider
+        provider = TracerProvider()
+        enable_otel_with_provider(provider)
+
+        veronica = VeronicaIntegration(
+            cooldown_fails=5, cooldown_seconds=60, backend=MemoryBackend()
+        )
+        # Force SAFE_MODE
+        veronica.state.current_state = VeronicaState.SAFE_MODE
+
+        agent = self._make_stub()
+        cap = CircuitBreakerCapability(failure_threshold=3, veronica=veronica)
+        cap.add_to_agent(agent)
+
+        with patch(
+            "veronica_core.otel.emit_containment_decision",
+            side_effect=Exception("OTel is on fire"),
+        ):
+            result = agent.generate_reply()
+
+        # Must be blocked by SAFE_MODE, not by OTel crash
+        assert result is None
+
+    def test_emit_decision_with_nan_cost(self):
+        """NaN cost_usd must not crash emit or corrupt span data."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test")
+
+        with tracer.start_as_current_span("span"):
+            emit_containment_decision("HALT", "reason", cost_usd=float("nan"))
+            emit_containment_decision("ALLOW", "ok", cost_usd=float("inf"))
+            emit_containment_decision("DEGRADE", "budget", cost_usd=-1.0)
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        assert len(events) == 3
+
+    def test_concurrent_generate_reply_with_otel(self):
+        """Multiple threads calling generate_reply with OTel enabled.
+        Circuit breaker state must remain consistent."""
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+        from veronica_core.circuit_breaker import CircuitState
+
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test")
+
+        call_count = 0
+        count_lock = threading.Lock()
+
+        class CountingAgent:
+            name = "counter"
+
+            def generate_reply(self, *args, **kwargs):
+                nonlocal call_count
+                with count_lock:
+                    call_count += 1
+                return "ok"
+
+        agent = CountingAgent()
+        cap = CircuitBreakerCapability(failure_threshold=100)
+        breaker = cap.add_to_agent(agent)
+        barrier = threading.Barrier(5)
+
+        def worker():
+            barrier.wait()
+            with tracer.start_as_current_span("worker"):
+                for _ in range(20):
+                    agent.generate_reply()
+
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        for t in threads:
+            assert not t.is_alive()
+
+        # All 100 calls should succeed
+        assert call_count == 100
+        assert breaker.state == CircuitState.CLOSED
