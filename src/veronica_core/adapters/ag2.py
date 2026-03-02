@@ -133,6 +133,7 @@ class VeronicaConversableAgent(ConversableAgent):
         Raises:
             VeronicaHalt: If any active policy (budget / step / retry) denies.
         """
+        agent_name = getattr(self, "name", "unknown")
         llm_config = getattr(self, "llm_config", None)
         model = llm_config.get("model") if isinstance(llm_config, dict) else None
         ctx = ToolCallContext(
@@ -147,11 +148,19 @@ class VeronicaConversableAgent(ConversableAgent):
             if hook_decision is not None:
                 from veronica_core.shield.types import Decision
                 if hook_decision == Decision.HALT:
+                    _emit_ag2_otel_event(
+                        agent_name, "HALT", "token budget exceeded", "token_budget"
+                    )
                     raise VeronicaHalt("Token budget exceeded", None)
 
         decision = self._container.check(cost_usd=0.0)
         if not decision.allowed:
+            _emit_ag2_otel_event(
+                agent_name, "HALT", decision.reason or "policy denied", "policy"
+            )
             raise VeronicaHalt(decision.reason, decision)
+
+        _emit_ag2_otel_event(agent_name, "ALLOW", "all checks passed", "pre_call")
 
         reply = super().generate_reply(messages=messages, sender=sender, **kwargs)
 
@@ -242,3 +251,26 @@ def register_veronica_hook(
         getattr(agent, "name", repr(agent)),
     )
     return container
+
+
+# ---------------------------------------------------------------------------
+# OTel helpers (no-op when OTel is not enabled)
+# ---------------------------------------------------------------------------
+
+
+def _emit_ag2_otel_event(
+    agent_name: str, decision: str, reason: str, check_type: str
+) -> None:
+    """Add a veronica containment event to the current OTel span.
+
+    No-op if OTel is not enabled. Never raises.
+    """
+    try:
+        from veronica_core.otel import emit_containment_decision
+
+        emit_containment_decision(
+            decision_name=decision,
+            reason=f"[{check_type}] {agent_name}: {reason}",
+        )
+    except Exception:
+        pass

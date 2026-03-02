@@ -159,6 +159,9 @@ class CircuitBreakerCapability:
                     logger.debug(
                         "[VERONICA_CAP] %s blocked: SAFE_MODE active", name
                     )
+                    _emit_ag2_otel_event(
+                        name, "HALT", "SAFE_MODE active", "safe_mode"
+                    )
                     return None
 
             # Per-agent circuit check (uses check() to enforce HALF_OPEN
@@ -170,6 +173,9 @@ class CircuitBreakerCapability:
                     name,
                     cb_decision.reason,
                 )
+                _emit_ag2_otel_event(
+                    name, "HALT", cb_decision.reason or "circuit open", "circuit_breaker"
+                )
                 return None
 
             # Token budget check
@@ -180,7 +186,13 @@ class CircuitBreakerCapability:
                     logger.debug(
                         "[VERONICA_CAP] %s blocked: token budget HALT", name
                     )
+                    _emit_ag2_otel_event(
+                        name, "HALT", "token budget exceeded", "token_budget"
+                    )
                     return None
+
+            # Emit ALLOW event before invoking the original
+            _emit_ag2_otel_event(name, "ALLOW", "all checks passed", "pre_call")
 
             # Invoke the original generate_reply
             reply = original_generate_reply(*args, **kwargs)
@@ -194,6 +206,9 @@ class CircuitBreakerCapability:
             # Record result to drive state transitions
             if reply is None:
                 breaker.record_failure()
+                _emit_ag2_otel_event(
+                    name, "FAILURE", "generate_reply returned None", "post_call"
+                )
             else:
                 breaker.record_success()
 
@@ -236,3 +251,26 @@ class CircuitBreakerCapability:
     def breakers(self) -> Dict[str, CircuitBreaker]:
         """Snapshot of all agent-name → CircuitBreaker mappings."""
         return dict(self._breakers)
+
+
+# ---------------------------------------------------------------------------
+# OTel helpers (no-op when OTel is not enabled)
+# ---------------------------------------------------------------------------
+
+
+def _emit_ag2_otel_event(
+    agent_name: str, decision: str, reason: str, check_type: str
+) -> None:
+    """Add a veronica containment event to the current OTel span.
+
+    No-op if OTel is not enabled. Never raises.
+    """
+    try:
+        from veronica_core.otel import emit_containment_decision
+
+        emit_containment_decision(
+            decision_name=decision,
+            reason=f"[{check_type}] {agent_name}: {reason}",
+        )
+    except Exception:
+        pass

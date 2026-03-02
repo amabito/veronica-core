@@ -4,10 +4,13 @@ from __future__ import annotations
 import pytest
 
 from veronica_core.otel import (
+    OTelExecutionGraphObserver,
     disable_otel,
     emit_containment_decision,
     emit_safety_event,
+    enable_otel_with_provider,
     enable_otel_with_tracer,
+    get_tracer,
     is_otel_enabled,
 )
 from veronica_core.shield.event import SafetyEvent
@@ -178,3 +181,269 @@ def test_pipeline_emits_otel_on_halt():
     assert any(name.startswith("veronica.") for name in event_names), (
         f"Expected veronica.* OTel event, got: {event_names}"
     )
+
+
+# ---------------------------------------------------------------------------
+# enable_otel_with_provider
+# ---------------------------------------------------------------------------
+
+
+class TestEnableOTelWithProvider:
+    """Tests for sharing an external TracerProvider."""
+
+    def test_provider_enables_otel(self):
+        """enable_otel_with_provider activates OTel using external provider."""
+        from opentelemetry.sdk.trace import TracerProvider
+
+        provider = TracerProvider()
+        enable_otel_with_provider(provider)
+        assert is_otel_enabled() is True
+
+    def test_provider_tracer_emits_events(self):
+        """Events emitted through a shared provider appear on the trace."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test-caller")
+
+        with tracer.start_as_current_span("ag2-agent-span"):
+            emit_containment_decision("ALLOW", "all checks passed")
+
+        finished = exporter.get_finished_spans()
+        assert len(finished) == 1
+        event_names = [e.name for e in finished[0].events]
+        assert any("veronica" in n for n in event_names)
+
+    def test_provider_bad_object_does_not_crash(self):
+        """Non-provider object should not crash, just log warning."""
+        enable_otel_with_provider("not a provider")
+        assert is_otel_enabled() is False
+
+
+# ---------------------------------------------------------------------------
+# get_tracer
+# ---------------------------------------------------------------------------
+
+
+class TestGetTracer:
+    """Tests for get_tracer() helper."""
+
+    def test_returns_none_when_disabled(self):
+        assert get_tracer() is None
+
+    def test_returns_tracer_when_enabled(self):
+        enable_otel_with_tracer(object())
+        assert get_tracer() is not None
+
+
+# ---------------------------------------------------------------------------
+# OTelExecutionGraphObserver
+# ---------------------------------------------------------------------------
+
+
+class TestOTelExecutionGraphObserver:
+    """Tests for OTelExecutionGraphObserver."""
+
+    def _make_otel_env(self):
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test")
+        return exporter, tracer
+
+    def test_on_node_start_emits_event(self):
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("agent-span"):
+            observer.on_node_start("n000001", "plan_step", {"key": "val"})
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        assert any(e.name == "veronica.node.start" for e in events)
+
+    def test_on_node_complete_emits_event(self):
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("agent-span"):
+            observer.on_node_complete("n000001", cost_usd=0.05, duration_ms=123.4)
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        complete_events = [e for e in events if e.name == "veronica.node.complete"]
+        assert len(complete_events) == 1
+        attrs = complete_events[0].attributes
+        assert attrs["veronica.cost_usd"] == 0.05
+        assert attrs["veronica.duration_ms"] == 123.4
+
+    def test_on_node_failed_emits_event(self):
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("agent-span"):
+            observer.on_node_failed("n000001", "TimeoutError")
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        failed_events = [e for e in events if e.name == "veronica.node.failed"]
+        assert len(failed_events) == 1
+        assert failed_events[0].attributes["veronica.error"] == "TimeoutError"
+
+    def test_on_decision_emits_event(self):
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        with tracer.start_as_current_span("agent-span"):
+            observer.on_decision("n000001", "HALT", "budget exceeded")
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        decision_events = [e for e in events if e.name == "veronica.node.decision"]
+        assert len(decision_events) == 1
+        attrs = decision_events[0].attributes
+        assert attrs["veronica.decision"] == "HALT"
+        assert attrs["veronica.reason"] == "budget exceeded"
+
+    def test_noop_when_otel_disabled(self):
+        """All observer methods are no-ops when OTel is not enabled."""
+        disable_otel()
+        observer = OTelExecutionGraphObserver()
+        # Must not raise
+        observer.on_node_start("n1", "op", {})
+        observer.on_node_complete("n1", 0.0, 0.0)
+        observer.on_node_failed("n1", "err")
+        observer.on_decision("n1", "ALLOW", "ok")
+
+    def test_reason_truncated_at_500(self):
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+        long_reason = "x" * 600
+
+        with tracer.start_as_current_span("agent-span"):
+            observer.on_decision("n1", "HALT", long_reason)
+
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        decision_events = [e for e in events if e.name == "veronica.node.decision"]
+        assert len(decision_events[0].attributes["veronica.reason"]) <= 500
+
+    def test_observer_satisfies_protocol(self):
+        """OTelExecutionGraphObserver must satisfy ExecutionGraphObserver protocol."""
+        from veronica_core.protocols import ExecutionGraphObserver as Protocol
+        observer = OTelExecutionGraphObserver()
+        assert isinstance(observer, Protocol)
+
+    def test_wired_to_execution_graph(self):
+        """Observer receives callbacks when wired to ExecutionGraph."""
+        exporter, tracer = self._make_otel_env()
+        observer = OTelExecutionGraphObserver()
+
+        from veronica_core.containment.execution_graph import ExecutionGraph
+
+        graph = ExecutionGraph(observers=[observer])
+
+        with tracer.start_as_current_span("graph-span"):
+            node_id = graph.create_root("test_op")
+            graph.mark_running(node_id)
+            graph.mark_success(node_id, cost_usd=0.01)
+
+        spans = exporter.get_finished_spans()
+        event_names = [e.name for s in spans for e in s.events]
+        assert "veronica.node.start" in event_names
+        assert "veronica.node.complete" in event_names
+
+
+# ---------------------------------------------------------------------------
+# AG2 Capability OTel integration
+# ---------------------------------------------------------------------------
+
+
+class TestAG2CapabilityOTel:
+    """OTel events emitted by CircuitBreakerCapability."""
+
+    def _make_otel_env(self):
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        enable_otel_with_provider(provider)
+        tracer = provider.get_tracer("test")
+        return exporter, tracer
+
+    def _make_stub(self, name="agent-1", reply="hello"):
+        class StubAgent:
+            def __init__(self):
+                self.name = name
+
+            def generate_reply(self, *args, **kwargs):
+                return reply
+
+        return StubAgent()
+
+    def test_allow_event_on_success(self):
+        """ALLOW event emitted when all checks pass."""
+        exporter, tracer = self._make_otel_env()
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
+        agent = self._make_stub()
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+
+        with tracer.start_as_current_span("agent-span"):
+            result = agent.generate_reply()
+
+        assert result == "hello"
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        event_names = [e.name for e in events]
+        assert any("allow" in n.lower() for n in event_names)
+
+    def test_halt_event_on_circuit_open(self):
+        """HALT event emitted when circuit breaker is OPEN."""
+        exporter, tracer = self._make_otel_env()
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
+        agent = self._make_stub(reply=None)
+        cap = CircuitBreakerCapability(failure_threshold=2, recovery_timeout=9999)
+        cap.add_to_agent(agent)
+
+        # Trip the breaker
+        agent.generate_reply()
+        agent.generate_reply()
+
+        exporter.clear()
+
+        with tracer.start_as_current_span("blocked-span"):
+            result = agent.generate_reply()
+
+        assert result is None
+        spans = exporter.get_finished_spans()
+        events = [e for s in spans for e in s.events]
+        halt_events = [e for e in events if "halt" in e.name.lower()]
+        assert len(halt_events) >= 1
+
+    def test_no_event_when_otel_disabled(self):
+        """No crash when OTel is disabled and capability runs."""
+        disable_otel()
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
+        agent = self._make_stub()
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        cap.add_to_agent(agent)
+        result = agent.generate_reply()
+        assert result == "hello"
