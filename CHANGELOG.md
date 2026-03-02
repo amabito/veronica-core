@@ -6,6 +6,41 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.6.0] — 2026-03-02 — Protocols, Budget Allocator, OTel Bridge
+
+**Breaking changes:** none
+
+### Added
+
+- **Protocol definitions** (`veronica_core.protocols`): 4 `@runtime_checkable` Protocols
+  (`ExecutionGraphObserver`, `BudgetBackendProtocol`, `PolicyEvaluator`, `ContainmentReporter`)
+  for type-safe plugin contracts.
+- **BudgetAllocator** (`veronica_core.budget_allocator`): hierarchical budget distribution
+  with `EQUAL`, `WEIGHTED`, `PRIORITY` strategies and automatic child ExecutionContext creation.
+- **MCP adapter** (`veronica_core.adapters.mcp`): Model Context Protocol tool-call interception
+  with `before_tool_call()` / `after_tool_call()` hooks and `wrap_mcp_server()` helper.
+- **AG2 OpenTelemetry bridge** (`veronica_core.otel`):
+  - `enable_otel_with_provider()`: share an external TracerProvider (e.g. AG2's) so
+    containment events appear in the same trace tree.
+  - `get_tracer()`: retrieve the veronica-core OTel tracer for child span creation.
+  - `OTelExecutionGraphObserver`: ExecutionGraphObserver that emits lifecycle events
+    (`node.start`, `node.complete`, `node.failed`, `node.decision`) to OTel spans.
+  - AG2 adapter OTel emission: `CircuitBreakerCapability` and `VeronicaConversableAgent`
+    now emit containment decision events (ALLOW/HALT) to the active OTel span.
+- **Distributed CircuitBreaker docs** (`docs/distributed-circuit-breaker.md`).
+
+### Fixed
+
+- Defensive `str(error or "")[:500]` in `OTelExecutionGraphObserver.on_node_failed()`
+  and `on_decision()` to handle None inputs without crashing.
+
+### Tests
+
+- 53 new adversarial tests (protocols, budget allocator, MCP adapter, AG2 OTel).
+- Total: 2057 tests passing.
+
+---
+
 ## [1.5.0] — 2026-03-01 — Enterprise Key Providers & CI Guard
 
 **Breaking changes:** none
