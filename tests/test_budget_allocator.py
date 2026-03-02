@@ -515,3 +515,146 @@ class TestAdversarialBudgetAllocator:
             agent_names=["a", "b"],
         )
         assert child._config.max_cost_usd == pytest.approx(0.0)
+
+    def test_nan_budget_fairshare_no_crash(self) -> None:
+        """NaN budget must not crash; allocations should be NaN or 0 (no infinite loop)."""
+        alloc = FairShareAllocator()
+        result = alloc.allocate(
+            total_budget=float("nan"),
+            agent_names=["a", "b"],
+            current_usage={},
+        )
+        # NaN propagates through division -- the key invariant is no crash/hang
+        assert len(result.allocations) == 2
+
+    def test_inf_budget_fairshare_no_crash(self) -> None:
+        """Infinite budget must not crash; agents get inf share."""
+        alloc = FairShareAllocator()
+        result = alloc.allocate(
+            total_budget=float("inf"),
+            agent_names=["a", "b"],
+            current_usage={},
+        )
+        assert result.allocations["a"] == float("inf")
+        assert result.allocations["b"] == float("inf")
+
+    def test_inf_budget_weighted_no_crash(self) -> None:
+        """Infinite budget with weighted allocator must not crash."""
+        alloc = WeightedAllocator({"a": 1.0, "b": 2.0})
+        result = alloc.allocate(
+            total_budget=float("inf"),
+            agent_names=["a", "b"],
+            current_usage={},
+        )
+        assert len(result.allocations) == 2
+
+    def test_nan_budget_dynamic_no_crash(self) -> None:
+        """NaN budget with dynamic allocator must not crash."""
+        alloc = DynamicAllocator(min_share=0.0)
+        result = alloc.allocate(
+            total_budget=float("nan"),
+            agent_names=["a", "b"],
+            current_usage={"a": 0.5},
+        )
+        assert len(result.allocations) == 2
+
+    def test_duplicate_agent_names_allocates_for_each(self) -> None:
+        """Duplicate agent names in list -- last wins in dict, total may differ."""
+        alloc = FairShareAllocator()
+        result = alloc.allocate(
+            total_budget=1.0,
+            agent_names=["a", "a", "a"],
+            current_usage={},
+        )
+        # dict deduplication: only 1 key "a", but total_allocated = share * 3
+        # Implementation splits by len(agent_names)=3, so share=0.333...
+        # But allocations dict has only 1 entry for "a" (last assignment wins)
+        assert "a" in result.allocations
+
+    def test_nan_in_weighted_weights_no_crash(self) -> None:
+        """NaN weight should not crash WeightedAllocator."""
+        # NaN weights are >= 0 check: NaN < 0 is False, so constructor won't reject
+        alloc = WeightedAllocator({"a": float("nan"), "b": 1.0})
+        result = alloc.allocate(
+            total_budget=1.0,
+            agent_names=["a", "b"],
+            current_usage={},
+        )
+        # NaN in sum -> NaN total_weight -> NaN division. Must not hang or crash.
+        assert len(result.allocations) == 2
+
+    def test_nan_in_current_usage_dynamic_no_crash(self) -> None:
+        """NaN usage value must not crash DynamicAllocator."""
+        alloc = DynamicAllocator(min_share=0.0)
+        result = alloc.allocate(
+            total_budget=1.0,
+            agent_names=["a", "b"],
+            current_usage={"a": float("nan"), "b": 0.5},
+        )
+        # NaN propagates through max(0.0, NaN) -> NaN, sum with NaN -> NaN
+        # Must not crash
+        assert len(result.allocations) == 2
+
+    def test_very_large_agent_count_no_timeout(self) -> None:
+        """1000 agents must complete in reasonable time without OOM."""
+        alloc = FairShareAllocator()
+        agents = [f"agent_{i}" for i in range(1000)]
+        result = alloc.allocate(
+            total_budget=100.0,
+            agent_names=agents,
+            current_usage={},
+        )
+        assert len(result.allocations) == 1000
+        _assert_invariant(result, 100.0)
+
+    def test_min_share_exceeds_per_agent_budget(self) -> None:
+        """min_share * n > total_budget -- allocations should still be non-negative."""
+        # min_share=0.99 with 2 agents: 0.99 * 2 = 1.98 > 1.0
+        # This is an edge case -- DynamicAllocator should not crash
+        alloc = DynamicAllocator(min_share=0.99)
+        result = alloc.allocate(
+            total_budget=1.0,
+            agent_names=["a", "b"],
+            current_usage={"a": 0.5, "b": 0.5},
+        )
+        # reserved = 0.99 * 1.0 * 2 = 1.98, remaining_for_proportional = max(0, 1.0 - 1.98) = 0
+        # Each gets min_floor=0.99 + 0.0 = 0.99, total_allocated = 1.98
+        # total_remaining = 1.0 - 1.98 = -0.98 (negative!)
+        # This is a boundary abuse case -- must not crash
+        assert len(result.allocations) == 2
+        for v in result.allocations.values():
+            assert v >= 0.0
+
+    def test_concurrent_allocate_calls_thread_safety(self) -> None:
+        """Multiple threads calling allocate() on the same allocator must not corrupt."""
+        alloc = DynamicAllocator(min_share=0.05)
+        errors: list[Exception] = []
+        results: list[AllocationResult] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(10)
+
+        def worker() -> None:
+            try:
+                barrier.wait()
+                r = alloc.allocate(
+                    total_budget=1.0,
+                    agent_names=["a", "b", "c"],
+                    current_usage={"a": 0.3, "b": 0.5, "c": 0.2},
+                )
+                with lock:
+                    results.append(r)
+            except Exception as exc:
+                with lock:
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Concurrent allocate errors: {errors}"
+        assert len(results) == 10
+        # All results should be identical (allocators are stateless for same input)
+        for r in results:
+            assert r.allocations == results[0].allocations

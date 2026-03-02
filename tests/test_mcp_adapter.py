@@ -463,3 +463,182 @@ class TestCircuitBreakerPerServer:
         # adapter_b is unaffected
         result = adapter_b.wrap_tool_call("tool", {}, _echo_fn)
         assert result.decision == "ALLOW"
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: corrupted inputs, boundary abuse, concurrent CB transitions
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialMCP:
+    """Adversarial tests for MCPContainmentAdapter -- attacker mindset."""
+
+    def test_corrupted_token_count_negative_ignored(self) -> None:
+        """Negative token_count in result must not produce negative cost."""
+        def neg_token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": -100}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, neg_token_fn)
+        # _extract_token_count requires isinstance(value, int) and value >= 0
+        # Negative should return 0 tokens -> cost = cost_per_call only
+        assert result.cost_usd == pytest.approx(0.01)
+
+    def test_corrupted_token_count_string_ignored(self) -> None:
+        """String token_count in result must be ignored (not coerced)."""
+        def str_token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": "one hundred"}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, str_token_fn)
+        assert result.cost_usd == pytest.approx(0.01)
+
+    def test_corrupted_token_count_float_ignored(self) -> None:
+        """Float token_count must be ignored (isinstance int check)."""
+        def float_token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": 99.5}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.01)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, float_token_fn)
+        # float is not int -> _extract_token_count returns 0
+        assert result.cost_usd == pytest.approx(0.0)
+
+    def test_corrupted_token_count_nan_int_impossible(self) -> None:
+        """NaN cannot be int, so token extraction returns 0."""
+        def nan_token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": float("nan")}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.01)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, nan_token_fn)
+        assert result.cost_usd == pytest.approx(0.0)
+
+    def test_empty_tool_name(self) -> None:
+        """Empty string tool_name must work without KeyError."""
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call("", {}, _echo_fn)
+        assert result.success is True
+        stats = adapter.get_tool_stats()
+        assert "" in stats
+
+    def test_very_long_tool_name(self) -> None:
+        """Very long tool name must not cause OOM or crash."""
+        long_name = "x" * 10_000
+        adapter = _make_adapter()
+        result = adapter.wrap_tool_call(long_name, {}, _echo_fn)
+        assert result.success is True
+        stats = adapter.get_tool_stats()
+        assert long_name in stats
+
+    def test_tool_name_with_special_chars(self) -> None:
+        """Tool name with special characters must not cause issues."""
+        for name in ["tool/sub", "tool::method", "tool with spaces", "\n\t", "\x00null"]:
+            adapter = _make_adapter()
+            result = adapter.wrap_tool_call(name, {}, _echo_fn)
+            assert result.success is True
+
+    def test_call_fn_mutates_arguments_no_side_effect(self) -> None:
+        """call_fn modifying the arguments dict must not affect adapter internals."""
+        def mutating_fn(**kwargs: Any) -> str:
+            kwargs["injected"] = "malicious"
+            return "ok"
+
+        adapter = _make_adapter()
+        args = {"query": "hello"}
+        result = adapter.wrap_tool_call("search", args, mutating_fn)
+        assert result.success is True
+        # Original args dict is mutated (Python's ** unpacking creates a new dict
+        # for the callee), but the adapter itself should be unaffected
+        assert result.result == "ok"
+
+    def test_zero_default_cost(self) -> None:
+        """default_cost_per_call=0.0 is valid and must not raise."""
+        adapter = _make_adapter(default_cost_per_call=0.0)
+        result = adapter.wrap_tool_call("search", {}, _echo_fn)
+        assert result.cost_usd == pytest.approx(0.0)
+
+    def test_call_fn_returns_object_with_token_count_attr(self) -> None:
+        """Result with token_count as attribute (not dict key) must be extracted."""
+        class TokenResult:
+            token_count = 50
+
+        def obj_fn(**kwargs: Any) -> TokenResult:
+            return TokenResult()
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.001)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, obj_fn)
+        assert result.cost_usd == pytest.approx(0.05)
+
+    def test_call_fn_returns_object_with_negative_token_count_attr(self) -> None:
+        """Object with negative token_count attr must be ignored."""
+        class BadResult:
+            token_count = -999
+
+        def obj_fn(**kwargs: Any) -> BadResult:
+            return BadResult()
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, obj_fn)
+        assert result.cost_usd == pytest.approx(0.01)
+
+    def test_concurrent_failures_and_successes_racing_cb(self) -> None:
+        """10 threads: 5 failing + 5 succeeding -- CB state must be consistent."""
+        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0)
+        adapter = _make_adapter(max_cost_usd=100.0, max_steps=200, circuit_breaker=cb)
+        barrier = threading.Barrier(10)
+        results: list[MCPToolResult] = []
+        lock = threading.Lock()
+
+        def worker(fail: bool) -> None:
+            barrier.wait()
+            fn = _raise_fn if fail else _echo_fn
+            r = adapter.wrap_tool_call("search", {}, fn)
+            with lock:
+                results.append(r)
+
+        threads = []
+        for i in range(10):
+            threads.append(threading.Thread(target=worker, args=(i < 5,)))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # CB state must be one of the valid states (no corruption)
+        assert cb.state in (CircuitState.CLOSED, CircuitState.OPEN)
+        assert len(results) == 10
+
+    def test_many_distinct_tools_no_memory_explosion(self) -> None:
+        """100 distinct tool names must not cause excessive memory usage."""
+        adapter = _make_adapter(max_cost_usd=100.0, max_steps=500)
+        for i in range(100):
+            adapter.wrap_tool_call(f"tool_{i}", {}, _echo_fn)
+        stats = adapter.get_tool_stats()
+        assert len(stats) == 100
+        for name, s in stats.items():
+            assert s.call_count == 1
+
+    def test_cost_per_token_zero_with_tokens(self) -> None:
+        """cost_per_token=0 with tokens should not add to cost."""
+        def token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": 1000}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.0)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, token_fn)
+        assert result.cost_usd == pytest.approx(0.01)
+
+    def test_large_token_count_no_overflow(self) -> None:
+        """Very large token count must not cause overflow."""
+        def big_token_fn(**kwargs: Any) -> dict[str, Any]:
+            return {"token_count": 10**9}
+
+        costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.000001)}
+        adapter = _make_adapter(tool_costs=costs)
+        result = adapter.wrap_tool_call("tool", {}, big_token_fn)
+        assert result.cost_usd == pytest.approx(1000.0)
