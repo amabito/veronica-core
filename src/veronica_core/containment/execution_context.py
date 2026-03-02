@@ -57,6 +57,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from veronica_core.circuit_breaker import CircuitBreaker
+    from veronica_core.containment.budget_allocator import BudgetAllocator
     from veronica_core.shield.pipeline import ShieldPipeline
     from veronica_core.partial import PartialResultBuffer
 
@@ -294,10 +295,13 @@ class ExecutionContext:
         metadata: ChainMetadata | None = None,
         circuit_breaker: CircuitBreaker | None = None,
         parent: "ExecutionContext | None" = None,
+        metrics: Any = None,
     ) -> None:
         self._config = config
         self._pipeline = pipeline
         self._circuit_breaker = circuit_breaker
+        # ContainmentMetricsProtocol-compatible object, or None for zero overhead.
+        self._metrics = metrics
         self._metadata = metadata or ChainMetadata(
             request_id=str(uuid.uuid4()),
             chain_id=str(uuid.uuid4()),
@@ -626,6 +630,11 @@ class ExecutionContext:
             self._nodes.append(node)
         stack.pop()
         self._graph.mark_halt(graph_node_id, stop_reason=stop_reason)
+        if self._metrics is not None:
+            try:
+                self._metrics.record_decision(self._metadata.chain_id, "HALT")
+            except Exception:
+                pass
         return Decision.HALT
 
     def _check_budget_estimate(
@@ -647,6 +656,11 @@ class ExecutionContext:
                 node.status = "halted"
                 node.end_ts = datetime.now(timezone.utc)
                 self._nodes.append(node)
+                if self._metrics is not None:
+                    try:
+                        self._metrics.record_decision(self._metadata.chain_id, "HALT")
+                    except Exception:
+                        pass
                 return True
         return False
 
@@ -912,6 +926,20 @@ class ExecutionContext:
         if opts.partial_buffer is not None:
             opts.partial_buffer.mark_complete()
 
+        if self._metrics is not None:
+            _agent_id = self._metadata.chain_id
+            try:
+                self._metrics.record_cost(_agent_id, actual_cost)
+                self._metrics.record_decision(_agent_id, "ALLOW")
+                _dur = (
+                    (node.end_ts - node.start_ts).total_seconds() * 1000.0
+                    if node.end_ts is not None
+                    else 0.0
+                )
+                self._metrics.record_latency(_agent_id, _dur)
+            except Exception:
+                pass
+
         return Decision.ALLOW
 
     def _check_limits(self) -> str | None:
@@ -1012,6 +1040,89 @@ class ExecutionContext:
         # Propagate further up if we have a parent (outside lock to avoid deadlock).
         if self._parent is not None:
             self._parent._propagate_child_cost(cost_usd)
+
+    def create_child(
+        self,
+        agent_name: str,
+        agent_names: list[str],
+        allocator: "BudgetAllocator | None" = None,
+        current_usage: dict[str, float] | None = None,
+        max_steps: int | None = None,
+        max_retries_total: int | None = None,
+        timeout_ms: int = 0,
+        pipeline: "ShieldPipeline | None" = None,
+    ) -> "ExecutionContext":
+        """Create a child context with a budget share determined by *allocator*.
+
+        Runs the allocator against the current remaining budget and returns a
+        child context whose cost ceiling is the share assigned to *agent_name*.
+
+        If no allocator is provided, the remaining budget is divided equally
+        among *agent_names* and *agent_name*'s share is used.
+
+        Args:
+            agent_name: Name of the child agent being created. Must be in
+                *agent_names*.
+            agent_names: Full list of agent names competing for budget. Used
+                by the allocator to compute shares.
+            allocator: Strategy for distributing budget. If None, uses
+                FairShareAllocator (equal split).
+            current_usage: Per-agent USD already spent. Passed to the
+                allocator; agents absent from the map default to 0.
+            max_steps: Child step limit. Defaults to parent's.
+            max_retries_total: Child retry budget. Defaults to parent's.
+            timeout_ms: Child timeout in milliseconds. 0 = no timeout.
+            pipeline: Optional ShieldPipeline for child.
+
+        Returns:
+            A new ExecutionContext linked to this parent with an allocated
+            budget ceiling.
+
+        Raises:
+            ValueError: If *agent_name* is not in *agent_names*.
+
+        Example::
+
+            allocator = WeightedAllocator({"planner": 2, "executor": 1})
+            with parent_ctx.create_child(
+                agent_name="planner",
+                agent_names=["planner", "executor"],
+                allocator=allocator,
+            ) as child:
+                child.wrap_llm_call(planner_fn)
+        """
+        if agent_name not in agent_names:
+            raise ValueError(
+                f"agent_name {agent_name!r} must be present in agent_names {agent_names!r}."
+            )
+
+        from veronica_core.containment.budget_allocator import (
+            FairShareAllocator,
+        )
+
+        with self._lock:
+            remaining = self._config.max_cost_usd - self._cost_usd_accumulated
+
+        effective_allocator: BudgetAllocator = allocator if allocator is not None else FairShareAllocator()
+        usage = current_usage or {}
+        result = effective_allocator.allocate(
+            total_budget=max(0.0, remaining),
+            agent_names=agent_names,
+            current_usage=usage,
+        )
+        child_budget = result.allocations.get(agent_name, 0.0)
+
+        child_cfg = ExecutionConfig(
+            max_cost_usd=child_budget,
+            max_steps=max_steps if max_steps is not None else self._config.max_steps,
+            max_retries_total=(
+                max_retries_total
+                if max_retries_total is not None
+                else self._config.max_retries_total
+            ),
+            timeout_ms=timeout_ms,
+        )
+        return ExecutionContext(config=child_cfg, pipeline=pipeline, parent=self)
 
     def spawn_child(
         self,

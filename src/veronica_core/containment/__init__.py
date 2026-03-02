@@ -23,6 +23,13 @@ from veronica_core.containment.execution_context import (
     attach_partial_buffer,
 )
 from veronica_core.containment.execution_graph import ExecutionGraph
+from veronica_core.containment.budget_allocator import (
+    AllocationResult,
+    BudgetAllocator,
+    FairShareAllocator,
+    WeightedAllocator,
+    DynamicAllocator,
+)
 
 __all__ = [
     "CancellationToken",
@@ -35,4 +42,10 @@ __all__ = [
     "WrapOptions",
     "get_current_partial_buffer",
     "attach_partial_buffer",
+    # BudgetAllocator (v1.6.0)
+    "AllocationResult",
+    "BudgetAllocator",
+    "FairShareAllocator",
+    "WeightedAllocator",
+    "DynamicAllocator",
 ]

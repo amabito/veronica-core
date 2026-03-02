@@ -42,7 +42,10 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, List, Literal, Optional
+
+if TYPE_CHECKING:
+    from veronica_core.protocols import ExecutionGraphObserver
 
 
 __all__ = ["ExecutionGraph", "Node", "NodeSignature"]
@@ -119,9 +122,12 @@ class ExecutionGraph:
         chain_id: Optional[str] = None,
         cost_rate_threshold_usd_per_sec: float = 0.10,
         token_velocity_threshold: float = 500.0,
+        observers: Optional[List["ExecutionGraphObserver"]] = None,
     ) -> None:
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()
+        # Observers are called outside the lock to avoid deadlocks.
+        self._observers: List["ExecutionGraphObserver"] = list(observers) if observers else []
 
         # Node storage and ID counter.
         self._nodes: dict[str, Node] = {}
@@ -307,14 +313,23 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
+        notify_start = False
+        node_name = ""
+        node_metadata: dict = {}
         with self._lock:
             node = self._get_node(node_id)
             if node.status == "created":
                 node.status = "running"
+                notify_start = True
+                node_name = node.name
+                node_metadata = dict(node.metadata)
             sig: NodeSignature = (node.kind, node.name)
             event = self._update_sig_window(sig)
             if event is not None:
                 self._pending_divergence_events.append(event)
+
+        if notify_start and self._observers:
+            self._notify_observers("on_node_start", node_id, node_name, node_metadata)
 
     def mark_success(
         self,
@@ -337,6 +352,8 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
+        notify_complete = False
+        duration_ms: float = 0.0
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
@@ -354,6 +371,11 @@ class ExecutionGraph:
             elapsed_ms = max(node.end_ts_ms - node.start_ts_ms, 1)
             self._check_cost_rate_divergence(cost_usd, elapsed_ms, node_id)
             self._check_token_velocity_divergence(tokens_out, elapsed_ms, node_id)
+            notify_complete = True
+            duration_ms = float(elapsed_ms)
+
+        if notify_complete and self._observers:
+            self._notify_observers("on_node_complete", node_id, cost_usd, duration_ms)
 
     def _update_graph_metrics(self, node: "Node") -> None:
         """Accumulate aggregate counters from a completed node.
@@ -463,6 +485,8 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
+        notify_failed = False
+        error_label = ""
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
@@ -476,6 +500,11 @@ class ExecutionGraph:
                 self._total_llm_calls += 1
             elif node.kind == "tool":
                 self._total_tool_calls += 1
+            notify_failed = True
+            error_label = error_class
+
+        if notify_failed and self._observers:
+            self._notify_observers("on_node_failed", node_id, error_label)
 
     def mark_halt(
         self,
@@ -501,6 +530,8 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
+        notify_failed = False
+        halt_reason = stop_reason or "halt"
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
@@ -513,6 +544,10 @@ class ExecutionGraph:
                 self._total_llm_calls += 1
             elif node.kind == "tool":
                 self._total_tool_calls += 1
+            notify_failed = True
+
+        if notify_failed and self._observers:
+            self._notify_observers("on_node_failed", node_id, halt_reason)
 
     def increment_retries(self, node_id: str) -> None:
         """Increment the retry counter for *node_id* by one.
@@ -749,6 +784,22 @@ class ExecutionGraph:
             return self._nodes[node_id]
         except KeyError:
             raise KeyError(f"Node not found: {node_id!r}") from None
+
+    def _notify_observers(self, method: str, *args: Any) -> None:
+        """Call *method* on all registered observers, swallowing exceptions.
+
+        Must NOT be called with self._lock held (to avoid deadlocks when
+        observers call back into the graph).
+
+        Args:
+            method: Observer method name to call.
+            *args: Positional arguments forwarded to the method.
+        """
+        for observer in self._observers:
+            try:
+                getattr(observer, method)(*args)
+            except Exception:
+                pass  # Observers must never crash the graph
 
 
 # ---------------------------------------------------------------------------

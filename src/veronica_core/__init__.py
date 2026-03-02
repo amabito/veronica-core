@@ -101,6 +101,12 @@ from veronica_core.containment import (
     WrapOptions,
     get_current_partial_buffer,
     attach_partial_buffer,
+    # BudgetAllocator (v1.6.0)
+    AllocationResult,
+    BudgetAllocator,
+    FairShareAllocator,
+    WeightedAllocator,
+    DynamicAllocator,
 )
 
 # Execution boundary (v0.9.1)
@@ -150,6 +156,14 @@ from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limi
 # AG2 AgentCapability-compatible adapters (v0.11.0)
 from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 
+# MCP containment adapter (v1.5.0)
+from veronica_core.adapters.mcp import (
+    MCPContainmentAdapter,
+    MCPToolCost,
+    MCPToolResult,
+    MCPToolStats,
+)
+
 # ASGI/WSGI Middleware (v0.11.0)
 from veronica_core.middleware import (
     VeronicaASGIMiddleware,
@@ -162,6 +176,17 @@ from veronica_core.compliance import ComplianceExporter
 
 # Quickstart API (v1.4.0 -- 2-line setup shortcut)
 from veronica_core.quickstart import init, shutdown, get_context
+
+# Protocol definitions (v1.6.0 -- integration contracts for external frameworks)
+from veronica_core.protocols import (
+    FrameworkAdapterProtocol,
+    PlannerProtocol,
+    ExecutionGraphObserver,
+    ContainmentMetricsProtocol,
+)
+
+# Metrics implementations (v1.6.0)
+from veronica_core.metrics import LoggingContainmentMetrics
 
 __all__ = [
     # Core
@@ -239,6 +264,12 @@ __all__ = [
     # Partial buffer helpers (v0.11)
     "get_current_partial_buffer",
     "attach_partial_buffer",
+    # BudgetAllocator (v1.6.0)
+    "AllocationResult",
+    "BudgetAllocator",
+    "FairShareAllocator",
+    "WeightedAllocator",
+    "DynamicAllocator",
     # Execution boundary (v0.9.1)
     "AIContainer",
     # Decorator-based injection (v0.9.3)
@@ -283,6 +314,11 @@ __all__ = [
     "rate_limit_decision",
     # AG2 AgentCapability-compatible adapters (v0.11.0)
     "CircuitBreakerCapability",
+    # MCP containment adapter (v1.5.0)
+    "MCPContainmentAdapter",
+    "MCPToolCost",
+    "MCPToolResult",
+    "MCPToolStats",
     # ASGI/WSGI Middleware (v0.11.0)
     "VeronicaASGIMiddleware",
     "VeronicaWSGIMiddleware",
@@ -293,6 +329,13 @@ __all__ = [
     "init",
     "shutdown",
     "get_context",
+    # Protocol definitions (v1.6.0)
+    "FrameworkAdapterProtocol",
+    "PlannerProtocol",
+    "ExecutionGraphObserver",
+    "ContainmentMetricsProtocol",
+    # Metrics implementations (v1.6.0)
+    "LoggingContainmentMetrics",
     # Deprecated (backward compatibility)
     "VeronicaPersistence",
 ]
