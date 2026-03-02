@@ -6,6 +6,18 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.6.1] — 2026-03-02 — MCP Adapter Docs Fix
+
+**Breaking changes:** none
+
+### Fixed
+
+- Corrected CHANGELOG v1.6.0 MCP adapter description: removed references to
+  `wrap_mcp_server()`, `before_tool_call()`, and `after_tool_call()` which were
+  not part of the MCP adapter public API (they exist in the Shield pipeline).
+
+---
+
 ## [1.6.0] — 2026-03-02 — Protocols, Budget Allocator, OTel Bridge
 
 **Breaking changes:** none
@@ -17,8 +29,8 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
   for type-safe plugin contracts.
 - **BudgetAllocator** (`veronica_core.budget_allocator`): hierarchical budget distribution
   with `EQUAL`, `WEIGHTED`, `PRIORITY` strategies and automatic child ExecutionContext creation.
-- **MCP adapter** (`veronica_core.adapters.mcp`): Model Context Protocol tool-call interception
-  with `before_tool_call()` / `after_tool_call()` hooks and `wrap_mcp_server()` helper.
+- **MCP adapter** (`veronica_core.adapters.mcp`): Model Context Protocol tool-call containment
+  with per-server circuit breaker, budget enforcement, and per-tool cost tracking.
 - **AG2 OpenTelemetry bridge** (`veronica_core.otel`):
   - `enable_otel_with_provider()`: share an external TracerProvider (e.g. AG2's) so
     containment events appear in the same trace tree.
