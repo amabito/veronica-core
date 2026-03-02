@@ -156,7 +156,7 @@ from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limi
 # AG2 AgentCapability-compatible adapters (v0.11.0)
 from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 
-# MCP containment adapter (v1.5.0)
+# MCP containment adapter (v1.6.0)
 from veronica_core.adapters.mcp import (
     MCPContainmentAdapter,
     MCPToolCost,
@@ -314,7 +314,7 @@ __all__ = [
     "rate_limit_decision",
     # AG2 AgentCapability-compatible adapters (v0.11.0)
     "CircuitBreakerCapability",
-    # MCP containment adapter (v1.5.0)
+    # MCP containment adapter (v1.6.0)
     "MCPContainmentAdapter",
     "MCPToolCost",
     "MCPToolResult",
