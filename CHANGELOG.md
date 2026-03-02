@@ -6,6 +6,56 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.1] — 2026-03-03 — F.R.I.D.A.Y. Full Audit Fixes
+
+**Breaking changes:** none
+
+### Fixed
+
+- **middleware.py**: Pre-flight check replaced `wrap_llm_call(fn=lambda: None)` with
+  `get_snapshot()` + budget ceiling check. Previously every HTTP request burned a step
+  count even without an LLM call. ASGI and WSGI middleware both updated.
+- **circuit_breaker.py**: HALF_OPEN in-flight slot now released when `failure_predicate`
+  returns `False`. Previously a filtered failure left the slot permanently occupied,
+  making the circuit unrecoverable.
+- **budget.py**: `check()` now validates `cost_usd` for NaN, Inf, and negative values.
+  NaN bypassed the `>` comparison (always False); negative values reduced projected spend.
+  `import math` moved from hot-path to module level.
+- **integration.py**: Guard check changed from `if context:` to `if context is not None:`
+  so empty dict `{}` (valid context) no longer skips the guard. `get_fail_count()` now
+  acquires lock before reading `fail_counts`. `get_cooldown_remaining()` returns `None`
+  for expired cooldowns (was returning `0.0`).
+- **persist.py**: Constructor coerces `str` path to `Path` to prevent `AttributeError`
+  on `.parent.mkdir()`.
+
+### Design Decisions Documented
+
+- **retry.py lock scope**: `fn()` and `time.sleep()` inside `_lock` is intentional
+  serialization. `test_execute_is_serialized` validates max concurrent == 1.
+  Trade-off: recursive callers will deadlock (known limitation, not a bug).
+- **agent_guard.py increment-then-check**: `max_steps=3` allows 2 actions (not 3).
+  This is the established test contract, not an off-by-one bug.
+- **exit.py cooperative shutdown**: `_signal_handler` sets `exit_requested` but does
+  not terminate the process. Designed for poll-based cooperative shutdown via
+  `is_exit_requested()`.
+
+### Deferred to v2.0
+
+- Async SDK bypass in `patch.py` (requires `wrap_llm_call_async()` API)
+- Two-phase async budget atomicity in `mcp_async.py`
+- `threading.local()` → `ContextVar` for node stack in `execution_context.py`
+- Distributed budget `reserve/commit/rollback` pattern
+- Post-call cost reconciliation API for MCP adapters
+- `_MCPAdapterBase` mixin extraction (sync/async deduplication)
+
+### Internal
+
+- Full codebase audit via J.A.R.V.I.S. Iron Legion (4 parallel F.R.I.D.A.Y. audits).
+  52 findings triaged, 7 fixes applied, 4 confirmed as design intent, remainder
+  deferred to v2.0. Audit reports archived in `.archive/20260303_audit_v180/`.
+
+---
+
 ## [1.8.0] — 2026-03-02 — MCP Adapter Hardening
 
 **Breaking changes:** none

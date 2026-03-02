@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "1.8.0"
+__version__ = "1.8.1"
 
 # Core state machine
 from veronica_core.state import (
