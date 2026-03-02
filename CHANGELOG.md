@@ -6,7 +6,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [1.8.1] — 2026-03-03 — F.R.I.D.A.Y. Full Audit Fixes
+## [1.8.1] — 2026-03-03 — Full Audit Fixes
 
 **Breaking changes:** none
 
@@ -50,7 +50,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ### Internal
 
-- Full codebase audit via J.A.R.V.I.S. Iron Legion (4 parallel F.R.I.D.A.Y. audits).
+- Full codebase audit (4 parallel automated audits).
   52 findings triaged, 7 fixes applied, 4 confirmed as design intent, remainder
   deferred to v2.0. Audit reports archived in `.archive/20260303_audit_v180/`.
 
