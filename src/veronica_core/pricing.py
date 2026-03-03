@@ -6,6 +6,7 @@ Estimates are approximate and may differ from actual billing by +/-30%.
 
 from __future__ import annotations
 
+import functools
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -58,6 +59,7 @@ PRICING_TABLE: dict[str, Pricing] = {
 _UNKNOWN_MODEL_FALLBACK = Pricing(0.030, 0.060)
 
 
+@functools.lru_cache(maxsize=256)
 def resolve_model_pricing(model: str) -> Pricing:
     """Return pricing for *model*, falling back gracefully for unknown models.
 

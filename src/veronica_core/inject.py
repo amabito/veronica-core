@@ -15,6 +15,7 @@ Changelog:
 from __future__ import annotations
 
 import functools
+import inspect
 import warnings
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -128,6 +129,33 @@ def veronica_guard(
             stacklevel=2,
         )
     def decorator(func: Callable) -> Callable:
+        if inspect.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard
+                from veronica_core.container import AIContainer
+
+                container = AIContainer(
+                    budget=BudgetEnforcer(limit_usd=max_cost_usd),
+                    retry=RetryContainer(max_retries=max_retries_total),
+                    step_guard=AgentStepGuard(max_steps=max_steps),
+                )
+                decision = container.check()
+                if not decision.allowed:
+                    if return_decision:
+                        return decision
+                    raise VeronicaHalt(decision.reason, decision)
+
+                token = _guard_active.set(True)
+                container_token = _active_container.set(container)
+                try:
+                    return await func(*args, **kwargs)
+                finally:
+                    _guard_active.reset(token)
+                    _active_container.reset(container_token)
+
+            return async_wrapper
+
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard

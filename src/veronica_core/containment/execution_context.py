@@ -232,6 +232,16 @@ class WrapOptions:
     response_hint: Any = None
     partial_buffer: "PartialResultBuffer | None" = None
 
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.cost_estimate_hint):
+            raise ValueError(
+                f"cost_estimate_hint must be a finite number, got {self.cost_estimate_hint!r}"
+            )
+        if self.cost_estimate_hint < 0:
+            raise ValueError(
+                f"cost_estimate_hint must be non-negative, got {self.cost_estimate_hint!r}"
+            )
+
 
 @dataclass
 class NodeRecord:
@@ -292,6 +302,14 @@ _STOP_REASON_EVENT_TYPE: dict[str, str] = {
 # Maximum number of SafetyEvents stored per chain to prevent memory exhaustion
 # from flooding callers or repeated limit-check emissions.
 _MAX_CHAIN_EVENTS: int = 1_000
+
+# Maximum number of NodeRecords stored per chain. Prevents unbounded growth in
+# long-running agents or run-away loops that generate many nodes.
+_MAX_NODES: int = 10_000
+
+# Maximum number of partial-buffer entries. Each entry holds a reference to a
+# PartialResultBuffer object; cap prevents unbounded dict growth.
+_MAX_PARTIAL_BUFFERS: int = 1_000
 
 
 class ExecutionContext:
@@ -365,8 +383,15 @@ class ExecutionContext:
         # Execution graph for DAG tracking of all nodes.
         self._graph = ExecutionGraph(chain_id=self._metadata.chain_id)
         self._root_node_id = self._graph.create_root("chain_root", {})
-        # threading.local() stack for nested parent tracking.
-        self._node_stack = threading.local()
+        # ContextVar-backed stack for nested parent tracking.
+        # ContextVar works correctly with both threading and asyncio; each
+        # coroutine or thread gets its own copy via contextvars.copy_context().
+        self._node_stack_var: contextvars.ContextVar[list[str] | None] = (
+            contextvars.ContextVar(
+                f"veronica_node_stack_{self._metadata.chain_id[:8]}",
+                default=None,
+            )
+        )
 
         # Partial buffers keyed by graph_node_id. Populated when WrapOptions.partial_buffer
         # is set; used by get_partial_result() to look up partial text per node.
@@ -415,7 +440,10 @@ class ExecutionContext:
             try:
                 self._circuit_breaker.close()
             except Exception:
-                pass
+                logger.debug(
+                    "ExecutionContext: circuit_breaker.close() failed during __exit__",
+                    exc_info=True,
+                )
 
     # ------------------------------------------------------------------
     # Public API
@@ -589,56 +617,75 @@ class ExecutionContext:
 
         stack, graph_node_id = self._begin_graph_node(kind, opts)
 
-        # Pre-flight: chain-level limit check.
-        halt_reason = self._check_limits()
-        if halt_reason is not None:
-            return self._halt_node(node, stack, graph_node_id, halt_reason)
+        try:
+            # Pre-flight: chain-level limit check.
+            halt_reason = self._check_limits()
+            if halt_reason is not None:
+                return self._halt_node(node, stack, graph_node_id, halt_reason)
 
-        # Pre-flight: cost estimate check (before calling fn).
-        if opts.cost_estimate_hint > 0.0:
-            exceeded = self._check_budget_estimate(node, opts)
-            if exceeded:
-                stack.pop()
-                self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
-                return Decision.HALT
+            # Pre-flight: cost estimate check (before calling fn).
+            if opts.cost_estimate_hint > 0.0:
+                exceeded = self._check_budget_estimate(node, opts)
+                if exceeded:
+                    stack.pop()
+                    self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
+                    return Decision.HALT
 
-        # Pipeline pre-dispatch check.
-        if self._pipeline is not None:
-            pipeline_decision = self._check_pipeline_pre_dispatch(
-                node_id, kind, opts, node, stack, graph_node_id
-            )
-            if pipeline_decision is not None:
-                return pipeline_decision
+            # Pipeline pre-dispatch check.
+            if self._pipeline is not None:
+                pipeline_decision = self._check_pipeline_pre_dispatch(
+                    node_id, kind, opts, node, stack, graph_node_id
+                )
+                if pipeline_decision is not None:
+                    return pipeline_decision
 
-        # CircuitBreaker pre-dispatch check.
-        if self._circuit_breaker is not None:
-            cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
-            if cb_decision is not None:
-                return cb_decision
+            # CircuitBreaker pre-dispatch check.
+            if self._circuit_breaker is not None:
+                cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
+                if cb_decision is not None:
+                    return cb_decision
 
-        # Dispatch the callable.
-        self._graph.mark_running(graph_node_id)
-        self._forward_divergence_events(graph_node_id)
+            # Dispatch the callable.
+            self._graph.mark_running(graph_node_id)
+            self._forward_divergence_events(graph_node_id)
 
-        _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
+            _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
 
-        if _fn_exc is not None:
-            return self._handle_fn_error(
-                _fn_exc, node_id, opts, node, stack, graph_node_id
-            )
+            if _fn_exc is not None:
+                return self._handle_fn_error(
+                    _fn_exc, node_id, opts, node, stack, graph_node_id
+                )
 
-        # Success path.
-        actual_cost = self._compute_actual_cost(kind, opts)
+            # Success path.
+            actual_cost = self._compute_actual_cost(kind, opts)
 
-        # Pipeline budget check (post-call, LLM calls only).
-        if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
-            charge_decision = self._check_before_charge(
-                node_id, opts, actual_cost, node, stack, graph_node_id
-            )
-            if charge_decision is not None:
-                return charge_decision
+            # Pipeline budget check (post-call, LLM calls only).
+            if kind == "llm" and self._pipeline is not None and actual_cost > 0.0:
+                charge_decision = self._check_before_charge(
+                    node_id, opts, actual_cost, node, stack, graph_node_id
+                )
+                if charge_decision is not None:
+                    return charge_decision
 
-        return self._finalize_success(node, stack, graph_node_id, actual_cost, opts)
+            return self._finalize_success(node, stack, graph_node_id, actual_cost, opts)
+
+        except BaseException:
+            # Ensure the graph stack is popped and the node is closed even when an
+            # unexpected exception escapes all sub-helpers (e.g. a hook that raises
+            # after the stack was pushed but before the normal pop path is reached).
+            if stack and stack and graph_node_id in stack:
+                try:
+                    stack.remove(graph_node_id)
+                except ValueError:
+                    pass
+                try:
+                    self._graph.mark_failure(graph_node_id, error_class="UnexpectedException")
+                except Exception:
+                    pass
+            if node.end_ts is None:
+                node.end_ts = datetime.now(timezone.utc)
+                node.status = "error"
+            raise
 
     # ------------------------------------------------------------------
     # _wrap sub-helpers
@@ -654,10 +701,10 @@ class ExecutionContext:
         Returns:
             (stack, graph_node_id) where stack is the per-thread call stack.
         """
-        stack: list[str] = getattr(self._node_stack, "stack", None)
+        stack: list[str] | None = self._node_stack_var.get()
         if stack is None:
-            self._node_stack.stack = []
-            stack = self._node_stack.stack
+            stack = []
+            self._node_stack_var.set(stack)
         graph_parent_id = stack[-1] if stack else self._root_node_id
 
         graph_node_id = self._graph.begin_node(
@@ -680,14 +727,24 @@ class ExecutionContext:
         node.status = "halted"
         node.end_ts = datetime.now(timezone.utc)
         with self._lock:
-            self._nodes.append(node)
+            if len(self._nodes) < _MAX_NODES:
+                self._nodes.append(node)
+            else:
+                logger.warning(
+                    "ExecutionContext: _nodes cap (%d) reached; node %s will not be recorded",
+                    _MAX_NODES,
+                    node.node_id,
+                )
         stack.pop()
         self._graph.mark_halt(graph_node_id, stop_reason=stop_reason)
         if self._metrics is not None:
             try:
                 self._metrics.record_decision(self._metadata.chain_id, "HALT")
             except Exception:
-                pass
+                logger.debug(
+                    "ExecutionContext: metrics.record_decision failed in _halt_node",
+                    exc_info=True,
+                )
         return Decision.HALT
 
     def _check_budget_estimate(
@@ -708,12 +765,16 @@ class ExecutionContext:
                 )
                 node.status = "halted"
                 node.end_ts = datetime.now(timezone.utc)
-                self._nodes.append(node)
+                if len(self._nodes) < _MAX_NODES:
+                    self._nodes.append(node)
                 if self._metrics is not None:
                     try:
                         self._metrics.record_decision(self._metadata.chain_id, "HALT")
                     except Exception:
-                        pass
+                        logger.debug(
+                            "ExecutionContext: metrics.record_decision failed in _check_budget_estimate",
+                            exc_info=True,
+                        )
                 return True
         return False
 
@@ -749,7 +810,8 @@ class ExecutionContext:
                     if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                         self._events.append(ev)
                         self._event_dedup_keys.add(dk)
-                self._nodes.append(node)
+                if len(self._nodes) < _MAX_NODES:
+                    self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
             return pipeline_decision
@@ -779,7 +841,8 @@ class ExecutionContext:
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
-                self._nodes.append(node)
+                if len(self._nodes) < _MAX_NODES:
+                    self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="circuit_open")
             return Decision.HALT
@@ -837,7 +900,15 @@ class ExecutionContext:
             # M2: Protect _partial_buffers dict write under _lock to prevent
             # concurrent writes from different threads racing on the same dict.
             with self._lock:
-                self._partial_buffers[graph_node_id] = opts.partial_buffer
+                if len(self._partial_buffers) < _MAX_PARTIAL_BUFFERS:
+                    self._partial_buffers[graph_node_id] = opts.partial_buffer
+                else:
+                    logger.warning(
+                        "ExecutionContext: _partial_buffers cap (%d) reached; "
+                        "partial buffer for node %s will not be tracked",
+                        _MAX_PARTIAL_BUFFERS,
+                        graph_node_id,
+                    )
             _buf_token = _current_partial_buffer.set(opts.partial_buffer)
 
         _fn_exc: BaseException | None = None
@@ -864,7 +935,8 @@ class ExecutionContext:
             node.status = "timeout"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
-                self._nodes.append(node)
+                if len(self._nodes) < _MAX_NODES:
+                    self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="timeout")
             return Decision.HALT
@@ -881,7 +953,8 @@ class ExecutionContext:
         node.status = "error"
         node.end_ts = datetime.now(timezone.utc)
         with self._lock:
-            self._nodes.append(node)
+            if len(self._nodes) < _MAX_NODES:
+                self._nodes.append(node)
         stack.pop()
         self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
 
@@ -960,7 +1033,8 @@ class ExecutionContext:
                     if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                         self._events.append(ev)
                         self._event_dedup_keys.add(dk)
-                self._nodes.append(node)
+                if len(self._nodes) < _MAX_NODES:
+                    self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
             return charge_decision
@@ -993,7 +1067,14 @@ class ExecutionContext:
             node.cost_usd = actual_cost
             node.status = "ok"
             node.end_ts = datetime.now(timezone.utc)
-            self._nodes.append(node)
+            if len(self._nodes) < _MAX_NODES:
+                self._nodes.append(node)
+            else:
+                logger.warning(
+                    "ExecutionContext: _nodes cap (%d) reached; successful node %s will not be recorded",
+                    _MAX_NODES,
+                    node.node_id,
+                )
 
             for ev in pipeline_events:
                 dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
@@ -1077,7 +1158,11 @@ class ExecutionContext:
             except Exception:
                 # Best-effort: if the backend is unavailable, fall through to
                 # the local check that already passed above.
-                pass
+                logger.debug(
+                    "ExecutionContext: budget backend unavailable during cross-process check; "
+                    "falling back to local limit",
+                    exc_info=True,
+                )
 
         with self._lock:
             if self._step_count >= self._config.max_steps:

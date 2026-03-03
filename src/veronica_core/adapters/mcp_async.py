@@ -42,16 +42,16 @@ import logging
 import time
 from typing import Any, Awaitable, Callable, Optional
 
-from veronica_core.adapters.mcp import (
+from veronica_core.adapters._mcp_base import (
     MCPToolCost,
     MCPToolResult,
     MCPToolStats,
+    _MCPAdapterBase,
     _STATS_WARN_LIMIT,
-    _extract_token_count,
+    _extract_token_count,  # noqa: F401 — re-exported for backward compatibility
 )
 from veronica_core.circuit_breaker import CircuitBreaker, FailurePredicate
-from veronica_core.containment.execution_context import ExecutionContext, WrapOptions
-from veronica_core.runtime_policy import PolicyContext
+from veronica_core.containment.execution_context import ExecutionContext
 from veronica_core.shield.types import Decision
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ __all__ = ["AsyncMCPContainmentAdapter", "wrap_mcp_server"]
 AsyncCallFn = Callable[..., Awaitable[Any]]
 
 
-class AsyncMCPContainmentAdapter:
+class AsyncMCPContainmentAdapter(_MCPAdapterBase):
     """Async version of MCPContainmentAdapter.
 
     Wraps async MCP tool calls with veronica-core containment. All semantics
@@ -101,19 +101,17 @@ class AsyncMCPContainmentAdapter:
         timeout_seconds: Optional[float] = None,
         failure_predicate: Optional[FailurePredicate] = None,
     ) -> None:
-        if default_cost_per_call < 0:
-            raise ValueError("default_cost_per_call must be >= 0")
-        self._ctx = execution_context
-        self._tool_costs: dict[str, MCPToolCost] = tool_costs or {}
-        self._circuit_breaker = circuit_breaker
-        self._default_cost_per_call = default_cost_per_call
-        self._timeout_seconds = timeout_seconds
-        self._failure_predicate = failure_predicate
-
+        super().__init__(
+            execution_context=execution_context,
+            tool_costs=tool_costs,
+            circuit_breaker=circuit_breaker,
+            default_cost_per_call=default_cost_per_call,
+            timeout_seconds=timeout_seconds,
+            failure_predicate=failure_predicate,
+        )
         # Per-tool stats; keyed by tool_name.
         # Lock required: stats updates occur after `await call_fn()`, so two
         # coroutines can interleave and produce torn reads/writes without locking.
-        self._stats: dict[str, MCPToolStats] = {}
         self._stats_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
@@ -152,28 +150,14 @@ class AsyncMCPContainmentAdapter:
         await self._ensure_stats(tool_name)
 
         # Circuit breaker pre-check.
-        if self._circuit_breaker is not None:
-            cb_decision = self._circuit_breaker.check(PolicyContext())
-            if not cb_decision.allowed:
-                logger.debug(
-                    "[ASYNC_MCP_ADAPTER] tool=%s blocked by circuit breaker: %s",
-                    tool_name,
-                    cb_decision.reason,
-                )
-                async with self._stats_lock:
-                    self._stats[tool_name].call_count += 1
-                return MCPToolResult(
-                    success=False,
-                    error=f"Circuit breaker open: {cb_decision.reason}",
-                    decision="HALT",
-                    cost_usd=0.0,
-                )
+        halt_result = self._check_circuit_breaker(tool_name)
+        if halt_result is not None:
+            async with self._stats_lock:
+                self._stats[tool_name].call_count += 1
+            return halt_result
 
         # Determine cost estimate.
-        tool_cost = self._tool_costs.get(tool_name)
-        cost_estimate = (
-            tool_cost.cost_per_call if tool_cost is not None else self._default_cost_per_call
-        )
+        cost_estimate = self._compute_cost_estimate(tool_name)
 
         # Two-phase approach: sync budget gate first, then async invocation.
         # ExecutionContext.wrap_tool_call is synchronous; we pass a no-op to
@@ -181,10 +165,7 @@ class AsyncMCPContainmentAdapter:
         def _budget_probe() -> None:
             pass
 
-        opts = WrapOptions(
-            operation_name=f"mcp:{tool_name}",
-            cost_estimate_hint=cost_estimate,
-        )
+        opts = self._build_wrap_options(tool_name, cost_estimate)
         ec_decision = self._ctx.wrap_tool_call(fn=_budget_probe, options=opts)
 
         if ec_decision == Decision.HALT:
@@ -222,9 +203,7 @@ class AsyncMCPContainmentAdapter:
                 type(call_error).__name__,
                 call_error,
             )
-            if self._circuit_breaker is not None:
-                if self._failure_predicate is None or self._failure_predicate(call_error):
-                    self._circuit_breaker.record_failure(error=call_error)
+            self._record_circuit_breaker_failure(call_error)
             async with self._stats_lock:
                 self._stats[tool_name].call_count += 1
                 self._stats[tool_name].error_count += 1
@@ -252,14 +231,10 @@ class AsyncMCPContainmentAdapter:
             )
 
         # Compute variable per-token cost.
-        actual_cost = cost_estimate
-        if tool_cost is not None and tool_cost.cost_per_token > 0:
-            token_count = _extract_token_count(result_value)
-            actual_cost += token_count * tool_cost.cost_per_token
+        actual_cost = self._compute_actual_cost(tool_name, result_value)
 
         # Record success in CB and stats.
-        if self._circuit_breaker is not None:
-            self._circuit_breaker.record_success()
+        self._record_circuit_breaker_success()
 
         async with self._stats_lock:
             stats = self._stats[tool_name]
@@ -279,14 +254,6 @@ class AsyncMCPContainmentAdapter:
             decision="ALLOW",
             cost_usd=actual_cost,
         )
-
-    def get_tool_stats(self) -> dict[str, MCPToolStats]:
-        """Return a snapshot of per-tool usage statistics.
-
-        Returns:
-            Mapping of tool_name -> MCPToolStats.
-        """
-        return dict(self._stats)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -353,7 +320,7 @@ async def wrap_mcp_server(
     ``call_tool(name, arguments)`` convenience method.
 
     Requires ``pip install veronica-core[mcp]`` for the mcp-sdk session object,
-    but does NOT import ``mcp`` directly — ``session`` is typed as ``Any`` to
+    but does NOT import ``mcp`` directly -- ``session`` is typed as ``Any`` to
     avoid a hard dependency.
 
     Args:

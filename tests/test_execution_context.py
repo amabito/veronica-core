@@ -9,7 +9,6 @@ Tests:
 
 from __future__ import annotations
 
-import math
 import sys
 import threading
 import time
@@ -225,7 +224,6 @@ class TestAdversarialH3BackendOutsideLock:
         Simulates a slow backend (1s sleep). A second thread must be able to
         acquire _lock and call get_snapshot() before the slow add() finishes.
         """
-        import pytest
 
         slow_add_started = threading.Event()
         other_thread_got_snapshot = threading.Event()
@@ -258,7 +256,7 @@ class TestAdversarialH3BackendOutsideLock:
             # Wait until slow backend.add() has started, then try to snapshot.
             slow_add_started.wait(timeout=2.0)
             try:
-                snap = ctx.get_snapshot()
+                ctx.get_snapshot()  # verify snapshot doesn't block
                 other_thread_got_snapshot.set()
             except Exception as exc:
                 errors.append(str(exc))
@@ -364,7 +362,6 @@ class TestAdversarialExecutionContext:
 
     def test_step_boundary_exactly_max_steps_allowed(self):
         """max_steps=5: calls 1-5 must ALLOW, 6th must HALT."""
-        import pytest
         config = ExecutionConfig(max_cost_usd=100.0, max_steps=5, max_retries_total=10)
         ctx = ExecutionContext(config=config)
 
@@ -513,7 +510,6 @@ class TestAdversarialExecutionContext:
         Event must appear at most once (dedup by key set).
         Uses threading.Barrier for synchronization.
         """
-        import pytest
 
         # Set a very low budget so many calls will trigger budget_exceeded
         config = ExecutionConfig(max_cost_usd=0.001, max_steps=1000, max_retries_total=1000)
@@ -657,8 +653,6 @@ class TestAdversarialExecutionContext:
         """If budget_backend.add() raises RuntimeError, local cost tracking
         must still work correctly and subsequent calls must succeed.
         """
-        from unittest.mock import MagicMock, patch
-        import pytest
 
         # Build a LocalBudgetBackend-like mock where add() raises on the first call
         class FlakyBackend:
@@ -873,3 +867,380 @@ class TestSignalPropagation:
                     fn=raise_system_exit,
                     options=WrapOptions(cost_estimate_hint=0.0),
                 )
+
+
+# ---------------------------------------------------------------------------
+# Task #1 new tests: WrapOptions NaN, _wrap finally, _MAX_NODES caps,
+# silent except → logger.debug
+# ---------------------------------------------------------------------------
+
+
+class TestWrapOptionsNaNValidation:
+    """1a: WrapOptions.cost_estimate_hint must reject NaN/Inf/negative."""
+
+    def test_nan_cost_estimate_raises(self):
+        with pytest.raises(ValueError, match="finite"):
+            WrapOptions(cost_estimate_hint=float("nan"))
+
+    def test_pos_inf_cost_estimate_raises(self):
+        with pytest.raises(ValueError, match="finite"):
+            WrapOptions(cost_estimate_hint=float("inf"))
+
+    def test_neg_inf_cost_estimate_raises(self):
+        with pytest.raises(ValueError, match="finite"):
+            WrapOptions(cost_estimate_hint=float("-inf"))
+
+    def test_negative_cost_estimate_raises(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            WrapOptions(cost_estimate_hint=-0.01)
+
+    def test_zero_cost_estimate_allowed(self):
+        opts = WrapOptions(cost_estimate_hint=0.0)
+        assert opts.cost_estimate_hint == 0.0
+
+    def test_positive_cost_estimate_allowed(self):
+        opts = WrapOptions(cost_estimate_hint=1.5)
+        assert opts.cost_estimate_hint == 1.5
+
+    def test_default_cost_estimate_allowed(self):
+        opts = WrapOptions()
+        assert opts.cost_estimate_hint == 0.0
+
+
+class TestWrapFinallyStackCleanup:
+    """1b: _wrap() must clean up graph stack even when an unexpected exception occurs."""
+
+    def test_unexpected_exception_in_hook_cleans_stack(self):
+        """A hook that raises unexpectedly must not leave the stack in a dirty state."""
+
+        class BombPipeline:
+            """Pipeline hook that raises on before_llm_call — simulates unexpected error."""
+
+            def before_llm_call(self, ctx):
+                raise RuntimeError("unexpected hook bomb")
+
+            def before_tool_call(self, ctx):
+                return None
+
+            def on_error(self, ctx, exc):
+                from veronica_core.shield.types import Decision
+                return Decision.RETRY
+
+            def get_events(self):
+                return []
+
+            def before_charge(self, ctx, cost_usd):
+                return None
+
+        pipeline = BombPipeline()
+
+        from veronica_core.shield.pipeline import ShieldPipeline
+        # Use a real pipeline wrapping the bomb as pre_dispatch
+        real_pipeline = ShieldPipeline(pre_dispatch=pipeline)
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config, pipeline=real_pipeline)
+
+        with pytest.raises(RuntimeError, match="unexpected hook bomb"):
+            ctx.wrap_llm_call(fn=lambda: None)
+
+        # Stack must be empty after the exception
+        stack = ctx._node_stack_var.get()
+        assert stack is None or len(stack) == 0, (
+            f"Graph stack leaked after unexpected exception: {stack}"
+        )
+
+    def test_wrap_finally_node_end_ts_set_on_unexpected_exc(self):
+        """node.end_ts must be set when an unexpected exception escapes _wrap."""
+
+        class PipelineThatRaises:
+            def before_llm_call(self, ctx):
+                raise ValueError("pipeline error")
+
+            def before_tool_call(self, ctx):
+                return None
+
+            def on_error(self, ctx, exc):
+                from veronica_core.shield.types import Decision
+                return Decision.RETRY
+
+            def get_events(self):
+                return []
+
+            def before_charge(self, ctx, cost_usd):
+                return None
+
+        from veronica_core.shield.pipeline import ShieldPipeline
+        real_pipeline = ShieldPipeline(pre_dispatch=PipelineThatRaises())
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config, pipeline=real_pipeline)
+
+        # The exception must propagate; we verify the stack is clean afterward
+        with pytest.raises(ValueError, match="pipeline error"):
+            ctx.wrap_llm_call(fn=lambda: None)
+
+        stack = ctx._node_stack_var.get()
+        assert stack is None or len(stack) == 0
+
+
+class TestNodesCap:
+    """1f: _nodes list and _partial_buffers dict must be capped to prevent OOM."""
+
+    def test_nodes_cap_prevents_unbounded_growth(self):
+        """After _MAX_NODES successful calls, additional nodes must be dropped silently."""
+        from veronica_core.containment.execution_context import _MAX_NODES
+
+        config = ExecutionConfig(
+            max_cost_usd=1_000_000.0,
+            max_steps=_MAX_NODES + 100,
+            max_retries_total=_MAX_NODES + 100,
+        )
+        ctx = ExecutionContext(config=config)
+
+        # Fill to cap
+        for _ in range(_MAX_NODES):
+            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        snap = ctx.get_snapshot()
+        assert len(snap.nodes) == _MAX_NODES
+
+        # Push 10 more beyond cap — must not grow list
+        for _ in range(10):
+            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        snap2 = ctx.get_snapshot()
+        assert len(snap2.nodes) == _MAX_NODES, (
+            f"Nodes list grew beyond cap: {len(snap2.nodes)} > {_MAX_NODES}"
+        )
+
+    def test_partial_buffers_cap_prevents_unbounded_growth(self):
+        """After _MAX_PARTIAL_BUFFERS calls with partial_buffer, dict must be capped."""
+        from veronica_core.containment.execution_context import _MAX_PARTIAL_BUFFERS
+        from veronica_core.partial import PartialResultBuffer
+
+        config = ExecutionConfig(
+            max_cost_usd=1_000_000.0,
+            max_steps=_MAX_PARTIAL_BUFFERS + 100,
+            max_retries_total=_MAX_PARTIAL_BUFFERS + 100,
+        )
+        ctx = ExecutionContext(config=config)
+
+        # Fill partial buffers to cap
+        for _ in range(_MAX_PARTIAL_BUFFERS):
+            buf = PartialResultBuffer()
+            ctx.wrap_llm_call(
+                fn=lambda: None,
+                options=WrapOptions(cost_estimate_hint=0.0, partial_buffer=buf),
+            )
+
+        with ctx._lock:
+            count_at_cap = len(ctx._partial_buffers)
+        assert count_at_cap == _MAX_PARTIAL_BUFFERS
+
+        # Push 5 more beyond cap
+        for _ in range(5):
+            buf = PartialResultBuffer()
+            ctx.wrap_llm_call(
+                fn=lambda: None,
+                options=WrapOptions(cost_estimate_hint=0.0, partial_buffer=buf),
+            )
+
+        with ctx._lock:
+            count_after = len(ctx._partial_buffers)
+        assert count_after == _MAX_PARTIAL_BUFFERS, (
+            f"_partial_buffers grew beyond cap: {count_after} > {_MAX_PARTIAL_BUFFERS}"
+        )
+
+
+class TestSilentExceptsLogged:
+    """1h: Silent except Exception: pass blocks must log at DEBUG level."""
+
+    def test_circuit_breaker_close_exception_logged(self, caplog):
+        """circuit_breaker.close() failure must log at DEBUG level, not silently pass."""
+        import logging
+
+        class BrokenBreaker:
+            def check(self, ctx):
+                # Return a permissive result — we just want the close to fail
+                class Perm:
+                    allowed = True
+                    reason = ""
+                return Perm()
+
+            def bind_to_context(self, chain_id):
+                pass
+
+            def record_failure(self, error=None):
+                pass
+
+            def record_success(self):
+                pass
+
+            def close(self):
+                raise RuntimeError("close exploded")
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=5)
+        ctx = ExecutionContext(config=config, circuit_breaker=BrokenBreaker())
+
+        with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
+            ctx.__exit__(None, None, None)
+
+        assert any("circuit_breaker.close" in r.message for r in caplog.records), (
+            "Expected DEBUG log for circuit_breaker.close() failure"
+        )
+
+    def test_metrics_halt_exception_logged(self, caplog):
+        """metrics.record_decision failure in _halt_node must log at DEBUG, not silently pass."""
+        import logging
+
+        class BrokenMetrics:
+            def record_decision(self, agent_id, decision):
+                raise RuntimeError("metrics down")
+
+            def record_cost(self, agent_id, cost):
+                pass
+
+            def record_latency(self, agent_id, dur):
+                pass
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=0, max_retries_total=5)
+        ctx = ExecutionContext(config=config, metrics=BrokenMetrics())
+
+        with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
+            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        assert any(
+            "metrics" in r.message.lower()
+            for r in caplog.records
+            if r.levelno == logging.DEBUG
+        ), f"Expected DEBUG log for metrics failure. Got: {[r.message for r in caplog.records]}"
+
+    def test_backend_unavailable_in_check_limits_logged(self, caplog):
+        """Budget backend failure in _check_limits must log at DEBUG, not silently pass."""
+        import logging
+
+        class FlakyBackend:
+            def add(self, cost):
+                return cost
+
+            def get(self):
+                raise ConnectionError("redis down")
+
+            def close(self):
+                pass
+
+        class _FakeLocalBudgetBackend:
+            """Sentinel for isinstance check bypass."""
+            pass
+
+        # We need the isinstance check to fail so _check_limits uses the cross-process path.
+        # Use monkeypatching of the import inside _check_limits.
+        from veronica_core import distributed as dist_mod
+
+        orig_local = dist_mod.LocalBudgetBackend
+
+        class NotLocal:
+            """Not a LocalBudgetBackend subclass."""
+            pass
+
+        try:
+            # Temporarily make LocalBudgetBackend appear as NotLocal for isinstance check
+            dist_mod.LocalBudgetBackend = NotLocal
+
+            config = ExecutionConfig(
+                max_cost_usd=10.0,
+                max_steps=5,
+                max_retries_total=5,
+                budget_backend=FlakyBackend(),
+            )
+            ctx = ExecutionContext(config=config)
+
+            with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
+                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        finally:
+            dist_mod.LocalBudgetBackend = orig_local
+
+        assert any(
+            "budget backend unavailable" in r.message or "backend" in r.message.lower()
+            for r in caplog.records
+            if r.levelno == logging.DEBUG
+        ), f"Expected DEBUG log for backend failure. Got: {[r.message for r in caplog.records]}"
+
+
+# ---------------------------------------------------------------------------
+# Task #2 new tests: ContextVar migration for _node_stack
+# ---------------------------------------------------------------------------
+
+
+class TestContextVarNodeStack:
+    """Task #2: _node_stack_var (ContextVar) must provide per-context isolation."""
+
+    def test_node_stack_var_exists_as_contextvar(self):
+        """ExecutionContext must expose _node_stack_var as a ContextVar, not threading.local."""
+        import contextvars
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+
+        assert hasattr(ctx, "_node_stack_var"), "Must have _node_stack_var attribute"
+        assert isinstance(ctx._node_stack_var, contextvars.ContextVar), (
+            "_node_stack_var must be a ContextVar"
+        )
+        assert not hasattr(ctx, "_node_stack"), (
+            "_node_stack (threading.local) must not exist after migration"
+        )
+
+    def test_node_stack_isolated_per_thread(self):
+        """Each thread must see its own stack (ContextVar with threading provides isolation)."""
+        import threading
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=20, max_retries_total=10)
+        ctx = ExecutionContext(config=config)
+
+        # Barrier ensures both threads are ready before racing
+        barrier = threading.Barrier(2)
+        stacks: dict[str, list | None] = {}
+        errors: list[str] = []
+
+        def thread_a():
+            try:
+                barrier.wait()
+                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                stacks["a"] = list(ctx._node_stack_var.get() or [])
+            except Exception as exc:
+                errors.append(f"thread_a: {exc}")
+
+        def thread_b():
+            try:
+                barrier.wait()
+                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                stacks["b"] = list(ctx._node_stack_var.get() or [])
+            except Exception as exc:
+                errors.append(f"thread_b: {exc}")
+
+        t_a = threading.Thread(target=thread_a)
+        t_b = threading.Thread(target=thread_b)
+        t_a.start()
+        t_b.start()
+        t_a.join(timeout=5.0)
+        t_b.join(timeout=5.0)
+
+        assert not errors, f"Thread errors: {errors}"
+        # Each stack should be empty after wrap completes (popped on success)
+        for name, stack in stacks.items():
+            assert stack == [] or stack is None, (
+                f"Thread {name} stack not empty after wrap completed: {stack}"
+            )
+
+    def test_node_stack_empty_after_successful_wrap(self):
+        """Stack must be empty (not None) or None after a successful wrap_llm_call."""
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+
+        ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        stack = ctx._node_stack_var.get()
+        assert stack is None or len(stack) == 0, (
+            f"Stack must be empty after wrap completes, got: {stack}"
+        )
