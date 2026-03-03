@@ -7,6 +7,7 @@ Tests:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -116,6 +117,14 @@ class TestAdversarialNullByteShell:
 
 class TestAdversarialHmacOracle:
     """Adversarial tests for HMAC oracle leak in policy tamper audit (SEC4)."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_policy_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Provide a signing key so PolicySigner() works in CI (non-DEV)."""
+        dev_key = hashlib.sha256(b"veronica-dev-key").digest()
+        monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
+        from veronica_core.security import security_level as _sl
+        _sl.reset_security_level()
 
     def _make_tampered_policy(self, tmp_path: Path) -> tuple[Path, Path]:
         """Create a policy file and a deliberately wrong .sig file."""

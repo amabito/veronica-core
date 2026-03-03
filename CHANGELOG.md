@@ -6,6 +6,25 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.7] — 2026-03-03 — LOW Bug Sweep & CI Fix
+
+**Breaking changes:** none
+
+### Fixed
+
+- **ExecutionContext**: Pipeline event intake now uses O(1) dedup keys (was O(n) list scan at 3 call sites).
+- **ComplianceExporter**: `attach()` and `_drain_attached()` now hold `_lock` for thread safety.
+- **VeronicaIntegration**: `_save_all_instances()` class method saves ALL live instances on exit (was first-only).
+- **SemanticLoopGuard**: Remove dead code branch in `_jaccard()` (`if not union` unreachable after early return).
+- **RetryContainer**: Remove dead post-loop fallback code (unreachable with `max_retries >= 0`).
+- **HMAC oracle tests**: Add `VERONICA_POLICY_KEY` fixture for CI (non-DEV) environments.
+
+### Added
+
+- `docs/V2_DEFERRED.md`: Comprehensive list of v2.0 deferred architectural items.
+
+---
+
 ## [1.8.6] — 2026-03-03 — Shield & Security Hardening
 
 **Breaking changes:** none

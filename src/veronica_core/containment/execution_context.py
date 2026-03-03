@@ -723,8 +723,10 @@ class ExecutionContext:
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 for ev in pre_halt_events:
-                    if ev not in self._events:
+                    dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
+                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                         self._events.append(ev)
+                        self._event_dedup_keys.add(dk)
                 self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
@@ -921,8 +923,10 @@ class ExecutionContext:
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
                 for ev in before_charge_events:
-                    if ev not in self._events:
+                    dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
+                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                         self._events.append(ev)
+                        self._event_dedup_keys.add(dk)
                 self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
@@ -959,8 +963,10 @@ class ExecutionContext:
             self._nodes.append(node)
 
             for ev in pipeline_events:
-                if ev not in self._events:
+                dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
+                if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                     self._events.append(ev)
+                    self._event_dedup_keys.add(dk)
 
         if self._parent is not None and actual_cost > 0.0:
             self._parent._propagate_child_cost(actual_cost)

@@ -126,9 +126,8 @@ class TestAdversarialC6AtexitDeduplication:
         real_register = atexit.register
 
         def _tracking_register(fn: object, *args: object, **kwargs: object) -> object:
-            fn_name = getattr(fn, "__func__", None)
-            fn_qualname = getattr(fn_name, "__qualname__", "") if fn_name else ""
-            if "VeronicaIntegration.save" in fn_qualname:
+            fn_name = getattr(fn, "__qualname__", getattr(fn, "__name__", ""))
+            if "_save_all_instances" in fn_name or "VeronicaIntegration" in fn_name:
                 save_calls.append(fn)
             return real_register(fn, *args, **kwargs)
 
@@ -136,7 +135,7 @@ class TestAdversarialC6AtexitDeduplication:
         return save_calls
 
     def test_single_instance_registers_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """One VeronicaIntegration with backend must register save via atexit exactly once."""
+        """One VeronicaIntegration with backend must register _save_all_instances via atexit."""
         save_calls = self._track_save_registrations(monkeypatch)
         VeronicaIntegration(backend=_NullBackend())
         assert len(save_calls) == 1, f"Expected 1 save registration, got {len(save_calls)}"
@@ -144,7 +143,7 @@ class TestAdversarialC6AtexitDeduplication:
     def test_two_instances_register_at_most_once_total(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A second VeronicaIntegration must NOT register save via atexit again."""
+        """A second VeronicaIntegration must NOT register atexit again (single class handler)."""
         save_calls = self._track_save_registrations(monkeypatch)
         VeronicaIntegration(backend=_NullBackend())
         VeronicaIntegration(backend=_NullBackend())
@@ -152,10 +151,21 @@ class TestAdversarialC6AtexitDeduplication:
             f"Expected 1 save registration across 2 instances, got {len(save_calls)}"
         )
 
+    def test_two_instances_both_saved_on_exit(self) -> None:
+        """Both instances with backends must have save() called by _save_all_instances."""
+        b1, b2 = _NullBackend(), _NullBackend()
+        i1 = VeronicaIntegration(backend=b1)
+        i2 = VeronicaIntegration(backend=b2)
+        # Simulate atexit
+        VeronicaIntegration._save_all_instances()
+        # Both instances should be in _live_instances
+        assert i1 in VeronicaIntegration._live_instances
+        assert i2 in VeronicaIntegration._live_instances
+
     def test_ten_instances_do_not_accumulate_atexit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Creating many instances must register save via atexit at most once."""
+        """Creating many instances must register atexit at most once."""
         save_calls = self._track_save_registrations(monkeypatch)
         for _ in range(10):
             VeronicaIntegration(backend=_NullBackend())

@@ -74,12 +74,11 @@ class SemanticLoopGuard:
 
     @staticmethod
     def _jaccard(a: FrozenSet[str], b: FrozenSet[str]) -> float:
-        """Jaccard similarity between two word sets. Returns 0.0 for empty sets."""
+        """Jaccard similarity between two word sets. Returns 1.0 for both-empty."""
         if not a and not b:
             return 1.0  # both empty -> identical
+        # If we reach here, at least one set is non-empty, so union is always truthy.
         union = a | b
-        if not union:
-            return 0.0
         return len(a & b) / len(union)
 
     # ------------------------------------------------------------------

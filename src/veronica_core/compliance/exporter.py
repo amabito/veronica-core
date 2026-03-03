@@ -133,7 +133,8 @@ class ComplianceExporter:
         """
         try:
             meta = getattr(ctx, "_metadata", None)
-            self._attached.append((weakref.ref(ctx), meta))
+            with self._lock:
+                self._attached.append((weakref.ref(ctx), meta))
         except Exception:
             logger.debug("compliance: attach failed", exc_info=True)
 
@@ -189,8 +190,9 @@ class ComplianceExporter:
 
     def _drain_attached(self) -> None:
         """Export snapshots from all attached contexts, then clear the list."""
-        attached = self._attached
-        self._attached = []
+        with self._lock:
+            attached = self._attached
+            self._attached = []
         for ref, meta in attached:
             try:
                 ctx = ref()

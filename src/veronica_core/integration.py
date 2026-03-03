@@ -10,6 +10,7 @@ import logging
 import threading
 import time
 import atexit
+import weakref
 
 from veronica_core.state import VeronicaStateMachine, VeronicaState
 from veronica_core.persist import VeronicaPersistence
@@ -34,7 +35,8 @@ class VeronicaIntegration:
     while adding persistence and graceful exit.
     """
 
-    _atexit_registered: bool = False  # class-level flag; prevents duplicate atexit registration
+    _atexit_registered: bool = False
+    _live_instances: weakref.WeakSet["VeronicaIntegration"] = weakref.WeakSet()
 
     def __init__(
         self,
@@ -170,11 +172,13 @@ class VeronicaIntegration:
         self.exit_handler = VeronicaExit(self.state, self.backend)
 
         # When using modern backend mode, also register atexit to save via backend.
-        # Use a class-level flag to prevent duplicate atexit registrations when
-        # multiple VeronicaIntegration instances are created in the same process.
-        if self.backend is not None and not VeronicaIntegration._atexit_registered:
-            atexit.register(self.save)
-            VeronicaIntegration._atexit_registered = True
+        # Track all instances with backends for atexit save.
+        # Register a single class-level handler that saves ALL live instances.
+        if self.backend is not None:
+            VeronicaIntegration._live_instances.add(self)
+            if not VeronicaIntegration._atexit_registered:
+                atexit.register(VeronicaIntegration._save_all_instances)
+                VeronicaIntegration._atexit_registered = True
 
         # Auto-save tracking
         self.auto_save_interval = auto_save_interval
@@ -275,6 +279,15 @@ class VeronicaIntegration:
             if expiry is None:
                 return None
             return max(0.0, expiry - time.time())
+
+    @classmethod
+    def _save_all_instances(cls) -> None:
+        """Atexit handler: save all live instances with backends."""
+        for instance in list(cls._live_instances):
+            try:
+                instance.save()
+            except Exception:
+                logger.debug("atexit save failed for %r", instance, exc_info=True)
 
     def save(self) -> bool:
         """Manually save state.

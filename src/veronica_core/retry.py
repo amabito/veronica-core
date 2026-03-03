@@ -101,9 +101,9 @@ class RetryContainer:
                 # reset() / check() without being blocked during backoff.
                 time.sleep(delay)
 
-        with self._lock:
-            exc = self._last_error
-        raise exc if exc is not None else RuntimeError("max retries exceeded")
+        # Unreachable under normal operation (max_retries >= 0).
+        # The loop always exits via return (success) or raise (last attempt).
+        raise RuntimeError("max retries exceeded")  # pragma: no cover
 
     @property
     def attempt_count(self) -> int:
