@@ -428,10 +428,9 @@ class TestThreadSafety:
             t.join()
 
         stats = adapter.get_tool_stats()
-        # All stats must be consistent (no torn reads)
-        assert stats["search"].call_count >= 0
-        assert stats["search"].error_count >= 0
-        assert stats["search"].call_count >= stats["search"].error_count
+        # All 10 threads must succeed; no budget limit, no errors
+        assert stats["search"].call_count == 10
+        assert stats["search"].error_count == 0
 
 
 # ---------------------------------------------------------------------------

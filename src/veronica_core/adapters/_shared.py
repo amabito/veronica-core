@@ -70,8 +70,12 @@ def extract_llm_result_cost(response: Any) -> float:
 
         model = llm_output.get("model_name") or llm_output.get("model") or ""
 
-        prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-        completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
+        prompt_tokens = usage.get("prompt_tokens")
+        if prompt_tokens is None:
+            prompt_tokens = usage.get("input_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        if completion_tokens is None:
+            completion_tokens = usage.get("output_tokens")
 
         if prompt_tokens is not None and completion_tokens is not None:
             return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))

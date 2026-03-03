@@ -162,6 +162,11 @@ class MCPContainmentAdapter:
             create separate instances).
         default_cost_per_call: Cost applied to tools without an explicit
             MCPToolCost entry. Must be >= 0.
+        timeout_seconds: If set, tool calls that exceed this duration raise
+            a TimeoutError stored in MCPToolResult.error. Note: timeout is
+            enforced post-hoc -- the tool call runs to completion and the
+            timeout is checked after. For preemptive timeout, use
+            AsyncMCPContainmentAdapter with asyncio.wait_for().
     """
 
     def __init__(

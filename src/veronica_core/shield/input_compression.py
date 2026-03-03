@@ -22,6 +22,7 @@ import hashlib
 import os
 import re
 import threading
+from collections import deque
 from typing import Any, Protocol, runtime_checkable
 
 from veronica_core.shield.event import SafetyEvent
@@ -186,7 +187,7 @@ class InputCompressionHook:
         self._compressor: Compressor = compressor or TemplateCompressor()
         self._fallback_to_original = fallback_to_original
         self._last_evidence: dict[str, Any] | None = None
-        self._safety_events: list[SafetyEvent] = []
+        self._safety_events: deque[SafetyEvent] = deque(maxlen=1000)
         self._lock = threading.Lock()
 
     @property

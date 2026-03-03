@@ -114,6 +114,8 @@ class TokenBudgetHook:
                 total_degraded = projected_total >= degrade_at_total
 
             if output_degraded or total_degraded:
+                self._pending_output += estimated_out
+                self._pending_input += estimated_in
                 return Decision.DEGRADE
 
             # Reserve estimated tokens atomically after passing all checks

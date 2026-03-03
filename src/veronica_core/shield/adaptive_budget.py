@@ -217,7 +217,7 @@ class AdaptiveBudgetHook:
         self._anomaly_active: bool = False
         self._anomaly_activated_ts: float | None = None
         self._event_buffer: deque[tuple[float, SafetyEvent]] = deque()
-        self._safety_events: list[SafetyEvent] = []
+        self._safety_events: deque[SafetyEvent] = deque(maxlen=1000)
 
     @staticmethod
     def _compute_thresholds(resolved_min: float, resolved_max: float) -> tuple[float, float]:
@@ -327,7 +327,7 @@ class AdaptiveBudgetHook:
 
     def _prune_event_buffer(self, cutoff: float) -> None:
         """Remove events older than *cutoff* from the front of the buffer (caller holds lock)."""
-        while self._event_buffer and self._event_buffer[0][0] <= cutoff:
+        while self._event_buffer and self._event_buffer[0][0] < cutoff:
             self._event_buffer.popleft()
 
     def _count_tighten_events(self, now: float) -> tuple[int, int, int]:
@@ -633,7 +633,7 @@ class AdaptiveBudgetHook:
             tighten_count = 0
             degrade_count = 0
             for ts, event in self._event_buffer:
-                if ts <= cutoff:
+                if ts < cutoff:
                     continue
                 if (
                     event.event_type in self._tighten_event_types
@@ -699,6 +699,10 @@ class AdaptiveBudgetHook:
         with self._lock:
             self._ceiling_multiplier = float(
                 state["adaptive_multiplier"]
+            )
+            self._ceiling_multiplier = max(
+                self._min_multiplier,
+                min(self._max_multiplier, self._ceiling_multiplier),
             )
             self._last_adjustment_ts = state.get("last_adjustment_ts")
             self._last_action = state.get("last_action")

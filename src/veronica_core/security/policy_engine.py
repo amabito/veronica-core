@@ -8,6 +8,7 @@ from __future__ import annotations
 import collections
 import fnmatch
 import math
+import os
 import re
 import threading
 import unicodedata
@@ -38,6 +39,8 @@ SHELL_DENY_OPERATORS: tuple[str, ...] = (
     "$(", "`",
     # Newline injection: allows multi-command payloads embedded in a single argument string.
     "\n",
+    # Null-byte injection: terminates strings in C-based shells, bypasses string comparisons.
+    "\x00",
 )
 
 FILE_READ_DENY_PATTERNS: tuple[str, ...] = (
@@ -412,7 +415,7 @@ def _check_pkg_install(argv0: str, argv1: str, args: list[str]) -> PolicyDecisio
     # DENY: per-command inline code execution flags (cmake, make, go — defense-in-depth)
     if argv0 in SHELL_DENY_EXEC_FLAGS:
         deny_flags = SHELL_DENY_EXEC_FLAGS[argv0]
-        matched = deny_flags.intersection(args[1:])
+        matched = deny_flags.intersection(a.lower() for a in args[1:])
         if matched:
             return PolicyDecision(
                 verdict="DENY",
@@ -521,6 +524,8 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
 def _eval_file_read(ctx: PolicyContext) -> PolicyDecision | None:
     """Evaluate file_read action rules."""
     path = ctx.args[0] if ctx.args else ""
+    # Resolve symlinks so that e.g. /tmp/link -> /etc/passwd is caught by deny patterns.
+    path = os.path.realpath(path) if path else ""
 
     if _matches_any(path, FILE_READ_DENY_PATTERNS):
         return PolicyDecision(
@@ -541,6 +546,8 @@ def _eval_file_read(ctx: PolicyContext) -> PolicyDecision | None:
 def _eval_file_write(ctx: PolicyContext) -> PolicyDecision | None:
     """Evaluate file_write action rules."""
     path = ctx.args[0] if ctx.args else ""
+    # Resolve symlinks so that e.g. /tmp/link -> /etc/passwd is caught by deny patterns.
+    path = os.path.realpath(path) if path else ""
 
     if _matches_any(path, FILE_WRITE_APPROVAL_PATTERNS):
         return PolicyDecision(
@@ -868,14 +875,9 @@ class PolicyEngine:
         if signer.verify(policy_path, sig_v1_path):
             return
 
-        try:
-            actual = sig_v1_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            actual = "<unreadable>"
-        expected = signer.sign(policy_path)
         PolicyEngine._emit_policy_audit(
             "policy_tamper",
-            {"policy_path": str(policy_path), "expected": expected, "actual": actual},
+            {"policy_path": str(policy_path), "expected": "<redacted>", "actual": "<redacted>"},
         )
         _log.error("policy_tamper: signature mismatch for %s", policy_path)
         raise RuntimeError(f"Policy tamper detected: {policy_path}")

@@ -508,8 +508,8 @@ class TestWrapMCPServerEdgeCases:
             return len(adapter._tool_costs)
 
         count = asyncio.run(run())
-        # Deduplication or last-write-wins; either way must not crash
-        assert count >= 0
+        # Deduplication or last-write-wins; at least 1 tool cost entry must exist
+        assert count >= 1
 
     def test_tool_with_none_name_skipped(self) -> None:
         """Tools with None name must be skipped gracefully."""
@@ -594,8 +594,7 @@ class TestEnsureStatsRace:
         assert errors == [], f"Race errors: {errors}"
         stats = adapter.get_tool_stats()
         assert "new_tool" in stats
-        assert stats["new_tool"].call_count <= 20
-        assert stats["new_tool"].call_count >= 0
+        assert stats["new_tool"].call_count == 20
 
     def test_concurrent_distinct_tools_no_corruption(self) -> None:
         """20 threads each calling a unique tool_name must not corrupt each other."""

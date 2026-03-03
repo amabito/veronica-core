@@ -15,6 +15,7 @@ Design principles:
 from __future__ import annotations
 
 import threading
+from collections import deque
 from datetime import datetime, time, timezone
 
 from veronica_core.shield.event import SafetyEvent
@@ -64,7 +65,7 @@ class TimeAwarePolicy:
         self._work_start = work_start
         self._work_end = work_end
         self._tz = tz or timezone.utc
-        self._safety_events: list[SafetyEvent] = []
+        self._safety_events: deque[SafetyEvent] = deque(maxlen=1000)
         self._lock = threading.Lock()
 
     # -- Properties ----------------------------------------------------------

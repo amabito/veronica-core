@@ -40,7 +40,7 @@ class BudgetWindowHook:
         self._max_calls = max_calls
         self._window_seconds = window_seconds
         self._degrade_threshold = degrade_threshold
-        self._timestamps: deque[float] = deque()
+        self._timestamps: deque[float] = deque(maxlen=max_calls * 2)
         self._lock = threading.Lock()
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
@@ -56,6 +56,7 @@ class BudgetWindowHook:
             count = len(self._timestamps)
 
             if count >= self._max_calls:
+                self._timestamps.append(now)
                 return Decision.HALT
 
             degrade_at = self._degrade_threshold * self._max_calls

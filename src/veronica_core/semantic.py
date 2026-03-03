@@ -46,13 +46,17 @@ class SemanticLoopGuard:
     window: int = 3
     jaccard_threshold: float = 0.92
     min_chars: int = 80
-    policy_type: str = field(default="semantic_loop", init=False)
 
     # Buffer stores (normalized_str, frozenset_of_words) tuples
     _buffer: Deque[Tuple[str, FrozenSet[str]]] = field(init=False)
 
     def __post_init__(self) -> None:
         self._buffer = deque(maxlen=self.window)
+
+    @property
+    def policy_type(self) -> str:
+        """Read-only policy type identifier."""
+        return "semantic_loop"
 
     # ------------------------------------------------------------------
     # Private helpers

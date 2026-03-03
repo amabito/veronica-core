@@ -205,8 +205,8 @@ class TestBudgetHalt:
             return await adapter.wrap_tool_call("search", {}, _echo_fn)
 
         result = asyncio.run(run())
-        if result.decision == "HALT":
-            assert result.success is False
+        assert result.decision == "HALT"
+        assert result.success is False
 
     def test_halt_result_has_error_message(self) -> None:
         async def run() -> MCPToolResult:
@@ -215,8 +215,8 @@ class TestBudgetHalt:
             return await adapter.wrap_tool_call("search", {}, _echo_fn)
 
         result = asyncio.run(run())
-        if result.decision == "HALT":
-            assert result.error is not None
+        assert result.decision == "HALT"
+        assert result.error is not None
 
     def test_halt_cost_is_zero(self) -> None:
         async def run() -> MCPToolResult:
@@ -225,8 +225,8 @@ class TestBudgetHalt:
             return await adapter.wrap_tool_call("search", {}, _echo_fn)
 
         result = asyncio.run(run())
-        if result.decision == "HALT":
-            assert result.cost_usd == 0.0
+        assert result.decision == "HALT"
+        assert result.cost_usd == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -645,7 +645,7 @@ class TestConcurrentAsync:
             return stats["search"].call_count
 
         count = asyncio.run(run())
-        assert count <= 10
+        assert count == 10
 
     def test_concurrent_mixed_success_failure(self) -> None:
         async def run() -> tuple[int, int]:
@@ -660,9 +660,8 @@ class TestConcurrentAsync:
             return successes, failures
 
         successes, failures = asyncio.run(run())
-        assert successes >= 0
-        assert failures >= 0
-        assert successes + failures == 10
+        assert successes == 5
+        assert failures == 5
 
     def test_ensure_stats_toctou_no_lost_counts(self) -> None:
         """B-3/S-8 adversarial: 50 coroutines call wrap_tool_call for the SAME

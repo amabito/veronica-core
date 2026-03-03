@@ -133,19 +133,25 @@ class TestBudgetWindowExpiryBoundary:
     def test_boundary_exact_window_not_double_counted(self, monkeypatch):
         # Call at t=0. At t=60, that call should be expired (cutoff = 60-60 = 0, ts=0 < 0 is False).
         # But we want to verify < semantics: ts < cutoff means expired.
-        # At t=60: cutoff=0, ts=0 -> 0 < 0 is False -> NOT pruned, still counts.
-        # At t=60.001: cutoff=0.001, ts=0 -> 0 < 0.001 -> pruned.
-        times = iter([0.0, 60.0, 60.001])
+        # At t=60: cutoff=0, ts=0 -> 0 < 0 is False -> NOT pruned, still counts -> HALT.
+        #   HALT also appends ts=60.0 (S1 fix: HALT counts in window like DEGRADE/ALLOW).
+        # At t=60.001: cutoff=0.001, ts=0.0 pruned, ts=60.0 retained -> still HALT.
+        # At t=120.001: cutoff=60.001, ts=60.0 < 60.001 -> pruned, fresh window -> None.
+        times = iter([0.0, 60.0, 60.001, 120.001])
         monkeypatch.setattr(time, "time", lambda: next(times))
 
         hook = BudgetWindowHook(max_calls=1, window_seconds=60.0)
         assert hook.before_llm_call(CTX) is None        # t=0.0, reserved slot
 
-        # At t=60: cutoff=0.0, ts=0.0 -> 0.0 < 0.0 is False -> NOT expired
+        # At t=60: cutoff=0.0, ts=0.0 -> 0.0 < 0.0 is False -> NOT expired -> HALT
+        # HALT appends ts=60.0 into window (S1 fix)
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=60.0, still within window
 
-        # At t=60.001: cutoff=0.001, ts=0.0 -> 0.0 < 0.001 -> expired, fresh window
-        assert hook.before_llm_call(CTX) is None        # t=60.001, old call pruned
+        # At t=60.001: ts=0.0 pruned (0.0 < 0.001), ts=60.0 retained -> HALT
+        assert hook.before_llm_call(CTX) is Decision.HALT  # t=60.001, HALT ts still live
+
+        # At t=120.001: cutoff=60.001, ts=60.0 < 60.001 -> pruned -> fresh window
+        assert hook.before_llm_call(CTX) is None        # t=120.001, all old calls expired
 
 
 class TestBudgetWindowIntegrationWiring:

@@ -34,6 +34,8 @@ class VeronicaIntegration:
     while adding persistence and graceful exit.
     """
 
+    _atexit_registered: bool = False  # class-level flag; prevents duplicate atexit registration
+
     def __init__(
         self,
         cooldown_fails: int = 3,
@@ -167,9 +169,12 @@ class VeronicaIntegration:
         # Register exit handler (pass PersistenceBackend if available, else None for default)
         self.exit_handler = VeronicaExit(self.state, self.backend)
 
-        # When using modern backend mode, also register atexit to save via backend
-        if self.backend is not None:
+        # When using modern backend mode, also register atexit to save via backend.
+        # Use a class-level flag to prevent duplicate atexit registrations when
+        # multiple VeronicaIntegration instances are created in the same process.
+        if self.backend is not None and not VeronicaIntegration._atexit_registered:
             atexit.register(self.save)
+            VeronicaIntegration._atexit_registered = True
 
         # Auto-save tracking
         self.auto_save_interval = auto_save_interval

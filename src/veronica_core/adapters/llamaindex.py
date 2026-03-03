@@ -264,10 +264,12 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
             raw = getattr(response, "raw", None)
             if isinstance(raw, dict):
                 usage = raw.get("usage") or {}
-                prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-                completion_tokens = (
-                    usage.get("completion_tokens") or usage.get("output_tokens")
-                )
+                prompt_tokens = usage.get("prompt_tokens")
+                if prompt_tokens is None:
+                    prompt_tokens = usage.get("input_tokens")
+                completion_tokens = usage.get("completion_tokens")
+                if completion_tokens is None:
+                    completion_tokens = usage.get("output_tokens")
                 if prompt_tokens is not None and completion_tokens is not None:
                     model_from_raw = raw.get("model") or raw.get("model_name") or model
                     return estimate_cost_usd(
@@ -277,10 +279,12 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
         # Fallback: look for token counts directly in payload
         usage = payload.get("usage") or {}
         if isinstance(usage, dict):
-            prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-            completion_tokens = (
-                usage.get("completion_tokens") or usage.get("output_tokens")
-            )
+            prompt_tokens = usage.get("prompt_tokens")
+            if prompt_tokens is None:
+                prompt_tokens = usage.get("input_tokens")
+            completion_tokens = usage.get("completion_tokens")
+            if completion_tokens is None:
+                completion_tokens = usage.get("output_tokens")
             if prompt_tokens is not None and completion_tokens is not None:
                 return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))
 
