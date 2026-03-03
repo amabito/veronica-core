@@ -415,7 +415,8 @@ def _check_pkg_install(argv0: str, argv1: str, args: list[str]) -> PolicyDecisio
     # DENY: per-command inline code execution flags (cmake, make, go — defense-in-depth)
     if argv0 in SHELL_DENY_EXEC_FLAGS:
         deny_flags = SHELL_DENY_EXEC_FLAGS[argv0]
-        matched = deny_flags.intersection(a.lower() for a in args[1:])
+        lowered_flags = frozenset(f.lower() for f in deny_flags)
+        matched = lowered_flags.intersection(a.lower() for a in args[1:])
         if matched:
             return PolicyDecision(
                 verdict="DENY",
