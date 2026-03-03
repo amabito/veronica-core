@@ -70,7 +70,8 @@ logs/
 
 # Session archives (J.A.R.V.I.S. / F.R.I.D.A.Y. intermediate files)
 .archive/
-.jarvis/
+.jarvis/*
+!.jarvis/ag2-pr-draft/
 .friday/
 
 # Internal launch strategy docs (not for public)
