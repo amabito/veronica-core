@@ -74,7 +74,7 @@ class ComplianceExporter:
     def __init__(
         self,
         api_key: str,
-        endpoint: str = "https://audit.veronica-core.dev/api/ingest",
+        endpoint: str = "",
         *,
         batch_size: int = 50,
         flush_interval_s: float = 10.0,
@@ -82,6 +82,12 @@ class ComplianceExporter:
         timeout_s: float = 5.0,
         max_retries: int = 2,
     ) -> None:
+        if not endpoint:
+            raise ValueError(
+                "ComplianceExporter requires an explicit endpoint URL. "
+                "No default is provided to prevent unintended data transmission "
+                "to external services."
+            )
         self._api_key = api_key
         self._endpoint = endpoint
         self._batch_size = batch_size

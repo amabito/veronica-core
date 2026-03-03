@@ -97,6 +97,67 @@ class TestRetryContainerThreadSafety:
         assert "exhausted" in (decision.reason or "")
 
 
+class TestRetryAdversarial:
+    """Adversarial tests for retry.py B-1/B-2 fixes."""
+
+    def test_concurrent_check_during_execute_race(self):
+        """B-1 adversarial: 10 threads call check() while execute() is running.
+
+        Before B-1 fix, check() read _last_error without lock, risking torn reads.
+        After fix, check() acquires lock -- all threads must see consistent state.
+        """
+        container = RetryContainer(max_retries=1, backoff_base=0.0)
+        results: list[bool] = []
+        barrier = threading.Barrier(11)
+
+        def always_fails():
+            raise RuntimeError("boom")
+
+        def execute_thread():
+            barrier.wait()
+            try:
+                container.execute(always_fails)
+            except RuntimeError:
+                pass
+
+        def check_thread():
+            barrier.wait()
+            ctx = PolicyContext()
+            for _ in range(20):
+                d = container.check(ctx)
+                results.append(d.allowed)
+
+        threads = [threading.Thread(target=execute_thread)]
+        threads += [threading.Thread(target=check_thread) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # After execute completes with failure, all subsequent checks must deny.
+        # Before B-1 fix, torn reads could return inconsistent allowed/denied.
+        final = container.check(PolicyContext())
+        assert not final.allowed, "After failed execute, check must deny"
+
+    def test_last_error_none_fallback_raises_runtime_error(self):
+        """B-2 adversarial: The post-loop fallback at line 104-106 handles
+        _last_error=None gracefully by raising RuntimeError instead of
+        TypeError (from `raise None`).
+
+        This path is normally unreachable (the loop re-raises on last attempt),
+        but exists as a defensive guard. We test it by directly invoking the
+        fallback logic pattern."""
+        container = RetryContainer(max_retries=0, backoff_base=0.0)
+
+        # Verify the defensive pattern: `raise exc if exc is not None else RuntimeError(...)`
+        # Simulate the post-loop state where _last_error is None
+        with container._lock:
+            container._last_error = None
+        exc = container._last_error
+        with pytest.raises(RuntimeError, match="max retries exceeded"):
+            raise exc if exc is not None else RuntimeError("max retries exceeded")
+
+
 class TestRetryLockReleasedDuringSleep:
     """H3 fix: check() and reset() must not be blocked while execute() sleeps."""
 

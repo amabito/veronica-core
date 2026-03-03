@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import threading
 import time
 from typing import Dict, Optional, Protocol, runtime_checkable
@@ -27,8 +28,6 @@ def _redact_exc(exc: BaseException) -> str:
     Handles ``redis://``, ``rediss://``, ``redis+ssl://``, ``rediss+ssl://``
     (case-insensitive), and passwords containing literal ``@`` characters.
     """
-    import re
-
     msg = str(exc)
     # Redact user:password in Redis URLs.
     # - ``rediss?`` matches redis:// and rediss://
@@ -310,9 +309,6 @@ class RedisBudgetBackend:
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error("RedisBudgetBackend.get failed: %s", _redact_exc(exc))
-                with self._lock:
-                    if self._using_fallback:
-                        return self._fallback.get()
                 return self._fallback.get()
             raise
 

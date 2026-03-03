@@ -102,7 +102,8 @@ class RetryContainer:
                 time.sleep(delay)
 
         with self._lock:
-            raise self._last_error  # type: ignore[misc]
+            exc = self._last_error
+        raise exc if exc is not None else RuntimeError("max retries exceeded")
 
     @property
     def attempt_count(self) -> int:
@@ -137,13 +138,16 @@ class RetryContainer:
         Returns:
             PolicyDecision allowing or denying the operation
         """
-        if self._last_error is not None:
+        with self._lock:
+            last_error = self._last_error
+            total_retries = self._total_retries
+        if last_error is not None:
             return PolicyDecision(
                 allowed=False,
                 policy_type=self.policy_type,
                 reason=(
                     f"Retry budget exhausted "
-                    f"({self._total_retries} retries used)"
+                    f"({total_retries} retries used)"
                 ),
             )
         return PolicyDecision(allowed=True, policy_type=self.policy_type)

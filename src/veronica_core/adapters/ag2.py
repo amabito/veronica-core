@@ -51,26 +51,15 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from veronica_core.agent_guard import AgentStepGuard
-from veronica_core.budget import BudgetEnforcer
+from veronica_core.adapters._shared import build_container
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
-from veronica_core.retry import RetryContainer
 from veronica_core.shield.types import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["VeronicaConversableAgent", "register_veronica_hook"]
-
-
-def _build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:
-    """Build an AIContainer from a GuardConfig or ExecutionConfig."""
-    return AIContainer(
-        budget=BudgetEnforcer(limit_usd=config.max_cost_usd),
-        retry=RetryContainer(max_retries=config.max_retries_total),
-        step_guard=AgentStepGuard(max_steps=config.max_steps),
-    )
 
 
 class VeronicaConversableAgent(ConversableAgent):
@@ -112,7 +101,7 @@ class VeronicaConversableAgent(ConversableAgent):
         **kwargs: Any,
     ) -> None:
         super().__init__(name, **kwargs)
-        self._container = _build_container(config)
+        self._container = build_container(config)
 
     def generate_reply(
         self,
@@ -217,7 +206,7 @@ def register_veronica_hook(
         agent = ConversableAgent("assistant")
         container = register_veronica_hook(agent, GuardConfig(max_cost_usd=1.0))
     """
-    container = _build_container(config)
+    container = build_container(config)
 
     def _veronica_reply_fn(
         recipient: ConversableAgent,

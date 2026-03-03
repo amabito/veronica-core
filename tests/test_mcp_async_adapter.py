@@ -663,3 +663,26 @@ class TestConcurrentAsync:
         assert successes >= 0
         assert failures >= 0
         assert successes + failures == 10
+
+    def test_ensure_stats_toctou_no_lost_counts(self) -> None:
+        """B-3/S-8 adversarial: 50 coroutines call wrap_tool_call for the SAME
+        tool simultaneously. Before the fix, two coroutines could both pass
+        the outer `if tool_name not in self._stats` check, and the second
+        would silently replace the first's MCPToolStats entry, losing counts.
+
+        After fix, check is inside the lock -- all 50 calls must be counted."""
+
+        async def run() -> int:
+            adapter = _make_adapter(
+                max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0
+            )
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("search", {}, _echo_fn))
+                for _ in range(50)
+            ]
+            await asyncio.gather(*tasks)
+            stats = adapter.get_tool_stats()
+            return stats["search"].call_count
+
+        count = asyncio.run(run())
+        assert count == 50, f"Expected 50 calls counted, got {count} (stats entry was replaced)"

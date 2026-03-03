@@ -402,3 +402,184 @@ class TestAdversarialStateMachine:
         sm.record_fail(pair)
         # Cooldown expiry should remain unchanged (the manually-set one)
         assert sm.cooldowns[pair] == future_expiry
+
+
+class TestConcurrentStateMachine:
+    """Additional concurrency tests using threading.Barrier for synchronization."""
+
+    def test_concurrent_record_pass_and_fail_same_entity(self):
+        """10 threads: simultaneous record_pass() + record_fail() on same entity.
+
+        Invariant: fail_counts value must never go negative and the dict must
+        be internally consistent (no KeyError, no corruption).
+        """
+        import threading
+
+        sm = VeronicaStateMachine(cooldown_fails=100, cooldown_seconds=600)
+        entity = "BTC/JPY"
+        barrier = threading.Barrier(10)
+        errors: list[Exception] = []
+        lock = threading.Lock()
+
+        def pass_worker():
+            barrier.wait()
+            try:
+                sm.record_pass(entity)
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        def fail_worker():
+            barrier.wait()
+            try:
+                sm.record_fail(entity)
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        # 5 pass + 5 fail workers race on the same entity
+        threads = (
+            [threading.Thread(target=pass_worker) for _ in range(5)]
+            + [threading.Thread(target=fail_worker) for _ in range(5)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Unexpected errors: {errors}"
+        # fail_counts value must be non-negative (never below 0)
+        count = sm.fail_counts.get(entity, 0)
+        assert count >= 0, f"fail_counts went negative: {count}"
+
+    def test_concurrent_transition_valid_and_invalid(self):
+        """10 threads: concurrent transition() calls (some valid, some invalid).
+
+        Valid transitions must succeed without corrupting state.
+        Invalid transitions must raise ValueError without crashing other threads.
+        """
+        import threading
+
+        sm = VeronicaStateMachine()
+        barrier = threading.Barrier(10)
+        errors: list[Exception] = []
+        valid_transitions: list[bool] = []
+        lock = threading.Lock()
+
+        def transition_worker(i: int):
+            barrier.wait()
+            try:
+                if i % 2 == 0:
+                    # IDLE -> SCREENING (valid from IDLE)
+                    sm.transition(VeronicaState.SCREENING, f"valid-{i}")
+                    with lock:
+                        valid_transitions.append(True)
+                else:
+                    # IDLE -> COOLDOWN (invalid from IDLE, must raise ValueError)
+                    sm.transition(VeronicaState.COOLDOWN, f"invalid-{i}")
+            except ValueError:
+                pass  # Expected for invalid transitions
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=transition_worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Unexpected errors: {errors}"
+        # State machine must still be in a valid state
+        assert sm.current_state in list(VeronicaState)
+
+    def test_cleanup_expired_racing_with_is_in_cooldown(self):
+        """cleanup_expired() racing with is_in_cooldown() must not corrupt cooldowns dict."""
+        import threading
+
+        sm = VeronicaStateMachine(cooldown_fails=1, cooldown_seconds=0.05)
+        barrier = threading.Barrier(6)
+        errors: list[Exception] = []
+        lock = threading.Lock()
+
+        # Seed some expiring cooldowns
+        for i in range(3):
+            sm.record_fail(f"pair_{i}")
+
+        def cleanup_worker():
+            barrier.wait()
+            try:
+                sm.cleanup_expired()
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        def check_worker(pair: str):
+            barrier.wait()
+            try:
+                # is_in_cooldown must not raise even when cleanup runs concurrently
+                sm.is_in_cooldown(pair)
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        # Wait for cooldowns to expire
+        time.sleep(0.1)
+
+        # 3 cleanup + 3 is_in_cooldown threads race
+        threads = (
+            [threading.Thread(target=cleanup_worker) for _ in range(3)]
+            + [threading.Thread(target=check_worker, args=(f"pair_{i}",)) for i in range(3)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent access errors: {errors}"
+        # All cooldowns must have been cleaned up (they expired 0.1s ago)
+        assert len(sm.cooldowns) == 0
+
+    def test_set_cooldown_racing_with_is_in_cooldown(self):
+        """set_cooldown() racing with is_in_cooldown() must not return stale results.
+
+        Invariant: is_in_cooldown() must never raise; returned bool may be either
+        True or False depending on thread scheduling (both are correct).
+        """
+        import threading
+
+        sm = VeronicaStateMachine()
+        entity = "ETH/JPY"
+        barrier = threading.Barrier(10)
+        errors: list[Exception] = []
+        lock = threading.Lock()
+
+        def setter_worker(expiry: float):
+            barrier.wait()
+            try:
+                sm.set_cooldown(entity, expiry)
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        def checker_worker():
+            barrier.wait()
+            try:
+                sm.is_in_cooldown(entity)  # Result may vary; must not raise
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        future = time.time() + 9999.0
+        threads = (
+            [threading.Thread(target=setter_worker, args=(future,)) for _ in range(5)]
+            + [threading.Thread(target=checker_worker) for _ in range(5)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent access errors: {errors}"
+        # After all setters ran, cooldown must be set
+        assert sm.is_in_cooldown(entity)

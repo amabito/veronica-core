@@ -56,7 +56,7 @@ except ImportError as _exc:
 import logging
 from typing import Any, Union
 
-from veronica_core.adapters._shared import build_container, cost_from_total_tokens
+from veronica_core.adapters._shared import build_container, cost_from_total_tokens, record_budget_spend
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
@@ -140,16 +140,8 @@ class VeronicaCrewAIListener(BaseEventListener):
             if self._container.step_guard is not None:
                 self._container.step_guard.step()
 
-            if self._container.budget is not None:
-                cost = _estimate_cost(event)
-                within = self._container.budget.spend(cost)
-                if not within:
-                    logger.warning(
-                        "[VERONICA_CREW] LLM call pushed budget over limit "
-                        "(spent $%.4f / $%.4f)",
-                        self._container.budget.spent_usd,
-                        self._container.budget.limit_usd,
-                    )
+            cost = _estimate_cost(event)
+            record_budget_spend(self._container, cost, "[VERONICA_CREW]", logger)
 
         @bus.on(LLMCallFailedEvent)
         def on_llm_call_failed(source: Any, event: LLMCallFailedEvent) -> None:

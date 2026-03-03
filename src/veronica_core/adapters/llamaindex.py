@@ -29,14 +29,12 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from veronica_core.agent_guard import AgentStepGuard
-from veronica_core.budget import BudgetEnforcer
+from veronica_core.adapters._shared import build_container, record_budget_spend
 from veronica_core.circuit_breaker import CircuitBreaker
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
 from veronica_core.pricing import estimate_cost_usd
-from veronica_core.retry import RetryContainer
 from veronica_core.runtime_policy import PolicyContext
 
 logger = logging.getLogger(__name__)
@@ -124,11 +122,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             event_ends_to_ignore=[],
         )
 
-        self._container = AIContainer(
-            budget=BudgetEnforcer(limit_usd=config.max_cost_usd),
-            retry=RetryContainer(max_retries=config.max_retries_total),
-            step_guard=AgentStepGuard(max_steps=config.max_steps),
-        )
+        self._container = build_container(config)
         self._circuit_breaker = circuit_breaker
         self._entity_id = entity_id
 
@@ -200,17 +194,9 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             self._container.step_guard.step()
 
         # Record token cost against budget
-        if self._container.budget is not None:
-            cost = _extract_cost_from_payload(payload)
-            if cost > 0.0:
-                within = self._container.budget.spend(cost)
-                if not within:
-                    logger.warning(
-                        "[VERONICA_LI] LLM call pushed budget over limit "
-                        "(spent $%.4f / $%.4f)",
-                        self._container.budget.spent_usd,
-                        self._container.budget.limit_usd,
-                    )
+        cost = _extract_cost_from_payload(payload)
+        if cost > 0.0:
+            record_budget_spend(self._container, cost, "[VERONICA_LI]", logger)
 
         # Record circuit breaker success
         if self._circuit_breaker is not None:

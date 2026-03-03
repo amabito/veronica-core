@@ -103,6 +103,20 @@ def _make_exporter(**kwargs: Any) -> ComplianceExporter:
 
 
 class TestLifecycle:
+    def test_missing_endpoint_raises_value_error(self) -> None:
+        """Omitting endpoint must raise ValueError (no silent external send)."""
+        import pytest
+
+        with pytest.raises(ValueError, match="endpoint"):
+            ComplianceExporter(api_key="k")
+
+    def test_empty_endpoint_raises_value_error(self) -> None:
+        """Empty string endpoint must also raise ValueError."""
+        import pytest
+
+        with pytest.raises(ValueError, match="endpoint"):
+            ComplianceExporter(api_key="k", endpoint="")
+
     def test_create_and_close(self) -> None:
         """Exporter can be created and closed without error."""
         exporter = _make_exporter()
@@ -453,12 +467,17 @@ class TestAdversarialBoundaryAbuse:
 
     def test_batch_size_one(self) -> None:
         """batch_size=1 should send each item individually."""
+        sent: list[dict] = []
         exporter = _make_exporter(batch_size=1)
-        exporter._enqueue({"seq": 1})
-        exporter._enqueue({"seq": 2})
-        time.sleep(0.5)  # Let background thread process
-        exporter.close()
-        # No crash is the assertion
+        with patch.object(exporter, "_send_one", side_effect=lambda p: sent.append(p)):
+            exporter._enqueue({"seq": 1})
+            exporter._enqueue({"seq": 2})
+            time.sleep(0.5)  # Let background thread process
+            exporter.close()
+        # Both items must have been sent individually (batch_size=1)
+        assert len(sent) == 2
+        seqs = {item["seq"] for item in sent}
+        assert seqs == {1, 2}
 
     def test_max_retries_large(self) -> None:
         """max_retries=100 with repeated failures should not infinite-loop."""
@@ -1173,10 +1192,14 @@ class TestAdversarialAttach:
                 return None
 
         exporter.attach(SlowCtx())  # type: ignore[arg-type]
+        # Keep a strong reference so the weakref in _attached stays alive
+        fast_ctx_ref = [None]
 
         def attach_during_drain():
             time.sleep(0.05)  # Wait for drain to start
-            exporter.attach(FastCtx())  # type: ignore[arg-type]
+            obj = FastCtx()
+            fast_ctx_ref[0] = obj  # Keep strong reference
+            exporter.attach(obj)  # type: ignore[arg-type]
 
         t = threading.Thread(target=attach_during_drain)
         t.start()
@@ -1187,7 +1210,15 @@ class TestAdversarialAttach:
         # It should be in the new _attached list, not lost
         # This is a known TOCTOU -- drain clears list, then iterates old copy
         # New attach goes to the new (empty) list, which is correct behavior
-        assert len(exporter._attached) >= 0  # Not crash = pass
+        # _attached stores (weakref.ref, metadata) tuples — verify one entry exists
+        assert len(exporter._attached) == 1, (
+            "FastCtx attached during drain must be retained in _attached, not silently dropped"
+        )
+        # The weakref must still be alive (we hold fast_ctx_ref[0] as strong ref)
+        ref, _meta = exporter._attached[0]
+        assert ref() is fast_ctx_ref[0], (
+            "The weakref in _attached must point to the FastCtx that was attached during drain"
+        )
         exporter.close()
 
     # -- atexit: drain_attached called from _atexit_flush --

@@ -191,10 +191,10 @@ class TestCostBoundary:
 
     @pytest.mark.parametrize("total_tokens", [1, 2, 3, 100, 10_000])
     def test_cost_positive_for_total_tokens(self, total_tokens: int) -> None:
-        """_estimate_cost must return a positive float for every total_tokens >= 1."""
-        from veronica_core.adapters.langchain import _estimate_cost
+        """extract_llm_result_cost must return a positive float for every total_tokens >= 1."""
+        from veronica_core.adapters._shared import extract_llm_result_cost
 
-        result = _estimate_cost(
+        result = extract_llm_result_cost(
             FakeLLMResult(llm_output={"token_usage": {"total_tokens": total_tokens}})
         )
         assert result > 0.0, f"cost was {result} for total_tokens={total_tokens}"
@@ -216,20 +216,10 @@ class TestCostBoundary:
         assert handler.container.budget.spent_usd > 0.0
 
     def test_zero_total_tokens_flows_through_calculation(self) -> None:
-        """total_tokens=0 must reach estimate_cost_usd() and produce 0.0 naturally.
+        """total_tokens=0 must produce 0.0 (no phantom spend)."""
+        from veronica_core.adapters._shared import extract_llm_result_cost
 
-        Regression test for the LangChain zero-token bypass bug: the early
-        return on ``total_raw == 0`` was removed so that 0 tokens flow through
-        the normal estimate_cost_usd() path rather than short-circuiting.
-        The result must still be 0.0 (no phantom spend).
-        """
-        from veronica_core.adapters.langchain import _estimate_cost
-
-        # total_tokens=0 -> tokens_in = max(1, 0) = 1, tokens_out = 0 - 1 = -1
-        # estimate_cost_usd with 1 prompt + (-1) completion token is 0.0
-        # because negative token counts produce no positive cost, but the
-        # important guarantee is: no phantom cost and no exception raised.
-        result = _estimate_cost(
+        result = extract_llm_result_cost(
             FakeLLMResult(llm_output={"token_usage": {"total_tokens": 0}})
         )
         assert result == 0.0, f"Expected 0.0 for zero tokens, got {result}"
@@ -237,9 +227,9 @@ class TestCostBoundary:
 
     def test_none_total_tokens_returns_zero_cost(self) -> None:
         """total_tokens=None must still return 0.0 (missing data guard remains)."""
-        from veronica_core.adapters.langchain import _estimate_cost
+        from veronica_core.adapters._shared import extract_llm_result_cost
 
-        result = _estimate_cost(
+        result = extract_llm_result_cost(
             FakeLLMResult(llm_output={"token_usage": {}})
         )
         assert result == 0.0, f"Expected 0.0 for missing total_tokens, got {result}"

@@ -224,6 +224,10 @@ class AdaptiveBudgetHook:
         """Return (min_multiplier, max_multiplier) validated pair."""
         return resolved_min, resolved_max
 
+    def _anomaly_factor_locked(self) -> float:
+        """Return anomaly tightening factor; MUST be called with self._lock held."""
+        return (1.0 - self._anomaly_tighten_pct) if self._anomaly_active else 1.0
+
     # -- Properties ----------------------------------------------------------
 
     @property
@@ -238,11 +242,7 @@ class AdaptiveBudgetHook:
     @property
     def adjusted_ceiling(self) -> int:
         with self._lock:
-            anomaly_factor = (
-                (1.0 - self._anomaly_tighten_pct)
-                if self._anomaly_active
-                else 1.0
-            )
+            anomaly_factor = self._anomaly_factor_locked()
             return max(
                 1,
                 round(
@@ -475,9 +475,7 @@ class AdaptiveBudgetHook:
             if self._cooldown_seconds > 0 and self._last_adjustment_ts is not None:
                 elapsed = now - self._last_adjustment_ts
                 if elapsed < self._cooldown_seconds:
-                    anomaly_factor = (
-                        (1.0 - self._anomaly_tighten_pct) if self._anomaly_active else 1.0
-                    )
+                    anomaly_factor = self._anomaly_factor_locked()
                     adjusted = max(
                         1,
                         round(self._base_ceiling * self._ceiling_multiplier * anomaly_factor),
@@ -508,9 +506,7 @@ class AdaptiveBudgetHook:
 
             action, old_multiplier = self._compute_adjustment(tighten_count, degrade_count)
 
-            anomaly_factor = (
-                (1.0 - self._anomaly_tighten_pct) if self._anomaly_active else 1.0
-            )
+            anomaly_factor = self._anomaly_factor_locked()
             adjusted = max(
                 1,
                 round(self._base_ceiling * self._ceiling_multiplier * anomaly_factor),
@@ -657,11 +653,7 @@ class AdaptiveBudgetHook:
             )
 
             # Compute effective values
-            anomaly_factor = (
-                (1.0 - self._anomaly_tighten_pct)
-                if self._anomaly_active
-                else 1.0
-            )
+            anomaly_factor = self._anomaly_factor_locked()
             effective_multiplier = (
                 self._ceiling_multiplier * time_multiplier * anomaly_factor
             )

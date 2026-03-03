@@ -65,11 +65,15 @@ class RiskScoreAccumulator:
             if self._config.reset_on_allow and verdict == "ALLOW":
                 self._window.clear()
 
+    def _score_locked(self) -> int:
+        """Return current score; MUST be called with self._lock held."""
+        return sum(e.delta for e in self._window)
+
     @property
     def current_score(self) -> int:
         """Sum of risk_score_delta values in the current window."""
         with self._lock:
-            return sum(e.delta for e in self._window)
+            return self._score_locked()
 
     @property
     def is_safe_mode(self) -> bool:
@@ -81,7 +85,7 @@ class RiskScoreAccumulator:
         comparison.
         """
         with self._lock:
-            return sum(e.delta for e in self._window) >= self._config.deny_threshold
+            return self._score_locked() >= self._config.deny_threshold
 
     def reset(self) -> None:
         """Clear all accumulated entries and reset score to zero."""

@@ -47,11 +47,15 @@ import functools
 import logging
 from typing import Any, Callable, TypeVar, Union
 
-from veronica_core.adapters._shared import build_container, cost_from_total_tokens
+from veronica_core.adapters._shared import (
+    build_container,
+    cost_from_total_tokens,
+    extract_llm_result_cost,
+    record_budget_spend,
+)
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
-from veronica_core.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
 
@@ -152,16 +156,8 @@ class VeronicaLangGraphCallback:
         if self._container.step_guard is not None:
             self._container.step_guard.step()
 
-        if self._container.budget is not None:
-            cost = _extract_llm_result_cost(response)
-            within = self._container.budget.spend(cost)
-            if not within:
-                logger.warning(
-                    "[VERONICA_LG] LLM call pushed budget over limit "
-                    "(spent $%.4f / $%.4f)",
-                    self._container.budget.spent_usd,
-                    self._container.budget.limit_usd,
-                )
+        cost = extract_llm_result_cost(response)
+        record_budget_spend(self._container, cost, "[VERONICA_LG]", logger)
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         """Error hook: log error without charging budget."""
@@ -175,39 +171,6 @@ class VeronicaLangGraphCallback:
     def container(self) -> AIContainer:
         """The underlying AIContainer (for testing and introspection)."""
         return self._container
-
-
-def _extract_llm_result_cost(response: Any) -> float:
-    """Extract USD cost from a LangChain LLMResult (used by callback handler).
-
-    Mirrors the logic in adapters/langchain.py _estimate_cost() so that
-    VeronicaLangGraphCallback works with the same LLMResult objects when
-    LangGraph invokes the callbacks.
-    """
-    try:
-        if response is None:
-            return 0.0
-        llm_output = getattr(response, "llm_output", None)
-        if llm_output is None:
-            return 0.0
-        usage = llm_output.get("token_usage") or llm_output.get("usage")
-        if not usage:
-            return 0.0
-
-        model = llm_output.get("model_name") or llm_output.get("model") or ""
-
-        prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
-        completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
-
-        if prompt_tokens is not None and completion_tokens is not None:
-            return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))
-
-        total_raw = usage.get("total_tokens")
-        if total_raw is None:
-            return 0.0
-        return cost_from_total_tokens(int(total_raw), model)
-    except (AttributeError, TypeError, ValueError, KeyError, OverflowError, RuntimeError):
-        return 0.0
 
 
 # ---------------------------------------------------------------------------

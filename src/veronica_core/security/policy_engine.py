@@ -630,13 +630,15 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
                     reason="Query string contains hex-encoded data (potential exfiltration)",
                     risk_score_delta=9,
                 )
-            if len(value) > NET_ENTROPY_MIN_LEN and _shannon_entropy(value) > NET_ENTROPY_THRESHOLD:
-                return PolicyDecision(
-                    verdict="DENY",
-                    rule_id="net.high_entropy_query",
-                    reason=f"Query string value has high entropy ({_shannon_entropy(value):.2f} bits)",
-                    risk_score_delta=9,
-                )
+            if len(value) > NET_ENTROPY_MIN_LEN:
+                entropy = _shannon_entropy(value)
+                if entropy > NET_ENTROPY_THRESHOLD:
+                    return PolicyDecision(
+                        verdict="DENY",
+                        rule_id="net.high_entropy_query",
+                        reason=f"Query string value has high entropy ({entropy:.2f} bits)",
+                        risk_score_delta=9,
+                    )
     return None
 
 

@@ -149,7 +149,7 @@ class AsyncMCPContainmentAdapter:
         if not tool_name or not isinstance(tool_name, str):
             raise ValueError(f"tool_name must be a non-empty string, got {tool_name!r}")
 
-        self._ensure_stats(tool_name)
+        await self._ensure_stats(tool_name)
 
         # Circuit breaker pre-check.
         if self._circuit_breaker is not None:
@@ -292,16 +292,17 @@ class AsyncMCPContainmentAdapter:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_stats(self, tool_name: str) -> None:
+    async def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""
-        if tool_name not in self._stats:
-            if len(self._stats) >= _STATS_WARN_LIMIT:
-                logger.warning(
-                    "Async MCP adapter stats tracking %d+ distinct tool names; "
-                    "this may indicate unbounded tool-name generation",
-                    _STATS_WARN_LIMIT,
-                )
-            self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
+        async with self._stats_lock:
+            if tool_name not in self._stats:
+                if len(self._stats) >= _STATS_WARN_LIMIT:
+                    logger.warning(
+                        "Async MCP adapter stats tracking %d+ distinct tool names; "
+                        "this may indicate unbounded tool-name generation",
+                        _STATS_WARN_LIMIT,
+                    )
+                self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
 
 
 # ---------------------------------------------------------------------------

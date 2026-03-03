@@ -6,6 +6,40 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.5] — 2026-03-03 — Simplify & Quality Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **retry.py**: `check()` read `_last_error` without lock (data race). Now acquires lock.
+- **retry.py**: Unreachable fallback `raise self._last_error` when `_last_error is None` caused
+  TypeError. Now raises `RuntimeError("max retries exceeded")`.
+- **mcp_async.py**: `_ensure_stats()` TOCTOU -- check moved inside `async with _stats_lock`.
+- **compliance/exporter.py**: Default endpoint hardcoded to external URL. Now requires explicit
+  endpoint (raises ValueError if empty).
+- **policy_engine.py**: `_shannon_entropy()` called twice per query param. Computed once now.
+- **risk_score.py**: `is_safe_mode` computed sum redundantly. Now delegates to `current_score`.
+- **distributed.py**: `import re` moved to top-level. Redundant `fallback.get()` consolidated.
+- **adaptive_budget.py**: Anomaly factor expression (5 occurrences) extracted to
+  `_anomaly_factor_locked()` helper.
+
+### Changed
+
+- **Adapter unification**: `ag2.py`, `langchain.py`, `llamaindex.py` now use `_shared.build_container()`
+  and `_shared.record_budget_spend()`. Eliminated 4 copy-paste budget warning blocks.
+  `_extract_llm_result_cost()` moved from `langgraph.py` to `_shared.py`.
+
+### Added
+
+- `tests/test_adapter_exec.py` -- 35 tests for `adapter/exec.py` (path traversal, capability
+  branches, timeout, mkdir side effects).
+- `tests/test_state_machine.py` -- 4 concurrency tests with `threading.Barrier`.
+- `tests/test_compliance_exporter.py` -- tautological assertions replaced with meaningful checks.
+- Total: 2482 tests passing.
+
+---
+
 ## [1.8.4] — 2026-03-03 — Distributed Safety & Coverage Hardening
 
 **Breaking changes:** none
