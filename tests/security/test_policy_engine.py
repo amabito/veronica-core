@@ -242,6 +242,30 @@ class TestAdditionalPolicyEdgeCases:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "UNKNOWN_ACTION"
 
+    def test_proc_self_environ_is_denied(self) -> None:
+        """/proc/self/environ leaks all environment variables -- must be blocked."""
+        engine = _engine()
+        ctx = _ctx("file_read", ["/proc/self/environ"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
+
+    def test_proc_self_cmdline_is_denied(self) -> None:
+        """/proc/self/cmdline exposes command-line secrets -- must be blocked."""
+        engine = _engine()
+        ctx = _ctx("file_read", ["/proc/self/cmdline"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
+
+    def test_proc_pid_environ_is_denied(self) -> None:
+        """/proc/<pid>/environ for other processes -- must be blocked."""
+        engine = _engine()
+        ctx = _ctx("file_read", ["/proc/1234/environ"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "FILE_READ_DENY_SENSITIVE"
+
     def test_git_workflow_subcmd_is_denied(self) -> None:
         """git workflow subcommand is blocked."""
         engine = _engine()

@@ -297,3 +297,42 @@ def test_attach_partial_buffer_different_buffer_raises():
     ctx.wrap_llm_call(fn=fn, options=WrapOptions(partial_buffer=buf_original))
     assert len(errors) == 1
     assert "different buffer" in str(errors[0]).lower() or "already attached" in str(errors[0]).lower()
+
+
+# ---------------------------------------------------------------------------
+# Test: wrap_llm_call after __exit__ returns HALT
+# ---------------------------------------------------------------------------
+
+
+def test_wrap_after_exit_returns_halt():
+    """After the context manager exits, wrap_llm_call must return HALT."""
+    ctx = _make_ctx(max_steps=10)
+    with ctx:
+        decision = ctx.wrap_llm_call(fn=lambda: "ok")
+        assert decision.name == "ALLOW"
+
+    # Context is now exited — subsequent calls must be rejected.
+    decision = ctx.wrap_llm_call(fn=lambda: "should_not_run")
+    assert decision.name == "HALT"
+
+
+def test_wrap_after_exit_does_not_execute_fn():
+    """The wrapped function must NOT be called after __exit__."""
+    called = []
+    ctx = _make_ctx(max_steps=10)
+    with ctx:
+        ctx.wrap_llm_call(fn=lambda: "ok")
+
+    ctx.wrap_llm_call(fn=lambda: called.append(True))
+    assert called == []
+
+
+def test_snapshot_aborted_after_exit():
+    """get_snapshot() must show aborted=True after context manager exits."""
+    ctx = _make_ctx(max_steps=10)
+    with ctx:
+        ctx.wrap_llm_call(fn=lambda: "ok")
+
+    snap = ctx.get_snapshot()
+    assert snap.aborted is True
+    assert snap.abort_reason == "context_manager_exited"

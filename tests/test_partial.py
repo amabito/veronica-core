@@ -95,3 +95,22 @@ class TestPartialBufferOverflowEvidenceFields:
         buf.append("hello")
         d = buf.to_dict()
         assert "truncated" not in d
+
+
+class TestAppendAfterComplete:
+    def test_append_after_mark_complete_raises(self):
+        """append() after mark_complete() must raise ValueError."""
+        buf = PartialResultBuffer()
+        buf.append("hello")
+        buf.mark_complete()
+        assert buf.is_complete
+        with pytest.raises(ValueError, match="marked complete"):
+            buf.append(" world")
+
+    def test_mark_complete_does_not_prevent_read(self):
+        """mark_complete() must not prevent get_partial() or to_dict()."""
+        buf = PartialResultBuffer()
+        buf.append("data")
+        buf.mark_complete()
+        assert buf.get_partial() == "data"
+        assert buf.to_dict()["partial_text"] == "data"

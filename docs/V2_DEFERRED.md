@@ -24,6 +24,8 @@ a patch release.
 |----|-------------|------|-------|
 | T-1 | `budget_backend.add()` outside lock (H3) allows one-call overrun in high concurrency | `execution_context.py:947` | Documented trade-off; H4 distributed check catches on next call |
 | T-2 | `max_steps=0` causes immediate HALT on first wrap call | `execution_context.py:1042` | Semantically correct: "zero steps allowed = no calls" |
+| T-3 | `max_output_tokens=0` causes immediate HALT on `TokenBudgetHook` | `shield/token_budget.py` | Same semantics as T-2 |
+| T-4 | `RedisBudgetBackend._client` use-after-free between `get()`/`reset()` and reconnect | `distributed.py:298` | Lock during I/O risks deadlock; exception handler mitigates |
 
 ## Latent Edge Cases
 
@@ -39,6 +41,23 @@ a patch release.
 | L-8 | LOW | JSONBackend orphans `.tmp` file on failed `replace()` (Windows file locking) | `backends.py` | Negligible disk impact |
 | L-9 | LOW | ComplianceExporter `_enqueue` drops payload silently on Full->Empty->Full race | `compliance/exporter.py` | Rare under normal load |
 | L-10 | LOW | WSGI middleware context-var reset / `__exit__` exception ordering suboptimal | `middleware.py` | Both ops expected safe |
+| L-11 | LOW | `BudgetEnforcer` with `limit_usd=0.0` produces `inf` utilization in `to_dict()` | `budget.py` | Edge case; JSON `Infinity` not serializable |
+| L-12 | LOW | `create_child()` TOCTOU: sibling children can collectively exceed parent budget | `execution_context.py:1184` | Requires concurrent `create_child()` from multiple threads |
+| L-13 | LOW | Base64 exfiltration detection threshold 20 chars allows short encoded secrets | `policy_engine.py:89` | Lowering threshold increases false positives |
+| L-14 | LOW | Divergence event drain after `mark_running()` may miss concurrent events | `execution_context.py:598` | Requires extreme concurrency on same node |
+| L-15 | LOW | `ExecutionContext.__enter__` has no double-entry guard | `execution_context.py:380` | Python context managers rarely guard this |
+
+## Resolved in v1.8.9 (Previously Deferred)
+
+| ID | Description | Resolution |
+|----|-------------|------------|
+| R-12 | `RedisBudgetBackend.is_using_fallback` unprotected read | Added `with self._lock` |
+| R-13 | `DistributedCircuitBreaker.is_using_fallback` unprotected read | Added `with self._lock` |
+| R-14 | `ExecutionContext.get_partial_result()` unprotected dict read | Added `with self._lock` |
+| R-15 | `ExecutionContext.__exit__` did not set `_aborted` -- post-exit wrap calls could execute | Set `_aborted = True` in `__exit__` |
+| R-16 | `PartialResultBuffer.append()` after `mark_complete()` silently accepted | Added `ValueError` guard |
+| R-17 | `/proc/self/environ` and `/proc/*/cmdline` not in `FILE_READ_DENY_PATTERNS` | Added 4 procfs patterns |
+| R-18 | `SecretMasker._mask_value()` returned unmasked strings at `MAX_DEPTH` boundary | Added shallow masking pass for strings and immediate container children |
 
 ## Resolved in v1.8.8 (Previously Deferred)
 
@@ -63,4 +82,4 @@ a patch release.
 
 ---
 
-Last updated: 2026-03-03 (v1.8.8)
+Last updated: 2026-03-03 (v1.8.9)

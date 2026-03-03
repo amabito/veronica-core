@@ -107,7 +107,29 @@ class SecretMasker:
             _depth: Internal recursion depth counter; passed automatically.
         """
         if _depth >= self._MAX_DEPTH:
-            # Bail out silently — better to skip masking than to crash or loop.
+            # At max depth, still mask string/bytes values (non-recursive) to
+            # prevent secrets hidden in deeply nested structures from leaking.
+            # For containers, apply a shallow single-pass mask to immediate
+            # string/bytes children so that secrets one level deeper are caught.
+            if isinstance(value, str):
+                return self.mask(value)
+            if isinstance(value, bytes):
+                return self.mask(value.decode("utf-8", errors="replace"))
+            if isinstance(value, dict):
+                return {
+                    k: self.mask(v) if isinstance(v, str)
+                    else self.mask(v.decode("utf-8", errors="replace")) if isinstance(v, bytes)
+                    else v
+                    for k, v in value.items()
+                }
+            if isinstance(value, (list, tuple)):
+                masked = [
+                    self.mask(item) if isinstance(item, str)
+                    else self.mask(item.decode("utf-8", errors="replace")) if isinstance(item, bytes)
+                    else item
+                    for item in value
+                ]
+                return type(value)(masked) if isinstance(value, tuple) else masked
             return value
         if isinstance(value, bytes):
             return self._mask_value(key, value.decode("utf-8", errors="replace"), _depth)

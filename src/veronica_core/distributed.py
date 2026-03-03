@@ -335,7 +335,8 @@ class RedisBudgetBackend:
 
     @property
     def is_using_fallback(self) -> bool:
-        return self._using_fallback
+        with self._lock:
+            return self._using_fallback
 
 
 def get_default_backend(
@@ -1177,7 +1178,8 @@ class DistributedCircuitBreaker:
     @property
     def is_using_fallback(self) -> bool:
         """True if currently operating in local fallback mode."""
-        return self._using_fallback
+        with self._lock:
+            return self._using_fallback
 
 
 def get_default_circuit_breaker(

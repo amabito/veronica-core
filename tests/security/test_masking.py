@@ -594,3 +594,53 @@ class TestAdversarialMasking:
         result = masker.mask_dict(a)
         assert result is not None
         assert result["name"] == "dict_a"
+
+
+class TestDeepNestingMasking:
+    """Strings at depth >= MAX_DEPTH must still be masked via shallow pass."""
+
+    def test_secret_string_at_max_depth_boundary(self, masker: SecretMasker) -> None:
+        """A string value at exactly MAX_DEPTH is still redacted."""
+        data: dict = {}
+        current = data
+        # Build nesting to depth MAX_DEPTH (50). The string is the value
+        # at the final level, so _mask_value sees it at _depth=50.
+        for i in range(masker._MAX_DEPTH):
+            current["nested"] = {}
+            current = current["nested"]
+        current["api_key"] = "sk_live_" + "x" * 30
+
+        result = masker.mask_dict(data)
+        flat = str(result)
+        assert "sk_live_" not in flat
+        assert "REDACTED" in flat
+
+    def test_secret_one_past_max_depth(self, masker: SecretMasker) -> None:
+        """A string inside a dict at MAX_DEPTH is masked by shallow pass."""
+        data: dict = {}
+        current = data
+        # At depth MAX_DEPTH, value is a dict with an immediate string child.
+        # The shallow masking pass at MAX_DEPTH must catch this.
+        for i in range(masker._MAX_DEPTH):
+            current["nested"] = {}
+            current = current["nested"]
+        # current is the dict at _depth=MAX_DEPTH; add a string child.
+        current["secret_child"] = {"api_key": "sk_live_" + "x" * 30}
+
+        result = masker.mask_dict(data)
+        flat = str(result)
+        assert "sk_live_" not in flat
+        assert "REDACTED" in flat
+
+    def test_bytes_at_max_depth_is_masked(self, masker: SecretMasker) -> None:
+        """Bytes containing a secret at MAX_DEPTH boundary are still masked."""
+        data: dict = {}
+        current = data
+        for i in range(masker._MAX_DEPTH):
+            current["nested"] = {}
+            current = current["nested"]
+        current["secret"] = b"AKIAIOSFODNN7EXAMPLE"
+
+        result = masker.mask_dict(data)
+        flat = str(result)
+        assert "AKIAIOSFODNN7EXAMPLE" not in flat

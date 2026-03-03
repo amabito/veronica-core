@@ -386,6 +386,15 @@ class ExecutionContext:
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        # Mark the context as aborted so that subsequent wrap_llm_call /
+        # wrap_tool_call invocations return HALT immediately.  Without this,
+        # callers could accidentally execute new LLM calls after the context
+        # manager has exited and cleaned up resources.
+        with self._lock:
+            self._aborted = True
+            if self._abort_reason is None:
+                self._abort_reason = "context_manager_exited"
+
         # Signal the timeout watcher thread to stop and wait for it to exit.
         # cancel() unblocks the thread's wait() call; join() ensures the thread
         # has actually finished before the context exits, preventing thread leaks
@@ -508,7 +517,8 @@ class ExecutionContext:
         Args:
             node_id: The graph_node_id associated with the wrap call.
         """
-        return self._partial_buffers.get(node_id)
+        with self._lock:
+            return self._partial_buffers.get(node_id)
 
     def abort(self, reason: str) -> None:
         """Cancel all pending work and prevent future wrap calls.

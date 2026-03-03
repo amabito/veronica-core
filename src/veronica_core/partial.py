@@ -86,7 +86,12 @@ class PartialResultBuffer:
         Raises:
             PartialBufferOverflow: If chunk count or total byte size limit is
                 exceeded. Subclasses ValueError for backward compatibility.
+            ValueError: If the buffer has already been marked complete.
         """
+        if self._is_complete:
+            raise ValueError(
+                "Cannot append to a PartialResultBuffer that has been marked complete."
+            )
         if len(self._chunks) >= MAX_CHUNKS:
             self._is_partial_overflow = True
             raise PartialBufferOverflow(

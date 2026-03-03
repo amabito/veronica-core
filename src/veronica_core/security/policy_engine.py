@@ -60,6 +60,12 @@ FILE_READ_DENY_PATTERNS: tuple[str, ...] = (
     "**/*.key",
     "**/*.p12",
     "**/*.pfx",
+    # Linux procfs: exposes environment variables, command-line args,
+    # and file descriptors (includes secrets passed via env or CLI).
+    "/proc/self/environ",
+    "/proc/self/cmdline",
+    "/proc/*/environ",
+    "/proc/*/cmdline",
 )
 
 NET_ALLOWLIST_HOSTS: frozenset[str] = frozenset({

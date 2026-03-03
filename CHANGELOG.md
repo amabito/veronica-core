@@ -6,6 +6,25 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.9] — 2026-03-03 — Round 3 Deep Audit
+
+**Breaking changes:** `PartialResultBuffer.append()` now raises `ValueError` after `mark_complete()` (previously silent).
+
+### Fixed
+
+- **distributed.py**: `RedisBudgetBackend.is_using_fallback` and `DistributedCircuitBreaker.is_using_fallback` now hold `_lock` for thread safety.
+- **ExecutionContext**: `get_partial_result()` now holds `_lock` for thread-safe dict access.
+- **ExecutionContext**: `__exit__` now sets `_aborted = True` to prevent post-exit `wrap_llm_call` execution.
+- **PartialResultBuffer**: `append()` now raises `ValueError` if the buffer has been `mark_complete()`d.
+- **PolicyEngine**: Added `/proc/self/environ`, `/proc/self/cmdline`, `/proc/*/environ`, `/proc/*/cmdline` to `FILE_READ_DENY_PATTERNS`.
+- **SecretMasker**: `_mask_value()` at `MAX_DEPTH` now applies shallow masking to strings, bytes, and immediate container children instead of returning unmasked.
+
+### Changed
+
+- `docs/V2_DEFERRED.md`: Added 7 resolved items (R-12 to R-18), 7 new deferred items (T-3, T-4, L-11 to L-15).
+
+---
+
 ## [1.8.8] — 2026-03-03 — Round 2 LOW Sweep
 
 **Breaking changes:** none
