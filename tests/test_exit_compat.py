@@ -183,3 +183,10 @@ class TestVeronicaPersistenceGetattr:
             klass = veronica_core.VeronicaPersistence
         from veronica_core.persist import VeronicaPersistence as _VP
         assert klass is _VP
+
+    def test_unknown_module_getattr_raises_attribute_error(self) -> None:
+        """Accessing a non-existent name on veronica_core must raise AttributeError."""
+        import veronica_core
+
+        with pytest.raises(AttributeError, match="has no attribute"):
+            _ = veronica_core.TotallyBogusName123

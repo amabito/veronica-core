@@ -213,6 +213,9 @@ def _install_on_halt_dispatch(
     - ``"raise"``  -- raises :class:`VeronicaHalt` on HALT.
     - ``"warn"``   -- logs a warning on HALT, returns the Decision.
     - ``"silent"`` -- returns the Decision unchanged (no-op).
+
+    Idempotent: if called multiple times, the previous wrapper is unwound
+    so that only a single dispatch layer exists (no double-logging).
     """
     if mode == "silent":
         return  # nothing to patch
@@ -220,7 +223,10 @@ def _install_on_halt_dispatch(
     from veronica_core.inject import VeronicaHalt
     from veronica_core.shield.types import Decision
 
-    original_wrap = ctx.wrap_llm_call
+    current = ctx.wrap_llm_call
+    # If current is already our wrapper, unwrap to the stashed original to
+    # prevent wrapper stacking (double-logging in warn mode).
+    original_wrap = getattr(current, "_quickstart_original", None) or current
 
     def _dispatching_wrap(*args: Any, **kwargs: Any) -> Any:
         result = original_wrap(*args, **kwargs)
@@ -234,6 +240,7 @@ def _install_on_halt_dispatch(
                 logger.warning("[VERONICA] HALT: %s", reason)
         return result
 
+    _dispatching_wrap._quickstart_original = original_wrap  # type: ignore[attr-defined]
     ctx.wrap_llm_call = _dispatching_wrap  # type: ignore[method-assign]
 
 

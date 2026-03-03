@@ -442,6 +442,34 @@ class TestAdversarialOnHalt:
         shutdown()
         assert get_context() is None
 
+    def test_double_install_warn_logs_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Double-calling _install_on_halt_dispatch must NOT stack wrappers.
+
+        If stacked, warn mode would log twice per HALT.  This test verifies
+        exactly one warning is emitted.
+        """
+        ctx = init("$100.00", on_halt="warn")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
+        # Install twice -- the second call must NOT stack on top of the first.
+        _install_on_halt_dispatch(ctx, "warn")
+        _install_on_halt_dispatch(ctx, "warn")
+        with caplog.at_level(logging.WARNING, logger="veronica_core.quickstart"):
+            ctx.wrap_llm_call()
+        halt_records = [r for r in caplog.records if "HALT" in r.message]
+        assert len(halt_records) == 1, (
+            f"Expected exactly 1 HALT warning but got {len(halt_records)}; "
+            f"wrapper stacking detected"
+        )
+
+    def test_init_shutdown_interleaving_storm(self) -> None:
+        """Rapid init/shutdown cycling must not corrupt module state."""
+        for _ in range(20):
+            ctx = init("$1.00", on_halt="silent")
+            assert get_context() is ctx
+            shutdown()
+            assert get_context() is None
+
 
 # ---------------------------------------------------------------------------
 # TestAdversarialRedactExc -- attacker mindset for credential redaction
@@ -488,3 +516,30 @@ class TestAdversarialRedactExc:
         exc = ConnectionError("redis://host:6379/0 refused")
         result = _redact_exc(exc)
         assert "redis://host:6379/0" in result
+
+    def test_uppercase_scheme_redacted(self) -> None:
+        """REDIS:// (uppercase) must be redacted -- case-insensitive."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError("REDIS://admin:secret@host:6379/0")
+        result = _redact_exc(exc)
+        assert "secret" not in result
+        assert "admin" not in result
+
+    def test_redis_plus_ssl_scheme_redacted(self) -> None:
+        """redis+ssl:// scheme must also be redacted."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError("redis+ssl://user:pass@secure.host:6380/1")
+        result = _redact_exc(exc)
+        assert "user:" not in result
+        assert "***@secure.host" in result
+
+    def test_password_with_literal_at_sign(self) -> None:
+        """Password containing literal '@' must be fully redacted (no partial leak)."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError("redis://user:p@ss@host:6379/0")
+        result = _redact_exc(exc)
+        assert "p@ss" not in result
+        assert "***@host:6379/0" in result
