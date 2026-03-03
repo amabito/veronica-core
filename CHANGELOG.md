@@ -6,6 +6,41 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.3] — 2026-03-03 — Thread Safety & Adversarial Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **CRITICAL: ExecutionConfig NaN bypass** -- `float('nan')` in `max_cost_usd` bypassed
+  all comparison-based budget checks (`nan >= nan` is always False). Added `__post_init__`
+  validation rejecting NaN, Inf, and negative values for all numeric config fields.
+- **distributed.py**: 6 remaining Redis URL credential leaks in logger calls now redacted
+  via `_redact_exc()`. Fixed TOCTOU race in `add()`/`get()`/`reset()` fallback paths by
+  holding `_lock` for the entire fallback-check-and-dispatch sequence.
+- **execution_context.py**: `_budget_backend.add()` moved outside `_lock` to prevent
+  blocking Redis IO from stalling all threads. `pipeline.get_events()` moved outside lock
+  to prevent re-entrant deadlock. `_partial_buffers` dict write now protected by `_lock`.
+  Event dedup upgraded from O(n) list scan to O(1) set lookup. `get_graph_snapshot()`
+  now acquires `_lock` for read consistency.
+- **mcp_async.py**: Added `asyncio.Lock` for stats updates preventing race conditions
+  after `await` yield points. `list_tools` failure log level upgraded from debug to warning.
+- **mcp.py**: `tool_name` validation now rejects None, empty string, and non-string values.
+- **patch.py**: Cost estimation failures now logged at debug level (was silent `return 0.0`).
+- **state.py**: `VeronicaStateMachine.from_dict()` now handles corrupted entries gracefully
+  with warning instead of crashing.
+- **integration.py**: `operation_count` in `maybe_save()` protected by `_lock`.
+- **exporter.py**: All silent `except Exception: pass` blocks now log at debug level.
+
+### Added
+
+- 75 adversarial tests covering: TOCTOU proof with `threading.Barrier`, HALF_OPEN slot
+  atomicity, step/cost boundary off-by-one, `_finalize_success` idempotency, concurrent
+  event dedup, `_budget_backend.add()` failure resilience, async stats lock contention
+  under 100 coroutines, sync stats concurrent initialization race.
+
+---
+
 ## [1.8.2] — 2026-03-03 — Phase 0 Hotfix
 
 **Breaking changes:** none

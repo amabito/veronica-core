@@ -156,7 +156,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v1.8.2
+## Ship Readiness -- v1.8.3
 
 2336 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
