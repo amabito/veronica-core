@@ -160,7 +160,7 @@ class RedisBudgetBackend:
         except Exception as exc:
             logger.error(
                 "RedisBudgetBackend: reconciliation failed (%s) — fallback delta preserved.",
-                exc,
+                _redact_exc(exc),
             )
             return False
         self._fallback.reset()
@@ -176,6 +176,11 @@ class RedisBudgetBackend:
 
         Reconnect attempts are rate-limited via ``_last_reconnect_attempt`` to
         avoid hot-loop log storms during extended Redis outages.
+
+        **Must be called with ``self._lock`` already held by the caller.**
+        ``add()`` acquires the lock for the entire check-and-dispatch block
+        (H4 TOCTOU fix), so ``_last_reconnect_attempt`` reads/writes here are
+        automatically serialised — no additional lock acquisition needed.
         """
         now = time.monotonic()
         last = getattr(self, "_last_reconnect_attempt", 0.0)
@@ -241,18 +246,19 @@ class RedisBudgetBackend:
             logger.warning(
                 "RedisBudgetBackend: could not seed fallback from Redis (%s) — "
                 "budget enforcement may be permissive during outage.",
-                exc,
+                _redact_exc(exc),
             )
 
     def add(self, amount: float) -> float:
-        # If previously using fallback, attempt to reconnect (rate-limited).
-        if self._using_fallback and self._fallback_on_error:
-            with self._lock:
-                if self._using_fallback:
-                    self._try_reconnect()
-
-        if self._using_fallback or self._client is None:
-            return self._fallback.add(amount)
+        # Hold the lock for the entire check-and-dispatch to prevent TOCTOU:
+        # without the lock, a concurrent thread can flip _using_fallback between
+        # the outer read (reconnect guard) and the dispatch read below, causing
+        # either double-routing or missed fallback transitions.
+        with self._lock:
+            if self._using_fallback and self._fallback_on_error:
+                self._try_reconnect()
+            if self._using_fallback or self._client is None:
+                return self._fallback.add(amount)
         try:
             pipe = self._client.pipeline()
             pipe.incrbyfloat(self._key, amount)
@@ -279,8 +285,10 @@ class RedisBudgetBackend:
             raise
 
     def get(self) -> float:
-        if self._using_fallback or self._client is None:
-            return self._fallback.get()
+        # Hold lock for check-and-dispatch to prevent TOCTOU (same rationale as add()).
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                return self._fallback.get()
         try:
             val = self._client.get(self._key)
             return float(val) if val is not None else 0.0
@@ -291,9 +299,11 @@ class RedisBudgetBackend:
             raise
 
     def reset(self) -> None:
-        if self._using_fallback or self._client is None:
-            self._fallback.reset()
-            return
+        # Hold lock for check-and-dispatch to prevent TOCTOU (same rationale as add()).
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                self._fallback.reset()
+                return
         try:
             self._client.delete(self._key)
         except Exception as exc:
@@ -610,7 +620,7 @@ class DistributedCircuitBreaker:
                 logger.warning(
                     "DistributedCircuitBreaker: cannot connect to Redis (%s). "
                     "Falling back to local CircuitBreaker.",
-                    exc,
+                    _redact_exc(exc),
                 )
                 self._using_fallback = True
             else:
@@ -655,7 +665,7 @@ class DistributedCircuitBreaker:
             logger.warning(
                 "DistributedCircuitBreaker: could not seed fallback from Redis (%s) — "
                 "fallback starts in CLOSED state.",
-                exc,
+                _redact_exc(exc),
             )
 
     def _reconcile_on_reconnect(self) -> bool:
@@ -704,7 +714,7 @@ class DistributedCircuitBreaker:
             logger.error(
                 "DistributedCircuitBreaker: reconciliation failed (%s) — "
                 "fallback state preserved.",
-                exc,
+                _redact_exc(exc),
             )
             return False
 
@@ -766,7 +776,7 @@ class DistributedCircuitBreaker:
         logger.error(
             "DistributedCircuitBreaker.%s failed: %s — using local fallback",
             method_name,
-            exc,
+            _redact_exc(exc),
         )
         with self._lock:
             if not self._using_fallback:

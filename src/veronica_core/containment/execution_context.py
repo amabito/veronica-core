@@ -40,6 +40,7 @@ Usage::
 from __future__ import annotations
 
 import contextvars
+import math
 import threading
 import time
 import uuid
@@ -189,6 +190,24 @@ class ExecutionConfig:
     budget_backend: "Any | None" = None  # BudgetBackend instance for cross-process tracking
     redis_url: str | None = None  # Convenience: auto-create RedisBudgetBackend
 
+    def __post_init__(self) -> None:
+        if math.isnan(self.max_cost_usd) or math.isinf(self.max_cost_usd):
+            raise ValueError(
+                f"max_cost_usd must be a finite number, got {self.max_cost_usd!r}"
+            )
+        if self.max_cost_usd < 0:
+            raise ValueError(
+                f"max_cost_usd must be non-negative, got {self.max_cost_usd!r}"
+            )
+        if self.max_steps < 0:
+            raise ValueError(
+                f"max_steps must be non-negative, got {self.max_steps!r}"
+            )
+        if self.max_retries_total < 0:
+            raise ValueError(
+                f"max_retries_total must be non-negative, got {self.max_retries_total!r}"
+            )
+
 
 @dataclass(frozen=True)
 class WrapOptions:
@@ -333,6 +352,8 @@ class ExecutionContext:
         self._abort_reason: str | None = None
         self._nodes: list[NodeRecord] = []
         self._events: list[SafetyEvent] = []
+        # M4: O(1) dedup for _emit_chain_event (replaces O(n) any() scan)
+        self._event_dedup_keys: set[tuple[str, Any, str, str, str]] = set()
 
         # Execution graph for DAG tracking of all nodes.
         self._graph = ExecutionGraph(chain_id=self._metadata.chain_id)
@@ -476,7 +497,10 @@ class ExecutionContext:
         Returns:
             dict as produced by ExecutionGraph.snapshot().
         """
-        return self._graph.snapshot()
+        # L6: Acquire _lock for consistency with get_snapshot() which also reads
+        # graph state while holding the lock.
+        with self._lock:
+            return self._graph.snapshot()
 
     def get_partial_result(self, node_id: str) -> "PartialResultBuffer | None":
         """Return the PartialResultBuffer for *node_id*, or None if none was attached.
@@ -685,13 +709,15 @@ class ExecutionContext:
             pipeline_decision = self._pipeline.before_tool_call(tool_ctx)  # type: ignore[union-attr]
 
         if pipeline_decision != Decision.ALLOW:
-            with self._lock:
-                for ev in self._pipeline.get_events():  # type: ignore[union-attr]
-                    if ev not in self._events:
-                        self._events.append(ev)
+            # M6: Collect pipeline events outside lock to avoid potential
+            # re-entrant deadlock if pipeline hooks call back into this context.
+            pre_halt_events = self._pipeline.get_events()  # type: ignore[union-attr]
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
+                for ev in pre_halt_events:
+                    if ev not in self._events:
+                        self._events.append(ev)
                 self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
@@ -775,7 +801,10 @@ class ExecutionContext:
         """
         _buf_token = None
         if opts.partial_buffer is not None:
-            self._partial_buffers[graph_node_id] = opts.partial_buffer
+            # M2: Protect _partial_buffers dict write under _lock to prevent
+            # concurrent writes from different threads racing on the same dict.
+            with self._lock:
+                self._partial_buffers[graph_node_id] = opts.partial_buffer
             _buf_token = _current_partial_buffer.set(opts.partial_buffer)
 
         _fn_exc: BaseException | None = None
@@ -878,13 +907,15 @@ class ExecutionContext:
         tool_ctx = self._make_tool_ctx(node_id, opts, cost_usd=actual_cost)
         charge_decision = self._pipeline.before_charge(tool_ctx, actual_cost)  # type: ignore[union-attr]
         if charge_decision != Decision.ALLOW:
-            with self._lock:
-                for ev in self._pipeline.get_events():  # type: ignore[union-attr]
-                    if ev not in self._events:
-                        self._events.append(ev)
+            # M6: Collect pipeline events outside lock to avoid potential
+            # re-entrant deadlock if pipeline hooks call back into this context.
+            before_charge_events = self._pipeline.get_events()  # type: ignore[union-attr]
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
+                for ev in before_charge_events:
+                    if ev not in self._events:
+                        self._events.append(ev)
                 self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="before_charge_halt")
@@ -903,19 +934,26 @@ class ExecutionContext:
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
 
+        # H3: Move backend.add() outside lock — backend has its own internal
+        # locking and may perform blocking Redis IO. Holding _lock during that
+        # call would stall all other threads for the full round-trip latency.
+        self._budget_backend.add(actual_cost)
+
+        # M6: Collect pipeline events outside lock to avoid potential re-entrant
+        # deadlock if pipeline hooks call back into ExecutionContext methods.
+        pipeline_events = self._pipeline.get_events() if self._pipeline is not None else []
+
         with self._lock:
             self._step_count += 1
-            self._budget_backend.add(actual_cost)
             self._cost_usd_accumulated += actual_cost
             node.cost_usd = actual_cost
             node.status = "ok"
             node.end_ts = datetime.now(timezone.utc)
             self._nodes.append(node)
 
-            if self._pipeline is not None:
-                for ev in self._pipeline.get_events():
-                    if ev not in self._events:
-                        self._events.append(ev)
+            for ev in pipeline_events:
+                if ev not in self._events:
+                    self._events.append(ev)
 
         if self._parent is not None and actual_cost > 0.0:
             self._parent._propagate_child_cost(actual_cost)
@@ -1187,12 +1225,11 @@ class ExecutionContext:
         # events with identical fields but different creation times would NOT be
         # equal under the default frozen-dataclass __eq__. Compare by key tuple
         # instead to correctly suppress duplicate limit-check emissions.
+        # M4: O(1) dedup using pre-built key set (was O(n) any() linear scan)
         dedup_key = (event.event_type, event.decision, event.reason, event.hook, event.request_id)
-        if len(self._events) < _MAX_CHAIN_EVENTS and not any(
-            (e.event_type, e.decision, e.reason, e.hook, e.request_id) == dedup_key
-            for e in self._events
-        ):
+        if len(self._events) < _MAX_CHAIN_EVENTS and dedup_key not in self._event_dedup_keys:
             self._events.append(event)
+            self._event_dedup_keys.add(dedup_key)
 
     def _start_timeout_watcher(self) -> None:
         """Start a daemon thread that signals cancellation after timeout_ms."""

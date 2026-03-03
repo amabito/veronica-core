@@ -551,3 +551,238 @@ class TestRedactExc:
         exc = ValueError("bad value")
         result = _redact_exc(exc)
         assert result.startswith("ValueError: ")
+
+
+# ---------------------------------------------------------------------------
+# Adversarial tests — H1 redact, H4 TOCTOU, M1 reconnect race
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialRedactExcInLogs:
+    """H1: All Redis exception log calls must use _redact_exc, never raw exc.
+
+    Attacker mindset: an exception message can contain
+    'redis://user:password@host/db' — verifies that credential strings
+    never appear in log output.
+    """
+
+    def test_reconcile_on_reconnect_failure_log_redacts_url(self) -> None:
+        """RedisBudgetBackend._reconcile_on_reconnect error log must not leak credentials."""
+        import logging
+        from unittest.mock import patch
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+        backend = make_redis_backend(fake_client, chain_id="adv-redact-reconcile")
+        backend._fallback.add(1.0)
+
+        credential_url = "redis://admin:sup3rs3cret@redis.internal:6379/0"
+
+        class CredentialLeakingPipeline:
+            def incrbyfloat(self, *a, **kw): pass
+            def expire(self, *a, **kw): pass
+            def execute(self): raise ConnectionError(f"failed connecting to {credential_url}")
+
+        fake_client.pipeline = lambda: CredentialLeakingPipeline()
+
+        log_records: list[logging.LogRecord] = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                log_records.append(record)
+
+        handler = CapturingHandler()
+        target_logger = logging.getLogger("veronica_core.distributed")
+        target_logger.addHandler(handler)
+        try:
+            backend._reconcile_on_reconnect()
+        finally:
+            target_logger.removeHandler(handler)
+
+        assert log_records, "Expected at least one log record"
+        full_log_output = " ".join(r.getMessage() for r in log_records)
+        assert "sup3rs3cret" not in full_log_output, (
+            "Credential password must not appear in log output (H1 _redact_exc missing)"
+        )
+        assert "admin" not in full_log_output, (
+            "Credential username must not appear in log output (H1 _redact_exc missing)"
+        )
+
+    def test_seed_fallback_failure_log_redacts_url(self) -> None:
+        """RedisBudgetBackend._seed_fallback_from_redis warning log must not leak credentials."""
+        import logging
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+        backend = make_redis_backend(fake_client, chain_id="adv-redact-seed")
+
+        credential_url = "redis://secretuser:topsecret@10.0.0.1:6379/1"
+
+        def credential_leaking_get(key: str) -> None:
+            raise ConnectionError(f"Cannot reach {credential_url}")
+
+        fake_client.get = credential_leaking_get  # type: ignore[method-assign]
+
+        log_records: list[logging.LogRecord] = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                log_records.append(record)
+
+        handler = CapturingHandler()
+        target_logger = logging.getLogger("veronica_core.distributed")
+        target_logger.addHandler(handler)
+        try:
+            backend._seed_fallback_from_redis()
+        finally:
+            target_logger.removeHandler(handler)
+
+        full_log_output = " ".join(r.getMessage() for r in log_records)
+        assert "topsecret" not in full_log_output, (
+            "Password must not appear in log output (H1 fix for _seed_fallback_from_redis)"
+        )
+        assert "secretuser" not in full_log_output, (
+            "Username must not appear in log output (H1 fix for _seed_fallback_from_redis)"
+        )
+
+    def test_activate_fallback_log_redacts_url(self) -> None:
+        """DistributedCircuitBreaker._activate_fallback error log must not leak credentials."""
+        import logging
+
+        from veronica_core.distributed import DistributedCircuitBreaker
+
+        credential_url = "redis://circuituser:circuitpass@redis.circuit:6379/0"
+        exc = ConnectionError(f"Error in {credential_url}")
+
+        log_records: list[logging.LogRecord] = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                log_records.append(record)
+
+        handler = CapturingHandler()
+        target_logger = logging.getLogger("veronica_core.distributed")
+        target_logger.addHandler(handler)
+        try:
+            # Build a minimal DCB without a real Redis connection.
+            dcb = DistributedCircuitBreaker.__new__(DistributedCircuitBreaker)
+            dcb._redis_url = "redis://fake"
+            dcb._key = "veronica:cb:adv-test"
+            dcb._ttl = 3600
+            dcb._fallback_on_error = True
+            dcb._using_fallback = False
+            dcb._lock = threading.Lock()
+            from veronica_core.circuit_breaker import CircuitBreaker
+            dcb._fallback = CircuitBreaker(failure_threshold=3, recovery_timeout=30.0)
+            dcb._client = None
+            dcb._seed_fallback_from_redis = lambda: None  # type: ignore[method-assign]
+            dcb._activate_fallback(exc, "check")
+        finally:
+            target_logger.removeHandler(handler)
+
+        full_log_output = " ".join(r.getMessage() for r in log_records)
+        assert "circuitpass" not in full_log_output, (
+            "Password must not appear in log output (H1 fix for _activate_fallback)"
+        )
+        assert "circuituser" not in full_log_output, (
+            "Username must not appear in log output (H1 fix for _activate_fallback)"
+        )
+
+
+class TestAdversarialH4TOCTOUFallbackTransition:
+    """H4: Concurrent add() calls during fallback transition must not lose increments.
+
+    10 threads call add() simultaneously while the pipeline is broken.
+    After transition, all 10 increments must be present in the fallback.
+    """
+
+    def test_concurrent_add_during_fallback_transition_no_lost_increments(self) -> None:
+        import time
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-toctou-transition")
+
+        # Pre-load a known base value to verify seeding accuracy.
+        fake_client.set(backend._key, "5.0")
+        fake_client.expire(backend._key, 3600)
+
+        class SlowBrokenPipeline:
+            """Simulates slow-failing pipeline to expose TOCTOU window."""
+            def incrbyfloat(self, *a, **kw): pass
+            def expire(self, *a, **kw): pass
+            def execute(self):
+                time.sleep(0.005)  # widen the TOCTOU window
+                raise ConnectionError("pipeline failed")
+
+        fake_client.pipeline = lambda: SlowBrokenPipeline()
+
+        n_threads = 10
+        amount_per_thread = 0.1
+        results: list[float] = []
+        lock = threading.Lock()
+
+        def do_add() -> None:
+            val = backend.add(amount_per_thread)
+            with lock:
+                results.append(val)
+
+        threads = [threading.Thread(target=do_add) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == n_threads, "All threads must complete"
+        # Base (5.0) seeded exactly once + 10 increments of 0.1 = 6.0
+        final = backend._fallback.get()
+        assert abs(final - 6.0) < 1e-5, (
+            f"Expected fallback total 6.0 (5.0 seeded + 1.0 increments) but got {final}; "
+            "TOCTOU caused lost increments or double-seeding"
+        )
+
+
+class TestAdversarialM1ReconnectRaceUnderConcurrency:
+    """M1: _try_reconnect rate-limit must be enforced even under high concurrency.
+
+    10 threads call add() simultaneously while on fallback.  Only one
+    reconnect attempt should occur per _RECONNECT_INTERVAL window.
+    """
+
+    def test_try_reconnect_rate_limit_under_10_concurrent_threads(self) -> None:
+        from unittest.mock import patch
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-m1-reconnect-race")
+        backend._using_fallback = True
+        backend._fallback_on_error = True
+        backend._last_reconnect_attempt = 0.0
+
+        connect_calls: list[float] = []
+        import time
+
+        def counting_connect_fail(self_inner: object) -> None:
+            connect_calls.append(time.monotonic())
+            # Simulate failed reconnect: stays on fallback.
+            raise ConnectionError("still down")
+
+        n_threads = 10
+
+        def do_add() -> None:
+            backend.add(0.1)
+
+        with patch.object(type(backend), "_connect", counting_connect_fail):
+            threads = [threading.Thread(target=do_add) for _ in range(n_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        # Rate-limiter must allow at most 1 reconnect attempt across all threads.
+        assert len(connect_calls) <= 1, (
+            f"Expected at most 1 _connect call (rate-limited) but got {len(connect_calls)}; "
+            "H4 lock fix (holding lock during reconnect) must serialise _try_reconnect"
+        )

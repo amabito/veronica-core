@@ -1,5 +1,6 @@
 """Tests for VeronicaStateMachine."""
 
+import logging
 import time
 from veronica_core.state import VeronicaState, VeronicaStateMachine
 
@@ -214,3 +215,97 @@ class TestFromDictMutableReference:
 
         # Restored instance must be unaffected
         assert sm_restored.fail_counts["pair_x"] == 1
+
+
+class TestFromDictCorruptedStateHistory:
+    """L5: from_dict must skip invalid state_history entries with a warning."""
+
+    def test_corrupted_from_state_is_skipped(self, caplog):
+        """Invalid from_state string causes entry to be skipped with a warning."""
+        data = {
+            "cooldown_fails": 3,
+            "cooldown_seconds": 600,
+            "fail_counts": {},
+            "cooldowns": {},
+            "current_state": "IDLE",
+            "state_history": [
+                {
+                    "from_state": "INVALID_STATE",
+                    "to_state": "SCREENING",
+                    "timestamp": 1000.0,
+                    "reason": "bad entry",
+                },
+                {
+                    "from_state": "IDLE",
+                    "to_state": "SCREENING",
+                    "timestamp": 2000.0,
+                    "reason": "valid entry",
+                },
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger="veronica_core.state"):
+            sm = VeronicaStateMachine.from_dict(data)
+
+        # Only the valid entry should be in state_history
+        assert len(sm.state_history) == 1
+        assert sm.state_history[0].reason == "valid entry"
+        # A warning should have been logged for the invalid entry
+        assert any("Skipping invalid state_history entry" in r.message for r in caplog.records)
+
+    def test_corrupted_to_state_is_skipped(self, caplog):
+        """Invalid to_state string causes entry to be skipped with a warning."""
+        data = {
+            "current_state": "IDLE",
+            "state_history": [
+                {
+                    "from_state": "IDLE",
+                    "to_state": "NO_SUCH_STATE",
+                    "timestamp": 1000.0,
+                    "reason": "bad to_state",
+                },
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger="veronica_core.state"):
+            sm = VeronicaStateMachine.from_dict(data)
+
+        assert len(sm.state_history) == 0
+        assert any("Skipping invalid state_history entry" in r.message for r in caplog.records)
+
+    def test_missing_key_in_entry_is_skipped(self, caplog):
+        """Entry missing required key is skipped with a warning."""
+        data = {
+            "current_state": "IDLE",
+            "state_history": [
+                {
+                    # Missing 'from_state'
+                    "to_state": "SCREENING",
+                    "timestamp": 1000.0,
+                    "reason": "missing from_state",
+                },
+                {
+                    "from_state": "IDLE",
+                    "to_state": "SCREENING",
+                    "timestamp": 2000.0,
+                    "reason": "valid",
+                },
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger="veronica_core.state"):
+            sm = VeronicaStateMachine.from_dict(data)
+
+        assert len(sm.state_history) == 1
+        assert sm.state_history[0].reason == "valid"
+
+    def test_all_valid_entries_are_preserved(self):
+        """When all entries are valid, all are preserved."""
+        sm_orig = VeronicaStateMachine()
+        sm_orig.transition(VeronicaState.SCREENING, "start")
+
+        data = sm_orig.to_dict()
+        sm_restored = VeronicaStateMachine.from_dict(data)
+
+        assert len(sm_restored.state_history) == 1
+        assert sm_restored.state_history[0].to_state == VeronicaState.SCREENING

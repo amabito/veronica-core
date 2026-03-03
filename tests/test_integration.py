@@ -324,3 +324,78 @@ class TestRecordFailLockCorrectness:
         assert len(results) == 4
         # Entity must be in cooldown after guard activation
         assert veronica.is_in_cooldown("pair_guard")
+
+
+# ---------------------------------------------------------------------------
+# L4: _maybe_auto_save thread safety
+# ---------------------------------------------------------------------------
+
+
+class TestMaybeAutoSaveThreadSafety:
+    """L4: _maybe_auto_save must be thread-safe under concurrent calls."""
+
+    def test_maybe_auto_save_10_concurrent_no_exception(self) -> None:
+        """10 concurrent _maybe_auto_save calls must not raise or corrupt state."""
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(
+            auto_save_interval=5,
+            backend=backend,
+        )
+
+        errors: list[Exception] = []
+
+        def call_save() -> None:
+            try:
+                veronica._maybe_auto_save()
+            except Exception as exc:
+                errors.append(exc)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+            futures = [pool.submit(call_save) for _ in range(10)]
+            concurrent.futures.wait(futures)
+
+        assert not errors, f"Unexpected exceptions: {errors}"
+
+    def test_maybe_auto_save_resets_operation_count_exactly_once(self) -> None:
+        """operation_count must be reset atomically — not double-reset under concurrency."""
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(
+            auto_save_interval=10,
+            backend=backend,
+        )
+
+        # Drive operation_count up to exactly the threshold
+        veronica.operation_count = 9
+
+        save_calls: list[bool] = []
+        original_save = veronica.save
+
+        def counting_save() -> bool:
+            save_calls.append(True)
+            return original_save()
+
+        veronica.save = counting_save  # type: ignore[method-assign]
+
+        # One more call should trigger exactly one save
+        veronica._maybe_auto_save()
+
+        # operation_count must have been reset to 0
+        with veronica._op_lock:
+            assert veronica.operation_count == 0, (
+                f"Expected operation_count=0 after reset, got {veronica.operation_count}"
+            )
+
+    def test_maybe_auto_save_disabled_when_interval_zero(self) -> None:
+        """auto_save_interval=0 disables auto-save."""
+        backend = MemoryBackend()
+        veronica = VeronicaIntegration(
+            auto_save_interval=0,
+            backend=backend,
+        )
+
+        # No matter how many calls, no save should occur
+        for _ in range(20):
+            veronica._maybe_auto_save()
+
+        # Backend should have no data (no save was triggered)
+        assert backend._data is None

@@ -1,14 +1,21 @@
 """Tests for veronica_core.patch -- SDK monkey-patching with guard-context awareness."""
 from __future__ import annotations
 
+import logging
 import sys
 import types
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 from veronica_core import veronica_guard
 from veronica_core.inject import get_active_container, is_guard_active
-from veronica_core.patch import patch_anthropic, patch_openai, unpatch_all
+from veronica_core.patch import (
+    _estimate_cost_anthropic,
+    _estimate_cost_openai,
+    patch_anthropic,
+    patch_openai,
+    unpatch_all,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -275,3 +282,55 @@ class TestSdkNotInstalled:
             patch_anthropic()  # must not raise
         finally:
             sys.modules.update(saved)
+
+
+# ---------------------------------------------------------------------------
+# Cost estimation failure logging
+# ---------------------------------------------------------------------------
+
+
+class TestCostEstimationFailureLogging:
+    """M5: Cost estimation failures must be logged at DEBUG level."""
+
+    def test_openai_cost_estimation_logs_debug_on_exception(self, caplog):
+        """_estimate_cost_openai logs debug message when an exception occurs."""
+        bad_response = MagicMock()
+        # Make usage.total_tokens raise
+        bad_response.usage = MagicMock()
+        type(bad_response.usage).total_tokens = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("simulated failure"))
+        )
+
+        with caplog.at_level(logging.DEBUG, logger="veronica_core.patch"):
+            result = _estimate_cost_openai(bad_response)
+
+        assert result == 0.0
+        assert any("Cost estimation failed" in r.message for r in caplog.records)
+
+    def test_anthropic_cost_estimation_logs_debug_on_exception(self, caplog):
+        """_estimate_cost_anthropic logs debug message when an exception occurs."""
+        bad_response = MagicMock()
+        bad_response.usage = MagicMock()
+        type(bad_response.usage).input_tokens = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("simulated failure"))
+        )
+
+        with caplog.at_level(logging.DEBUG, logger="veronica_core.patch"):
+            result = _estimate_cost_anthropic(bad_response)
+
+        assert result == 0.0
+        assert any("Cost estimation failed" in r.message for r in caplog.records)
+
+    def test_openai_cost_estimation_returns_zero_silently_when_no_usage(self):
+        """Returns 0.0 without logging when usage is simply absent (not an error)."""
+        response = MagicMock()
+        response.usage = None
+        result = _estimate_cost_openai(response)
+        assert result == 0.0
+
+    def test_anthropic_cost_estimation_returns_zero_silently_when_no_usage(self):
+        """Returns 0.0 without logging when usage is simply absent (not an error)."""
+        response = MagicMock()
+        response.usage = None
+        result = _estimate_cost_anthropic(response)
+        assert result == 0.0

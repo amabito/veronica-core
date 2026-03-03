@@ -218,6 +218,9 @@ class MCPContainmentAdapter:
             MCPToolResult with success/failure, the raw result, decision, and
             cost charged for this invocation.
         """
+        if not tool_name or not isinstance(tool_name, str):
+            raise ValueError(f"tool_name must be a non-empty string, got {tool_name!r}")
+
         if inspect.iscoroutinefunction(call_fn):
             raise TypeError(
                 "call_fn is a coroutine function; use AsyncMCPContainmentAdapter instead"

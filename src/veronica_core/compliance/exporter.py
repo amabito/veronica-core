@@ -100,8 +100,8 @@ class ComplianceExporter:
         if _HAS_HTTPX:
             try:
                 self._httpx = _httpx_mod.Client(timeout=timeout_s)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("compliance: httpx client init failed: %s", exc)
 
         # Background flush thread
         self._thread = threading.Thread(
@@ -174,8 +174,8 @@ class ComplianceExporter:
         if self._httpx is not None:
             try:
                 self._httpx.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("compliance: httpx client close failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Internal
@@ -311,5 +311,5 @@ class ComplianceExporter:
         try:
             self._drain_attached()
             self._flush_batch()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("compliance: atexit flush failed: %s", exc)

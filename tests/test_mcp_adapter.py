@@ -516,13 +516,11 @@ class TestAdversarialMCP:
         result = adapter.wrap_tool_call("tool", {}, nan_token_fn)
         assert result.cost_usd == pytest.approx(0.0)
 
-    def test_empty_tool_name(self) -> None:
-        """Empty string tool_name must work without KeyError."""
+    def test_empty_tool_name_raises(self) -> None:
+        """Empty string tool_name must raise ValueError (M3 validation)."""
         adapter = _make_adapter()
-        result = adapter.wrap_tool_call("", {}, _echo_fn)
-        assert result.success is True
-        stats = adapter.get_tool_stats()
-        assert "" in stats
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            adapter.wrap_tool_call("", {}, _echo_fn)
 
     def test_very_long_tool_name(self) -> None:
         """Very long tool name must not cause OOM or crash."""

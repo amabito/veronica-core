@@ -127,6 +127,7 @@ class ExecutionGraph:
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()
         # Observers are called outside the lock to avoid deadlocks.
+        # Immutable after __init__: no lock needed for reads.
         self._observers: List["ExecutionGraphObserver"] = list(observers) if observers else []
 
         # Node storage and ID counter.

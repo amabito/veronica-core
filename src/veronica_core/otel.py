@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
+# Set once during enable_otel(); read-only after. No lock needed for reads.
 _otel_enabled: bool = False
 _tracer: Any = None
 

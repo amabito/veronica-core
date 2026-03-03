@@ -71,7 +71,8 @@ class AsyncMCPContainmentAdapter:
     - ``call_fn`` must be an async callable (``async def``); it is awaited.
     - ``timeout_seconds`` adds an ``asyncio.wait_for`` timeout around the call.
     - ``failure_predicate`` restricts which exceptions trip the circuit breaker.
-    - Stats mutations are synchronous (no await between them) so no lock is needed.
+    - Stats mutations are protected by ``self._stats_lock`` (asyncio.Lock) to prevent
+      interleaving between coroutines that resume after ``await call_fn()``.
 
     Args:
         execution_context: Chain-level containment context. Controls budget
@@ -110,9 +111,10 @@ class AsyncMCPContainmentAdapter:
         self._failure_predicate = failure_predicate
 
         # Per-tool stats; keyed by tool_name.
-        # No lock needed: all mutations are synchronous (no await between them),
-        # so concurrent coroutines cannot interleave within a stats update.
+        # Lock required: stats updates occur after `await call_fn()`, so two
+        # coroutines can interleave and produce torn reads/writes without locking.
         self._stats: dict[str, MCPToolStats] = {}
+        self._stats_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,6 +146,9 @@ class AsyncMCPContainmentAdapter:
             MCPToolResult with success/failure, raw result, decision, and
             cost charged for this invocation.
         """
+        if not tool_name or not isinstance(tool_name, str):
+            raise ValueError(f"tool_name must be a non-empty string, got {tool_name!r}")
+
         self._ensure_stats(tool_name)
 
         # Circuit breaker pre-check.
@@ -155,7 +160,8 @@ class AsyncMCPContainmentAdapter:
                     tool_name,
                     cb_decision.reason,
                 )
-                self._stats[tool_name].call_count += 1
+                async with self._stats_lock:
+                    self._stats[tool_name].call_count += 1
                 return MCPToolResult(
                     success=False,
                     error=f"Circuit breaker open: {cb_decision.reason}",
@@ -183,7 +189,8 @@ class AsyncMCPContainmentAdapter:
 
         if ec_decision == Decision.HALT:
             logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
-            self._stats[tool_name].call_count += 1
+            async with self._stats_lock:
+                self._stats[tool_name].call_count += 1
             return MCPToolResult(
                 success=False,
                 error="Budget limit exceeded",
@@ -218,9 +225,9 @@ class AsyncMCPContainmentAdapter:
             if self._circuit_breaker is not None:
                 if self._failure_predicate is None or self._failure_predicate(call_error):
                     self._circuit_breaker.record_failure(error=call_error)
-            stats = self._stats[tool_name]
-            stats.call_count += 1
-            stats.error_count += 1
+            async with self._stats_lock:
+                self._stats[tool_name].call_count += 1
+                self._stats[tool_name].error_count += 1
             return MCPToolResult(
                 success=False,
                 error=f"{type(call_error).__name__}: {call_error}",
@@ -233,9 +240,9 @@ class AsyncMCPContainmentAdapter:
             logger.debug(
                 "[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name
             )
-            stats = self._stats[tool_name]
-            stats.call_count += 1
-            stats.error_count += 1
+            async with self._stats_lock:
+                self._stats[tool_name].call_count += 1
+                self._stats[tool_name].error_count += 1
             return MCPToolResult(
                 success=False,
                 result=result_value,
@@ -254,16 +261,17 @@ class AsyncMCPContainmentAdapter:
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
 
-        stats = self._stats[tool_name]
-        stats.call_count += 1
-        stats.total_cost_usd += actual_cost
-        stats._total_duration_ms += duration_ms
-        successful_calls = stats.call_count - stats.error_count
-        stats.avg_duration_ms = (
-            stats._total_duration_ms / successful_calls
-            if successful_calls > 0
-            else 0.0
-        )
+        async with self._stats_lock:
+            stats = self._stats[tool_name]
+            stats.call_count += 1
+            stats.total_cost_usd += actual_cost
+            stats._total_duration_ms += duration_ms
+            successful_calls = stats.call_count - stats.error_count
+            stats.avg_duration_ms = (
+                stats._total_duration_ms / successful_calls
+                if successful_calls > 0
+                else 0.0
+            )
 
         return MCPToolResult(
             success=True,
@@ -376,7 +384,7 @@ async def wrap_mcp_server(
                     )
         except Exception:  # noqa: BLE001
             # list_tools failure must not prevent adapter creation.
-            logger.debug("[wrap_mcp_server] list_tools() failed; proceeding without discovery")
+            logger.warning("[wrap_mcp_server] list_tools() failed; proceeding without discovery")
 
     return _BoundMCPAdapter(
         session=session,

@@ -220,13 +220,20 @@ class VeronicaStateMachine:
         instance.fail_counts = dict(data.get("fail_counts", {}))
         instance.cooldowns = dict(data.get("cooldowns", {}))
         instance.current_state = VeronicaState(data.get("current_state", "IDLE"))
-        instance.state_history = [
-            StateTransition(
-                from_state=VeronicaState(t["from_state"]),
-                to_state=VeronicaState(t["to_state"]),
-                timestamp=t["timestamp"],
-                reason=t["reason"],
-            )
-            for t in data.get("state_history", [])
-        ]
+        raw_history = data.get("state_history", [])
+        instance.state_history = []
+        for t in raw_history:
+            try:
+                instance.state_history.append(
+                    StateTransition(
+                        from_state=VeronicaState(t["from_state"]),
+                        to_state=VeronicaState(t["to_state"]),
+                        timestamp=t["timestamp"],
+                        reason=t["reason"],
+                    )
+                )
+            except (ValueError, KeyError) as exc:
+                logger.warning(
+                    "[VERONICA_STATE] Skipping invalid state_history entry: %s", exc
+                )
         return instance

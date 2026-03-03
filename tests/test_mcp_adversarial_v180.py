@@ -847,3 +847,158 @@ class TestSyncFnReturnsCoroutine:
         # Clean up the unawaited coroutine to avoid RuntimeWarning
         if _asyncio.iscoroutine(result.result):
             result.result.close()
+
+
+# ---------------------------------------------------------------------------
+# 15. M3: tool_name validation (sync and async adapters)
+# ---------------------------------------------------------------------------
+
+
+class TestToolNameValidation:
+    """M3: tool_name must be a non-empty string; None and '' must raise ValueError."""
+
+    def test_sync_none_tool_name_raises(self) -> None:
+        """wrap_tool_call(tool_name=None) on sync adapter must raise ValueError."""
+        adapter = _make_sync()
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            adapter.wrap_tool_call(None, {}, _sync_echo)  # type: ignore[arg-type]
+
+    def test_sync_empty_tool_name_raises(self) -> None:
+        """wrap_tool_call(tool_name='') on sync adapter must raise ValueError."""
+        adapter = _make_sync()
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            adapter.wrap_tool_call("", {}, _sync_echo)
+
+    def test_sync_non_string_tool_name_raises(self) -> None:
+        """Non-string tool_name (int) on sync adapter must raise ValueError."""
+        adapter = _make_sync()
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            adapter.wrap_tool_call(42, {}, _sync_echo)  # type: ignore[arg-type]
+
+    def test_async_none_tool_name_raises(self) -> None:
+        """wrap_tool_call(tool_name=None) on async adapter must raise ValueError."""
+        async def run() -> None:
+            adapter = _make_async()
+            await adapter.wrap_tool_call(None, {}, _async_echo)  # type: ignore[arg-type]
+
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            asyncio.run(run())
+
+    def test_async_empty_tool_name_raises(self) -> None:
+        """wrap_tool_call(tool_name='') on async adapter must raise ValueError."""
+        async def run() -> None:
+            adapter = _make_async()
+            await adapter.wrap_tool_call("", {}, _async_echo)
+
+        with pytest.raises(ValueError, match="tool_name must be a non-empty string"):
+            asyncio.run(run())
+
+    def test_sync_valid_tool_name_not_raises(self) -> None:
+        """A valid non-empty string tool_name must NOT raise ValueError."""
+        adapter = _make_sync()
+        result = adapter.wrap_tool_call("my_tool", {}, _sync_echo)
+        assert result.success is True
+
+    def test_async_valid_tool_name_not_raises(self) -> None:
+        """A valid non-empty string tool_name must NOT raise ValueError (async)."""
+        async def run() -> MCPToolResult:
+            adapter = _make_async()
+            return await adapter.wrap_tool_call("my_tool", {}, _async_echo)
+
+        result = asyncio.run(run())
+        assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# 16. H2: Async concurrent stats consistency (stats_lock)
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncConcurrentStatsConsistency:
+    """H2: Concurrent async wrap_tool_call must produce consistent call_count."""
+
+    def test_concurrent_async_stats_call_count_exact(self) -> None:
+        """20 concurrent async successful calls must yield call_count == 20 (with lock)."""
+        async def run() -> int:
+            adapter = _make_async(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("tool", {}, _async_echo))
+                for _ in range(20)
+            ]
+            results = await asyncio.gather(*tasks)
+            # Count actual ALLOW results (not budget HALT from max_steps)
+            allowed = sum(1 for r in results if r.decision == "ALLOW" and r.success)
+            stats = adapter.get_tool_stats()
+            return stats["tool"].call_count, allowed
+
+        call_count, allowed = asyncio.run(run())
+        # call_count must be consistent (no missed increments from race)
+        assert call_count == 20
+        assert call_count >= allowed
+
+    def test_concurrent_async_stats_cost_consistency(self) -> None:
+        """20 concurrent async calls with fixed cost: total_cost_usd must be consistent."""
+        async def run() -> float:
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.01
+            )
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("tool", {}, _async_echo))
+                for _ in range(20)
+            ]
+            await asyncio.gather(*tasks)
+            stats = adapter.get_tool_stats()
+            return stats["tool"].total_cost_usd
+
+        total_cost = asyncio.run(run())
+        # 20 calls * 0.01 = 0.20 (no torn reads/writes with lock)
+        assert total_cost == pytest.approx(0.20, rel=1e-6)
+
+    def test_concurrent_async_error_count_no_corruption(self) -> None:
+        """10 concurrent failures: error_count must equal 10 (no torn updates)."""
+        async def run() -> tuple[int, int]:
+            adapter = _make_async(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("tool", {}, _async_raise))
+                for _ in range(10)
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            stats = adapter.get_tool_stats()
+            return stats["tool"].call_count, stats["tool"].error_count
+
+        call_count, error_count = asyncio.run(run())
+        assert call_count == 10
+        assert error_count == 10
+
+
+# ---------------------------------------------------------------------------
+# 17. L7: wrap_mcp_server list_tools failure logs at WARNING level
+# ---------------------------------------------------------------------------
+
+
+class TestWrapMCPServerLogLevel:
+    """L7: list_tools() failure in wrap_mcp_server must log at WARNING, not DEBUG."""
+
+    def test_list_tools_failure_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """list_tools() failure must emit a WARNING log (not DEBUG)."""
+        import logging
+
+        class FailingSession:
+            async def list_tools(self) -> None:
+                raise RuntimeError("list_tools unavailable")
+
+            async def call_tool(self, *, name: str, arguments: dict) -> Any:
+                return {"ok": True}
+
+        async def run() -> None:
+            session = FailingSession()
+            ctx = _make_ctx()
+            with caplog.at_level(logging.WARNING, logger="veronica_core.adapters.mcp_async"):
+                await wrap_mcp_server(session=session, execution_context=ctx)
+
+        asyncio.run(run())
+        warning_msgs = [
+            r.message for r in caplog.records
+            if r.levelno == logging.WARNING and "list_tools" in r.message
+        ]
+        assert len(warning_msgs) >= 1, f"Expected WARNING for list_tools failure, got: {caplog.records}"
