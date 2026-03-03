@@ -1340,6 +1340,18 @@ source = { editable = "." }
 compliance = [
     { name = "httpx" },
 ]
+dev = [
+    { name = "cryptography" },
+    { name = "fakeredis" },
+    { name = "hvac" },
+    { name = "lupa" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pyyaml" },
+    { name = "redis" },
+]
 mcp = [
     { name = "mcp" },
 ]
@@ -1370,14 +1382,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", marker = "extra == 'dev'", specifier = ">=46.0.5" },
+    { name = "fakeredis", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "httpx", marker = "extra == 'compliance'", specifier = ">=0.27" },
+    { name = "hvac", marker = "extra == 'dev'", specifier = ">=2.4.0" },
     { name = "hvac", marker = "extra == 'vault'", specifier = ">=2.0" },
+    { name = "lupa", marker = "extra == 'dev'", specifier = ">=2.6" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0,<2" },
+    { name = "opentelemetry-api", marker = "extra == 'dev'", specifier = ">=1.39.1" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20" },
+    { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.39.1" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
+    { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
 ]
-provides-extras = ["redis", "otel", "compliance", "vault", "mcp"]
+provides-extras = ["redis", "otel", "compliance", "vault", "mcp", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
