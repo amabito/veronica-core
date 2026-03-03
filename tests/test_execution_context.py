@@ -810,3 +810,66 @@ class TestMetricsRecordingFailure:
                 d = ctx.wrap_llm_call(fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0))
                 results.append(d)
             assert all(d == Decision.ALLOW for d in results)
+
+
+# ---------------------------------------------------------------------------
+# Retry counter must not increment on HALT
+# ---------------------------------------------------------------------------
+
+
+class TestRetryCounterOnHalt:
+    """HALT decisions must not consume the retry budget."""
+
+    def test_retry_count_unchanged_when_circuit_breaker_halts(self):
+        from veronica_core.circuit_breaker import CircuitBreaker
+
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=9999.0)
+        cb.record_failure()  # trips to OPEN
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config, circuit_breaker=cb)
+
+        with ctx:
+            d = ctx.wrap_llm_call(
+                fn=lambda: "should not run",
+                options=WrapOptions(cost_estimate_hint=0.0),
+            )
+        assert d == Decision.HALT
+        assert ctx._retries_used == 0
+
+
+# ---------------------------------------------------------------------------
+# KeyboardInterrupt / SystemExit must propagate
+# ---------------------------------------------------------------------------
+
+
+class TestSignalPropagation:
+    """KeyboardInterrupt and SystemExit must not be swallowed."""
+
+    def test_keyboard_interrupt_propagates(self):
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+
+        def raise_keyboard():
+            raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            with ctx:
+                ctx.wrap_llm_call(
+                    fn=raise_keyboard,
+                    options=WrapOptions(cost_estimate_hint=0.0),
+                )
+
+    def test_system_exit_propagates(self):
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config)
+
+        def raise_system_exit():
+            raise SystemExit(1)
+
+        with pytest.raises(SystemExit):
+            with ctx:
+                ctx.wrap_llm_call(
+                    fn=raise_system_exit,
+                    options=WrapOptions(cost_estimate_hint=0.0),
+                )

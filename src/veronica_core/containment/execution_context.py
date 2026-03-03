@@ -878,10 +878,6 @@ class ExecutionContext:
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_failure(error=exc)
 
-        with self._lock:
-            self._retries_used += 1
-            node.retries_used += 1
-
         node.status = "error"
         node.end_ts = datetime.now(timezone.utc)
         with self._lock:
@@ -889,8 +885,21 @@ class ExecutionContext:
         stack.pop()
         self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
 
+        # Re-raise signal-class exceptions (KeyboardInterrupt, SystemExit) after
+        # node bookkeeping is complete.  These must propagate to the caller; storing
+        # them as a Decision would silently swallow process-termination signals.
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise exc
+
         if error_decision == Decision.HALT:
             return Decision.HALT
+
+        # Only increment retry counters when we are actually going to retry.
+        # HALT decisions should not consume the retry budget.
+        with self._lock:
+            self._retries_used += 1
+            node.retries_used += 1
+
         return Decision.RETRY
 
     def _compute_actual_cost(

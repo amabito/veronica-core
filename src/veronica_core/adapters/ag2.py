@@ -131,17 +131,6 @@ class VeronicaConversableAgent(ConversableAgent):
             model=model,
         )
 
-        token_budget_hook = getattr(self._container, "token_budget_hook", None)
-        if token_budget_hook is not None:
-            hook_decision = token_budget_hook.before_llm_call(ctx)
-            if hook_decision is not None:
-                from veronica_core.shield.types import Decision
-                if hook_decision == Decision.HALT:
-                    _emit_ag2_otel_event(
-                        agent_name, "HALT", "token budget exceeded", "token_budget"
-                    )
-                    raise VeronicaHalt("Token budget exceeded", None)
-
         decision = self._container.check(cost_usd=0.0)
         if not decision.allowed:
             _emit_ag2_otel_event(
@@ -152,10 +141,6 @@ class VeronicaConversableAgent(ConversableAgent):
         _emit_ag2_otel_event(agent_name, "ALLOW", "all checks passed", "pre_call")
 
         reply = super().generate_reply(messages=messages, sender=sender, **kwargs)
-
-        # Record token usage after successful call
-        if token_budget_hook is not None and reply is not None:
-            token_budget_hook.record_usage(output_tokens=len(str(reply)) // 4)
 
         # Increment step counter only when a reply was produced.
         # None means the agent declined to reply — no LLM call was made.

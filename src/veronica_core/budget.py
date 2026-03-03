@@ -28,6 +28,16 @@ class BudgetEnforcer:
 
     limit_usd: float = 100.0
     _spent_usd: float = field(default=0.0, init=False)
+
+    def __post_init__(self) -> None:
+        if math.isnan(self.limit_usd) or math.isinf(self.limit_usd):
+            raise ValueError(
+                f"limit_usd must be finite, got {self.limit_usd!r}"
+            )
+        if self.limit_usd < 0:
+            raise ValueError(
+                f"limit_usd must be non-negative, got {self.limit_usd!r}"
+            )
     _call_count: int = field(default=0, init=False)
     _exceeded: bool = field(default=False, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)

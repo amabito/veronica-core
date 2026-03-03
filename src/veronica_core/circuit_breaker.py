@@ -56,6 +56,16 @@ class CircuitBreaker:
     failure_predicate: Optional[FailurePredicate] = None
 
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
+
+    def __post_init__(self) -> None:
+        if self.failure_threshold < 1:
+            raise ValueError(
+                f"failure_threshold must be >= 1, got {self.failure_threshold}"
+            )
+        if self.recovery_timeout < 0:
+            raise ValueError(
+                f"recovery_timeout must be >= 0, got {self.recovery_timeout}"
+            )
     _failure_count: int = field(default=0, init=False)
     _last_failure_time: Optional[float] = field(default=None, init=False)
     _success_count: int = field(default=0, init=False)

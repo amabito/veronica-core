@@ -215,3 +215,32 @@ class TestBudgetToDictConsistency:
         d = b.to_dict()
         assert d["spent_usd"] == 0.0
         assert d["call_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Constructor validation — NaN / Inf / negative limit_usd
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetEnforcerConstructorValidation:
+    """BudgetEnforcer.__post_init__ must reject invalid limit_usd."""
+
+    def test_limit_usd_nan_raises(self) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            BudgetEnforcer(limit_usd=float("nan"))
+
+    def test_limit_usd_positive_inf_raises(self) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            BudgetEnforcer(limit_usd=float("inf"))
+
+    def test_limit_usd_negative_inf_raises(self) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            BudgetEnforcer(limit_usd=float("-inf"))
+
+    def test_limit_usd_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            BudgetEnforcer(limit_usd=-0.01)
+
+    def test_limit_usd_zero_is_valid(self) -> None:
+        b = BudgetEnforcer(limit_usd=0.0)
+        assert b.limit_usd == 0.0

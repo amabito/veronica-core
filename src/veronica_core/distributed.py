@@ -613,6 +613,22 @@ class DistributedCircuitBreaker:
         redis_client: object = None,
         failure_predicate: Optional[FailurePredicate] = None,
     ) -> None:
+        if failure_threshold < 1:
+            raise ValueError(
+                f"failure_threshold must be >= 1, got {failure_threshold}"
+            )
+        if recovery_timeout < 0:
+            raise ValueError(
+                f"recovery_timeout must be >= 0, got {recovery_timeout}"
+            )
+        if ttl_seconds < 1:
+            raise ValueError(
+                f"ttl_seconds must be >= 1, got {ttl_seconds}"
+            )
+        if half_open_slot_timeout < 0:
+            raise ValueError(
+                f"half_open_slot_timeout must be >= 0, got {half_open_slot_timeout}"
+            )
         self._redis_url = redis_url
         self._circuit_id = circuit_id
         self._key = f"{self.KEY_PREFIX}{circuit_id}"

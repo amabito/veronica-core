@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 
+import pytest
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
 from veronica_core.runtime_policy import PolicyContext
@@ -122,3 +123,32 @@ class TestCircuitBreakerHalfOpenConcurrency:
         cb.check(_make_context())  # slot consumed
         cb.record_failure()        # resets in_flight + reopens
         assert cb._half_open_in_flight == 0
+
+
+# ---------------------------------------------------------------------------
+# Constructor validation
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreakerConstructorValidation:
+    """CircuitBreaker.__post_init__ must reject invalid parameters."""
+
+    def test_failure_threshold_zero_raises(self):
+        with pytest.raises(ValueError, match="failure_threshold"):
+            CircuitBreaker(failure_threshold=0)
+
+    def test_failure_threshold_negative_raises(self):
+        with pytest.raises(ValueError, match="failure_threshold"):
+            CircuitBreaker(failure_threshold=-1)
+
+    def test_recovery_timeout_negative_raises(self):
+        with pytest.raises(ValueError, match="recovery_timeout"):
+            CircuitBreaker(recovery_timeout=-1.0)
+
+    def test_failure_threshold_one_is_valid(self):
+        cb = CircuitBreaker(failure_threshold=1)
+        assert cb.failure_threshold == 1
+
+    def test_recovery_timeout_zero_is_valid(self):
+        cb = CircuitBreaker(recovery_timeout=0.0)
+        assert cb.recovery_timeout == 0.0

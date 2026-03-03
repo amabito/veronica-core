@@ -2037,6 +2037,55 @@ class TestDistributedCircuitBreakerClose:
         fake_client.ping()
 
 
+# ---------------------------------------------------------------------------
+# Constructor validation — DistributedCircuitBreaker
+# ---------------------------------------------------------------------------
+
+
+class TestDistributedCircuitBreakerConstructorValidation:
+    """DistributedCircuitBreaker must reject invalid constructor arguments."""
+
+    def test_failure_threshold_zero_raises(self):
+        with pytest.raises(ValueError, match="failure_threshold"):
+            DistributedCircuitBreaker(
+                redis_url="redis://localhost",
+                circuit_id="val-test",
+                failure_threshold=0,
+            )
+
+    def test_failure_threshold_negative_raises(self):
+        with pytest.raises(ValueError, match="failure_threshold"):
+            DistributedCircuitBreaker(
+                redis_url="redis://localhost",
+                circuit_id="val-test",
+                failure_threshold=-5,
+            )
+
+    def test_recovery_timeout_negative_raises(self):
+        with pytest.raises(ValueError, match="recovery_timeout"):
+            DistributedCircuitBreaker(
+                redis_url="redis://localhost",
+                circuit_id="val-test",
+                recovery_timeout=-1.0,
+            )
+
+    def test_ttl_seconds_zero_raises(self):
+        with pytest.raises(ValueError, match="ttl_seconds"):
+            DistributedCircuitBreaker(
+                redis_url="redis://localhost",
+                circuit_id="val-test",
+                ttl_seconds=0,
+            )
+
+    def test_half_open_slot_timeout_negative_raises(self):
+        with pytest.raises(ValueError, match="half_open_slot_timeout"):
+            DistributedCircuitBreaker(
+                redis_url="redis://localhost",
+                circuit_id="val-test",
+                half_open_slot_timeout=-1.0,
+            )
+
+
 def _make_redis_budget_backend(fake_client, chain_id: str = "h1test"):
     """Create RedisBudgetBackend with injected fakeredis client."""
     import threading

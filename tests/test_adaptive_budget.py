@@ -1975,3 +1975,34 @@ class TestAdversarialAdaptiveBudget:
         """
         with pytest.raises(ValueError, match="window_seconds"):
             AdaptiveBudgetHook(base_ceiling=100, window_seconds=-100.0)
+
+
+# ---------------------------------------------------------------------------
+# State restore — corrupted last_action
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveLastActionRestore:
+    """restore_state must sanitize unknown last_action values."""
+
+    def test_corrupted_last_action_resets_to_none(self) -> None:
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        state = hook.export_control_state()
+        state["last_action"] = "INVALID_ACTION"
+        hook.import_control_state(state)
+        assert hook.last_action is None
+
+    def test_valid_last_action_preserved(self) -> None:
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        state = hook.export_control_state()
+        state["last_action"] = "tighten"
+        hook.import_control_state(state)
+        assert hook.last_action == "tighten"
+
+    def test_none_last_action_preserved(self) -> None:
+        hook = AdaptiveBudgetHook(base_ceiling=100)
+        hook.adjust(_now=1000.0)  # sets last_action
+        state = hook.export_control_state()
+        state["last_action"] = None
+        hook.import_control_state(state)
+        assert hook.last_action is None

@@ -705,6 +705,10 @@ class AdaptiveBudgetHook:
                 min(self._max_multiplier, self._ceiling_multiplier),
             )
             self._last_adjustment_ts = state.get("last_adjustment_ts")
-            self._last_action = state.get("last_action")
+            _valid_actions = frozenset({None, "tighten", "loosen", "hold"})
+            raw_action = state.get("last_action")
+            if raw_action not in _valid_actions:
+                raw_action = None  # fail-safe: reset unknown action
+            self._last_action = raw_action
             self._anomaly_active = bool(state.get("anomaly_active", False))
             self._anomaly_activated_ts = state.get("anomaly_activated_ts")
