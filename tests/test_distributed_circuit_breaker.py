@@ -2019,6 +2019,24 @@ class TestAdversarialBudgetEpsilon:
         assert 0 < _BUDGET_EPSILON < 1e-6, f"Unexpected epsilon value: {_BUDGET_EPSILON}"
 
 
+class TestDistributedCircuitBreakerClose:
+    """Tests for DistributedCircuitBreaker.close() resource cleanup."""
+
+    def test_close_owned_client_does_not_raise(self, fake_client):
+        dcb = _make_dcb(fake_client, circuit_id="close-test")
+        dcb._owns_client = True
+        dcb.close()
+        # Calling close again must not raise (idempotent)
+        dcb.close()
+
+    def test_close_does_not_close_externally_owned_client(self, fake_client):
+        dcb = _make_dcb(fake_client, circuit_id="close-ext-test")
+        dcb._owns_client = False
+        dcb.close()
+        # Client should still be usable (not closed by DCB)
+        fake_client.ping()
+
+
 def _make_redis_budget_backend(fake_client, chain_id: str = "h1test"):
     """Create RedisBudgetBackend with injected fakeredis client."""
     import threading

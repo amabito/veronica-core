@@ -195,7 +195,14 @@ class CircuitBreakerCapability:
             _emit_ag2_otel_event(name, "ALLOW", "all checks passed", "pre_call")
 
             # Invoke the original generate_reply
-            reply = original_generate_reply(*args, **kwargs)
+            try:
+                reply = original_generate_reply(*args, **kwargs)
+            except Exception as exc:
+                breaker.record_failure(error=exc)
+                _emit_ag2_otel_event(
+                    name, "FAILURE", f"generate_reply raised {type(exc).__name__}", "post_call"
+                )
+                raise
 
             # Record token usage after successful reply
             if reply is not None and cap._token_budget_hook is not None:

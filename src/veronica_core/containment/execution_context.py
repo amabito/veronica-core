@@ -411,6 +411,11 @@ class ExecutionContext:
             self._timeout_thread.join(timeout=1.0)
         if hasattr(self, "_budget_backend"):
             self._budget_backend.close()
+        if hasattr(self, "_circuit_breaker") and hasattr(self._circuit_breaker, "close"):
+            try:
+                self._circuit_breaker.close()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Public API

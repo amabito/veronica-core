@@ -1175,6 +1175,18 @@ class DistributedCircuitBreaker:
             "circuit_id": snap.circuit_id,
         }
 
+    def close(self) -> None:
+        """Close the Redis client if this instance owns it.
+
+        Safe to call multiple times.  Does nothing if using a shared client
+        (``redis_client`` was passed to the constructor) or already closed.
+        """
+        try:
+            if self._owns_client and self._client is not None:
+                self._client.close()
+        except Exception:
+            pass
+
     @property
     def is_using_fallback(self) -> bool:
         """True if currently operating in local fallback mode."""

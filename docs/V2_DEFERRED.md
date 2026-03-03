@@ -49,12 +49,24 @@ a patch release.
 | L-15 | LOW | `ExecutionContext.__enter__` has no double-entry guard | `execution_context.py:380` | Python context managers rarely guard this |
 | L-16 | LOW | `DegradationLadder` may oscillate between tiers at exact threshold boundary | `shield/degradation.py` | Hysteresis would add complexity; current behaviour acceptable |
 | L-17 | LOW | `time.time()` used for timeouts instead of `time.monotonic()` | `execution_context.py`, `circuit_breaker.py` | Clock adjustment can cause premature/delayed timeout |
+| L-18 | LOW | `ExecutionGraph._nodes` dict grows unbounded; no pruning or size cap | `containment/execution_graph.py` | Acceptable for short-lived chains; long-running daemons should create new contexts per request |
+| L-19 | LOW | ASGI middleware 429 response may be suppressed by app exceptions | `middleware.py` | Requires app to raise during HALT response path |
+| L-20 | LOW | AG2 `add_to_agent` uses `agent.name` as key; name collision silently skips second agent | `adapters/ag2_capability.py` | Logged as warning; callers must ensure unique names |
 
 ## Test Gap Notes
 
 | ID | Description | Notes |
 |----|-------------|-------|
 | D-9 | `exit.py`, `state.py` have zero unit tests; `adapters/_shared.py`, `shield/hooks.py` untested | Test backfill deferred to v2.0 |
+
+## Resolved in v1.8.11 (Previously Deferred)
+
+| ID | Description | Resolution |
+|----|-------------|------------|
+| R-23 | `serialize_snapshot` naive `datetime.min` fallback caused TypeError with tz-aware timestamps | Added `datetime.min.replace(tzinfo=timezone.utc)` |
+| R-24 | `DistributedCircuitBreaker` no `close()` method; Redis connection leaked | Added `close()` method; called from `ExecutionContext.__exit__` |
+| R-25 | `TokenBudgetHook.before_llm_call` negative token estimate could bypass budget | Clamped `estimated_out`/`estimated_in` to `max(0, ...)` |
+| R-26 | AG2 `_guarded_generate_reply` did not record exception as circuit breaker failure | Added try/except around `original_generate_reply()` with `record_failure()` on exception |
 
 ## Resolved in v1.8.10 (Previously Deferred)
 
@@ -100,4 +112,4 @@ a patch release.
 
 ---
 
-Last updated: 2026-03-03 (v1.8.10)
+Last updated: 2026-03-03 (v1.8.11)

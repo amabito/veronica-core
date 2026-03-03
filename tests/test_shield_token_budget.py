@@ -198,3 +198,29 @@ class TestTokenBudgetIntegrationWiring:
         )
         vi = VeronicaIntegration(shield=cfg)
         assert vi._shield_pipeline.before_llm_call(CTX) is Decision.HALT
+
+
+class TestTokenBudgetNegativeEstimateClamping:
+    """Negative token estimates must be clamped to 0, not bypass budget."""
+
+    def test_negative_tokens_out_clamped_to_zero(self):
+        hook = TokenBudgetHook(max_output_tokens=100)
+        hook.record_usage(output_tokens=100)
+        # Negative estimated output should NOT reduce projected usage below actual
+        ctx_neg = ToolCallContext(request_id="r1", tool_name="llm", tokens_out=-50)
+        result = hook.before_llm_call(ctx_neg)
+        assert result is Decision.HALT
+
+    def test_negative_tokens_in_clamped_to_zero(self):
+        hook = TokenBudgetHook(max_output_tokens=1000, max_total_tokens=100)
+        hook.record_usage(output_tokens=50, input_tokens=50)
+        # Negative estimated input should NOT reduce projected total below actual
+        ctx_neg = ToolCallContext(request_id="r1", tool_name="llm", tokens_in=-80)
+        result = hook.before_llm_call(ctx_neg)
+        assert result is Decision.HALT
+
+    def test_zero_estimate_unaffected(self):
+        hook = TokenBudgetHook(max_output_tokens=100)
+        ctx_zero = ToolCallContext(request_id="r1", tool_name="llm", tokens_out=0)
+        result = hook.before_llm_call(ctx_zero)
+        assert result is None

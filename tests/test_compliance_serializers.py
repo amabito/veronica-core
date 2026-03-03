@@ -189,10 +189,12 @@ class TestSerializeSnapshot:
         assert "2026-02-28" in result["chain"]["started_at"]
 
     def test_started_at_fallback_when_no_nodes(self) -> None:
-        """Empty nodes list uses datetime.min as fallback."""
+        """Empty nodes list uses datetime.min as fallback -- must be timezone-aware."""
         snapshot = _make_snapshot(nodes=[], events=[])
         result = serialize_snapshot(snapshot)
         assert isinstance(result["chain"]["started_at"], str)
+        # Must contain timezone info (not naive datetime.min)
+        assert "+" in result["chain"]["started_at"] or "Z" in result["chain"]["started_at"]
 
     def test_events_serialized(self) -> None:
         snapshot = _make_snapshot()

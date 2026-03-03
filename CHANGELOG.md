@@ -6,6 +6,24 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.11] — 2026-03-03 — Round 5 Deep Audit
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Serializers**: `serialize_snapshot` no-nodes fallback now uses timezone-aware `datetime.min.replace(tzinfo=timezone.utc)` instead of naive `datetime.min`. Prevents `TypeError` when mixed with timezone-aware timestamps.
+- **DistributedCircuitBreaker**: Added `close()` method for Redis connection cleanup. Called automatically from `ExecutionContext.__exit__`.
+- **TokenBudgetHook**: `before_llm_call` now clamps negative `tokens_out`/`tokens_in` estimates to 0 via `max(0, ...)`. Prevents negative estimates from bypassing budget enforcement.
+- **AG2 CircuitBreakerCapability**: `_guarded_generate_reply` now catches exceptions raised by `original_generate_reply()` and records them as circuit breaker failures before re-raising. Previously, exceptions bypassed the circuit breaker entirely.
+
+### Added
+
+- 8 new tests: token budget negative estimate clamping (3), AG2 exception recording (3), distributed CB close (2).
+- Deferred items L-18 (unbounded ExecutionGraph._nodes), L-19 (ASGI 429 suppression), L-20 (AG2 name collision).
+
+---
+
 ## [1.8.10] — 2026-03-03 — Round 4 Hardening
 
 **Breaking changes:** `ExecutionConfig(timeout_ms=-1)` now raises `ValueError` (previously accepted silently).

@@ -377,3 +377,82 @@ class TestRemoveFromAgent:
         breaker = cap.add_to_agent(agent)
         assert breaker is not None
         assert cap.get_breaker("rr") is breaker
+
+
+# ---------------------------------------------------------------------------
+# Exception recording in circuit breaker
+# ---------------------------------------------------------------------------
+
+
+class TestExceptionRecordedAsFailure:
+    """Exceptions raised by generate_reply must trip the circuit breaker."""
+
+    def test_exception_records_failure_and_reraises(self) -> None:
+        """When generate_reply raises, record_failure must be called and exception re-raised."""
+        import pytest
+
+        class RaisingAgent:
+            name = "raise_agent"
+
+            def generate_reply(self, messages=None, sender=None, **kwargs):
+                raise RuntimeError("boom")
+
+        cap = CircuitBreakerCapability(failure_threshold=2)
+        agent = RaisingAgent()
+        cap.add_to_agent(agent)
+        breaker = cap.get_breaker("raise_agent")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            agent.generate_reply([])
+
+        assert breaker.failure_count == 1
+
+    def test_exception_opens_circuit_after_threshold(self) -> None:
+        """Repeated exceptions must open the circuit."""
+
+        class RaisingAgent:
+            name = "raise_agent2"
+
+            def generate_reply(self, messages=None, sender=None, **kwargs):
+                raise ValueError("bad input")
+
+        cap = CircuitBreakerCapability(failure_threshold=2)
+        agent = RaisingAgent()
+        cap.add_to_agent(agent)
+
+        for _ in range(2):
+            try:
+                agent.generate_reply([])
+            except ValueError:
+                pass
+
+        assert cap.get_breaker("raise_agent2").state == CircuitState.OPEN
+
+    def test_open_circuit_blocks_after_exceptions(self) -> None:
+        """After circuit opens from exceptions, further calls return None without calling original."""
+
+        call_count = 0
+
+        class RaisingAgent:
+            name = "raise_agent3"
+
+            def generate_reply(self, messages=None, sender=None, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                raise TypeError("type error")
+
+        cap = CircuitBreakerCapability(failure_threshold=2)
+        agent = RaisingAgent()
+        cap.add_to_agent(agent)
+
+        for _ in range(2):
+            try:
+                agent.generate_reply([])
+            except TypeError:
+                pass
+
+        assert call_count == 2
+        # Now circuit is OPEN, next call should be blocked without calling original
+        reply = agent.generate_reply([])
+        assert reply is None
+        assert call_count == 2  # original NOT called

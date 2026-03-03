@@ -6,7 +6,7 @@ and veronica_core types.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from veronica_core.containment.execution_context import (
@@ -65,7 +65,7 @@ def serialize_snapshot(
         "aborted": snapshot.aborted,
         "abort_reason": snapshot.abort_reason,
         "elapsed_ms": snapshot.elapsed_ms,
-        "started_at": _iso(snapshot.nodes[0].start_ts) if snapshot.nodes else _iso(datetime.min),
+        "started_at": _iso(snapshot.nodes[0].start_ts) if snapshot.nodes else _iso(datetime.min.replace(tzinfo=timezone.utc)),
     }
 
     if graph is not None:

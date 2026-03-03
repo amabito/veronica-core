@@ -90,8 +90,8 @@ class TokenBudgetHook:
         If ctx.tokens_out or ctx.tokens_in are provided, reserves them atomically
         after passing all checks.
         """
-        estimated_out = ctx.tokens_out or 0
-        estimated_in = ctx.tokens_in or 0
+        estimated_out = max(0, ctx.tokens_out or 0)
+        estimated_in = max(0, ctx.tokens_in or 0)
 
         with self._lock:
             projected_output = self._output_total + self._pending_output + estimated_out
