@@ -893,3 +893,24 @@ class TestAdversarialContainmentInvariant:
         # All 100 calls should succeed
         assert call_count == 100
         assert breaker.state == CircuitState.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# Public API export tests (Phase 0, item 0b)
+# ---------------------------------------------------------------------------
+
+
+def test_enable_otel_with_provider_in_veronica_core_all():
+    """enable_otel_with_provider must be importable from veronica_core."""
+    import veronica_core
+
+    assert hasattr(veronica_core, "enable_otel_with_provider")
+    assert "enable_otel_with_provider" in veronica_core.__all__
+
+
+def test_otel_execution_graph_observer_in_veronica_core_all():
+    """OTelExecutionGraphObserver must be importable from veronica_core."""
+    import veronica_core
+
+    assert hasattr(veronica_core, "OTelExecutionGraphObserver")
+    assert "OTelExecutionGraphObserver" in veronica_core.__all__

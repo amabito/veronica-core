@@ -26,7 +26,7 @@ import atexit
 import logging
 import math
 import threading
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
 
@@ -191,12 +191,50 @@ def init(
             on_halt,
         )
 
-    # Store on_halt mode on the context object for external inspection.
-    # We use a plain attribute rather than a dataclass field so that
-    # ExecutionContext itself does not need to be modified.
+    # Store on_halt mode on the context object for external inspection
+    # and for the wrap helper below.  We use a plain attribute rather than
+    # a dataclass field so that ExecutionContext itself does not need to be
+    # modified.
     _context._quickstart_on_halt = on_halt  # type: ignore[attr-defined]
 
+    # Wrap the original wrap_llm_call so that HALT decisions are
+    # dispatched according to the *on_halt* mode automatically.
+    _install_on_halt_dispatch(_context, on_halt)
+
     return _context
+
+
+def _install_on_halt_dispatch(
+    ctx: ExecutionContext,
+    mode: Literal["raise", "warn", "silent"],
+) -> None:
+    """Monkey-patch ``ctx.wrap_llm_call`` to dispatch on HALT decisions.
+
+    - ``"raise"``  -- raises :class:`VeronicaHalt` on HALT.
+    - ``"warn"``   -- logs a warning on HALT, returns the Decision.
+    - ``"silent"`` -- returns the Decision unchanged (no-op).
+    """
+    if mode == "silent":
+        return  # nothing to patch
+
+    from veronica_core.inject import VeronicaHalt
+    from veronica_core.shield.types import Decision
+
+    original_wrap = ctx.wrap_llm_call
+
+    def _dispatching_wrap(*args: Any, **kwargs: Any) -> Any:
+        result = original_wrap(*args, **kwargs)
+        if isinstance(result, Decision) and result.name == "HALT":
+            if mode == "raise":
+                raise VeronicaHalt(
+                    f"HALT: {result.reason}" if hasattr(result, "reason") else "HALT"
+                )
+            elif mode == "warn":
+                reason = getattr(result, "reason", "unknown")
+                logger.warning("[VERONICA] HALT: %s", reason)
+        return result
+
+    ctx.wrap_llm_call = _dispatching_wrap  # type: ignore[method-assign]
 
 
 def shutdown() -> None:

@@ -1,11 +1,13 @@
 """Tests for veronica_core.quickstart -- init()/shutdown()/_parse_budget().
 
 Covers happy-path, edge cases, and adversarial scenarios including
-concurrency, corrupted input, and state-corruption patterns.
+concurrency, corrupted input, state-corruption patterns, and on_halt
+dispatch behaviour (raise/warn/silent).
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 from unittest.mock import patch
@@ -13,7 +15,9 @@ from unittest.mock import patch
 import pytest
 
 from veronica_core.containment.execution_context import ExecutionContext
+from veronica_core.inject import VeronicaHalt
 from veronica_core.quickstart import _parse_budget, get_context, init, shutdown
+from veronica_core.shield.types import Decision
 
 
 # ---------------------------------------------------------------------------
@@ -299,3 +303,188 @@ class TestAdversarialQuickstart:
             t.join()
 
         assert all(r is ctx for r in results)
+
+
+# ---------------------------------------------------------------------------
+# TestOnHaltDispatch -- behavioural tests for on_halt=raise/warn/silent
+# ---------------------------------------------------------------------------
+
+
+class TestOnHaltDispatch:
+    """Verify that on_halt actually dispatches HALT decisions correctly."""
+
+    def _make_halting_ctx(self, mode: str) -> ExecutionContext:
+        """Init with given on_halt mode and monkey-patch wrap_llm_call to return HALT."""
+        ctx = init("$100.00", on_halt=mode)  # type: ignore[arg-type]
+        # Replace wrap_llm_call with a fake that always returns HALT,
+        # then re-install the on_halt dispatcher on top.
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, mode)
+        return ctx
+
+    def test_on_halt_raise_raises_veronica_halt(self) -> None:
+        ctx = self._make_halting_ctx("raise")
+        with pytest.raises(VeronicaHalt, match="HALT"):
+            ctx.wrap_llm_call()
+
+    def test_on_halt_warn_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        ctx = self._make_halting_ctx("warn")
+        with caplog.at_level(logging.WARNING, logger="veronica_core.quickstart"):
+            result = ctx.wrap_llm_call()
+        assert result == Decision.HALT
+        assert any("HALT" in record.message for record in caplog.records)
+
+    def test_on_halt_silent_returns_decision_unchanged(self) -> None:
+        ctx = init("$100.00", on_halt="silent")
+        # For silent mode, wrap_llm_call is NOT patched, so we mock the
+        # original directly to return HALT.
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
+        result = ctx.wrap_llm_call()
+        assert result == Decision.HALT
+        # No exception, no log -- just the raw Decision.
+
+    def test_on_halt_raise_does_not_trigger_on_allow(self) -> None:
+        ctx = init("$100.00", on_halt="raise")
+        # Replace underlying with ALLOW, then re-install dispatcher.
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.ALLOW  # type: ignore[method-assign]
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        _install_on_halt_dispatch(ctx, "raise")
+        result = ctx.wrap_llm_call()
+        assert result == Decision.ALLOW  # no exception
+
+
+# ---------------------------------------------------------------------------
+# TestAdversarialOnHalt -- attacker mindset for on_halt dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialOnHalt:
+    """Adversarial tests for on_halt dispatch -- how to break it."""
+
+    def test_non_decision_return_passes_through_raise_mode(self) -> None:
+        """If wrap_llm_call returns a non-Decision (e.g. raw string), no crash."""
+        ctx = init("$100.00", on_halt="raise")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: "NOT_A_DECISION"  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, "raise")
+        result = ctx.wrap_llm_call()
+        assert result == "NOT_A_DECISION"
+
+    def test_none_return_passes_through(self) -> None:
+        """wrap_llm_call returning None must not crash dispatcher."""
+        ctx = init("$100.00", on_halt="raise")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: None  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, "raise")
+        result = ctx.wrap_llm_call()
+        assert result is None
+
+    def test_original_raises_exception_propagates(self) -> None:
+        """If the underlying wrap_llm_call raises, the exception propagates."""
+        ctx = init("$100.00", on_halt="raise")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+
+        def _boom(*a: Any, **kw: Any) -> Any:
+            raise RuntimeError("boom")
+
+        ctx.wrap_llm_call = _boom  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, "raise")
+        with pytest.raises(RuntimeError, match="boom"):
+            ctx.wrap_llm_call()
+
+    def test_concurrent_halt_raise_all_get_exception(self) -> None:
+        """Multiple threads hitting HALT in raise mode all get VeronicaHalt."""
+        ctx = init("$100.00", on_halt="raise")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, "raise")
+
+        exceptions: list[BaseException] = []
+        barrier = threading.Barrier(5)
+
+        def call() -> None:
+            barrier.wait()
+            try:
+                ctx.wrap_llm_call()
+            except VeronicaHalt as exc:
+                exceptions.append(exc)
+
+        threads = [threading.Thread(target=call) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(exceptions) == 5
+        assert all(isinstance(e, VeronicaHalt) for e in exceptions)
+
+    def test_all_decision_variants_no_crash(self) -> None:
+        """ALLOW, RETRY, DEGRADE, QUARANTINE, QUEUE must not raise in raise mode."""
+        for decision in [Decision.ALLOW, Decision.RETRY, Decision.DEGRADE,
+                         Decision.QUARANTINE, Decision.QUEUE]:
+            shutdown()
+            ctx = init("$100.00", on_halt="raise")
+            from veronica_core.quickstart import _install_on_halt_dispatch
+            ctx.wrap_llm_call = lambda *a, d=decision, **kw: d  # type: ignore[method-assign]
+            _install_on_halt_dispatch(ctx, "raise")
+            result = ctx.wrap_llm_call()
+            assert result == decision
+
+    def test_shutdown_after_halt_cleans_up(self) -> None:
+        """After on_halt=raise triggers VeronicaHalt, shutdown() is still safe."""
+        ctx = init("$100.00", on_halt="raise")
+        from veronica_core.quickstart import _install_on_halt_dispatch
+        ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
+        _install_on_halt_dispatch(ctx, "raise")
+        with pytest.raises(VeronicaHalt):
+            ctx.wrap_llm_call()
+        shutdown()
+        assert get_context() is None
+
+
+# ---------------------------------------------------------------------------
+# TestAdversarialRedactExc -- attacker mindset for credential redaction
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialRedactExc:
+    """Adversarial tests for _redact_exc in distributed.py."""
+
+    def test_multiple_urls_in_single_message(self) -> None:
+        """Multiple redis URLs in one message must all be redacted."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError(
+            "primary redis://admin:pass1@host1:6379/0 "
+            "replica redis://reader:pass2@host2:6380/1"
+        )
+        result = _redact_exc(exc)
+        assert "pass1" not in result
+        assert "pass2" not in result
+        assert "admin" not in result
+        assert "reader" not in result
+
+    def test_url_with_special_chars_in_password(self) -> None:
+        """Passwords with @, :, / must still be fully redacted."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError("redis://user:p%40ss:w/rd@host:6379/0")
+        result = _redact_exc(exc)
+        assert "p%40ss" not in result
+        assert "***@host" in result
+
+    def test_empty_exception_message(self) -> None:
+        from veronica_core.distributed import _redact_exc
+
+        exc = RuntimeError("")
+        result = _redact_exc(exc)
+        assert result == "RuntimeError: "
+
+    def test_url_without_credentials_unchanged(self) -> None:
+        """redis://host:6379/0 (no user:pass) must pass through unchanged."""
+        from veronica_core.distributed import _redact_exc
+
+        exc = ConnectionError("redis://host:6379/0 refused")
+        result = _redact_exc(exc)
+        assert "redis://host:6379/0" in result

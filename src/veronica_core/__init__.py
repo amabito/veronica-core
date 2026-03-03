@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "1.8.1"
+__version__ = "1.8.2"
 
 # Core state machine
 from veronica_core.state import (
@@ -15,7 +15,7 @@ from veronica_core.backends import (
     JSONBackend,
     MemoryBackend,
 )
-from veronica_core.persist import VeronicaPersistence  # Deprecated, use JSONBackend
+# VeronicaPersistence is deprecated -- accessed via __getattr__ with DeprecationWarning
 
 # Exit handling
 from veronica_core.exit import (
@@ -145,7 +145,13 @@ from veronica_core.distributed import (
 )
 
 # OpenTelemetry (v0.10.0)
-from veronica_core.otel import enable_otel, disable_otel, is_otel_enabled
+from veronica_core.otel import (
+    enable_otel,
+    disable_otel,
+    is_otel_enabled,
+    enable_otel_with_provider,
+    OTelExecutionGraphObserver,
+)
 
 # Degradation Ladder (v0.10.0)
 from veronica_core.shield.degradation import DegradationLadder, DegradationConfig, Trimmer, NoOpTrimmer
@@ -308,6 +314,8 @@ __all__ = [
     "enable_otel",
     "disable_otel",
     "is_otel_enabled",
+    "enable_otel_with_provider",
+    "OTelExecutionGraphObserver",
     # Degradation Ladder (v0.10.0)
     "DegradationLadder",
     "DegradationConfig",
@@ -345,13 +353,11 @@ __all__ = [
     "ContainmentMetricsProtocol",
     # Metrics implementations (v1.6.0)
     "LoggingContainmentMetrics",
-    # Deprecated (backward compatibility)
-    "VeronicaPersistence",
 ]
 
 
 def __getattr__(name: str):  # type: ignore[return]
-    """Emit DeprecationWarning for the old AIcontainer name on attribute access."""
+    """Emit DeprecationWarning for deprecated names on attribute access."""
     if name == "AIcontainer":
         import warnings
 
@@ -362,4 +368,16 @@ def __getattr__(name: str):  # type: ignore[return]
             stacklevel=2,
         )
         return AIContainer
+    if name == "VeronicaPersistence":
+        import warnings
+
+        warnings.warn(
+            "VeronicaPersistence is deprecated and will be removed in v2.0. "
+            "Use JSONBackend or MemoryBackend instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from veronica_core.persist import VeronicaPersistence as _VP
+
+        return _VP
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

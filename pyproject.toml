@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veronica-core"
-version = "1.8.1"
+version = "1.8.2"
 description = "Runtime Containment Layer for LLM Systems. Enforces bounded cost, retries, recursion, wait states, and failure domains."
 readme = "README.md"
 license = {text = "MIT"}
@@ -53,16 +53,7 @@ vault = [
     "hvac>=2.0",
 ]
 mcp = [
-    "mcp>=1.0",
-]
-dev = [
-    "pytest>=8.0",
-    "pytest-cov>=5.0",
-    "cryptography>=42",
-    "fakeredis>=2.0",
-    "lupa>=2.6",
-    "opentelemetry-sdk>=1.20",
-    "pyyaml>=6.0",
+    "mcp>=1.0,<2",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -92,6 +83,7 @@ dev = [
     "opentelemetry-api>=1.39.1",
     "opentelemetry-sdk>=1.39.1",
     "pytest>=9.0.2",
+    "pytest-cov>=5.0",
     "pyyaml>=6.0.3",
     "redis>=5.0",
 ]

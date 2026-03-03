@@ -9,6 +9,7 @@ import pytest
 from veronica_core.distributed import (
     LocalBudgetBackend,
     RedisBudgetBackend,
+    _redact_exc,
     get_default_backend,
 )
 
@@ -519,3 +520,34 @@ def test_execution_context_with_redis_backend(fake_redis_client):
 
     snap2 = ctx2.get_snapshot()
     assert abs(snap2.cost_usd_accumulated - 0.30) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# _redact_exc -- credential redaction in error logs (Phase 0, item 0f)
+# ---------------------------------------------------------------------------
+
+
+class TestRedactExc:
+    def test_redacts_password_in_redis_url(self) -> None:
+        exc = ConnectionError("Error connecting to redis://admin:s3cret@redis.example.com:6379/0")
+        result = _redact_exc(exc)
+        assert "s3cret" not in result
+        assert "admin" not in result
+        assert "***@redis.example.com" in result
+
+    def test_redacts_rediss_url(self) -> None:
+        exc = ConnectionError("rediss://user:pa$$w0rd@host:6380/1 timed out")
+        result = _redact_exc(exc)
+        assert "pa$$w0rd" not in result
+        assert "user" not in result
+        assert "***@host" in result
+
+    def test_preserves_message_without_url(self) -> None:
+        exc = RuntimeError("some generic error")
+        result = _redact_exc(exc)
+        assert result == "RuntimeError: some generic error"
+
+    def test_includes_exception_type(self) -> None:
+        exc = ValueError("bad value")
+        result = _redact_exc(exc)
+        assert result.startswith("ValueError: ")

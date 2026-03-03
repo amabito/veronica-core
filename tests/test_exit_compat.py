@@ -148,3 +148,38 @@ class TestShieldPipelineOnErrorPolicy:
         )
         result = pipe.on_error(CTX, RuntimeError("err"))
         assert result is Decision.ALLOW
+
+
+# ---------------------------------------------------------------------------
+# Test: VeronicaPersistence __getattr__ DeprecationWarning (Phase 0, item 0c)
+# ---------------------------------------------------------------------------
+
+
+class TestVeronicaPersistenceGetattr:
+    """Accessing veronica_core.VeronicaPersistence must emit DeprecationWarning."""
+
+    def test_module_getattr_emits_deprecation_warning(self) -> None:
+        import veronica_core
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", DeprecationWarning)
+            _ = veronica_core.VeronicaPersistence
+        assert any(
+            issubclass(warning.category, DeprecationWarning)
+            and "VeronicaPersistence" in str(warning.message)
+            for warning in w
+        ), "Accessing VeronicaPersistence on veronica_core must emit DeprecationWarning"
+
+    def test_veronica_persistence_not_in_all(self) -> None:
+        import veronica_core
+
+        assert "VeronicaPersistence" not in veronica_core.__all__
+
+    def test_veronica_persistence_returns_correct_class(self) -> None:
+        import veronica_core
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            klass = veronica_core.VeronicaPersistence
+        from veronica_core.persist import VeronicaPersistence as _VP
+        assert klass is _VP

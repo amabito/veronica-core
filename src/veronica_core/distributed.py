@@ -13,6 +13,20 @@ from veronica_core.runtime_policy import PolicyContext, PolicyDecision
 logger = logging.getLogger(__name__)
 
 
+def _redact_exc(exc: BaseException) -> str:
+    """Return exception type and message with Redis URLs redacted.
+
+    Prevents credential leakage when ``redis://user:password@host/...``
+    appears in exception strings (e.g. ``ConnectionError``).
+    """
+    import re
+
+    msg = str(exc)
+    # Redact user:password in redis:// and rediss:// URLs.
+    msg = re.sub(r"(rediss?://)([^@]+)@", r"\1***@", msg)
+    return f"{type(exc).__name__}: {msg}"
+
+
 @runtime_checkable
 class BudgetBackend(Protocol):
     def add(self, amount: float) -> float: ...
@@ -88,7 +102,7 @@ class RedisBudgetBackend:
             if self._fallback_on_error:
                 logger.warning(
                     "RedisBudgetBackend: cannot connect to Redis (%s). Falling back to LocalBudgetBackend.",
-                    exc,
+                    _redact_exc(exc),
                 )
                 self._using_fallback = True
             else:
@@ -236,7 +250,8 @@ class RedisBudgetBackend:
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error(
-                    "RedisBudgetBackend.add failed: %s — using local fallback", exc
+                    "RedisBudgetBackend.add failed: %s — using local fallback",
+                    _redact_exc(exc),
                 )
                 # Seed fallback with last known Redis total and switch atomically.
                 # The lock + double-check prevents concurrent threads from seeding
@@ -259,7 +274,7 @@ class RedisBudgetBackend:
             return float(val) if val is not None else 0.0
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("RedisBudgetBackend.get failed: %s", exc)
+                logger.error("RedisBudgetBackend.get failed: %s", _redact_exc(exc))
                 return self._fallback.get()
             raise
 
@@ -271,7 +286,7 @@ class RedisBudgetBackend:
             self._client.delete(self._key)
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("RedisBudgetBackend.reset failed: %s", exc)
+                logger.error("RedisBudgetBackend.reset failed: %s", _redact_exc(exc))
             else:
                 raise
 
@@ -1066,7 +1081,7 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("DistributedCircuitBreaker.snapshot failed: %s", exc)
+                logger.error("DistributedCircuitBreaker.snapshot failed: %s", _redact_exc(exc))
                 with self._fallback._lock:
                     return CircuitSnapshot(
                         state=self._fallback._state,

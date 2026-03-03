@@ -6,6 +6,33 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.2] — 2026-03-03 — Phase 0 Hotfix
+
+**Breaking changes:** none
+
+### Fixed
+
+- **quickstart.py**: `on_halt` parameter now actually dispatches HALT decisions.
+  `on_halt="raise"` raises `VeronicaHalt`, `"warn"` logs a warning, `"silent"` is
+  a no-op. Previously the parameter was stored but never acted upon.
+- **distributed.py**: Redis URL credentials are now redacted in error log messages.
+  `_redact_exc()` strips `user:password@` from `redis://` and `rediss://` URLs
+  before logging, preventing credential leakage.
+
+### Changed
+
+- **`__init__.py`**: `enable_otel_with_provider` and `OTelExecutionGraphObserver`
+  added to `__all__` (were importable but missing from the public API surface).
+- **`__init__.py`**: `VeronicaPersistence` removed from `__all__` and direct imports.
+  Accessing it now emits `DeprecationWarning` via `__getattr__` (use `JSONBackend`
+  or `MemoryBackend` instead, removal scheduled for v2.0).
+- **pyproject.toml**: Removed duplicate `[project.optional-dependencies].dev` section.
+  All dev dependencies now live in `[dependency-groups].dev`. Added `pytest-cov>=5.0`.
+- **pyproject.toml**: MCP optional dependency pinned to `mcp>=1.0,<2` (upper bound
+  added to prevent silent breakage on MCP 2.0 protocol changes).
+
+---
+
 ## [1.8.1] — 2026-03-03 — Full Audit Fixes
 
 **Breaking changes:** none
