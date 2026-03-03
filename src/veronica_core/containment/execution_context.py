@@ -40,6 +40,7 @@ Usage::
 from __future__ import annotations
 
 import contextvars
+import logging
 import math
 import threading
 import time
@@ -61,6 +62,8 @@ if TYPE_CHECKING:
     from veronica_core.containment.budget_allocator import BudgetAllocator
     from veronica_core.shield.pipeline import ShieldPipeline
     from veronica_core.partial import PartialResultBuffer
+
+logger = logging.getLogger(__name__)
 
 # ContextVar that holds the active PartialResultBuffer for the current wrap call.
 # Reset to None after each wrap call completes (or raises).
@@ -206,6 +209,10 @@ class ExecutionConfig:
         if self.max_retries_total < 0:
             raise ValueError(
                 f"max_retries_total must be non-negative, got {self.max_retries_total!r}"
+            )
+        if self.timeout_ms < 0:
+            raise ValueError(
+                f"timeout_ms must be non-negative, got {self.timeout_ms!r}"
             )
 
 
@@ -1001,7 +1008,9 @@ class ExecutionContext:
                 )
                 self._metrics.record_latency(_agent_id, _dur)
             except Exception:
-                pass
+                logger.debug(
+                    "ExecutionContext: metrics recording failed", exc_info=True
+                )
 
         return Decision.ALLOW
 

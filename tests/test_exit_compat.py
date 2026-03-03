@@ -190,3 +190,70 @@ class TestVeronicaPersistenceGetattr:
 
         with pytest.raises(AttributeError, match="has no attribute"):
             _ = veronica_core.TotallyBogusName123
+
+
+# ---------------------------------------------------------------------------
+# Test: VeronicaExit exception safety during shutdown (v1.8.10)
+# ---------------------------------------------------------------------------
+
+
+class TestVeronicaExitExceptionSafety:
+    """Exit handlers must not propagate exceptions from state machine or persistence."""
+
+    def test_graceful_exit_survives_transition_failure(self) -> None:
+        """_graceful_exit must complete even if state_machine.transition() raises."""
+        sm = _make_state_machine()
+        backend = MemoryBackend()
+        ve = VeronicaExit(state_machine=sm, persistence=backend)
+
+        # Sabotage transition to raise
+        original_transition = sm.transition
+        def failing_transition(*args, **kwargs):
+            raise RuntimeError("transition broken")
+        sm.transition = failing_transition
+
+        # Must not raise
+        ve._graceful_exit()
+
+        # State save should still have been attempted
+        loaded = backend.load()
+        assert loaded is not None
+
+    def test_graceful_exit_survives_persistence_failure(self) -> None:
+        """_graceful_exit must complete even if persistence.save() raises."""
+        sm = _make_state_machine()
+
+        class FailingSaveBackend(MemoryBackend):
+            def save(self, data: dict) -> bool:
+                raise IOError("disk full")
+
+        backend = FailingSaveBackend()
+        ve = VeronicaExit(state_machine=sm, persistence=backend)
+
+        # Must not raise
+        ve._graceful_exit()
+
+    def test_emergency_exit_survives_transition_failure(self) -> None:
+        """_emergency_exit must complete even if state_machine.transition() raises."""
+        sm = _make_state_machine()
+        backend = MemoryBackend()
+        ve = VeronicaExit(state_machine=sm, persistence=backend)
+
+        sm.transition = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("broken"))
+
+        # Must not raise
+        ve._emergency_exit()
+
+    def test_emergency_exit_survives_persistence_failure(self) -> None:
+        """_emergency_exit must complete even if persistence.save() raises."""
+        sm = _make_state_machine()
+
+        class FailingSaveBackend(MemoryBackend):
+            def save(self, data: dict) -> bool:
+                raise IOError("disk full")
+
+        backend = FailingSaveBackend()
+        ve = VeronicaExit(state_machine=sm, persistence=backend)
+
+        # Must not raise
+        ve._emergency_exit()

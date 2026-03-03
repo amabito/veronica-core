@@ -137,23 +137,35 @@ class VeronicaExit:
         logger.info("[VERONICA_EXIT] GRACEFUL exit initiated")
 
         # 1. Transition to SAFE_MODE
-        self.state_machine.transition(VeronicaState.SAFE_MODE, self.exit_reason)
+        try:
+            self.state_machine.transition(VeronicaState.SAFE_MODE, self.exit_reason)
+        except Exception:
+            logger.exception("[VERONICA_EXIT] State transition to SAFE_MODE failed")
 
         # 2. Cleanup expired cooldowns
-        expired = self.state_machine.cleanup_expired()
-        if expired:
-            logger.info(f"[VERONICA_EXIT] Cleaned up {len(expired)} expired cooldowns")
+        try:
+            expired = self.state_machine.cleanup_expired()
+            if expired:
+                logger.info(f"[VERONICA_EXIT] Cleaned up {len(expired)} expired cooldowns")
+        except Exception:
+            logger.exception("[VERONICA_EXIT] Cooldown cleanup failed")
 
         # 3. Save state
-        success = self.persistence.save(self.state_machine.to_dict())
-        if success:
-            logger.info("[VERONICA_EXIT] State saved successfully")
-        else:
-            logger.error("[VERONICA_EXIT] State save FAILED")
+        try:
+            success = self.persistence.save(self.state_machine.to_dict())
+            if success:
+                logger.info("[VERONICA_EXIT] State saved successfully")
+            else:
+                logger.error("[VERONICA_EXIT] State save FAILED")
+        except Exception:
+            logger.exception("[VERONICA_EXIT] State save raised an exception")
 
         # 4. Log final stats
-        stats = self.state_machine.get_stats()
-        logger.info(f"[VERONICA_EXIT] Final stats: {stats}")
+        try:
+            stats = self.state_machine.get_stats()
+            logger.info(f"[VERONICA_EXIT] Final stats: {stats}")
+        except Exception:
+            logger.exception("[VERONICA_EXIT] Failed to retrieve final stats")
 
         logger.info("[VERONICA_EXIT] GRACEFUL exit complete")
 
@@ -162,14 +174,20 @@ class VeronicaExit:
         logger.warning("[VERONICA_EXIT] EMERGENCY exit initiated")
 
         # 1. Transition to SAFE_MODE
-        self.state_machine.transition(VeronicaState.SAFE_MODE, self.exit_reason)
+        try:
+            self.state_machine.transition(VeronicaState.SAFE_MODE, self.exit_reason)
+        except Exception:
+            logger.exception("[VERONICA_EXIT] Emergency state transition failed")
 
         # 2. Save state (critical)
-        success = self.persistence.save(self.state_machine.to_dict())
-        if success:
-            logger.info("[VERONICA_EXIT] Emergency state save OK")
-        else:
-            logger.error("[VERONICA_EXIT] Emergency state save FAILED")
+        try:
+            success = self.persistence.save(self.state_machine.to_dict())
+            if success:
+                logger.info("[VERONICA_EXIT] Emergency state save OK")
+            else:
+                logger.error("[VERONICA_EXIT] Emergency state save FAILED")
+        except Exception:
+            logger.exception("[VERONICA_EXIT] Emergency state save raised an exception")
 
         logger.warning("[VERONICA_EXIT] EMERGENCY exit complete")
 

@@ -9,10 +9,13 @@ Tests:
 
 from __future__ import annotations
 
+import math
 import sys
 import threading
 import time
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -741,3 +744,69 @@ class TestAdversarialExecutionContext:
         assert snap.cost_usd_accumulated >= 0.0, (
             f"Negative cost after backend failures: {snap.cost_usd_accumulated}"
         )
+
+
+# ---------------------------------------------------------------------------
+# ExecutionConfig.timeout_ms validation (v1.8.10)
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionConfigTimeoutValidation:
+    """timeout_ms must reject negative values."""
+
+    def test_negative_timeout_ms_raises(self):
+        import pytest
+        with pytest.raises(ValueError, match="timeout_ms must be non-negative"):
+            ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=-1)
+
+    def test_zero_timeout_ms_accepted(self):
+        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=0)
+        assert config.timeout_ms == 0
+
+    def test_positive_timeout_ms_accepted(self):
+        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=30000)
+        assert config.timeout_ms == 30000
+
+
+# ---------------------------------------------------------------------------
+# Metrics recording failure logging (v1.8.10)
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsRecordingFailure:
+    """Silent metrics exceptions must log at DEBUG level instead of swallowing."""
+
+    def test_metrics_failure_logged_at_debug(self):
+        class FailingMetrics:
+            def record_cost(self, agent_id, cost_usd):
+                raise RuntimeError("metrics backend down")
+            def record_decision(self, agent_id, decision):
+                raise RuntimeError("metrics backend down")
+            def record_latency(self, agent_id, duration_ms):
+                raise RuntimeError("metrics backend down")
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config, metrics=FailingMetrics())
+
+        # wrap_llm_call should succeed even though metrics recording fails
+        with ctx:
+            d = ctx.wrap_llm_call(fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0))
+            assert d == Decision.ALLOW
+
+    def test_metrics_failure_does_not_affect_decision(self):
+        class ExplodingMetrics:
+            def record_cost(self, agent_id, cost_usd):
+                raise TypeError("boom")
+            def record_decision(self, agent_id, decision):
+                raise TypeError("boom")
+            def record_latency(self, agent_id, duration_ms):
+                raise TypeError("boom")
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=config, metrics=ExplodingMetrics())
+        with ctx:
+            results = []
+            for _ in range(3):
+                d = ctx.wrap_llm_call(fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0))
+                results.append(d)
+            assert all(d == Decision.ALLOW for d in results)

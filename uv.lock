@@ -1333,7 +1333,7 @@ wheels = [
 
 [[package]]
 name = "veronica-core"
-version = "1.8.6"
+version = "1.8.9"
 source = { editable = "." }
 
 [package.optional-dependencies]

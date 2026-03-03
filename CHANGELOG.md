@@ -6,6 +6,23 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.10] — 2026-03-03 — Round 4 Hardening
+
+**Breaking changes:** `ExecutionConfig(timeout_ms=-1)` now raises `ValueError` (previously accepted silently).
+
+### Fixed
+
+- **ExecutionContext**: Metrics recording failure now logs at DEBUG level instead of silently swallowing the exception.
+- **ExecutionContext**: Added `logging` import and module-level `logger` for instrumentation.
+- **ExecutionConfig**: `timeout_ms` now validated as non-negative in `__post_init__()` (consistent with other fields).
+- **VeronicaExit**: `_graceful_exit()` and `_emergency_exit()` now wrap each step in try/except to prevent unhandled exceptions during shutdown.
+
+### Changed
+
+- `docs/V2_DEFERRED.md`: Added 3 new deferred items (T-5, L-16, L-17), 5 resolved items (R-19 to R-22), updated test gap notes (D-9).
+
+---
+
 ## [1.8.9] — 2026-03-03 — Round 3 Deep Audit
 
 **Breaking changes:** `PartialResultBuffer.append()` now raises `ValueError` after `mark_complete()` (previously silent).

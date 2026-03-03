@@ -26,6 +26,7 @@ a patch release.
 | T-2 | `max_steps=0` causes immediate HALT on first wrap call | `execution_context.py:1042` | Semantically correct: "zero steps allowed = no calls" |
 | T-3 | `max_output_tokens=0` causes immediate HALT on `TokenBudgetHook` | `shield/token_budget.py` | Same semantics as T-2 |
 | T-4 | `RedisBudgetBackend._client` use-after-free between `get()`/`reset()` and reconnect | `distributed.py:298` | Lock during I/O risks deadlock; exception handler mitigates |
+| T-5 | `CircuitBreaker` failure predicate evaluated outside lock | `circuit_breaker.py` | Safe by idempotency under GIL; revisit for nogil |
 
 ## Latent Edge Cases
 
@@ -46,6 +47,23 @@ a patch release.
 | L-13 | LOW | Base64 exfiltration detection threshold 20 chars allows short encoded secrets | `policy_engine.py:89` | Lowering threshold increases false positives |
 | L-14 | LOW | Divergence event drain after `mark_running()` may miss concurrent events | `execution_context.py:598` | Requires extreme concurrency on same node |
 | L-15 | LOW | `ExecutionContext.__enter__` has no double-entry guard | `execution_context.py:380` | Python context managers rarely guard this |
+| L-16 | LOW | `DegradationLadder` may oscillate between tiers at exact threshold boundary | `shield/degradation.py` | Hysteresis would add complexity; current behaviour acceptable |
+| L-17 | LOW | `time.time()` used for timeouts instead of `time.monotonic()` | `execution_context.py`, `circuit_breaker.py` | Clock adjustment can cause premature/delayed timeout |
+
+## Test Gap Notes
+
+| ID | Description | Notes |
+|----|-------------|-------|
+| D-9 | `exit.py`, `state.py` have zero unit tests; `adapters/_shared.py`, `shield/hooks.py` untested | Test backfill deferred to v2.0 |
+
+## Resolved in v1.8.10 (Previously Deferred)
+
+| ID | Description | Resolution |
+|----|-------------|------------|
+| R-19 | `ExecutionContext` metrics recording failure silently swallowed | Added `logger.debug` with `exc_info=True` |
+| R-20 | `VeronicaExit._graceful_exit()` not exception-safe | Wrapped each step in try/except |
+| R-21 | `VeronicaExit._emergency_exit()` not exception-safe | Wrapped each step in try/except |
+| R-22 | `ExecutionConfig.timeout_ms` missing non-negative validation | Added validation in `__post_init__()` |
 
 ## Resolved in v1.8.9 (Previously Deferred)
 
@@ -82,4 +100,4 @@ a patch release.
 
 ---
 
-Last updated: 2026-03-03 (v1.8.9)
+Last updated: 2026-03-03 (v1.8.10)
