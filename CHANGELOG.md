@@ -6,6 +6,39 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.6] — 2026-03-03 — Shield & Security Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **BudgetWindowHook**: HALT now records timestamp in window (off-by-one metrics fix).
+- **BudgetWindowHook**: Add `deque(maxlen)` to prevent unbounded growth under sustained HALT.
+- **AdaptiveBudgetHook**: Fix `<= cutoff` to `< cutoff` boundary pruning (off-by-one).
+- **AdaptiveBudgetHook**: Cap `_safety_events` with `deque(maxlen=1000)` (OOM prevention).
+- **AdaptiveBudgetHook**: Clamp `ceiling_multiplier` on `import_control_state` (bounds validation).
+- **TokenBudgetHook**: DEGRADE path now reserves pending tokens (TOCTOU race fix).
+- **TimeAwarePolicy**: Cap `_safety_events` with `deque(maxlen=1000)`.
+- **InputCompressionHook**: Cap `_safety_events` with `deque(maxlen=1000)`.
+- **PolicyEngine**: Add null-byte (`\x00`) to `SHELL_DENY_OPERATORS`.
+- **PolicyEngine**: Redact expected HMAC in tamper audit log (oracle prevention).
+- **PolicyEngine**: Resolve symlinks via `os.path.realpath()` in file read/write checks.
+- **PolicyEngine**: Case-insensitive deny for `go` subcommands and `cmake` flags.
+- **SemanticLoopGuard**: `policy_type` is now a read-only `@property`.
+- **VeronicaIntegration**: Deduplicate `atexit.register(save)` across instances.
+- **_shared.py**: Fix `or`-masking of zero-value tokens (explicit `None` check).
+- **llamaindex.py**: Fix same `or`-masking bug (incomplete v1.8.5 fix).
+- **mcp.py**: Document `timeout_seconds` as post-hoc measurement.
+
+### Tests
+
+- Add 41 adversarial tests for all fixed bugs (shield, security, core, adapters).
+- Fix 7 tautological assertions (`or True`, `>= 0`, conditional vacuity).
+- Strengthen 4 weak assertions to exact equality checks.
+- Total: 2533 tests passing.
+
+---
+
 ## [1.8.5] — 2026-03-03 — Simplify & Quality Hardening
 
 **Breaking changes:** none
