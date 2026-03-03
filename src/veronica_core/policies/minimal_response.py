@@ -49,7 +49,8 @@ class MinimalResponsePolicy:
     def _build_constraints(self) -> str:
         """Build the constraint text block."""
         if self.allow_questions:
-            question_rule = f"At most {self.max_questions} question if essential."
+            noun = "question" if self.max_questions == 1 else "questions"
+            question_rule = f"At most {self.max_questions} {noun} if essential."
         else:
             question_rule = "No follow-up questions."
         return _CONSTRAINT_TEMPLATE.format(

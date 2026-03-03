@@ -39,7 +39,7 @@ def _estimate_cost_openai(response: Any) -> float:
         total = getattr(usage, "total_tokens", 0)
         return total * 0.000002  # conservative $0.002 / 1K tokens
     except Exception as exc:
-        logger.debug("Cost estimation failed: %s", exc)
+        logger.warning("Cost estimation failed (OpenAI): %s", exc)
         return 0.0
 
 
@@ -53,7 +53,7 @@ def _estimate_cost_anthropic(response: Any) -> float:
         out = getattr(usage, "output_tokens", 0)
         return (inp + out) * 0.000003  # conservative $0.003 / 1K tokens
     except Exception as exc:
-        logger.debug("Cost estimation failed: %s", exc)
+        logger.warning("Cost estimation failed (Anthropic): %s", exc)
         return 0.0
 
 

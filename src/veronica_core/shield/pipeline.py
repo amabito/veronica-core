@@ -172,6 +172,24 @@ class ShieldPipeline:
             # Hook deferred (returned None) — explicit no-opinion means allow.
             return Decision.ALLOW
         # No retry hook: apply the configured policy (default: HALT, fail-closed).
+        # Record the decision so SafetyEvent logging is symmetric with other paths.
+        if self._on_error_policy != Decision.ALLOW:
+            event = SafetyEvent(
+                event_type="RETRY_POLICY_APPLIED",
+                decision=self._on_error_policy,
+                reason=f"on_error fallback ({self._on_error_policy.value}): {type(err).__name__}",
+                hook="ShieldPipeline",
+                request_id=ctx.request_id,
+            )
+            with self._lock:
+                if len(self._safety_events) < self._MAX_SAFETY_EVENTS:
+                    self._safety_events.append(event)
+            try:
+                from veronica_core.otel import emit_safety_event
+
+                emit_safety_event(event)
+            except Exception:
+                pass
         return self._on_error_policy
 
     def before_charge(self, ctx: ToolCallContext, cost_usd: float) -> Decision:

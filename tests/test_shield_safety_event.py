@@ -26,8 +26,19 @@ class TestPipelineNoHooks:
         pipe.before_llm_call(CTX)
         assert pipe.get_events() == []
 
-    def test_no_events_on_error(self):
+    def test_on_error_default_halt_records_event(self):
+        """Default on_error policy (HALT) now records a SafetyEvent."""
         pipe = ShieldPipeline()
+        pipe.on_error(CTX, RuntimeError("boom"))
+        events = pipe.get_events()
+        assert len(events) == 1
+        assert events[0].event_type == "RETRY_POLICY_APPLIED"
+        assert events[0].decision is Decision.HALT
+        assert "RuntimeError" in events[0].reason
+
+    def test_no_events_on_error_allow_policy(self):
+        """Explicit ALLOW policy produces no SafetyEvent."""
+        pipe = ShieldPipeline(on_error_policy=Decision.ALLOW)
         pipe.on_error(CTX, RuntimeError("boom"))
         assert pipe.get_events() == []
 

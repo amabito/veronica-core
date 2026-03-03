@@ -241,6 +241,10 @@ class DynamicAllocator:
             # Proportional to usage, then apply min_share floor.
             # First reserve the floor for each agent.
             reserved = min_floor * n
+            if reserved > total_budget:
+                # Floor exceeds budget; scale down to fit.
+                min_floor = total_budget / n
+                reserved = total_budget
             remaining_for_proportional = max(0.0, total_budget - reserved)
 
             # Proportional allocation of the non-floor portion.

@@ -793,8 +793,10 @@ class ExecutionContext:
                 metadata=metadata,
             )
             with self._lock:
-                if safe_evt not in self._events:
+                dk = (safe_evt.event_type, safe_evt.decision, safe_evt.reason, safe_evt.hook, safe_evt.request_id)
+                if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
                     self._events.append(safe_evt)
+                    self._event_dedup_keys.add(dk)
 
     def _invoke_fn(
         self,

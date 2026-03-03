@@ -390,7 +390,7 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
         )
 
     if "-m" in args[1:]:
-        m_idx = args.index("-m")
+        m_idx = args[1:].index("-m") + 1  # offset for args[1:] slice
         module = args[m_idx + 1].lower() if m_idx + 1 < len(args) else ""
         if module in _PYTHON_MODULE_PKG_MANAGERS:
             return PolicyDecision(

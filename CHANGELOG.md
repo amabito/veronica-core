@@ -6,6 +6,25 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.8] — 2026-03-03 — Round 2 LOW Sweep
+
+**Breaking changes:** none
+
+### Fixed
+
+- **ShieldPipeline**: `on_error()` no-hook fallback path now records SafetyEvent (was asymmetric with other pipeline methods).
+- **ExecutionContext**: Divergence event dedup now uses O(1) `_event_dedup_keys` (4th site missed in v1.8.7).
+- **MinimalResponsePolicy**: Fix grammar — "question" now pluralised correctly when `max_questions > 1`.
+- **PolicyEngine**: `_check_python_inline_exec` `-m` index search now uses `args[1:]` slice consistently.
+- **DynamicAllocator**: Clamp `min_floor` when `min_share * n` exceeds total budget (was violating allocation invariant).
+- **patch.py**: Cost estimation failure log level upgraded from `debug` to `warning`.
+
+### Changed
+
+- `docs/V2_DEFERRED.md`: Added 6 resolved items (R-6 to R-11), 6 new deferred items (D-7, D-8, L-7 to L-10).
+
+---
+
 ## [1.8.7] — 2026-03-03 — LOW Bug Sweep & CI Fix
 
 **Breaking changes:** none
