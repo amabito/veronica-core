@@ -1002,3 +1002,306 @@ class TestWrapMCPServerLogLevel:
             if r.levelno == logging.WARNING and "list_tools" in r.message
         ]
         assert len(warning_msgs) >= 1, f"Expected WARNING for list_tools failure, got: {caplog.records}"
+
+
+# ---------------------------------------------------------------------------
+# 18. M3 Task: Sync concurrent _ensure_stats() with call_count verification
+# ---------------------------------------------------------------------------
+
+
+class TestSyncEnsureStatsConcurrentCallCount:
+    """20 threads calling same brand-new tool_name: call_count must == 20."""
+
+    def test_20_threads_same_new_tool_call_count_exact(self) -> None:
+        """20 threads competing on _ensure_stats + wrap_tool_call: call_count == 20."""
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        barrier = threading.Barrier(20)
+        errors: list[Exception] = []
+
+        def worker() -> None:
+            barrier.wait()  # synchronize all threads to maximize race
+            try:
+                adapter.wrap_tool_call("brand_new_tool", {}, _sync_echo)
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Unexpected exceptions: {errors}"
+        stats = adapter.get_tool_stats()
+        assert "brand_new_tool" in stats, "Stats entry missing after concurrent creation"
+        assert stats["brand_new_tool"].call_count == 20, (
+            f"Expected call_count=20, got {stats['brand_new_tool'].call_count}"
+        )
+
+    def test_20_threads_same_tool_error_count_exact(self) -> None:
+        """20 threads all raising on same tool_name: error_count must == 20."""
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        barrier = threading.Barrier(20)
+
+        def worker() -> None:
+            barrier.wait()
+            try:
+                adapter.wrap_tool_call("failing_tool", {}, _sync_raise)
+            except Exception:  # noqa: BLE001
+                pass
+
+        threads = [threading.Thread(target=worker) for _ in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        stats = adapter.get_tool_stats()
+        assert "failing_tool" in stats
+        assert stats["failing_tool"].call_count == 20
+        assert stats["failing_tool"].error_count == 20
+
+
+# ---------------------------------------------------------------------------
+# 19. M3 Task: Async stats lock contention under high load (100 coroutines)
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncStatsLockHighLoad:
+    """100 concurrent async wrap_tool_call: stats must be exact, no deadlock."""
+
+    def test_100_concurrent_coroutines_call_count_exact(self) -> None:
+        """100 concurrent async calls to same tool_name: call_count must == 100."""
+        async def run() -> int:
+            adapter = _make_async(
+                max_cost_usd=1000.0, max_steps=500, default_cost_per_call=0.0
+            )
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("high_load_tool", {}, _async_echo))
+                for _ in range(100)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Confirm no exceptions escaped
+            for r in results:
+                assert not isinstance(r, Exception), f"Unexpected exception: {r}"
+            stats = adapter.get_tool_stats()
+            return stats["high_load_tool"].call_count
+
+        count = asyncio.run(run())
+        assert count == 100, f"Expected call_count=100, got {count}"
+
+    def test_100_concurrent_coroutines_no_deadlock(self) -> None:
+        """100 concurrent async calls must complete without asyncio.Lock deadlock."""
+        import contextlib
+
+        async def run() -> str:
+            adapter = _make_async(
+                max_cost_usd=1000.0, max_steps=500, default_cost_per_call=0.0
+            )
+            tasks = [
+                asyncio.create_task(adapter.wrap_tool_call("lock_test_tool", {}, _async_echo))
+                for _ in range(100)
+            ]
+            # 5-second wall-clock limit to detect deadlocks
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+            stats = adapter.get_tool_stats()
+            return stats.get("lock_test_tool")
+
+        tool_stats = asyncio.run(run())
+        assert tool_stats is not None
+        # call_count == 100 proves no deadlock (all coroutines completed)
+        assert tool_stats.call_count == 100
+
+
+# ---------------------------------------------------------------------------
+# 20. M3 Task: Tool name cardinality warning (_STATS_WARN_LIMIT)
+# ---------------------------------------------------------------------------
+
+
+class TestToolNameCardinalityWarning:
+    """100+ distinct tool names: no crash, all stats created."""
+
+    def test_100_distinct_tool_names_no_crash(self) -> None:
+        """Creating 100 distinct tool names must not crash the adapter."""
+        adapter = _make_sync(max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0)
+        for i in range(100):
+            result = adapter.wrap_tool_call(f"tool_{i:03d}", {}, _sync_echo)
+            assert result.success is True, f"Call failed for tool_{i:03d}"
+        stats = adapter.get_tool_stats()
+        assert len(stats) == 100
+
+    def test_100_distinct_tool_names_all_call_count_one(self) -> None:
+        """Each of 100 distinct tool names must have call_count == 1."""
+        adapter = _make_sync(max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0)
+        for i in range(100):
+            adapter.wrap_tool_call(f"unique_tool_{i}", {}, _sync_echo)
+        stats = adapter.get_tool_stats()
+        for i in range(100):
+            name = f"unique_tool_{i}"
+            assert name in stats, f"Missing stats for {name}"
+            assert stats[name].call_count == 1, (
+                f"Expected call_count=1 for {name}, got {stats[name].call_count}"
+            )
+
+    def test_async_100_distinct_tool_names_no_crash(self) -> None:
+        """100 distinct async tool names: no crash, all stats created."""
+        async def run() -> int:
+            adapter = _make_async(
+                max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0
+            )
+            for i in range(100):
+                await adapter.wrap_tool_call(f"async_tool_{i:03d}", {}, _async_echo)
+            stats = adapter.get_tool_stats()
+            return len(stats)
+
+        count = asyncio.run(run())
+        assert count == 100
+
+
+# ---------------------------------------------------------------------------
+# 21. M3 Task: fn() raises after stats increment -- adapter not corrupted
+# ---------------------------------------------------------------------------
+
+
+class TestFnRaisesAfterStatsIncrement:
+    """fn() raises: error_count incremented, subsequent calls still work."""
+
+    def test_sync_error_count_after_raise(self) -> None:
+        """Sync fn() that raises: error_count == 1, call_count == 1."""
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01)
+        result = adapter.wrap_tool_call("raise_tool", {}, _sync_raise)
+
+        assert result.success is False
+        assert result.error is not None
+        stats = adapter.get_tool_stats()
+        assert stats["raise_tool"].call_count == 1
+        assert stats["raise_tool"].error_count == 1
+
+    def test_sync_adapter_usable_after_raise(self) -> None:
+        """After fn() raises, subsequent successful calls still work (not corrupted)."""
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+        # First call raises
+        r1 = adapter.wrap_tool_call("mixed_tool", {}, _sync_raise)
+        assert r1.success is False
+        # Second call succeeds
+        r2 = adapter.wrap_tool_call("mixed_tool", {}, _sync_echo)
+        assert r2.success is True
+        stats = adapter.get_tool_stats()
+        assert stats["mixed_tool"].call_count == 2
+        assert stats["mixed_tool"].error_count == 1
+
+    def test_async_error_count_after_raise(self) -> None:
+        """Async fn() that raises: error_count == 1, call_count == 1."""
+        async def run() -> tuple[bool, int, int]:
+            adapter = _make_async(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01)
+            result = await adapter.wrap_tool_call("async_raise_tool", {}, _async_raise)
+            stats = adapter.get_tool_stats()
+            return result.success, stats["async_raise_tool"].call_count, stats["async_raise_tool"].error_count
+
+        success, call_count, error_count = asyncio.run(run())
+        assert success is False
+        assert call_count == 1
+        assert error_count == 1
+
+    def test_async_adapter_usable_after_raise(self) -> None:
+        """After async fn() raises, subsequent successful async calls still work."""
+        async def run() -> tuple[bool, bool, int, int]:
+            adapter = _make_async(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+            r1 = await adapter.wrap_tool_call("async_mixed", {}, _async_raise)
+            r2 = await adapter.wrap_tool_call("async_mixed", {}, _async_echo)
+            stats = adapter.get_tool_stats()
+            return r1.success, r2.success, stats["async_mixed"].call_count, stats["async_mixed"].error_count
+
+        s1, s2, cc, ec = asyncio.run(run())
+        assert s1 is False
+        assert s2 is True
+        assert cc == 2
+        assert ec == 1
+
+    def test_sync_cost_charged_on_raise(self) -> None:
+        """Sync fn() raises: cost_usd in result must be cost_estimate (not 0)."""
+        costs = {"raise_tool_cost": MCPToolCost("raise_tool_cost", cost_per_call=0.05)}
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        result = adapter.wrap_tool_call("raise_tool_cost", {}, _sync_raise)
+        assert result.success is False
+        assert result.cost_usd == pytest.approx(0.05)
+
+
+# ---------------------------------------------------------------------------
+# 22. M3 Task: Budget backend raises during wrap_tool_call
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetBackendRaises:
+    """ExecutionContext.wrap_tool_call raises: adapter still usable after exception."""
+
+    def test_sync_budget_exception_propagates(self) -> None:
+        """If ExecutionContext.wrap_tool_call raises, the exception propagates (not swallowed)."""
+        from unittest.mock import patch
+
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=200)
+        fn_called = [0]
+
+        def counting_fn(**kwargs: Any) -> str:
+            fn_called[0] += 1
+            return "ok"
+
+        with patch.object(
+            adapter._ctx,
+            "wrap_tool_call",
+            side_effect=RuntimeError("budget backend crash"),
+        ):
+            with pytest.raises(RuntimeError, match="budget backend crash"):
+                adapter.wrap_tool_call("tool", {}, counting_fn)
+
+        # call_fn must NOT have been invoked (EC raises before execution)
+        assert fn_called[0] == 0
+
+    def test_sync_adapter_usable_after_budget_exception(self) -> None:
+        """After budget backend exception, adapter is still functional on next call."""
+        from unittest.mock import patch
+
+        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+
+        with patch.object(
+            adapter._ctx,
+            "wrap_tool_call",
+            side_effect=RuntimeError("transient crash"),
+        ):
+            try:
+                adapter.wrap_tool_call("tool", {}, _sync_echo)
+            except RuntimeError:
+                pass  # expected
+
+        # After the exception, the adapter's stats entry must not be corrupted
+        # and subsequent calls (with normal context) must work
+        result = adapter.wrap_tool_call("tool", {}, _sync_echo)
+        assert result.success is True
+
+    def test_async_budget_exception_propagates(self) -> None:
+        """If async budget probe (EC.wrap_tool_call) raises, exception propagates."""
+        from unittest.mock import patch
+
+        async def run() -> bool:
+            adapter = _make_async(max_cost_usd=100.0, max_steps=200)
+            fn_called = [0]
+
+            async def counting_fn(**kwargs: Any) -> str:
+                fn_called[0] += 1
+                return "ok"
+
+            with patch.object(
+                adapter._ctx,
+                "wrap_tool_call",
+                side_effect=RuntimeError("async budget crash"),
+            ):
+                try:
+                    await adapter.wrap_tool_call("tool", {}, counting_fn)
+                    return False  # should not reach here
+                except RuntimeError:
+                    return fn_called[0] == 0  # True if fn was NOT called
+
+        fn_not_called = asyncio.run(run())
+        assert fn_not_called is True

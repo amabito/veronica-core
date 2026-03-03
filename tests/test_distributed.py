@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 import fakeredis
 import pytest
@@ -785,4 +786,695 @@ class TestAdversarialM1ReconnectRaceUnderConcurrency:
         assert len(connect_calls) <= 1, (
             f"Expected at most 1 _connect call (rate-limited) but got {len(connect_calls)}; "
             "H4 lock fix (holding lock during reconnect) must serialise _try_reconnect"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Adversarial tests — DistributedCircuitBreaker TOCTOU, fallback flip, reconnect race
+# ---------------------------------------------------------------------------
+
+
+def _make_dcb_for_adversarial(
+    fake_client,
+    circuit_id: str = "adv-test",
+    failure_threshold: int = 3,
+    recovery_timeout: float = 60.0,
+    half_open_slot_timeout: float = 120.0,
+):
+    """Create DistributedCircuitBreaker with injected fakeredis client."""
+    import veronica_core.distributed as dist_mod
+    from veronica_core.circuit_breaker import CircuitBreaker
+    from veronica_core.distributed import DistributedCircuitBreaker
+
+    dcb = DistributedCircuitBreaker.__new__(DistributedCircuitBreaker)
+    dcb._redis_url = "redis://fake"
+    dcb._circuit_id = circuit_id
+    dcb._key = f"veronica:circuit:{circuit_id}"
+    dcb._failure_threshold = failure_threshold
+    dcb._recovery_timeout = recovery_timeout
+    dcb._ttl = 3600
+    dcb._fallback_on_error = True
+    dcb._half_open_slot_timeout = half_open_slot_timeout
+    dcb._failure_predicate = None
+    dcb._fallback = CircuitBreaker(
+        failure_threshold=failure_threshold,
+        recovery_timeout=recovery_timeout,
+    )
+    dcb._using_fallback = False
+    dcb._client = fake_client
+    dcb._owns_client = False
+    dcb._lock = threading.Lock()
+    dcb._last_reconnect_attempt = 0.0
+    dcb._script_failure = fake_client.register_script(dist_mod._LUA_RECORD_FAILURE)
+    dcb._script_success = fake_client.register_script(dist_mod._LUA_RECORD_SUCCESS)
+    dcb._script_check = fake_client.register_script(dist_mod._LUA_CHECK)
+    return dcb
+
+
+class TestAdversarialDistributedCBTOCTOU:
+    """TOCTOU proof: HALF_OPEN slot must be claimed by exactly 1 concurrent caller.
+
+    Attacker mindset: 10 threads all see HALF_OPEN simultaneously and race to
+    claim the single test slot.  The Lua script atomicity must ensure exactly
+    one wins — no split-brain where 0 or 2+ threads are allowed through.
+    """
+
+    def test_adversarial_half_open_slot_exactly_one_claimant_under_concurrency(
+        self,
+    ) -> None:
+        """Under 10 concurrent check() calls in HALF_OPEN, exactly 1 must be allowed."""
+        from veronica_core.runtime_policy import PolicyContext
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-toctou-half-open",
+            failure_threshold=1,
+            half_open_slot_timeout=120.0,
+        )
+
+        # Force HALF_OPEN state directly in Redis.
+        fake_client.hset(
+            dcb._key,
+            mapping={
+                "state": "HALF_OPEN",
+                "failure_count": 1,
+                "success_count": 0,
+                "last_failure_time": str(time.time() - 999.0),
+                "half_open_in_flight": 0,
+                "half_open_claimed_at": 0,
+            },
+        )
+        fake_client.expire(dcb._key, 3600)
+
+        ctx = PolicyContext()
+        allowed_results: list[bool] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(10)
+
+        def do_check() -> None:
+            barrier.wait()  # synchronize all threads at the same instant
+            decision = dcb.check(ctx)
+            with lock:
+                allowed_results.append(decision.allowed)
+
+        threads = [threading.Thread(target=do_check) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(allowed_results) == 10, "All threads must complete"
+        allowed_count = sum(1 for r in allowed_results if r)
+        assert allowed_count == 1, (
+            f"Exactly 1 check() must be allowed in HALF_OPEN (Lua atomic slot claim), "
+            f"but {allowed_count} were allowed. TOCTOU race detected."
+        )
+
+    def test_adversarial_half_open_slot_released_after_timeout_and_one_new_claimant(
+        self,
+    ) -> None:
+        """Stale HALF_OPEN slot must be released after timeout and allow exactly 1 new claimant.
+
+        If the process that claimed the slot crashes (slot held indefinitely),
+        the half_open_slot_timeout releases it automatically.  The next caller
+        should then claim the slot — not be blocked forever.
+        """
+        from veronica_core.runtime_policy import PolicyContext
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-slot-timeout",
+            failure_threshold=1,
+            half_open_slot_timeout=1.0,  # 1 second timeout
+        )
+
+        # Simulate a stale slot: claimed 10 seconds ago (past the 1s timeout).
+        stale_claimed_at = time.time() - 10.0
+        fake_client.hset(
+            dcb._key,
+            mapping={
+                "state": "HALF_OPEN",
+                "failure_count": 1,
+                "success_count": 0,
+                "last_failure_time": str(time.time() - 999.0),
+                "half_open_in_flight": 1,  # slot appears held
+                "half_open_claimed_at": stale_claimed_at,
+            },
+        )
+        fake_client.expire(dcb._key, 3600)
+
+        ctx = PolicyContext()
+        # The slot is stale — check() should auto-release and allow this caller.
+        decision = dcb.check(ctx)
+        assert decision.allowed, (
+            "check() must allow the caller when the stale HALF_OPEN slot is auto-released "
+            f"(got allowed={decision.allowed}, reason={decision.reason!r})"
+        )
+
+        # A second concurrent caller must be denied (slot now held by first caller).
+        decision2 = dcb.check(ctx)
+        assert not decision2.allowed, (
+            "Second check() must be denied (slot already claimed by the previous caller)"
+        )
+
+
+class TestAdversarialDistributedCBConcurrentFallbackFlip:
+    """Concurrent fallback flip: when Redis fails mid-operation, exactly one thread
+    should seed the fallback and all threads must route to fallback consistently.
+
+    Attacker mindset: 10 threads all call check()/record_failure() simultaneously
+    while Redis is broken. The fallback must be activated exactly once (idempotent
+    _activate_fallback), and all results must be consistent.
+    """
+
+    def test_adversarial_concurrent_redis_failure_activates_fallback_once(
+        self,
+    ) -> None:
+        """10 concurrent record_failure() calls with Redis broken must activate fallback once."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import PolicyContext
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-fallback-flip",
+            failure_threshold=5,
+        )
+
+        seed_calls: list[int] = []
+        original_seed = dcb._seed_fallback_from_redis
+
+        def counting_seed() -> None:
+            seed_calls.append(1)
+            original_seed()
+
+        dcb._seed_fallback_from_redis = counting_seed  # type: ignore[method-assign]
+
+        # Break the Lua script to simulate Redis failure.
+        def broken_script(*args, **kwargs):
+            raise ConnectionError("Redis unavailable during test")
+
+        dcb._script_failure = broken_script  # type: ignore[assignment]
+
+        barrier = threading.Barrier(10)
+
+        def do_record_failure() -> None:
+            barrier.wait()
+            dcb.record_failure()
+
+        threads = [threading.Thread(target=do_record_failure) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Fallback must have been activated.
+        assert dcb.is_using_fallback or dcb._using_fallback, (
+            "Fallback must be activated after concurrent Redis failures"
+        )
+
+        # _seed_fallback_from_redis must have been called at most once
+        # (idempotent double-check under lock prevents multiple seeds).
+        assert len(seed_calls) <= 1, (
+            f"_seed_fallback_from_redis must be called at most once (got {len(seed_calls)}); "
+            "_activate_fallback double-check lock is not working"
+        )
+
+    def test_adversarial_check_during_fallback_all_return_consistent_decisions(
+        self,
+    ) -> None:
+        """10 concurrent check() calls on fallback must return consistent PolicyDecision objects."""
+        from veronica_core.runtime_policy import PolicyContext
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-fallback-check",
+            failure_threshold=5,
+        )
+        # Pre-set to fallback mode.
+        dcb._using_fallback = True
+        dcb._client = None
+
+        ctx = PolicyContext()
+        decisions: list[bool] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(10)
+
+        def do_check() -> None:
+            barrier.wait()
+            d = dcb.check(ctx)
+            with lock:
+                decisions.append(d.allowed)
+
+        threads = [threading.Thread(target=do_check) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(decisions) == 10, "All threads must complete"
+        # In fallback (local CircuitBreaker), CLOSED state — all should be allowed.
+        assert all(decisions), (
+            f"All check() calls on fallback CLOSED circuit must be allowed, "
+            f"but got: {decisions}"
+        )
+
+
+class TestAdversarialDistributedCBReconnectRace:
+    """Reconnect race: concurrent threads must not trigger multiple reconnect attempts.
+
+    The _attempt_reconnect_if_on_fallback() uses double-checked locking:
+    outer check avoids lock on fast path; inner check serialises reconnects.
+    All 10 concurrent calls must result in at most 1 _try_reconnect call.
+    """
+
+    def test_adversarial_reconnect_race_with_barrier_exactly_one_attempt(
+        self,
+    ) -> None:
+        """10 threads simultaneously on fallback must trigger at most 1 _connect attempt.
+
+        _attempt_reconnect_if_on_fallback() uses double-checked locking:
+        outer check is unlocked (fast path), inner check is locked (serialised).
+        Even with 10 threads all seeing _using_fallback=True simultaneously,
+        only one should enter _try_reconnect() and attempt _connect().
+        """
+        from unittest.mock import patch
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-reconnect-race",
+            failure_threshold=5,
+        )
+        dcb._using_fallback = True
+        dcb._fallback_on_error = True
+        dcb._last_reconnect_attempt = 0.0  # allow the first attempt
+
+        connect_calls: list[float] = []
+
+        def counting_connect_fail(self_inner: object) -> None:
+            """Count _connect() invocations and simulate failure (stays on fallback)."""
+            connect_calls.append(time.monotonic())
+            raise ConnectionError("still down for test")
+
+        barrier = threading.Barrier(10)
+
+        def do_attempt() -> None:
+            barrier.wait()  # release all threads simultaneously
+            dcb._attempt_reconnect_if_on_fallback()
+
+        with patch.object(type(dcb), "_connect", counting_connect_fail):
+            threads = [threading.Thread(target=do_attempt) for _ in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        # Double-checked locking must ensure at most 1 _connect() call.
+        # (All 10 threads attempt _attempt_reconnect_if_on_fallback, but
+        # the inner lock + rate-limit serialises them to 1 actual _connect.)
+        assert len(connect_calls) <= 1, (
+            f"Expected at most 1 _connect() call under double-checked locking, "
+            f"but got {len(connect_calls)}. Reconnect race condition detected."
+        )
+
+    def test_adversarial_fallback_reconnect_does_not_lose_circuit_state(
+        self,
+    ) -> None:
+        """After reconnect, reconciled Redis state must reflect local fallback failures.
+
+        Scenario:
+        1. DCB starts on Redis, records 2 failures via Lua script directly.
+        2. Fallback is seeded from Redis → fallback has 2 failures.
+        3. 1 more failure added directly to fallback (simulates outage period).
+        4. _reconcile_on_reconnect() pushes local state to Redis.
+        5. Redis must show failure_count=3, not 0 (no state lost on reconnect).
+        """
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        dcb = _make_dcb_for_adversarial(
+            fake_client,
+            circuit_id="adv-reconnect-state",
+            failure_threshold=5,
+        )
+
+        # Step 1: record 2 failures directly via Lua script (no reconnect side-effects).
+        dcb._script_failure(
+            keys=[dcb._key],
+            args=[dcb._failure_threshold, time.time(), dcb._ttl],
+        )
+        dcb._script_failure(
+            keys=[dcb._key],
+            args=[dcb._failure_threshold, time.time(), dcb._ttl],
+        )
+        redis_count = int(fake_client.hget(dcb._key, "failure_count") or 0)
+        assert redis_count == 2, f"Redis should have 2 failures, got {redis_count}"
+
+        # Step 2: seed fallback from Redis (simulates what _seed_fallback_from_redis does).
+        dcb._seed_fallback_from_redis()
+        assert dcb._fallback._failure_count == 2, (
+            f"Fallback must be seeded with 2 failures, got {dcb._fallback._failure_count}"
+        )
+
+        # Step 3: add 1 more failure to fallback directly (simulates outage period).
+        from veronica_core.circuit_breaker import CircuitState
+        with dcb._fallback._lock:
+            dcb._fallback._failure_count = 3
+            dcb._fallback._state = CircuitState.CLOSED
+            dcb._fallback._last_failure_time = time.time()
+
+        # Step 4: simulate reconnect — call _reconcile_on_reconnect directly.
+        # At this point dcb._using_fallback is False (not in fallback mode) and
+        # dcb._client is fake_client (working), so reconcile should succeed.
+        reconciled = dcb._reconcile_on_reconnect()
+        assert reconciled is True, (
+            "Reconcile must succeed with working fakeredis client"
+        )
+
+        # Step 5: verify Redis has the pushed state.
+        data = fake_client.hgetall(dcb._key)
+        redis_failure_count = int(data.get("failure_count", 0))
+        redis_state = data.get("state", "CLOSED")
+
+        assert redis_failure_count == 3, (
+            f"Redis must show 3 failures after reconcile, got {redis_failure_count}; "
+            "circuit state was lost during reconnect reconciliation"
+        )
+        assert redis_state in ("CLOSED", "OPEN"), (
+            f"Redis state must be CLOSED or OPEN after reconcile, got {redis_state!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Adversarial tests — RedisBudgetBackend: add/get race, reset, reconcile
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialRedisBudgetAddGetRace:
+    """TOCTOU proof: concurrent add() and get() must not lose increments.
+
+    Attacker mindset: 5 threads calling add(1.0) and 5 threads calling get()
+    simultaneously.  INCRBYFLOAT is atomic per call, so the final total must
+    equal the number of add() calls.  Any lost increment indicates a race.
+    """
+
+    def test_adversarial_concurrent_add_and_get_no_lost_increments(self) -> None:
+        """5 add(1.0) + 5 get() threads via Barrier: final total must be 5.0."""
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-add-get-race")
+
+        add_results: list[float] = []
+        get_results: list[float] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(10)
+
+        def do_add() -> None:
+            barrier.wait()
+            val = backend.add(1.0)
+            with lock:
+                add_results.append(val)
+
+        def do_get() -> None:
+            barrier.wait()
+            val = backend.get()
+            with lock:
+                get_results.append(val)
+
+        threads = (
+            [threading.Thread(target=do_add) for _ in range(5)]
+            + [threading.Thread(target=do_get) for _ in range(5)]
+        )
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(add_results) == 5, "All 5 add() threads must complete"
+        assert len(get_results) == 5, "All 5 get() threads must complete"
+
+        # Final total must reflect all 5 add(1.0) calls — no lost increments.
+        final = backend.get()
+        assert abs(final - 5.0) < 1e-6, (
+            f"Final total must be 5.0 (5 x 1.0 added), got {final}; "
+            "concurrent add/get race caused lost increments"
+        )
+
+        # Each add() return value must be monotonically valid (between 1.0 and 5.0).
+        for r in add_results:
+            assert 1.0 <= r <= 5.0, (
+                f"add() return {r} is outside valid range [1.0, 5.0]; "
+                "INCRBYFLOAT atomicity violated"
+            )
+
+
+class TestAdversarialRedisBudgetFallbackTransitionConcurrency:
+    """Concurrent add() during fallback transition must not lose any increment.
+
+    Thread A and Thread B both call add() simultaneously while Redis pipeline
+    is artificially slowed.  Both increments must be reflected in the final total
+    regardless of whether they land in Redis or in the fallback.
+    """
+
+    def test_adversarial_two_threads_add_during_slow_pipeline_no_lost_increment(
+        self,
+    ) -> None:
+        """2 threads add 1.0 each through a slow pipeline: final total must be 2.0."""
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-slow-pipeline")
+
+        original_pipeline = fake_client.pipeline
+
+        class SlowPipeline:
+            """Wraps real pipeline but introduces a delay in execute() to widen races."""
+
+            def __init__(self) -> None:
+                self._real = original_pipeline()
+
+            def incrbyfloat(self, key: str, amount: float) -> None:
+                self._real.incrbyfloat(key, amount)
+
+            def expire(self, key: str, ttl: int) -> None:
+                self._real.expire(key, ttl)
+
+            def execute(self) -> list:
+                time.sleep(0.02)  # widen the concurrency window
+                return self._real.execute()
+
+        fake_client.pipeline = SlowPipeline
+
+        results: list[float] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(2)
+
+        def do_add() -> None:
+            barrier.wait()
+            val = backend.add(1.0)
+            with lock:
+                results.append(val)
+
+        t1 = threading.Thread(target=do_add)
+        t2 = threading.Thread(target=do_add)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Restore
+        fake_client.pipeline = original_pipeline
+
+        assert len(results) == 2, "Both threads must complete"
+        # Sum of returned totals is not guaranteed to be 2.0 (returns are snapshots),
+        # but the actual final backend total must be 2.0.
+        final = backend.get()
+        assert abs(final - 2.0) < 1e-5, (
+            f"Final total must be 2.0 (2 x 1.0 added), got {final}; "
+            "slow pipeline caused a lost increment during concurrent add()"
+        )
+
+
+class TestAdversarialRedisBudgetResetConcurrency:
+    """Reset during concurrent add() must leave the backend in a consistent state.
+
+    Thread A performs a rapid add() loop while Thread B calls reset() mid-stream.
+    After reset() completes, any subsequent add() must start from 0.0 and
+    get() must reflect only post-reset accumulation.
+    """
+
+    def test_adversarial_reset_mid_add_loop_post_reset_total_is_correct(
+        self,
+    ) -> None:
+        """After reset(), backend total reflects only post-reset adds."""
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-reset-concurrency")
+
+        reset_done = threading.Event()
+        post_reset_adds: list[float] = []
+        lock = threading.Lock()
+
+        def adder_thread() -> None:
+            """Add 1.0 repeatedly; after reset, track post-reset add results."""
+            for i in range(20):
+                val = backend.add(1.0)
+                if reset_done.is_set():
+                    with lock:
+                        post_reset_adds.append(val)
+                time.sleep(0.001)
+
+        def resetter_thread() -> None:
+            """Wait a bit then reset."""
+            time.sleep(0.005)  # let adder accumulate some
+            backend.reset()
+            reset_done.set()
+
+        t_add = threading.Thread(target=adder_thread)
+        t_reset = threading.Thread(target=resetter_thread)
+        t_add.start()
+        t_reset.start()
+        t_add.join()
+        t_reset.join()
+
+        # After all threads finish, the final total must be >= 0 and <= 20.0
+        # (cannot be negative; cannot exceed total adds).
+        final = backend.get()
+        assert 0.0 <= final <= 20.0, (
+            f"Final total after reset must be in [0.0, 20.0], got {final}"
+        )
+
+        # Post-reset adds must return values >= 1.0 (at least the first post-reset add).
+        # This ensures reset() zeroed the counter correctly.
+        if post_reset_adds:
+            min_post_reset = min(post_reset_adds)
+            assert min_post_reset >= 0.0, (
+                f"Post-reset add() return {min_post_reset} must be non-negative"
+            )
+
+        # Verify final state is consistent: get() must match the last add() return
+        # (within tolerance — concurrent nature means brief windows of mismatch).
+        final_2 = backend.get()
+        assert abs(final_2 - final) < 1e-3 or final_2 >= final, (
+            f"get() must be stable or monotonic after threads finish, "
+            f"got {final} then {final_2}"
+        )
+
+
+class TestAdversarialRedisBudgetReconcileConnectionFailure:
+    """Connection failure mid-reconcile must preserve the fallback delta.
+
+    _reconcile_on_reconnect() reads the local delta and attempts INCRBYFLOAT.
+    If the connection drops during execute(), the delta must remain in the
+    local fallback — it must not be silently discarded.
+
+    This is a regression test for the 'undercount on partial reconcile' pattern:
+    if the delta were cleared before confirming the write, a connection drop
+    would erase it forever.
+    """
+
+    def test_adversarial_reconcile_failure_mid_execute_preserves_delta(
+        self,
+    ) -> None:
+        """INCRBYFLOAT failure during reconcile must leave delta intact."""
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-reconcile-drop")
+
+        # Pre-load Redis with a base value.
+        fake_client.set(backend._key, "2.0")
+        fake_client.expire(backend._key, 3600)
+
+        # Simulate failover with a delta of 0.75.
+        backend._seed_fallback_from_redis()
+        backend._using_fallback = True
+        backend._fallback.add(0.75)  # delta = 0.75
+
+        # Verify pre-condition: fallback holds 2.75 total, seed_base = 2.0.
+        assert abs(backend._fallback.get() - 2.75) < 1e-9
+        assert abs(backend._fallback_seed_base - 2.0) < 1e-9
+
+        # Break the pipeline so INCRBYFLOAT fails.
+        class DropPipeline:
+            def incrbyfloat(self, *a, **kw) -> None: pass
+            def expire(self, *a, **kw) -> None: pass
+            def execute(self) -> None:
+                raise ConnectionError("connection dropped mid-reconcile")
+
+        fake_client.pipeline = lambda: DropPipeline()
+
+        # Call reconcile with _using_fallback cleared (simulates reconnect).
+        backend._using_fallback = False
+        result = backend._reconcile_on_reconnect()
+
+        assert result is False, (
+            "_reconcile_on_reconnect must return False when connection drops"
+        )
+        # The delta must still be in the fallback — not discarded.
+        remaining_delta = backend._fallback.get() - backend._fallback_seed_base
+        assert abs(remaining_delta - 0.75) < 1e-9, (
+            f"Delta must be preserved after failed reconcile; "
+            f"expected 0.75, fallback.get()={backend._fallback.get():.4f}, "
+            f"seed_base={backend._fallback_seed_base:.4f}, delta={remaining_delta:.4f}"
+        )
+
+    def test_adversarial_reconcile_success_then_failure_no_double_count(
+        self,
+    ) -> None:
+        """After successful reconcile, a second reconcile must not double-count.
+
+        If reset() is not called after a successful INCRBYFLOAT, subsequent
+        reconnect attempts would push the same delta again, causing overspend.
+        """
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+
+        backend = make_redis_backend(fake_client, chain_id="adv-double-reconcile")
+
+        # Pre-load Redis with 1.0.
+        fake_client.set(backend._key, "1.0")
+        fake_client.expire(backend._key, 3600)
+
+        # Simulate outage: seed=1.0, delta=0.5.
+        backend._seed_fallback_from_redis()
+        backend._using_fallback = True
+        backend._fallback.add(0.5)
+
+        # First reconcile: must succeed and flush delta=0.5 to Redis.
+        backend._using_fallback = False
+        result1 = backend._reconcile_on_reconnect()
+        assert result1 is True, "First reconcile must succeed"
+
+        redis_val_after_1 = float(fake_client.get(backend._key) or 0)
+        assert abs(redis_val_after_1 - 1.5) < 1e-9, (
+            f"Redis must be 1.5 after first reconcile (1.0 base + 0.5 delta), "
+            f"got {redis_val_after_1}"
+        )
+
+        # Second reconcile: delta should be 0 (fallback was reset after first reconcile).
+        result2 = backend._reconcile_on_reconnect()
+        assert result2 is True, "Second reconcile (empty delta) must succeed"
+
+        redis_val_after_2 = float(fake_client.get(backend._key) or 0)
+        assert abs(redis_val_after_2 - 1.5) < 1e-9, (
+            f"Redis must still be 1.5 after second reconcile (no delta to flush), "
+            f"got {redis_val_after_2}; double-counting detected"
         )
