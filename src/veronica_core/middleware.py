@@ -188,10 +188,15 @@ class VeronicaWSGIMiddleware:
             ):
                 return _wsgi_429(start_response)
 
-            result = self._app(environ, start_response)
+            # Wrap start_response so we know if the app already started a
+            # response.  If it did, we must NOT call _wsgi_429 (which would
+            # invoke start_response a second time, violating the WSGI spec
+            # and causing an AssertionError in compliant WSGI servers).
+            tracker = _StartResponseTracker(start_response)
+            result = self._app(environ, tracker)
 
             # Post-flight: check if aborted during the call.
-            if ctx.get_snapshot().aborted:
+            if ctx.get_snapshot().aborted and not tracker.started:
                 return _wsgi_429(start_response)
 
             return result
@@ -203,6 +208,30 @@ class VeronicaWSGIMiddleware:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class _StartResponseTracker:
+    """Thin wrapper around WSGI start_response that tracks whether it was called.
+
+    Used by VeronicaWSGIMiddleware to guard against invoking start_response a
+    second time (for the 429 response) when the app already started a response.
+    Calling start_response more than once violates the WSGI spec (PEP 3333).
+    """
+
+    def __init__(self, start_response: Callable[..., Any]) -> None:
+        self._start_response = start_response
+        self.started: bool = False
+
+    def __call__(
+        self,
+        status: str,
+        response_headers: list,
+        exc_info: Any = None,
+    ) -> Any:
+        self.started = True
+        if exc_info is not None:
+            return self._start_response(status, response_headers, exc_info)
+        return self._start_response(status, response_headers)
 
 
 async def _send_429(send: _Send) -> None:

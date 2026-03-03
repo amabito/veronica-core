@@ -63,39 +63,45 @@ class RetryContainer:
         with self._lock:
             self._attempt_count = 0
 
-            for attempt in range(self.max_retries + 1):
+        for attempt in range(self.max_retries + 1):
+            with self._lock:
                 self._attempt_count = attempt + 1
 
-                try:
-                    result = fn(*args, **kwargs)
+            try:
+                result = fn(*args, **kwargs)
+                with self._lock:
                     self._last_error = None  # Clear error state on success
-                    if attempt > 0:
-                        logger.info(
-                            f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}"
-                        )
-                    return result
+                if attempt > 0:
+                    logger.info(
+                        f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}"
+                    )
+                return result
 
-                except Exception as e:
+            except Exception as e:
+                with self._lock:
                     self._last_error = e
                     self._total_retries += 1
 
-                    if attempt >= self.max_retries:
-                        logger.warning(
-                            f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {e}"
-                        )
-                        raise
-
-                    base_delay = self.backoff_base * (2**attempt)
-                    if self.jitter > 0.0:
-                        base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
-                    delay = min(max(0.0, base_delay), self.backoff_max)
-                    logger.info(
-                        f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
-                        f"Retrying in {delay:.1f}s "
-                        f"({self.max_retries - attempt} remaining)"
+                if attempt >= self.max_retries:
+                    logger.warning(
+                        f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {e}"
                     )
-                    time.sleep(delay)
+                    raise
 
+                base_delay = self.backoff_base * (2**attempt)
+                if self.jitter > 0.0:
+                    base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
+                delay = min(max(0.0, base_delay), self.backoff_max)
+                logger.info(
+                    f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
+                    f"Retrying in {delay:.1f}s "
+                    f"({self.max_retries - attempt} remaining)"
+                )
+                # Release lock before sleeping so other threads can call
+                # reset() / check() without being blocked during backoff.
+                time.sleep(delay)
+
+        with self._lock:
             raise self._last_error  # type: ignore[misc]
 
     @property

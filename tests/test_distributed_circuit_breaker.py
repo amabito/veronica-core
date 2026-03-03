@@ -1837,3 +1837,203 @@ class TestAdversarialLuaMetacharacterInjection:
         # B should still be allowed (closed), not affected by A's failures
         # Note: if fallback is active for both, local state is also independent
         assert dcb_b.state == CircuitState.CLOSED
+
+
+class TestAdversarialLuaArgvNilGuard:
+    """H6: Verify Lua scripts reject malformed ARGV values (nil from tonumber).
+
+    Before the H6 fix, passing an empty string or non-numeric ARGV caused
+    tonumber() to return nil, which propagated into EXPIRE key nil (no-op)
+    and arithmetic with nil (Lua error).  After the fix, each script returns
+    an explicit redis.error_reply, which bubbles up as a ResponseError.
+    """
+
+    def test_record_failure_rejects_empty_threshold(self, fake_client):
+        """_LUA_RECORD_FAILURE with ARGV[1]='' must raise, not silently no-op."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_RECORD_FAILURE"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"], args=["", str(time.time()), "3600"])
+
+    def test_record_failure_rejects_non_numeric_now(self, fake_client):
+        """_LUA_RECORD_FAILURE with ARGV[2]='not_a_time' must raise."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_RECORD_FAILURE"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"], args=["3", "not_a_time", "3600"])
+
+    def test_record_failure_rejects_non_numeric_ttl(self, fake_client):
+        """_LUA_RECORD_FAILURE with ARGV[3]='' must raise instead of EXPIRE key nil."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_RECORD_FAILURE"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"], args=["3", str(time.time()), ""])
+
+    def test_record_success_rejects_empty_ttl(self, fake_client):
+        """_LUA_RECORD_SUCCESS with ARGV[1]='' must raise."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_RECORD_SUCCESS"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"], args=[""])
+
+    def test_check_rejects_empty_recovery_timeout(self, fake_client):
+        """_LUA_CHECK with ARGV[1]='' must raise."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_CHECK"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"],
+                   args=["", str(time.time()), "3600", "120"])
+
+    def test_check_rejects_non_numeric_now(self, fake_client):
+        """_LUA_CHECK with ARGV[2]='abc' must raise."""
+        import redis
+
+        script = fake_client.register_script(_import_lua("_LUA_CHECK"))
+        with pytest.raises((redis.ResponseError, Exception)):
+            script(keys=["veronica:circuit:h6test"],
+                   args=["60", "abc", "3600", "120"])
+
+    def test_check_malformed_slot_timeout_defaults_to_zero(self, fake_client):
+        """_LUA_CHECK with ARGV[4]='' falls back to 0 (disabled), must not crash."""
+        script = fake_client.register_script(_import_lua("_LUA_CHECK"))
+        # Should succeed (no error) — half_open_slot_timeout defaults to 0
+        result = script(keys=["veronica:circuit:h6test2"],
+                        args=["60", str(time.time()), "3600", ""])
+        assert result is not None
+
+    def test_valid_argv_record_failure_succeeds(self, fake_client):
+        """Sanity: valid numeric ARGV must not raise."""
+        script = fake_client.register_script(_import_lua("_LUA_RECORD_FAILURE"))
+        result = script(keys=["veronica:circuit:h6valid"],
+                        args=["3", str(time.time()), "3600"])
+        assert result == 1
+
+
+class TestAdversarialLuaClaimedAtNilGuard:
+    """C2: Verify claimed_at nil/garbage does not crash Lua (stale slot release).
+
+    Before the C2 fix, tonumber(redis.call('HGET',...) or '0') could return nil
+    if the stored value was a non-numeric string like 'GARBAGE'.  The subsequent
+    `if nil > 0` raised a Lua type error in real Redis.  After the fix, nil
+    claimed_at triggers fail-safe release (deny > allow principle).
+    """
+
+    def test_garbage_claimed_at_releases_slot_after_timeout(self, fake_client):
+        """Garbage claimed_at: after timeout, slot MUST be released (fail-safe release).
+
+        The C2 fix treats nil claimed_at as stale when slot is held (in_flight=1),
+        releasing to prevent permanent lockout from corrupted Redis data.
+        """
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=0.01)
+        dcb.record_failure()
+        dcb.check(_ctx())  # claim slot
+
+        # Corrupt the timestamp with garbage
+        fake_client.hset(dcb._key, "half_open_claimed_at", "GARBAGE")
+        time.sleep(0.02)
+
+        dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
+                          recovery_timeout=0.0, half_open_slot_timeout=0.01)
+        decision = dcb2.check(_ctx())
+        # C2 fix: nil claimed_at + in_flight=1 -> release slot -> new caller claims it
+        assert decision.allowed, (
+            "Garbage claimed_at must trigger fail-safe release, allowing new caller"
+        )
+
+    def test_empty_string_claimed_at_does_not_crash(self, fake_client):
+        """Empty string claimed_at: must not crash Lua with nil arithmetic error.
+
+        Empty string is truthy in Lua, so `'' or '0'` returns '' and
+        tonumber('') returns nil.  The C2 fix guards against this.
+        """
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=0.01)
+        dcb.record_failure()
+        dcb.check(_ctx())  # claim slot
+
+        # Set empty string (truthy in Lua, tonumber('') = nil)
+        fake_client.hset(dcb._key, "half_open_claimed_at", "")
+        time.sleep(0.02)
+
+        dcb2 = _make_dcb(fake_client, circuit_id="test", failure_threshold=1,
+                          recovery_timeout=0.0, half_open_slot_timeout=0.01)
+        # Must not raise — previously would crash in real Redis with nil arithmetic
+        decision = dcb2.check(_ctx())
+        assert isinstance(decision.allowed, bool)
+
+    def test_last_failure_time_garbage_stays_open(self, fake_client):
+        """Garbage last_failure_time: OPEN->HALF_OPEN transition must not occur.
+
+        If last_failure_time_str is non-numeric, tonumber() returns nil.
+        The nil guard (last_failure_time ~= nil) prevents the transition.
+        Circuit stays OPEN (fail-safe: deny > allow).
+        """
+        dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0,
+                        half_open_slot_timeout=120.0)
+        dcb.record_failure()
+        # Manually corrupt last_failure_time
+        fake_client.hset(dcb._key, "state", "OPEN")
+        fake_client.hset(dcb._key, "last_failure_time", "not_a_timestamp")
+
+        decision = dcb.check(_ctx())
+        # Garbage last_failure_time -> tonumber returns nil -> nil guard fires ->
+        # no OPEN->HALF_OPEN transition -> stays OPEN -> denied
+        assert not decision.allowed, (
+            "Garbage last_failure_time must prevent OPEN->HALF_OPEN transition"
+        )
+
+
+class TestAdversarialBudgetEpsilon:
+    """H1: Verify INCRBYFLOAT epsilon tolerance prevents spurious budget enforcement."""
+
+    def test_budget_epsilon_prevents_rounding_error_halt(self, fake_client):
+        """1000 small INCRBYFLOAT additions must not undercount and fail to enforce.
+
+        IEEE-754 rounding can cause 1000 * 0.001 to compute as 0.9999999999999998
+        instead of 1.0.  Without epsilon, the limit check (>= 1.0) would pass
+        where it should halt.  With epsilon, the accumulated total triggers halt.
+        """
+        import threading
+
+        backend = _make_redis_budget_backend(fake_client)
+
+        # Add 1000 * 0.001 = 1.0 (but floating point may give 0.999999...)
+        for _ in range(1000):
+            backend.add(0.001)
+
+        total = backend.get()
+        # The total should be very close to 1.0 (within any realistic epsilon)
+        assert abs(total - 1.0) < 1e-6, f"Redis total diverged too much: {total}"
+
+    def test_budget_epsilon_exported_from_distributed(self):
+        """_BUDGET_EPSILON must be exported and have a sensible value."""
+        from veronica_core.distributed import _BUDGET_EPSILON
+
+        assert isinstance(_BUDGET_EPSILON, float)
+        assert 0 < _BUDGET_EPSILON < 1e-6, f"Unexpected epsilon value: {_BUDGET_EPSILON}"
+
+
+def _make_redis_budget_backend(fake_client, chain_id: str = "h1test"):
+    """Create RedisBudgetBackend with injected fakeredis client."""
+    import threading
+
+    from veronica_core.distributed import LocalBudgetBackend, RedisBudgetBackend
+
+    backend = RedisBudgetBackend.__new__(RedisBudgetBackend)
+    backend._redis_url = "redis://fake"
+    backend._chain_id = chain_id
+    backend._key = f"veronica:budget:{chain_id}"
+    backend._ttl = 3600
+    backend._fallback_on_error = True
+    backend._fallback = LocalBudgetBackend()
+    backend._using_fallback = False
+    backend._lock = threading.Lock()
+    backend._client = fake_client
+    backend._fallback_seed_base = 0.0
+    return backend

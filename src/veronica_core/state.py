@@ -81,8 +81,11 @@ class VeronicaStateMachine:
             self.fail_counts[pair] = self.fail_counts.get(pair, 0) + 1
 
             if self.fail_counts[pair] >= self.cooldown_fails:
-                # Activate cooldown
+                # Activate cooldown and reset counter so that subsequent
+                # record_fail() calls don't re-trigger cooldown immediately
+                # after the current one expires.
                 self.cooldowns[pair] = time.time() + self.cooldown_seconds
+                self.fail_counts[pair] = 0
                 logger.warning(
                     f"[VERONICA_STATE] {pair} cooldown activated: "
                     f"{self.cooldown_fails} consecutive fails, "

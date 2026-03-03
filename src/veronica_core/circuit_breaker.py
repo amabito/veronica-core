@@ -174,6 +174,14 @@ class CircuitBreaker:
                     # allow the next test request.  Without this, a filtered
                     # failure leaves the slot permanently occupied and the
                     # circuit can never recover.
+                    #
+                    # Note: there is a benign TOCTOU window between the predicate
+                    # evaluation above (outside the lock) and the state check below
+                    # (inside the lock).  In the worst case, the circuit transitions
+                    # from HALF_OPEN to OPEN between the two reads.  The only
+                    # consequence is a redundant "_half_open_in_flight = 0" reset
+                    # on an already-OPEN circuit, which is harmless: the slot counter
+                    # is always reset on the OPEN→* transitions anyway.
                     with self._lock:
                         if self._state == CircuitState.HALF_OPEN:
                             self._half_open_in_flight = 0

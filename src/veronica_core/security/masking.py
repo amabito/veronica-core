@@ -58,9 +58,13 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("PYPI_TOKEN", re.compile(r"\b(pypi-[A-Za-z0-9_\-]{50,})\b")),
     # Polymarket API keys (common in this project)
     ("POLYMARKET_KEY", re.compile(r"(?i)polymarket[_\-. ]?(?:api[_\-. ]?)?(?:key|secret|token)\s*[=:]\s*([^\s,;\"']{20,})")),
-    # Generic 32+ hex strings (must be standalone to avoid false positives on hashes).
-    # No upper bound: 65+ char secrets (SHA-512 digests, long API tokens) are also redacted.
-    ("HEX_SECRET", re.compile(r"(?<![A-Za-z0-9])([0-9a-fA-F]{32,})(?![A-Za-z0-9])")),
+    # Generic 40+ hex strings that appear after a key/token/secret label.
+    # Minimum length 40 skips MD5 (32 chars) and most git short hashes.
+    # Context requirement (key=/token=/secret= prefix) prevents false positives
+    # on SHA-256/SHA-512 digests, git commit hashes, and other hex-encoded data.
+    ("HEX_SECRET", re.compile(
+        r"(?i)(?:key|token|secret|password|apikey|api_key|access_key|auth)[=:\s]+([0-9a-fA-F]{40,})"
+    )),
     # password=value, passwd=value, secret=value patterns
     ("PASSWORD_KV", re.compile(
         r"(?i)(?:password|passwd|secret|token|api_key|apikey|access_key)\s*[=:]\s*([^\s,;\"'&]{4,})"

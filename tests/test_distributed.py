@@ -1478,3 +1478,72 @@ class TestAdversarialRedisBudgetReconcileConnectionFailure:
             f"Redis must still be 1.5 after second reconcile (no delta to flush), "
             f"got {redis_val_after_2}; double-counting detected"
         )
+
+
+class TestAdversarialGetTOCTOU:
+    """H2: Verify get() TOCTOU fix — client reference captured under lock.
+
+    Before the fix, _using_fallback could flip between the check (L290) and
+    the Redis read (L293), causing get() to read from a stale/closed client.
+    After the fix, the client reference is captured under lock, so subsequent
+    Redis failure falls back cleanly.
+    """
+
+    def test_get_captures_client_under_lock(self) -> None:
+        """get() with a client that fails mid-call must fall back gracefully."""
+        import threading
+        from unittest.mock import MagicMock
+
+        # Create a client that raises on .get() to simulate mid-call Redis failure
+        broken_client = MagicMock()
+        broken_client.get.side_effect = ConnectionError("Redis died")
+
+        backend = make_redis_backend(broken_client, chain_id="h2-toctou")
+        backend._fallback.add(0.42)
+        backend._using_fallback = False  # Start as if connected
+
+        # get() should catch the exception and return fallback value
+        result = backend.get()
+        # After Redis failure, fallback value (0.42) should be returned
+        assert result == pytest.approx(0.42), (
+            f"Expected fallback 0.42 after Redis failure, got {result}"
+        )
+
+    def test_get_concurrent_fallback_flip_no_crash(self) -> None:
+        """get() must not crash when _using_fallback flips during the call.
+
+        This simulates the TOCTOU window: one thread flips to fallback while
+        another is inside get() after the lock check but before the Redis read.
+        """
+
+        server = fakeredis.FakeServer()
+        fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
+        backend = make_redis_backend(fake_client, chain_id="h2-concurrent")
+        fake_client.set(backend._key, "5.0")
+
+        errors: list[Exception] = []
+
+        def flip_fallback() -> None:
+            # Flip _using_fallback while get() may be in progress
+            for _ in range(50):
+                with backend._lock:
+                    backend._using_fallback = True
+                with backend._lock:
+                    backend._using_fallback = False
+
+        def do_get() -> None:
+            try:
+                for _ in range(50):
+                    val = backend.get()
+                    assert isinstance(val, float), f"get() returned non-float: {val!r}"
+            except Exception as exc:
+                errors.append(exc)
+
+        t_flip = threading.Thread(target=flip_fallback)
+        t_get = threading.Thread(target=do_get)
+        t_flip.start()
+        t_get.start()
+        t_flip.join()
+        t_get.join()
+
+        assert not errors, f"get() raised under concurrent fallback flip: {errors}"

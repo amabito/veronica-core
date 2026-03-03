@@ -49,10 +49,10 @@ class TestVeronicaStateMachine:
         assert not activated
         assert sm.fail_counts[entity] == 2
 
-        # Third fail triggers cooldown
+        # Third fail triggers cooldown and resets fail_counts to 0
         activated = sm.record_fail(entity)
         assert activated
-        assert sm.fail_counts[entity] == 3
+        assert sm.fail_counts[entity] == 0  # M5 fix: reset on cooldown trigger
         assert entity in sm.cooldowns
 
     def test_cooldown_activation(self):
@@ -157,7 +157,8 @@ class TestVeronicaStateMachine:
 
         assert stats["current_state"] == "SCREENING"
         assert "task_2" in stats["active_cooldowns"]
-        assert stats["fail_counts"] == {"task_1": 1, "task_2": 2}
+        # M5 fix: fail_counts resets to 0 when cooldown triggers
+        assert stats["fail_counts"] == {"task_1": 1, "task_2": 0}
         assert stats["total_transitions"] == 1
         assert stats["last_transition"]["to"] == "SCREENING"
 
@@ -309,3 +310,95 @@ class TestFromDictCorruptedStateHistory:
 
         assert len(sm_restored.state_history) == 1
         assert sm_restored.state_history[0].to_state == VeronicaState.SCREENING
+
+
+class TestAdversarialStateMachine:
+    """Adversarial tests for VeronicaStateMachine — attacker mindset (M5 fix)."""
+
+    def test_fail_counts_reset_on_cooldown_trigger(self):
+        """M5: fail_counts must reset to 0 when cooldown is triggered.
+
+        Without the fix, subsequent record_fail() calls after cooldown expiry
+        would re-trigger cooldown after just 1 fail (counts never cleared).
+        """
+        sm = VeronicaStateMachine(cooldown_fails=3, cooldown_seconds=600)
+        pair = "BTC/JPY"
+
+        # Reach threshold to trigger cooldown
+        sm.record_fail(pair)
+        sm.record_fail(pair)
+        triggered = sm.record_fail(pair)
+
+        assert triggered is True
+        # M5 fix: fail_counts must be reset to 0 (not remain at 3)
+        assert sm.fail_counts[pair] == 0, (
+            "fail_counts must reset to 0 on cooldown trigger to prevent "
+            "immediate re-trigger after cooldown expiry"
+        )
+
+    def test_post_cooldown_expiry_needs_full_threshold_again(self):
+        """M5: After cooldown expires, the full threshold of fails is needed again.
+
+        This is the correctness consequence of the fix: if fail_counts were not
+        reset on cooldown trigger, a single fail after expiry would immediately
+        re-trigger cooldown (threshold already met).
+        """
+        sm = VeronicaStateMachine(cooldown_fails=3, cooldown_seconds=0)
+        pair = "ETH/JPY"
+
+        # Trigger cooldown
+        sm.record_fail(pair)
+        sm.record_fail(pair)
+        sm.record_fail(pair)
+        assert pair in sm.cooldowns
+
+        # Expire cooldown instantly (cooldown_seconds=0)
+        assert not sm.is_in_cooldown(pair)  # expires + cleanup on first check
+
+        # Now needs full threshold again (2 more fails, not yet at 3)
+        sm.record_fail(pair)
+        assert not sm.is_in_cooldown(pair)  # 1 fail after expiry: not yet at threshold
+        sm.record_fail(pair)
+        assert not sm.is_in_cooldown(pair)  # 2 fails: still not at threshold
+
+    def test_concurrent_record_fail_no_race_condition(self):
+        """M5: concurrent record_fail() from 10 threads must not corrupt fail_counts."""
+        import threading
+
+        sm = VeronicaStateMachine(cooldown_fails=100, cooldown_seconds=600)
+        pair = "XRP/JPY"
+        cooldowns_triggered = []
+        lock = threading.Lock()
+
+        def fail_worker():
+            triggered = sm.record_fail(pair)
+            if triggered:
+                with lock:
+                    cooldowns_triggered.append(True)
+
+        threads = [threading.Thread(target=fail_worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # fail_counts must equal number of record_fail calls that did not trigger cooldown
+        # With threshold=100, no cooldown should have triggered for 10 calls
+        assert len(cooldowns_triggered) == 0
+        assert sm.fail_counts.get(pair, 0) == 10
+
+    def test_record_fail_after_set_cooldown_does_not_override(self):
+        """Calling record_fail() while a manually-set cooldown is active
+        should not reset or override the cooldown expiry."""
+        sm = VeronicaStateMachine(cooldown_fails=3, cooldown_seconds=600)
+        pair = "BTC/JPY"
+        future_expiry = time.time() + 9999.0
+
+        # Manually set a long cooldown
+        sm.set_cooldown(pair, future_expiry)
+        assert sm.is_in_cooldown(pair)
+
+        # record_fail below threshold: should not trigger a new cooldown
+        sm.record_fail(pair)
+        # Cooldown expiry should remain unchanged (the manually-set one)
+        assert sm.cooldowns[pair] == future_expiry

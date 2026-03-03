@@ -12,6 +12,11 @@ from veronica_core.runtime_policy import PolicyContext, PolicyDecision
 
 logger = logging.getLogger(__name__)
 
+# H1: INCRBYFLOAT accumulates IEEE-754 rounding errors across many small increments.
+# Use this epsilon when comparing Redis-backed float totals to hard limits to avoid
+# spurious under-enforcement (e.g. 9.999999999999998 failing a 10.0 limit check).
+_BUDGET_EPSILON: float = 1e-9
+
 
 def _redact_exc(exc: BaseException) -> str:
     """Return exception type and message with Redis URLs redacted.
@@ -136,6 +141,13 @@ class RedisBudgetBackend:
             delta = fallback.get() - _fallback_seed_base
 
         After successful reconciliation the local backend and seed base are reset.
+
+        M6 INVARIANT: This method is always called from _try_reconnect(), which is
+        always called from add() while self._lock is held.  Concurrent add() calls
+        therefore cannot slip in between fallback.get() and fallback.reset(), so
+        the delta computation is race-free.  The LocalBudgetBackend operations
+        below each hold their own internal lock (re-entrant safe for a different
+        lock object), so there is no deadlock risk.
 
         Returns:
             True if reconciliation succeeded (or there was nothing to reconcile),
@@ -285,16 +297,22 @@ class RedisBudgetBackend:
             raise
 
     def get(self) -> float:
-        # Hold lock for check-and-dispatch to prevent TOCTOU (same rationale as add()).
+        # Capture client reference under lock to prevent TOCTOU: without capturing,
+        # _using_fallback could flip to True between the check (L295) and the Redis
+        # read (L298), causing the Redis read to execute against a stale/closed client.
         with self._lock:
             if self._using_fallback or self._client is None:
                 return self._fallback.get()
+            client = self._client
         try:
-            val = self._client.get(self._key)
+            val = client.get(self._key)
             return float(val) if val is not None else 0.0
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error("RedisBudgetBackend.get failed: %s", _redact_exc(exc))
+                with self._lock:
+                    if self._using_fallback:
+                        return self._fallback.get()
                 return self._fallback.get()
             raise
 
@@ -353,6 +371,11 @@ local threshold = tonumber(ARGV[1])
 local now = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
 
+-- H6: Validate ARGV values; return error if malformed to prevent nil arithmetic.
+if threshold == nil or now == nil or ttl == nil then
+    return redis.error_reply('ERR invalid args: threshold/now/ttl must be numeric')
+end
+
 -- Initialize fields if missing
 if redis.call('EXISTS', key) == 0 then
     redis.call('HSET', key,
@@ -392,6 +415,11 @@ return new_count
 _LUA_RECORD_SUCCESS = """
 local key = KEYS[1]
 local ttl = tonumber(ARGV[1])
+
+-- H6: Validate ARGV values; return error if malformed to prevent nil arithmetic.
+if ttl == nil then
+    return redis.error_reply('ERR invalid args: ttl must be numeric')
+end
 
 -- Initialize fields if missing
 if redis.call('EXISTS', key) == 0 then
@@ -439,6 +467,13 @@ local now = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
 local half_open_slot_timeout = tonumber(ARGV[4])
 
+-- H6: Validate ARGV values; return error if malformed to prevent nil arithmetic.
+if recovery_timeout == nil or now == nil or ttl == nil then
+    return redis.error_reply('ERR invalid args: recovery_timeout/now/ttl must be numeric')
+end
+-- half_open_slot_timeout defaults to 0 (no timeout) if nil/malformed.
+if half_open_slot_timeout == nil then half_open_slot_timeout = 0 end
+
 -- Initialize fields if missing
 if redis.call('EXISTS', key) == 0 then
     redis.call('HSET', key,
@@ -477,8 +512,18 @@ if state == 'HALF_OPEN' then
     -- Auto-release stale slot if half_open_slot_timeout is configured and elapsed.
     -- This prevents permanent lock-out when the claiming process crashes.
     if old_in_flight == 1 and half_open_slot_timeout > 0 then
-        local claimed_at = tonumber(redis.call('HGET', key, 'half_open_claimed_at') or '0')
-        if claimed_at > 0 and (now - claimed_at) >= half_open_slot_timeout then
+        -- C2: Use explicit nil/empty guard before tonumber to handle garbage values.
+        -- Lua's `or '0'` only substitutes for falsy (nil/false); empty string '' is
+        -- truthy in Lua, so tonumber('') returns nil instead of 0, causing the
+        -- stale-slot release to silently skip — a permanent lockout bug.
+        local raw_claimed_at = redis.call('HGET', key, 'half_open_claimed_at')
+        local claimed_at = (raw_claimed_at ~= nil and raw_claimed_at ~= '') and tonumber(raw_claimed_at) or nil
+        if claimed_at ~= nil and claimed_at > 0 and (now - claimed_at) >= half_open_slot_timeout then
+            old_in_flight = 0
+            redis.call('HSET', key, 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
+        elseif claimed_at == nil and old_in_flight == 1 then
+            -- Garbage/empty claimed_at with slot held: fail-safe — release the stale slot
+            -- to prevent permanent lockout from corrupted state.
             old_in_flight = 0
             redis.call('HSET', key, 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
         end

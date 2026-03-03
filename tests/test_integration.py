@@ -111,11 +111,12 @@ class TestVeronicaIntegration:
 
         entity = "test_task"
 
-        # Add 11 fails (exceeds guard limit)
-        for _ in range(11):
-            veronica.record_fail(entity)
+        # M5 fix: fail_counts reset on cooldown trigger, so direct record_fail()
+        # calls never accumulate > cooldown_fails in fail_counts.
+        # Directly set a high fail_count in state to test validate_state rejection.
+        veronica.state.fail_counts[entity] = 11
 
-        # Manual save should fail validation
+        # Manual save should fail validation (guard rejects fail_count > 10)
         success = veronica.save()
         assert not success  # Guard rejects state with fail_count > 10
 

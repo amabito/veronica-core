@@ -66,10 +66,11 @@ def test_llm_client_is_optional():
     assert not veronica.is_in_cooldown(task)
 
     veronica.record_fail(task)
-    veronica.record_fail(task)  # Activates cooldown
+    veronica.record_fail(task)  # Activates cooldown (threshold=2)
 
     assert veronica.is_in_cooldown(task)
-    assert veronica.get_fail_count(task) == 2
+    # M5 fix: fail_counts resets to 0 when cooldown triggers
+    assert veronica.get_fail_count(task) == 0
 
 
 def test_no_llm_dependency_in_core():

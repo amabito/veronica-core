@@ -545,6 +545,13 @@ class ExecutionContext:
         with self._lock:
             parent_id = self._nodes[-1].node_id if self._nodes else None
 
+        # H5: parent_id is read under lock above, but _begin_graph_node is called
+        # outside the lock below.  A concurrent thread can append to _nodes between
+        # the two points, causing parent_id to lag one node behind the true tail.
+        # This is intentionally benign: graph parent linkage is used for diagnostic
+        # tracing only, not for any correctness or safety decision.  Extending the
+        # lock to cover _begin_graph_node is not warranted because _begin_graph_node
+        # may call pipeline hooks that acquire their own locks (deadlock risk).
         node = NodeRecord(
             node_id=node_id,
             parent_id=parent_id,
@@ -987,16 +994,21 @@ class ExecutionContext:
 
         Checked in priority order:
         1. aborted flag
-        2. cost ceiling
+        2. cost ceiling (local + cross-process if distributed backend)
         3. step limit
         4. retry budget
         5. timeout / cancellation
         """
+        # H1: Import epsilon for IEEE-754 rounding tolerance on INCRBYFLOAT totals.
+        # H4: Import LocalBudgetBackend for cross-process budget check guard.
+        # Both imports are deferred to avoid circular import at module load time.
+        from veronica_core.distributed import LocalBudgetBackend, _BUDGET_EPSILON
+
         with self._lock:
             if self._aborted:
                 return "aborted"
 
-            if self._cost_usd_accumulated >= self._config.max_cost_usd:
+            if self._cost_usd_accumulated + _BUDGET_EPSILON >= self._config.max_cost_usd:
                 reason = (
                     f"cost ${self._cost_usd_accumulated:.4f} >= "
                     f"ceiling ${self._config.max_cost_usd:.4f}"
@@ -1004,6 +1016,29 @@ class ExecutionContext:
                 self._emit_chain_event("budget_exceeded", reason)
                 return "budget_exceeded"
 
+        # H4: Cross-process budget check. When using a distributed backend
+        # (e.g. RedisBudgetBackend), other processes may have accumulated spend
+        # that is not reflected in _cost_usd_accumulated (which is local only).
+        # We check the backend's global total outside the lock to avoid blocking
+        # other threads during a potentially slow Redis round-trip.
+
+        if not isinstance(self._budget_backend, LocalBudgetBackend):
+            try:
+                global_total = self._budget_backend.get()
+                if global_total + _BUDGET_EPSILON >= self._config.max_cost_usd:
+                    with self._lock:
+                        reason = (
+                            f"cross-process cost ${global_total:.4f} >= "
+                            f"ceiling ${self._config.max_cost_usd:.4f}"
+                        )
+                        self._emit_chain_event("budget_exceeded", reason)
+                    return "budget_exceeded"
+            except Exception:
+                # Best-effort: if the backend is unavailable, fall through to
+                # the local check that already passed above.
+                pass
+
+        with self._lock:
             if self._step_count >= self._config.max_steps:
                 reason = f"steps {self._step_count} >= limit {self._config.max_steps}"
                 self._emit_chain_event("step_limit_exceeded", reason)

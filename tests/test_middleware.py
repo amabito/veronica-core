@@ -266,3 +266,110 @@ def test_wsgi_context_in_environ() -> None:
 
     assert len(captured) == 1
     assert isinstance(captured[0], ExecutionContext)
+
+
+# ---------------------------------------------------------------------------
+# C3 fix tests: WSGI start_response must not be called twice
+# ---------------------------------------------------------------------------
+
+
+def test_wsgi_no_double_start_response_when_app_already_responded() -> None:
+    """C3 fix: If app calls start_response and then context is aborted,
+    _wsgi_429 must NOT invoke start_response a second time.
+
+    Before the fix, this would call start_response twice, violating the
+    WSGI spec and causing AssertionError in compliant servers.
+    """
+    start_response_calls: list[str] = []
+
+    def _strict_start_response(status: str, headers: list) -> None:
+        start_response_calls.append(status)
+        # A strict WSGI server raises AssertionError on double-call
+        if len(start_response_calls) > 1:
+            raise AssertionError("start_response called more than once!")
+
+    def _app_that_responds_then_context_aborts(
+        environ: dict[str, Any],
+        start_response: Any,
+    ) -> list[bytes]:
+        # App calls start_response (response started)
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        # App then aborts the execution context directly
+        ctx = environ.get("veronica.context")
+        if ctx is not None:
+            ctx.abort("simulated mid-response abort")
+        return [b"partial response"]
+
+    middleware = VeronicaWSGIMiddleware(
+        _app_that_responds_then_context_aborts,
+        config=_make_config(),
+    )
+    env: dict[str, Any] = {}
+    # Must not raise AssertionError (i.e., start_response called only once)
+    body = list(middleware(env, _strict_start_response))
+
+    assert len(start_response_calls) == 1, (
+        f"start_response must be called exactly once, got {start_response_calls}"
+    )
+    # The original app response is returned (not replaced by 429)
+    assert body == [b"partial response"]
+
+
+def test_wsgi_start_response_tracker_sets_started_flag() -> None:
+    """_StartResponseTracker.started is True after the inner start_response is called."""
+    from veronica_core.middleware import _StartResponseTracker
+
+    calls: list[str] = []
+
+    def _inner_start_response(status: str, headers: list) -> None:
+        calls.append(status)
+
+    tracker = _StartResponseTracker(_inner_start_response)
+    assert not tracker.started
+
+    tracker("200 OK", [])
+    assert tracker.started
+    assert calls == ["200 OK"]
+
+
+def test_wsgi_start_response_tracker_passes_exc_info() -> None:
+    """_StartResponseTracker forwards exc_info when non-None."""
+    from veronica_core.middleware import _StartResponseTracker
+
+    received_exc_info: list[Any] = []
+
+    def _inner(status: str, headers: list, exc_info: Any = None) -> None:
+        received_exc_info.append(exc_info)
+
+    tracker = _StartResponseTracker(_inner)
+    sentinel = object()
+    tracker("500 Internal Server Error", [], exc_info=sentinel)
+    assert received_exc_info == [sentinel]
+
+
+def test_wsgi_429_returned_when_app_did_not_respond() -> None:
+    """Post-flight 429 IS sent when app aborted context without calling start_response."""
+    start_response_calls: list[str] = []
+
+    def _start_response(status: str, headers: list) -> None:
+        start_response_calls.append(status)
+
+    def _app_that_aborts_without_responding(
+        environ: dict[str, Any],
+        start_response: Any,
+    ) -> list[bytes]:
+        # App aborts context but never calls start_response
+        ctx = environ.get("veronica.context")
+        if ctx is not None:
+            ctx.abort("abort without responding")
+        return []
+
+    middleware = VeronicaWSGIMiddleware(
+        _app_that_aborts_without_responding,
+        config=_make_config(),
+    )
+    env: dict[str, Any] = {}
+    body = list(middleware(env, _start_response))
+
+    assert len(start_response_calls) == 1
+    assert "429" in start_response_calls[0]

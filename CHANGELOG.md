@@ -6,6 +6,45 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [1.8.4] — 2026-03-03 — Distributed Safety & Coverage Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **CRITICAL: Lua tonumber() nil crash** -- Redis `tonumber()` returns nil for empty string
+  or corrupted values in all Lua scripts (`_LUA_CHECK`, `_LUA_RECORD_FAILURE`,
+  `_LUA_RECORD_SUCCESS`). Added nil guards after every `tonumber()` call with safe
+  defaults (0 for counters, current time for timestamps).
+- **CRITICAL: Lua ARGV validation** -- Lua scripts now reject nil TTL/threshold arguments
+  at the top of each script, preventing silent misconfiguration.
+- **CRITICAL: WSGI double start_response** -- `VeronicaWSGIMiddleware` could call
+  `start_response` twice (once from app, once for 429 HALT) violating PEP 3333.
+  Added `_StartResponseTracker` wrapper to skip post-flight 429 if response already started.
+- **distributed.py**: `INCRBYFLOAT` float precision drift -- added `_BUDGET_EPSILON`
+  tolerance constant for budget limit comparison after many increments.
+- **distributed.py**: TOCTOU race in `get()` -- client reference now captured under lock
+  to prevent reconnection between None-check and usage.
+- **retry.py**: Lock held during `time.sleep(delay)` blocked `check()` and `reset()` from
+  other threads. Lock now released before sleep and re-acquired after.
+- **execution_context.py**: Cross-process budget enforcement -- `_check_limits()` now
+  queries distributed backend global total (when not LocalBudgetBackend) to detect
+  budget exceeded by other processes.
+- **state.py**: Cooldown `fail_count` not reset -- `record_fail()` now resets
+  `fail_counts[pair] = 0` when cooldown triggers.
+- **security/masking.py**: HEX_SECRET regex overly broad -- tightened to require 40+ chars
+  AND context prefix (`key=`/`token=`/`secret=`/`password=`) to avoid matching git hashes,
+  MD5, and SHA256 digests.
+
+### Added
+
+- 112 new tests: BudgetEnforcer adversarial (NaN/Inf/negative/concurrent), AgentStepGuard
+  concurrent step/reset, LLMClient protocol compliance, distributed Lua corruption,
+  WSGI double-call, retry lock-during-sleep, state cooldown reset, HEX_SECRET precision.
+- Total: 2438 tests passing.
+
+---
+
 ## [1.8.3] — 2026-03-03 — Thread Safety & Adversarial Hardening
 
 **Breaking changes:** none

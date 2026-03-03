@@ -43,8 +43,29 @@ class TestExistingPatterns:
         assert "REDACTED:PASSWORD_KV" in result
 
     def test_hex_secret_is_masked(self, masker: SecretMasker) -> None:
-        hex_val = "a" * 32
+        # M4 fix: HEX_SECRET now requires a key/token/secret= prefix and 40+ chars
+        # (prevents false positives on MD5/SHA-256 digests without context)
+        hex_val = "a" * 40
         result = masker.mask(f"key={hex_val}")
+        assert "REDACTED" in result
+
+    def test_hex_secret_short_without_context_not_masked(self, masker: SecretMasker) -> None:
+        """M4: 32-char hex without key= context must not be masked (false positive prevention)."""
+        # MD5 hash length (32 chars) without any key/token prefix
+        md5_hash = "d41d8cd98f00b204e9800998ecf8427e"
+        result = masker.mask(f"md5sum: {md5_hash}")
+        assert "REDACTED:HEX_SECRET" not in result
+
+    def test_hex_secret_git_sha_not_masked(self, masker: SecretMasker) -> None:
+        """M4: A git commit SHA without key= context must not be masked."""
+        sha256 = "a" * 64  # 64-char SHA-256 (all hex) without prefix
+        result = masker.mask(f"commit: {sha256}")
+        assert "REDACTED:HEX_SECRET" not in result
+
+    def test_hex_secret_with_token_prefix_masked(self, masker: SecretMasker) -> None:
+        """M4: 40+ char hex after token= prefix must be redacted."""
+        token_val = "f" * 40
+        result = masker.mask(f"token={token_val}")
         assert "REDACTED" in result
 
 
