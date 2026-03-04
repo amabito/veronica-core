@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 import time
+import uuid
 from typing import Dict, Optional, Protocol, runtime_checkable
 
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState, FailurePredicate
@@ -17,6 +18,14 @@ logger = logging.getLogger(__name__)
 # Use this epsilon when comparing Redis-backed float totals to hard limits to avoid
 # spurious under-enforcement (e.g. 9.999999999999998 failing a 10.0 limit check).
 _BUDGET_EPSILON: float = 1e-9
+
+# Reservation timeout: auto-rollback after this many seconds to prevent leaks
+# when the caller crashes between reserve() and commit()/rollback().
+_RESERVATION_TIMEOUT_S: float = 60.0
+
+
+class ReservationExpiredError(Exception):
+    """Raised when a reservation ID has passed its deadline."""
 
 
 def _redact_exc(exc: BaseException) -> str:
@@ -52,10 +61,16 @@ class BudgetBackend(Protocol):
 
 
 class LocalBudgetBackend:
-    """In-process budget backend. Thread-safe. Default behavior."""
+    """In-process budget backend. Thread-safe. Default behavior.
+
+    Supports two-phase reserve/commit/rollback for atomic budget accounting.
+    Reservations expire after _RESERVATION_TIMEOUT_S seconds to prevent leaks.
+    """
 
     def __init__(self) -> None:
         self._cost: float = 0.0
+        # _reservations: rid -> (amount, deadline_monotonic)
+        self._reservations: dict[str, tuple[float, float]] = {}
         self._lock = threading.Lock()
 
     def add(self, amount: float) -> float:
@@ -67,12 +82,85 @@ class LocalBudgetBackend:
         with self._lock:
             return self._cost
 
+    def get_reserved(self) -> float:
+        """Return the total amount currently held in active reservations."""
+        with self._lock:
+            self._expire_reservations_locked()
+            return sum(amt for amt, _ in self._reservations.values())
+
+    def reserve(self, amount: float, ceiling: float) -> str:
+        """Atomically reserve *amount* against *ceiling*.
+
+        Checks committed + pending_reserved + amount <= ceiling + epsilon.
+        Returns a reservation ID string.
+        Raises OverflowError if the ceiling would be exceeded.
+        Raises ValueError for invalid amount (NaN, Inf, negative, zero).
+        """
+        if not (amount > 0 and amount < float("inf")):
+            raise ValueError(
+                f"reserve() amount must be positive and finite, got {amount!r}"
+            )
+        with self._lock:
+            self._expire_reservations_locked()
+            reserved_total = sum(amt for amt, _ in self._reservations.values())
+            if self._cost + reserved_total + amount > ceiling + _BUDGET_EPSILON:
+                raise OverflowError(
+                    f"Budget ceiling {ceiling:.6f} would be exceeded: "
+                    f"committed={self._cost:.6f}, reserved={reserved_total:.6f}, "
+                    f"requested={amount:.6f}"
+                )
+            rid = str(uuid.uuid4())
+            deadline = time.monotonic() + _RESERVATION_TIMEOUT_S
+            self._reservations[rid] = (amount, deadline)
+            return rid
+
+    def commit(self, reservation_id: str) -> float:
+        """Commit a reservation: move it from pending to committed cost.
+
+        Returns the new total committed cost.
+        Raises KeyError if the reservation_id is not found (already expired/rolled back).
+        """
+        with self._lock:
+            self._expire_reservations_locked()
+            if reservation_id not in self._reservations:
+                raise KeyError(
+                    f"Reservation {reservation_id!r} not found (expired or already committed/rolled back)"
+                )
+            amount, _ = self._reservations.pop(reservation_id)
+            self._cost += amount
+            return self._cost
+
+    def rollback(self, reservation_id: str) -> None:
+        """Roll back a reservation without charging cost.
+
+        Raises KeyError if the reservation_id is not found.
+        """
+        with self._lock:
+            self._expire_reservations_locked()
+            if reservation_id not in self._reservations:
+                raise KeyError(
+                    f"Reservation {reservation_id!r} not found (expired or already committed/rolled back)"
+                )
+            self._reservations.pop(reservation_id)
+
     def reset(self) -> None:
         with self._lock:
             self._cost = 0.0
+            self._reservations.clear()
 
     def close(self) -> None:
         pass
+
+    def _expire_reservations_locked(self) -> None:
+        """Remove expired reservations. Must be called with self._lock held."""
+        now = time.monotonic()
+        expired = [
+            rid
+            for rid, (_, deadline) in self._reservations.items()
+            if now > deadline
+        ]
+        for rid in expired:
+            self._reservations.pop(rid)
 
 
 class RedisBudgetBackend:
@@ -319,10 +407,247 @@ class RedisBudgetBackend:
                 self._fallback.reset()
                 return
         try:
-            self._client.delete(self._key)
+            reservations_key = f"{self._key}:reservations"
+            pipe = self._client.pipeline()
+            pipe.delete(self._key)
+            pipe.delete(reservations_key)
+            pipe.execute()
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error("RedisBudgetBackend.reset failed: %s", _redact_exc(exc))
+            else:
+                raise
+
+    def get_reserved(self) -> float:
+        """Return total amount held in active reservations.
+
+        Falls back to local backend if Redis unavailable.
+        """
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                return self._fallback.get_reserved()
+            client = self._client
+        try:
+            reservations_key = f"{self._key}:reservations"
+            vals = client.hvals(reservations_key)
+            now = time.time()
+            total = 0.0
+            for v in vals:
+                sep = v.find(":")
+                if sep >= 0:
+                    amt = float(v[:sep])
+                    dl = float(v[sep + 1:])
+                    if dl > now:
+                        total += amt
+            return total
+        except Exception as exc:
+            if self._fallback_on_error:
+                logger.error("RedisBudgetBackend.get_reserved failed: %s", _redact_exc(exc))
+                return self._fallback.get_reserved()
+            raise
+
+    def reserve(self, amount: float, ceiling: float) -> str:
+        """Atomically reserve *amount* against *ceiling* in Redis.
+
+        Returns a reservation ID. Raises OverflowError if ceiling exceeded.
+        Falls back to local backend if Redis unavailable.
+        Raises ValueError for invalid amount (NaN, Inf, negative, zero).
+        """
+        if not (amount > 0 and amount < float("inf")):
+            raise ValueError(
+                f"reserve() amount must be positive and finite, got {amount!r}"
+            )
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                return self._fallback.reserve(amount, ceiling)
+            client = self._client
+
+        try:
+            reservations_key = f"{self._key}:reservations"
+            rid = str(uuid.uuid4())
+            now = time.time()
+            deadline = now + _RESERVATION_TIMEOUT_S
+
+            # Lua script for atomic reserve with ceiling check
+            lua_reserve = """
+local committed_key = KEYS[1]
+local reservations_key = KEYS[2]
+local amount = tonumber(ARGV[1])
+local ceiling = tonumber(ARGV[2])
+local rid = ARGV[3]
+local deadline = tonumber(ARGV[4])
+local now = tonumber(ARGV[5])
+
+-- Sweep expired reservations
+local all_rids = redis.call('HKEYS', reservations_key)
+for _, r in ipairs(all_rids) do
+    local v = redis.call('HGET', reservations_key, r)
+    if v then
+        local sep = string.find(v, ':')
+        if sep then
+            local dl = tonumber(string.sub(v, sep + 1)) or 0.0
+            if dl <= now then
+                redis.call('HDEL', reservations_key, r)
+            end
+        end
+    end
+end
+
+local committed_str = redis.call('GET', committed_key)
+local committed = tonumber(committed_str) or 0.0
+
+local reserved_total = 0.0
+local active_vals = redis.call('HVALS', reservations_key)
+for _, v in ipairs(active_vals) do
+    local sep = string.find(v, ':')
+    if sep then
+        local amt = tonumber(string.sub(v, 1, sep - 1)) or 0.0
+        reserved_total = reserved_total + amt
+    end
+end
+
+if committed + reserved_total + amount > ceiling + 1e-9 then
+    return redis.error_reply('ERR ceiling exceeded')
+end
+
+redis.call('HSET', reservations_key, rid, amount .. ':' .. deadline)
+return 1
+"""
+            result = client.eval(
+                lua_reserve,
+                2,
+                self._key,
+                reservations_key,
+                str(amount),
+                str(ceiling),
+                rid,
+                str(deadline),
+                str(now),
+            )
+            if result != 1:
+                raise OverflowError(f"Budget ceiling {ceiling:.6f} would be exceeded")
+            return rid
+        except Exception as exc:
+            exc_str = str(exc)
+            if "ceiling exceeded" in exc_str:
+                raise OverflowError(f"Budget ceiling {ceiling:.6f} would be exceeded") from exc
+            if self._fallback_on_error:
+                logger.error(
+                    "RedisBudgetBackend.reserve failed: %s — using local fallback",
+                    _redact_exc(exc),
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                return self._fallback.reserve(amount, ceiling)
+            raise
+
+    def commit(self, reservation_id: str) -> float:
+        """Commit a reservation in Redis: move amount to committed cost.
+
+        Returns the new total committed cost.
+        Raises KeyError if the reservation_id is not found.
+        """
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                return self._fallback.commit(reservation_id)
+            client = self._client
+
+        try:
+            reservations_key = f"{self._key}:reservations"
+            lua_commit = """
+local committed_key = KEYS[1]
+local reservations_key = KEYS[2]
+local rid = ARGV[1]
+local ttl = tonumber(ARGV[2])
+
+local v = redis.call('HGET', reservations_key, rid)
+if v == nil or v == false then
+    return redis.error_reply('ERR reservation not found: ' .. rid)
+end
+
+local sep = string.find(v, ':')
+local amount = 0.0
+if sep then
+    amount = tonumber(string.sub(v, 1, sep - 1)) or 0.0
+else
+    amount = tonumber(v) or 0.0
+end
+
+redis.call('HDEL', reservations_key, rid)
+local new_total = redis.call('INCRBYFLOAT', committed_key, amount)
+if ttl ~= nil and ttl > 0 then
+    redis.call('EXPIRE', committed_key, ttl)
+end
+return tostring(new_total)
+"""
+            result = client.eval(
+                lua_commit,
+                2,
+                self._key,
+                reservations_key,
+                reservation_id,
+                str(self._ttl),
+            )
+            return float(result)
+        except Exception as exc:
+            exc_str = str(exc)
+            if "reservation not found" in exc_str:
+                raise KeyError(f"Reservation {reservation_id!r} not found") from exc
+            if self._fallback_on_error:
+                logger.error(
+                    "RedisBudgetBackend.commit failed: %s — using local fallback",
+                    _redact_exc(exc),
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                return self._fallback.commit(reservation_id)
+            raise
+
+    def rollback(self, reservation_id: str) -> None:
+        """Roll back a reservation in Redis without charging cost.
+
+        Raises KeyError if the reservation_id is not found.
+        """
+        with self._lock:
+            if self._using_fallback or self._client is None:
+                self._fallback.rollback(reservation_id)
+                return
+            client = self._client
+
+        try:
+            reservations_key = f"{self._key}:reservations"
+            lua_rollback = """
+local reservations_key = KEYS[1]
+local rid = ARGV[1]
+
+local existed = redis.call('HDEL', reservations_key, rid)
+if existed == 0 then
+    return redis.error_reply('ERR reservation not found: ' .. rid)
+end
+return 1
+"""
+            client.eval(lua_rollback, 1, reservations_key, reservation_id)
+        except Exception as exc:
+            exc_str = str(exc)
+            if "reservation not found" in exc_str:
+                raise KeyError(f"Reservation {reservation_id!r} not found") from exc
+            if self._fallback_on_error:
+                logger.error(
+                    "RedisBudgetBackend.rollback failed: %s — using local fallback",
+                    _redact_exc(exc),
+                )
+                with self._lock:
+                    if not self._using_fallback:
+                        self._seed_fallback_from_redis()
+                        self._using_fallback = True
+                try:
+                    self._fallback.rollback(reservation_id)
+                except KeyError:
+                    pass
             else:
                 raise
 

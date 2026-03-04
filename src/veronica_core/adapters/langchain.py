@@ -37,7 +37,7 @@ except ImportError:
 import logging
 from typing import Any, Dict, List, Union
 
-from veronica_core.adapters._shared import build_container, extract_llm_result_cost, record_budget_spend
+from veronica_core.adapters._shared import build_adapter_container, extract_llm_result_cost, record_budget_spend
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
@@ -75,9 +75,14 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
         llm = ChatOpenAI(callbacks=[handler])
     """
 
-    def __init__(self, config: Union[GuardConfig, ExecutionConfig]) -> None:
+    def __init__(
+        self,
+        config: Union[GuardConfig, ExecutionConfig],
+        *,
+        execution_context: Any = None,
+    ) -> None:
         super().__init__()
-        self._container = build_container(config)
+        self._container = build_adapter_container(config, execution_context)
 
     # ------------------------------------------------------------------
     # LangChain callback hooks

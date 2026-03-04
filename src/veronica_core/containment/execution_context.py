@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Literal, Optional
 
 from veronica_core.containment.execution_graph import ExecutionGraph
+from veronica_core.containment.timeout_pool import _timeout_pool as _shared_timeout_pool
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision, ToolCallContext
 
@@ -231,6 +232,7 @@ class WrapOptions:
     model: str | None = None
     response_hint: Any = None
     partial_buffer: "PartialResultBuffer | None" = None
+    reconciliation_callback: Any = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.cost_estimate_hint):
@@ -415,6 +417,7 @@ class ExecutionContext:
         self._start_time: float = time.monotonic()
         self._cancellation_token = CancellationToken()
         self._timeout_thread: threading.Thread | None = None
+        self._timeout_pool_handle: object | None = None
 
         if config.timeout_ms > 0:
             self._start_timeout_watcher()
@@ -448,6 +451,12 @@ class ExecutionContext:
         self._cancellation_token.cancel()
         if self._timeout_thread is not None and self._timeout_thread.is_alive():
             self._timeout_thread.join(timeout=1.0)
+        if self._timeout_pool_handle is not None:
+            try:
+                _shared_timeout_pool.cancel(self._timeout_pool_handle)
+            except Exception:
+                pass
+            self._timeout_pool_handle = None
         if hasattr(self, "_budget_backend"):
             self._budget_backend.close()
         if hasattr(self, "_circuit_breaker") and hasattr(self._circuit_breaker, "close"):
@@ -637,6 +646,9 @@ class ExecutionContext:
         # returning.
         stack: list[str] = []
         graph_node_id: str = ""
+        # reservation_id is set when the backend supports two-phase accounting.
+        # It is committed on success and rolled back on any failure/exception.
+        _reservation_id: str | None = None
 
         try:
             stack, graph_node_id = self._begin_graph_node(kind, opts)
@@ -647,12 +659,43 @@ class ExecutionContext:
                 return self._halt_node(node, stack, graph_node_id, halt_reason)
 
             # Pre-flight: cost estimate check (before calling fn).
+            # If the backend supports reserve/commit/rollback, use two-phase accounting
+            # to atomically hold escrow and prevent TOCTOU overspend.
             if opts.cost_estimate_hint > 0.0:
-                exceeded = self._check_budget_estimate(node, opts)
-                if exceeded:
-                    stack.pop()
-                    self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
-                    return Decision.HALT
+                if hasattr(self._budget_backend, "reserve"):
+                    try:
+                        _reservation_id = self._budget_backend.reserve(
+                            opts.cost_estimate_hint, self._config.max_cost_usd
+                        )
+                    except OverflowError:
+                        stack.pop()
+                        with self._lock:
+                            self._emit_chain_event(
+                                "budget_exceeded",
+                                f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
+                                f"chain ceiling ${self._config.max_cost_usd:.4f}",
+                            )
+                        node.status = "halted"
+                        node.end_ts = datetime.now(timezone.utc)
+                        with self._lock:
+                            if len(self._nodes) < _MAX_NODES:
+                                self._nodes.append(node)
+                        self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
+                        if self._metrics is not None:
+                            try:
+                                self._metrics.record_decision(self._metadata.chain_id, "HALT")
+                            except Exception:
+                                logger.debug(
+                                    "ExecutionContext: metrics.record_decision failed in reserve OverflowError",
+                                    exc_info=True,
+                                )
+                        return Decision.HALT
+                else:
+                    exceeded = self._check_budget_estimate(node, opts)
+                    if exceeded:
+                        stack.pop()
+                        self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
+                        return Decision.HALT
 
             # Pipeline pre-dispatch check.
             if self._pipeline is not None:
@@ -660,12 +703,24 @@ class ExecutionContext:
                     node_id, kind, opts, node, stack, graph_node_id
                 )
                 if pipeline_decision is not None:
+                    if _reservation_id is not None:
+                        try:
+                            self._budget_backend.rollback(_reservation_id)
+                        except (KeyError, Exception):  # noqa: BLE001
+                            pass
+                        _reservation_id = None
                     return pipeline_decision
 
             # CircuitBreaker pre-dispatch check.
             if self._circuit_breaker is not None:
                 cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
                 if cb_decision is not None:
+                    if _reservation_id is not None:
+                        try:
+                            self._budget_backend.rollback(_reservation_id)
+                        except (KeyError, Exception):  # noqa: BLE001
+                            pass
+                        _reservation_id = None
                     return cb_decision
 
             # Dispatch the callable.
@@ -675,6 +730,12 @@ class ExecutionContext:
             _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
 
             if _fn_exc is not None:
+                if _reservation_id is not None:
+                    try:
+                        self._budget_backend.rollback(_reservation_id)
+                    except (KeyError, Exception):  # noqa: BLE001
+                        pass
+                    _reservation_id = None
                 return self._handle_fn_error(
                     _fn_exc, node_id, opts, node, stack, graph_node_id
                 )
@@ -688,9 +749,17 @@ class ExecutionContext:
                     node_id, opts, actual_cost, node, stack, graph_node_id
                 )
                 if charge_decision is not None:
+                    if _reservation_id is not None:
+                        try:
+                            self._budget_backend.rollback(_reservation_id)
+                        except (KeyError, Exception):  # noqa: BLE001
+                            pass
+                        _reservation_id = None
                     return charge_decision
 
-            return self._finalize_success(node, stack, graph_node_id, actual_cost, opts)
+            return self._finalize_success(
+                node, stack, graph_node_id, actual_cost, opts, _reservation_id
+            )
 
         except BaseException:
             # Ensure the graph stack is popped and the node is closed even when an
@@ -708,6 +777,12 @@ class ExecutionContext:
             if node.end_ts is None:
                 node.end_ts = datetime.now(timezone.utc)
                 node.status = "error"
+            # Roll back any pending reservation to prevent budget leak.
+            if _reservation_id is not None:
+                try:
+                    self._budget_backend.rollback(_reservation_id)
+                except (KeyError, Exception):  # noqa: BLE001
+                    pass
             raise
         finally:
             # Decrement nesting depth so the next outermost _wrap() call in this
@@ -1094,15 +1169,23 @@ class ExecutionContext:
         graph_node_id: str,
         actual_cost: float,
         opts: WrapOptions,
+        reservation_id: str | None = None,
     ) -> Decision:
         """Record successful completion: update counters, propagate cost, mark graph."""
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
 
-        # H3: Move backend.add() outside lock — backend has its own internal
+        # H3: Move backend.add()/commit() outside lock — backend has its own internal
         # locking and may perform blocking Redis IO. Holding _lock during that
         # call would stall all other threads for the full round-trip latency.
-        self._budget_backend.add(actual_cost)
+        if reservation_id is not None:
+            try:
+                self._budget_backend.commit(reservation_id)
+            except (KeyError, Exception):  # noqa: BLE001
+                # Reservation expired between reserve and commit; fall back to add().
+                self._budget_backend.add(actual_cost)
+        else:
+            self._budget_backend.add(actual_cost)
 
         # M6: Collect pipeline events outside lock to avoid potential re-entrant
         # deadlock if pipeline hooks call back into ExecutionContext methods.
@@ -1149,9 +1232,25 @@ class ExecutionContext:
                     else 0.0
                 )
                 self._metrics.record_latency(_agent_id, _dur)
+                if opts.response_hint is not None:
+                    from veronica_core.pricing import extract_usage_from_response
+                    _usage = extract_usage_from_response(opts.response_hint)
+                    if _usage is not None:
+                        self._metrics.record_tokens(_agent_id, _usage[0], _usage[1])
             except Exception:
                 logger.debug(
                     "ExecutionContext: metrics recording failed", exc_info=True
+                )
+
+        # Reconciliation callback: notify caller of estimated vs actual cost.
+        if opts.reconciliation_callback is not None:
+            try:
+                opts.reconciliation_callback.on_reconcile(
+                    opts.cost_estimate_hint, actual_cost
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "ExecutionContext: reconciliation_callback failed", exc_info=True
                 )
 
         return Decision.ALLOW
@@ -1264,18 +1363,37 @@ class ExecutionContext:
             },
         )
 
-    def _propagate_child_cost(self, cost_usd: float) -> None:
+    def _propagate_child_cost(self, cost_usd: float, _visited: frozenset[int] | None = None) -> None:
         """Receive cost from a child context and accumulate it here.
 
-        If accumulated cost exceeds ceiling, marks context as aborted.
-        Propagates further if this context also has a parent.
+        If accumulated cost exceeds ceiling, marks context as aborted and
+        signals the CancellationToken. Propagates further if this context
+        also has a parent.
 
         Args:
             cost_usd: Cost amount (in USD) spent by the child context.
+            _visited: Internal set of already-visited context IDs to prevent
+                infinite recursion if a circular parent chain is accidentally
+                constructed (defensive programming).
         """
+        # Guard against circular parent chains (should never occur in production
+        # but defensive check prevents RecursionError if chains are misconfigured).
+        my_id = id(self)
+        if _visited is None:
+            _visited = frozenset()
+        if my_id in _visited:
+            logger.warning(
+                "ExecutionContext._propagate_child_cost: circular parent chain detected "
+                "at context %d; stopping propagation to prevent infinite recursion",
+                my_id,
+            )
+            return
+        _visited = _visited | {my_id}
+
+        _just_aborted = False
         with self._lock:
             self._cost_usd_accumulated += cost_usd
-            if self._cost_usd_accumulated >= self._config.max_cost_usd:
+            if self._cost_usd_accumulated >= self._config.max_cost_usd and not self._aborted:
                 self._emit_chain_event(
                     "budget_exceeded_by_child",
                     f"child propagation pushed chain total "
@@ -1283,9 +1401,12 @@ class ExecutionContext:
                     f"ceiling ${self._config.max_cost_usd:.4f}",
                 )
                 self._aborted = True
+                _just_aborted = True
+        if _just_aborted:
+            self._cancellation_token.cancel()
         # Propagate further up if we have a parent (outside lock to avoid deadlock).
         if self._parent is not None:
-            self._parent._propagate_child_cost(cost_usd)
+            self._parent._propagate_child_cost(cost_usd, _visited)
 
     def create_child(
         self,
@@ -1440,14 +1561,17 @@ class ExecutionContext:
             self._event_dedup_keys.add(dedup_key)
 
     def _start_timeout_watcher(self) -> None:
-        """Start a daemon thread that signals cancellation after timeout_ms."""
+        """Schedule cancellation via SharedTimeoutPool after timeout_ms.
 
+        Uses the shared pool (single daemon thread) rather than spawning a
+        dedicated thread per ExecutionContext. The pool handle is stored in
+        ``_timeout_pool_handle`` so it can be cancelled on __exit__.
+        """
         timeout_s = self._config.timeout_ms / 1000.0
+        deadline = time.monotonic() + timeout_s
 
-        def watcher() -> None:
-            cancelled = self._cancellation_token.wait(timeout_s=timeout_s)
-            if not cancelled:
-                # Timeout elapsed; signal cancellation.
+        def _on_timeout() -> None:
+            if not self._cancellation_token.is_cancelled:
                 with self._lock:
                     self._emit_chain_event(
                         "timeout",
@@ -1455,9 +1579,4 @@ class ExecutionContext:
                     )
                 self._cancellation_token.cancel()
 
-        self._timeout_thread = threading.Thread(
-            target=watcher,
-            daemon=True,
-            name=f"veronica-timeout-{self._metadata.chain_id[:8]}",
-        )
-        self._timeout_thread.start()
+        self._timeout_pool_handle = _shared_timeout_pool.schedule(deadline, _on_timeout)

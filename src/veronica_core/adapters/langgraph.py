@@ -48,6 +48,7 @@ import logging
 from typing import Any, Callable, TypeVar, Union
 
 from veronica_core.adapters._shared import (
+    build_adapter_container,
     build_container,
     cost_from_total_tokens,
     extract_llm_result_cost,
@@ -129,8 +130,13 @@ class VeronicaLangGraphCallback:
         # Pass to LangGraph via RunnableConfig callbacks=[cb]
     """
 
-    def __init__(self, config: Union[GuardConfig, ExecutionConfig]) -> None:
-        self._container = build_container(config)
+    def __init__(
+        self,
+        config: Union[GuardConfig, ExecutionConfig],
+        *,
+        execution_context: Any = None,
+    ) -> None:
+        self._container = build_adapter_container(config, execution_context)
 
     # ------------------------------------------------------------------
     # LangChain-compatible callback hooks (used by LangGraph internally)
@@ -182,6 +188,7 @@ def veronica_node_wrapper(
     config: Union[GuardConfig, ExecutionConfig],
     *,
     container: AIContainer | None = None,
+    execution_context: Any = None,
 ) -> Callable[[F], F]:
     """Decorator that wraps a LangGraph node function with VERONICA policy enforcement.
 
@@ -214,7 +221,12 @@ def veronica_node_wrapper(
             # ... LLM call ...
             return {"messages": [...], "token_usage": {"total_tokens": 350}}
     """
-    _container = container if container is not None else build_container(config)
+    if container is not None:
+        _container = container
+    elif execution_context is not None:
+        _container = build_adapter_container(config, execution_context)
+    else:
+        _container = build_container(config)
 
     def decorator(fn: F) -> F:
         @functools.wraps(fn)

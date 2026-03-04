@@ -1280,7 +1280,7 @@ class TestBudgetBackendRaises:
         assert result.success is True
 
     def test_async_budget_exception_propagates(self) -> None:
-        """If async budget probe (EC.wrap_tool_call) raises, exception propagates."""
+        """If budget reserve raises, exception propagates and call_fn is not called."""
         from unittest.mock import patch
 
         async def run() -> bool:
@@ -1291,9 +1291,11 @@ class TestBudgetBackendRaises:
                 fn_called[0] += 1
                 return "ok"
 
+            # In the two-phase path, budget_backend.reserve() is called first.
+            # If it raises, call_fn must NOT be invoked.
             with patch.object(
-                adapter._ctx,
-                "wrap_tool_call",
+                adapter._ctx._budget_backend,
+                "reserve",
                 side_effect=RuntimeError("async budget crash"),
             ):
                 try:

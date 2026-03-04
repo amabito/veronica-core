@@ -159,25 +159,50 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Determine cost estimate.
         cost_estimate = self._compute_cost_estimate(tool_name)
 
-        # Two-phase approach: sync budget gate first, then async invocation.
-        # ExecutionContext.wrap_tool_call is synchronous; we pass a no-op to
-        # perform the budget check, then await call_fn separately.
-        def _budget_probe() -> None:
-            pass
+        # Budget gate: use reserve/commit/rollback when available (two-phase
+        # atomicity), otherwise fall back to the sync _budget_probe no-op.
+        budget_backend = getattr(self._ctx, "_budget_backend", None)
+        _use_reserve = (
+            cost_estimate > 0.0
+            and budget_backend is not None
+            and hasattr(budget_backend, "reserve")
+        )
+        _reservation_id: Optional[str] = None
 
-        opts = self._build_wrap_options(tool_name, cost_estimate)
-        ec_decision = self._ctx.wrap_tool_call(fn=_budget_probe, options=opts)
+        if _use_reserve:
+            # Phase 1a: reserve the cost estimate against the ceiling.
+            try:
+                _reservation_id = budget_backend.reserve(
+                    cost_estimate, self._ctx._config.max_cost_usd
+                )
+            except OverflowError:
+                logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT (reserve)", tool_name)
+                async with self._stats_lock:
+                    self._stats[tool_name].call_count += 1
+                return MCPToolResult(
+                    success=False,
+                    error="Budget limit exceeded",
+                    decision="HALT",
+                    cost_usd=0.0,
+                )
+        else:
+            # Fallback: sync budget probe via ExecutionContext.wrap_tool_call.
+            def _budget_probe() -> None:
+                pass
 
-        if ec_decision == Decision.HALT:
-            logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
-            async with self._stats_lock:
-                self._stats[tool_name].call_count += 1
-            return MCPToolResult(
-                success=False,
-                error="Budget limit exceeded",
-                decision="HALT",
-                cost_usd=0.0,
-            )
+            opts = self._build_wrap_options(tool_name, cost_estimate)
+            ec_decision = self._ctx.wrap_tool_call(fn=_budget_probe, options=opts)
+
+            if ec_decision == Decision.HALT:
+                logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
+                async with self._stats_lock:
+                    self._stats[tool_name].call_count += 1
+                return MCPToolResult(
+                    success=False,
+                    error="Budget limit exceeded",
+                    decision="HALT",
+                    cost_usd=0.0,
+                )
 
         # Phase 2: await call_fn.
         call_error: Optional[BaseException] = None
@@ -203,6 +228,11 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 type(call_error).__name__,
                 call_error,
             )
+            if _reservation_id is not None:
+                try:
+                    budget_backend.rollback(_reservation_id)
+                except Exception:  # noqa: BLE001
+                    pass
             self._record_circuit_breaker_failure(call_error)
             async with self._stats_lock:
                 self._stats[tool_name].call_count += 1
@@ -219,6 +249,11 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             logger.debug(
                 "[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name
             )
+            if _reservation_id is not None:
+                try:
+                    budget_backend.rollback(_reservation_id)
+                except Exception:  # noqa: BLE001
+                    pass
             async with self._stats_lock:
                 self._stats[tool_name].call_count += 1
                 self._stats[tool_name].error_count += 1
@@ -232,6 +267,15 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
 
         # Compute variable per-token cost.
         actual_cost = self._compute_actual_cost(tool_name, result_value)
+
+        # Phase 3: commit the reservation (or add directly for legacy backends).
+        if _reservation_id is not None:
+            try:
+                budget_backend.commit(_reservation_id)
+            except Exception:  # noqa: BLE001
+                # Reservation expired or already committed; add directly.
+                budget_backend.add(actual_cost)
+        # (legacy path: cost already added via _budget_probe no-op in wrap_tool_call)
 
         # Record success in CB and stats.
         self._record_circuit_breaker_success()

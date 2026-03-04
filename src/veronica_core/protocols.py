@@ -28,6 +28,8 @@ __all__ = [
     "PlannerProtocol",
     "ExecutionGraphObserver",
     "ContainmentMetricsProtocol",
+    "AsyncBudgetBackendProtocol",
+    "ReconciliationCallback",
 ]
 
 
@@ -308,5 +310,49 @@ class ContainmentMetricsProtocol(Protocol):
         Args:
             agent_id: Identifier for the agent or chain.
             duration_ms: Duration in milliseconds from dispatch to completion.
+        """
+        ...
+
+
+@runtime_checkable
+class AsyncBudgetBackendProtocol(Protocol):
+    """Protocol for async-capable budget backends.
+
+    Async budget backends must support reserve/commit/rollback for two-phase
+    accounting, plus a simple get() for current committed cost.
+    """
+
+    async def reserve(self, amount: float, ceiling: float) -> str:
+        """Atomically reserve amount against ceiling. Returns reservation ID."""
+        ...
+
+    async def commit(self, reservation_id: str) -> float:
+        """Commit a reservation. Returns new total committed cost."""
+        ...
+
+    async def rollback(self, reservation_id: str) -> None:
+        """Roll back a reservation without charging cost."""
+        ...
+
+    async def get(self) -> float:
+        """Return the current committed cost."""
+        ...
+
+
+@runtime_checkable
+class ReconciliationCallback(Protocol):
+    """Callback invoked after a successful wrap call to reconcile estimated vs actual cost.
+
+    Implement this protocol to receive notifications when the actual cost of a
+    call differs from the estimated cost. Useful for cost tracking, alerting,
+    and budget adjustment.
+    """
+
+    def on_reconcile(self, estimated_cost: float, actual_cost: float) -> None:
+        """Called after a successful wrap_llm_call or wrap_tool_call.
+
+        Args:
+            estimated_cost: The cost_estimate_hint from WrapOptions.
+            actual_cost: The actual cost computed after the call completed.
         """
         ...

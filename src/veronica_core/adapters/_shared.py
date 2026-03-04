@@ -117,3 +117,146 @@ def record_budget_spend(
             container.budget.limit_usd,
         )
     return within
+
+
+# NEW: ExecutionContext adapter classes
+
+class _BudgetProxy:
+    """Budget view backed by an ExecutionContext."""
+
+    def __init__(self, ctx: Any, limit_usd: float) -> None:
+        self._ctx = ctx
+        self._limit_usd = limit_usd
+
+    @property
+    def limit_usd(self) -> float:
+        return self._limit_usd
+
+    @property
+    def spent_usd(self) -> float:
+        try:
+            backend = getattr(self._ctx, "_budget_backend", None)
+            if backend is not None:
+                get_fn = getattr(backend, "get", None)
+                if get_fn is not None:
+                    return float(get_fn())
+        except Exception:
+            pass
+        return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
+
+    @property
+    def call_count(self) -> int:
+        return int(getattr(self._ctx, "_step_count", 0))
+
+    @property
+    def is_exceeded(self) -> bool:
+        return self.spent_usd > self._limit_usd
+
+    def spend(self, amount_usd: float) -> bool:
+        """Add cost to the ExecutionContext and return True if within budget."""
+        try:
+            backend = getattr(self._ctx, "_budget_backend", None)
+            if backend is not None:
+                add_fn = getattr(backend, "add", None)
+                get_fn = getattr(backend, "get", None)
+                if add_fn is not None:
+                    add_fn(amount_usd)
+                    if get_fn is not None:
+                        return float(get_fn()) <= self._limit_usd
+                    return True
+            lock = getattr(self._ctx, "_lock", None)
+            if lock is not None:
+                with lock:
+                    self._ctx._cost_usd_accumulated += amount_usd
+                    return self._ctx._cost_usd_accumulated <= self._limit_usd
+            self._ctx._cost_usd_accumulated = (
+                getattr(self._ctx, "_cost_usd_accumulated", 0.0) + amount_usd
+            )
+            return self._ctx._cost_usd_accumulated <= self._limit_usd
+        except Exception:
+            return True
+
+
+class _StepGuardProxy:
+    """Step guard view backed by an ExecutionContext."""
+
+    def __init__(self, ctx: Any, max_steps: int) -> None:
+        self._ctx = ctx
+        self._max_steps = max_steps
+
+    @property
+    def current_step(self) -> int:
+        return int(getattr(self._ctx, "_step_count", 0))
+
+    @property
+    def max_steps(self) -> int:
+        return self._max_steps
+
+    def step(self, result: Any = None) -> bool:
+        """Increment step counter; return True if still within limit."""
+        try:
+            lock = getattr(self._ctx, "_lock", None)
+            if lock is not None:
+                with lock:
+                    self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1
+                    return self._ctx._step_count < self._max_steps
+            self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1
+            return self._ctx._step_count < self._max_steps
+        except Exception:
+            return True
+
+
+class ExecutionContextContainerAdapter:
+    """Adapts an ExecutionContext to the AIContainer interface."""
+
+    def __init__(self, ctx: Any, config: Union[GuardConfig, ExecutionConfig]) -> None:
+        self._ctx = ctx
+        self._config = config
+        self.budget: _BudgetProxy = _BudgetProxy(ctx, config.max_cost_usd)
+        self.step_guard: _StepGuardProxy = _StepGuardProxy(ctx, config.max_steps)
+        self.retry = None
+
+    def check(self, cost_usd: float = 0.0, **_kwargs: Any) -> Any:
+        """Policy gate mirroring AIContainer.check()."""
+        from veronica_core.runtime_policy import PolicyDecision
+        snap = None
+        try:
+            snap = self._ctx.get_snapshot()
+        except Exception:
+            pass
+        if snap is not None and getattr(snap, "aborted", False):
+            return PolicyDecision(allowed=False, reason="Context aborted", policy_type="containment")
+        spent = self.budget.spent_usd
+        if self._config.max_cost_usd > 0 and spent >= self._config.max_cost_usd:
+            return PolicyDecision(
+                allowed=False,
+                reason=f"Budget limit exceeded: ${spent:.4f} / ${self._config.max_cost_usd:.4f}",
+                policy_type="budget",
+            )
+        steps = self.step_guard.current_step
+        if steps >= self._config.max_steps:
+            return PolicyDecision(
+                allowed=False,
+                reason=f"Step limit exceeded: {steps} / {self._config.max_steps}",
+                policy_type="step",
+            )
+        return PolicyDecision(allowed=True, reason="", policy_type="containment")
+
+    @property
+    def active_policies(self) -> list:
+        policies = []
+        if self._config.max_cost_usd > 0:
+            policies.append("budget")
+        if self._config.max_steps > 0:
+            policies.append("step_guard")
+        return policies
+
+
+def build_adapter_container(
+    config: Union[GuardConfig, ExecutionConfig],
+    execution_context: Optional[Any] = None,
+) -> Union[AIContainer, "ExecutionContextContainerAdapter"]:
+    """Build a container from config, optionally backed by an ExecutionContext."""
+    if execution_context is not None:
+        return ExecutionContextContainerAdapter(execution_context, config)
+    return build_container(config)

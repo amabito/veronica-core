@@ -14,6 +14,14 @@ get_current_execution_context().
 #   aborted after the call. Non-HTTP scopes pass through unchanged.
 # Fix: replaced pre-flight wrap_llm_call(no-op) with get_snapshot().aborted
 #   to avoid burning step_count on every HTTP request.
+# Added WebSocket containment: VeronicaASGIMiddleware now enforces budget
+#   and step limits for WebSocket (scope type == "websocket") sessions.
+#   Pre-flight budget exceeded -> websocket.close code=1008, inner app not
+#   called. Mid-session step/budget limit -> synthetic websocket.disconnect
+#   returned to inner app, then websocket.close code=1008 sent to client.
+#   Each receive() and send() call increments the step counter. The active
+#   ExecutionContext is available via get_current_execution_context() inside
+#   the inner app for the duration of the WS session.
 # Added VeronicaWSGIMiddleware: WSGI middleware with identical semantics
 #   for synchronous WSGI apps.
 # Added get_current_execution_context(): returns the ExecutionContext
@@ -90,7 +98,11 @@ class VeronicaASGIMiddleware:
         receive: _Receive,
         send: _Send,
     ) -> None:
-        if scope.get("type") != "http":
+        scope_type = scope.get("type")
+        if scope_type == "websocket":
+            await self._handle_websocket(scope, receive, send)
+            return
+        if scope_type != "http":
             await self._app(scope, receive, send)
             return
 
@@ -134,6 +146,87 @@ class VeronicaASGIMiddleware:
 
         if halted:
             await _send_429(send)
+
+    async def _handle_websocket(
+        self,
+        scope: _Scope,
+        receive: _Receive,
+        send: _Send,
+    ) -> None:
+        """Handle a WebSocket scope with budget and step-limit containment.
+
+        Pre-flight: if the budget is already at or over the ceiling, send
+        websocket.close(code=1008) immediately without calling the inner app.
+
+        Mid-session: each receive() and send() call increments the step counter
+        via wrap_tool_call(cost_estimate_hint=0). Once the budget or step limit
+        is exceeded, _tracked_receive() returns a synthetic
+        websocket.disconnect instead of blocking on the real receive, and a
+        websocket.close(code=1008) is queued after the inner app returns.
+
+        The ExecutionContext is stored in the ContextVar for the duration of
+        the session so get_current_execution_context() works inside the inner
+        app.
+        """
+        from veronica_core.containment.execution_context import WrapOptions
+
+        ctx = ExecutionContext(config=self._config, pipeline=self._pipeline)
+        token = _current_execution_context.set(ctx)
+        halted = False
+
+        try:
+            snap = ctx.get_snapshot()
+            if snap.aborted or snap.cost_usd_accumulated >= self._config.max_cost_usd:
+                halted = True
+            else:
+                _halt_flag: list[bool] = [False]
+
+                async def _tracked_receive() -> dict[str, Any]:
+                    if _halt_flag[0]:
+                        return {"type": "websocket.disconnect", "code": 1008}
+                    opts = WrapOptions(
+                        operation_name="ws.receive",
+                        cost_estimate_hint=0.0,
+                    )
+                    decision = ctx.wrap_tool_call(fn=lambda: None, options=opts)
+                    from veronica_core.shield.types import Decision as _Decision
+                    if decision == _Decision.HALT:
+                        _halt_flag[0] = True
+                        return {"type": "websocket.disconnect", "code": 1008}
+                    return await receive()
+
+                async def _tracked_send(message: dict[str, Any]) -> None:
+                    if message.get("type") == "websocket.close":
+                        await send(message)
+                        return
+                    opts = WrapOptions(
+                        operation_name="ws.send",
+                        cost_estimate_hint=0.0,
+                    )
+                    decision = ctx.wrap_tool_call(fn=lambda: None, options=opts)
+                    from veronica_core.shield.types import Decision as _Decision
+                    if decision == _Decision.HALT:
+                        _halt_flag[0] = True
+                        return
+                    await send(message)
+
+                app_exception: BaseException | None = None
+                try:
+                    await self._app(scope, _tracked_receive, _tracked_send)
+                except BaseException as exc:
+                    app_exception = exc
+
+                if _halt_flag[0]:
+                    halted = True
+
+                if app_exception is not None:
+                    raise app_exception
+        finally:
+            _current_execution_context.reset(token)
+            ctx.__exit__(None, None, None)
+
+        if halted:
+            await _send_ws_close_1008(send)
 
     # Note: _send_429 is defined at module level below.
 
@@ -257,3 +350,8 @@ def _wsgi_429(start_response: Callable[..., Any]) -> list[bytes]:
         [("Content-Type", "text/plain; charset=utf-8")],
     )
     return [b"429 Too Many Requests"]
+
+
+async def _send_ws_close_1008(send: _Send) -> None:
+    """Send websocket.close with code=1008 (Policy Violation)."""
+    await send({"type": "websocket.close", "code": 1008})

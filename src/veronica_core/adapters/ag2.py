@@ -50,7 +50,7 @@ except ImportError:
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from veronica_core.adapters._shared import build_container
+from veronica_core.adapters._shared import build_adapter_container, build_container
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
@@ -96,10 +96,12 @@ class VeronicaConversableAgent(ConversableAgent):
         self,
         name: str,
         config: Union[GuardConfig, ExecutionConfig],
+        *,
+        execution_context: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(name, **kwargs)
-        self._container = build_container(config)
+        self._container = build_adapter_container(config, execution_context)
 
     def generate_reply(
         self,
