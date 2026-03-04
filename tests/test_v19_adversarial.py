@@ -190,10 +190,10 @@ class TestAdversarialContextVarContamination:
 
 
 class TestAdversarialAsyncGuard:
-    """Attacker tries to leave ContextVar dirty via asyncio.timeout."""
+    """Attacker tries to leave ContextVar dirty via asyncio.timeout / wait_for."""
 
     def test_timeout_resets_guard(self):
-        """asyncio.timeout must reset _guard_active to False."""
+        """Timeout must reset _guard_active to False."""
         from veronica_core.inject import is_guard_active, veronica_guard
 
         @veronica_guard()
@@ -202,8 +202,7 @@ class TestAdversarialAsyncGuard:
 
         async def runner():
             try:
-                async with asyncio.timeout(0.01):
-                    await slow_fn()
+                await asyncio.wait_for(slow_fn(), timeout=0.01)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
 
