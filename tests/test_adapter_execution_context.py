@@ -95,10 +95,10 @@ from veronica_core import GuardConfig  # noqa: E402
 from veronica_core.adapters.ag2 import VeronicaConversableAgent  # noqa: E402
 from veronica_core.adapters._shared import ExecutionContextContainerAdapter  # noqa: E402
 from veronica_core.adapters.langchain import VeronicaCallbackHandler  # noqa: E402
-from veronica_core.adapters.langgraph import (
+from veronica_core.adapters.langgraph import (  # noqa: E402
     VeronicaLangGraphCallback,
     veronica_node_wrapper,
-)  # noqa: E402
+)
 from veronica_core.containment import ExecutionConfig  # noqa: E402
 from veronica_core.containment.execution_context import ExecutionContext  # noqa: E402
 from veronica_core.inject import VeronicaHalt  # noqa: E402
