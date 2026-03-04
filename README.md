@@ -146,6 +146,20 @@ For detailed architecture, see [docs/architecture.md](docs/architecture.md).
 
 ---
 
+## Distributed Safety Model
+
+veronica-core enforces execution boundaries for LLM agents across concurrent calls:
+
+- **Budget transactions**: two-phase reserve/commit/rollback protocol prevents cost overrun across concurrent calls
+- **Circuit breaker**: local and distributed (Redis-backed) failure containment with Lua-atomic state transitions
+- **Timeout propagation**: `SharedTimeoutPool` daemon thread handles deadline scheduling for all `ExecutionContext` instances in a process
+- **Redis fallback**: `RedisBudgetBackend` seeds a local fallback on Redis failure and reconciles the delta on reconnection
+- **Reservation expiry**: reservations auto-expire after 60 seconds to prevent budget lock-up from crashed callers
+
+See [docs/DISTRIBUTED_CONSISTENCY.md](docs/DISTRIBUTED_CONSISTENCY.md) for the full consistency model.
+
+---
+
 ## Security
 
 Policy enforcement is at the process boundary (argv-level). This is not an OS-level sandbox.

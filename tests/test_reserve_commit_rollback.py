@@ -159,9 +159,10 @@ class TestLocalReservationExpiry:
         b = LocalBudgetBackend()
         import veronica_core.distributed as dm
         original = dm._RESERVATION_TIMEOUT_S
-        monkeypatch.setattr(dm, "_RESERVATION_TIMEOUT_S", 0.0)
+        # Use negative timeout so deadline is in the past at creation time.
+        # Zero timeout is unreliable on Windows due to timer granularity.
+        monkeypatch.setattr(dm, "_RESERVATION_TIMEOUT_S", -1.0)
         rid = b.reserve(0.5, ceiling=1.0)
-        time.sleep(0.01)
         # Trigger expiry sweep by calling get_reserved()
         b.get_reserved()
         # Now commit should raise because reservation was removed
