@@ -83,9 +83,14 @@ def run_agent(prompt: str) -> str:
 - **Execution graph** -- typed node lifecycle, amplification metrics, divergence detection
 - **Degradation ladder** -- 4-tier graceful degradation (model_downgrade, context_trim, rate_limit, halt)
 - **Multi-agent context** -- parent-child ExecutionContext hierarchy with cost propagation
+- **Two-phase budget** -- reserve/commit/rollback protocol prevents double-spending across concurrent calls
+- **Async budget backends** -- `AsyncLocalBudgetBackend` and `AsyncRedisBudgetBackend` with native asyncio coordination
+- **WebSocket containment** -- ASGI middleware enforces step limits on WebSocket connections with `close(1008)`
+- **CancellationToken** -- parent/child propagation with upward cost enforcement
 - **SafetyEvent** -- structured evidence for every non-ALLOW decision (SHA-256 hashed, no raw prompts)
 - **Security containment** -- PolicyEngine, AuditLog, ed25519 policy signing, red-team regression suite
 - **ASGI/WSGI middleware** -- per-request ExecutionContext via ContextVar, 429 on HALT
+- **MCP containment** -- sync and async MCP server adapters with per-tool budget enforcement
 - **Auto cost calculation** -- pricing table for OpenAI, Anthropic, Google models
 
 No required dependencies. Works with any LLM provider.
@@ -102,8 +107,9 @@ No required dependencies. Works with any LLM provider.
 | AG2 (AutoGen) | `CircuitBreakerCapability` | [examples/ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) |
 | LlamaIndex | `VeronicaLlamaIndexHandler` | -- |
 | CrewAI | `VeronicaCrewAIListener` | [examples/integrations/crewai/](examples/integrations/crewai/) |
-| LangGraph | `VeronicaLangGraphListener` | -- |
+| LangGraph | `VeronicaLangGraphCallback` / `veronica_node_wrapper` | [examples/langgraph_minimal.py](examples/langgraph_minimal.py) |
 | ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
+| MCP | `MCPContainmentAdapter` / `AsyncMCPContainmentAdapter` | -- |
 | ROS2 | `SafetyMonitor` / `OperatingMode` | [examples/ros2/](examples/ros2/) |
 
 veronica-core integrates with [AG2](https://github.com/ag2ai/ag2) via `AgentCapability`. `CircuitBreakerCapability` wraps AG2 agents with failure detection and automatic recovery.
@@ -125,6 +131,9 @@ Current integration uses monkey-patching as AG2 does not expose before/after hoo
 | [runaway_loop_demo.py](examples/runaway_loop_demo.py) | Runaway execution containment |
 | [budget_degrade_demo.py](examples/budget_degrade_demo.py) | DEGRADE before HALT |
 | [token_budget_minimal_demo.py](examples/token_budget_minimal_demo.py) | Token ceiling enforcement |
+| [langchain_minimal.py](examples/langchain_minimal.py) | LangChain integration quickstart |
+| [langgraph_minimal.py](examples/langgraph_minimal.py) | LangGraph integration quickstart |
+| [ag2_minimal.py](examples/ag2_minimal.py) | AG2 integration quickstart |
 
 ---
 
