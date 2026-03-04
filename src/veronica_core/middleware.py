@@ -179,6 +179,8 @@ class VeronicaASGIMiddleware:
             if snap.aborted or snap.cost_usd_accumulated >= self._config.max_cost_usd:
                 halted = True
             else:
+                from veronica_core.shield.types import Decision as _Decision
+
                 _halt_flag: list[bool] = [False]
 
                 async def _tracked_receive() -> dict[str, Any]:
@@ -189,7 +191,6 @@ class VeronicaASGIMiddleware:
                         cost_estimate_hint=0.0,
                     )
                     decision = ctx.wrap_tool_call(fn=lambda: None, options=opts)
-                    from veronica_core.shield.types import Decision as _Decision
                     if decision == _Decision.HALT:
                         _halt_flag[0] = True
                         return {"type": "websocket.disconnect", "code": 1008}
@@ -204,7 +205,6 @@ class VeronicaASGIMiddleware:
                         cost_estimate_hint=0.0,
                     )
                     decision = ctx.wrap_tool_call(fn=lambda: None, options=opts)
-                    from veronica_core.shield.types import Decision as _Decision
                     if decision == _Decision.HALT:
                         _halt_flag[0] = True
                         return

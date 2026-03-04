@@ -416,7 +416,6 @@ class ExecutionContext:
         # Timeout bookkeeping
         self._start_time: float = time.monotonic()
         self._cancellation_token = CancellationToken()
-        self._timeout_thread: threading.Thread | None = None
         self._timeout_pool_handle: object | None = None
 
         if config.timeout_ms > 0:
@@ -449,8 +448,6 @@ class ExecutionContext:
         # has actually finished before the context exits, preventing thread leaks
         # in test suites and short-lived programs.
         self._cancellation_token.cancel()
-        if self._timeout_thread is not None and self._timeout_thread.is_alive():
-            self._timeout_thread.join(timeout=1.0)
         if self._timeout_pool_handle is not None:
             try:
                 _shared_timeout_pool.cancel(self._timeout_pool_handle)
@@ -668,28 +665,14 @@ class ExecutionContext:
                             opts.cost_estimate_hint, self._config.max_cost_usd
                         )
                     except OverflowError:
-                        stack.pop()
-                        with self._lock:
-                            self._emit_chain_event(
-                                "budget_exceeded",
-                                f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
-                                f"chain ceiling ${self._config.max_cost_usd:.4f}",
-                            )
-                        node.status = "halted"
-                        node.end_ts = datetime.now(timezone.utc)
-                        with self._lock:
-                            if len(self._nodes) < _MAX_NODES:
-                                self._nodes.append(node)
-                        self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
-                        if self._metrics is not None:
-                            try:
-                                self._metrics.record_decision(self._metadata.chain_id, "HALT")
-                            except Exception:
-                                logger.debug(
-                                    "ExecutionContext: metrics.record_decision failed in reserve OverflowError",
-                                    exc_info=True,
-                                )
-                        return Decision.HALT
+                        reason = (
+                            f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
+                            f"chain ceiling ${self._config.max_cost_usd:.4f}"
+                        )
+                        self._emit_chain_event("budget_exceeded", reason)
+                        return self._halt_node(
+                            node, stack, graph_node_id, reason,
+                        )
                 else:
                     exceeded = self._check_budget_estimate(node, opts)
                     if exceeded:
@@ -703,24 +686,14 @@ class ExecutionContext:
                     node_id, kind, opts, node, stack, graph_node_id
                 )
                 if pipeline_decision is not None:
-                    if _reservation_id is not None:
-                        try:
-                            self._budget_backend.rollback(_reservation_id)
-                        except (KeyError, Exception):  # noqa: BLE001
-                            pass
-                        _reservation_id = None
+                    self._try_rollback(self._budget_backend, _reservation_id)
                     return pipeline_decision
 
             # CircuitBreaker pre-dispatch check.
             if self._circuit_breaker is not None:
                 cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
                 if cb_decision is not None:
-                    if _reservation_id is not None:
-                        try:
-                            self._budget_backend.rollback(_reservation_id)
-                        except (KeyError, Exception):  # noqa: BLE001
-                            pass
-                        _reservation_id = None
+                    self._try_rollback(self._budget_backend, _reservation_id)
                     return cb_decision
 
             # Dispatch the callable.
@@ -730,12 +703,7 @@ class ExecutionContext:
             _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
 
             if _fn_exc is not None:
-                if _reservation_id is not None:
-                    try:
-                        self._budget_backend.rollback(_reservation_id)
-                    except (KeyError, Exception):  # noqa: BLE001
-                        pass
-                    _reservation_id = None
+                self._try_rollback(self._budget_backend, _reservation_id)
                 return self._handle_fn_error(
                     _fn_exc, node_id, opts, node, stack, graph_node_id
                 )
@@ -749,12 +717,7 @@ class ExecutionContext:
                     node_id, opts, actual_cost, node, stack, graph_node_id
                 )
                 if charge_decision is not None:
-                    if _reservation_id is not None:
-                        try:
-                            self._budget_backend.rollback(_reservation_id)
-                        except (KeyError, Exception):  # noqa: BLE001
-                            pass
-                        _reservation_id = None
+                    self._try_rollback(self._budget_backend, _reservation_id)
                     return charge_decision
 
             return self._finalize_success(
@@ -778,11 +741,7 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 node.status = "error"
             # Roll back any pending reservation to prevent budget leak.
-            if _reservation_id is not None:
-                try:
-                    self._budget_backend.rollback(_reservation_id)
-                except (KeyError, Exception):  # noqa: BLE001
-                    pass
+            self._try_rollback(self._budget_backend, _reservation_id)
             raise
         finally:
             # Decrement nesting depth so the next outermost _wrap() call in this
@@ -790,6 +749,16 @@ class ExecutionContext:
             d = self._nesting_depth_var.get()
             if d > 0:
                 self._nesting_depth_var.set(d - 1)
+
+    @staticmethod
+    def _try_rollback(backend: Any, reservation_id: str | None) -> None:
+        """Roll back a reservation, swallowing all exceptions."""
+        if reservation_id is None:
+            return
+        try:
+            backend.rollback(reservation_id)
+        except Exception:  # noqa: BLE001
+            pass
 
     # ------------------------------------------------------------------
     # _wrap sub-helpers

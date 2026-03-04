@@ -60,6 +60,16 @@ class BudgetBackend(Protocol):
     def close(self) -> None: ...
 
 
+@runtime_checkable
+class ReservableBudgetBackend(BudgetBackend, Protocol):
+    """Extended protocol for backends that support two-phase reserve/commit/rollback."""
+
+    def reserve(self, amount: float, ceiling: float) -> str: ...
+    def commit(self, reservation_id: str) -> float: ...
+    def rollback(self, reservation_id: str) -> None: ...
+    def get_reserved(self) -> float: ...
+
+
 class LocalBudgetBackend:
     """In-process budget backend. Thread-safe. Default behavior.
 
@@ -71,6 +81,7 @@ class LocalBudgetBackend:
         self._cost: float = 0.0
         # _reservations: rid -> (amount, deadline_monotonic)
         self._reservations: dict[str, tuple[float, float]] = {}
+        self._reserved_total: float = 0.0
         self._lock = threading.Lock()
 
     def add(self, amount: float) -> float:
@@ -85,8 +96,9 @@ class LocalBudgetBackend:
     def get_reserved(self) -> float:
         """Return the total amount currently held in active reservations."""
         with self._lock:
-            self._expire_reservations_locked()
-            return sum(amt for amt, _ in self._reservations.values())
+            total = self._total_reserved_locked()
+            # Clamp to zero to avoid negative epsilon from float arithmetic.
+            return max(0.0, total)
 
     def reserve(self, amount: float, ceiling: float) -> str:
         """Atomically reserve *amount* against *ceiling*.
@@ -101,8 +113,7 @@ class LocalBudgetBackend:
                 f"reserve() amount must be positive and finite, got {amount!r}"
             )
         with self._lock:
-            self._expire_reservations_locked()
-            reserved_total = sum(amt for amt, _ in self._reservations.values())
+            reserved_total = self._total_reserved_locked()
             if self._cost + reserved_total + amount > ceiling + _BUDGET_EPSILON:
                 raise OverflowError(
                     f"Budget ceiling {ceiling:.6f} would be exceeded: "
@@ -112,6 +123,7 @@ class LocalBudgetBackend:
             rid = str(uuid.uuid4())
             deadline = time.monotonic() + _RESERVATION_TIMEOUT_S
             self._reservations[rid] = (amount, deadline)
+            self._reserved_total += amount
             return rid
 
     def commit(self, reservation_id: str) -> float:
@@ -127,6 +139,7 @@ class LocalBudgetBackend:
                     f"Reservation {reservation_id!r} not found (expired or already committed/rolled back)"
                 )
             amount, _ = self._reservations.pop(reservation_id)
+            self._reserved_total -= amount
             self._cost += amount
             return self._cost
 
@@ -141,12 +154,14 @@ class LocalBudgetBackend:
                 raise KeyError(
                     f"Reservation {reservation_id!r} not found (expired or already committed/rolled back)"
                 )
-            self._reservations.pop(reservation_id)
+            amount, _ = self._reservations.pop(reservation_id)
+            self._reserved_total -= amount
 
     def reset(self) -> None:
         with self._lock:
             self._cost = 0.0
             self._reservations.clear()
+            self._reserved_total = 0.0
 
     def close(self) -> None:
         pass
@@ -160,7 +175,16 @@ class LocalBudgetBackend:
             if now > deadline
         ]
         for rid in expired:
-            self._reservations.pop(rid)
+            amt, _ = self._reservations.pop(rid)
+            self._reserved_total -= amt
+
+    def _total_reserved_locked(self) -> float:
+        """Return total active reservation amount. Call with self._lock held."""
+        self._expire_reservations_locked()
+        # Reset accumulator when empty to prevent float drift.
+        if not self._reservations:
+            self._reserved_total = 0.0
+        return self._reserved_total
 
 
 class RedisBudgetBackend:
@@ -478,33 +502,26 @@ local rid = ARGV[3]
 local deadline = tonumber(ARGV[4])
 local now = tonumber(ARGV[5])
 
--- Sweep expired reservations
-local all_rids = redis.call('HKEYS', reservations_key)
-for _, r in ipairs(all_rids) do
-    local v = redis.call('HGET', reservations_key, r)
-    if v then
-        local sep = string.find(v, ':')
-        if sep then
-            local dl = tonumber(string.sub(v, sep + 1)) or 0.0
-            if dl <= now then
-                redis.call('HDEL', reservations_key, r)
-            end
+-- Single-pass: sweep expired + sum active via HGETALL
+local all_pairs = redis.call('HGETALL', reservations_key)
+local reserved_total = 0.0
+for i = 1, #all_pairs, 2 do
+    local r = all_pairs[i]
+    local v = all_pairs[i + 1]
+    local sep = string.find(v, ':')
+    if sep then
+        local dl = tonumber(string.sub(v, sep + 1)) or 0.0
+        if dl <= now then
+            redis.call('HDEL', reservations_key, r)
+        else
+            local amt = tonumber(string.sub(v, 1, sep - 1)) or 0.0
+            reserved_total = reserved_total + amt
         end
     end
 end
 
 local committed_str = redis.call('GET', committed_key)
 local committed = tonumber(committed_str) or 0.0
-
-local reserved_total = 0.0
-local active_vals = redis.call('HVALS', reservations_key)
-for _, v in ipairs(active_vals) do
-    local sep = string.find(v, ':')
-    if sep then
-        local amt = tonumber(string.sub(v, 1, sep - 1)) or 0.0
-        reserved_total = reserved_total + amt
-    end
-end
 
 if committed + reserved_total + amount > ceiling + 1e-9 then
     return redis.error_reply('ERR ceiling exceeded')

@@ -208,8 +208,8 @@ def test_execution_context_uses_pool_not_thread() -> None:
         assert ctx._timeout_pool_handle is not None, (
             "Pool handle must be set when timeout_ms > 0"
         )
-        assert ctx._timeout_thread is None, (
-            "Legacy timeout_thread must NOT be spawned when pool is available"
+        assert not hasattr(ctx, "_timeout_thread"), (
+            "Legacy timeout_thread field must not exist (removed in simplify)"
         )
 
 

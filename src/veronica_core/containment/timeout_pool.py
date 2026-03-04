@@ -47,6 +47,7 @@ class SharedTimeoutPool:
         self._cancelled: set[int] = set()
         self._counter: int = 0
         self._thread: threading.Thread | None = None
+        self._started: bool = False
         self._wakeup = threading.Event()
         self._shutdown = False
 
@@ -71,13 +72,14 @@ class SharedTimeoutPool:
             handle = self._counter
             heapq.heappush(self._heap, (deadline, handle, callback))
             # Start daemon thread lazily on first use.
-            if self._thread is None or not self._thread.is_alive():
+            if not self._started:
                 self._thread = threading.Thread(
                     target=self._run,
                     daemon=True,
                     name="veronica-timeout-pool",
                 )
                 self._thread.start()
+                self._started = True
         # Interrupt sleeping thread so it recalculates earliest deadline.
         self._wakeup.set()
         return handle
@@ -150,10 +152,6 @@ class SharedTimeoutPool:
             # Sleep until next deadline or until woken by schedule()/cancel().
             self._wakeup.clear()
             self._wakeup.wait(timeout=sleep_s)
-
-            with self._lock:
-                if self._shutdown:
-                    return
 
 
     @classmethod

@@ -127,6 +127,14 @@ class _BudgetProxy:
     def __init__(self, ctx: Any, limit_usd: float) -> None:
         self._ctx = ctx
         self._limit_usd = limit_usd
+        # Cache backend callables at construction time (they don't change).
+        _backend = getattr(ctx, "_budget_backend", None)
+        self._get_fn = getattr(_backend, "get", None) if _backend else None
+        self._add_fn = getattr(_backend, "add", None) if _backend else None
+        try:
+            self._lock = getattr(ctx, "_lock", None)
+        except Exception:
+            self._lock = None
 
     @property
     def limit_usd(self) -> float:
@@ -134,14 +142,11 @@ class _BudgetProxy:
 
     @property
     def spent_usd(self) -> float:
-        try:
-            backend = getattr(self._ctx, "_budget_backend", None)
-            if backend is not None:
-                get_fn = getattr(backend, "get", None)
-                if get_fn is not None:
-                    return float(get_fn())
-        except Exception:
-            pass
+        if self._get_fn is not None:
+            try:
+                return float(self._get_fn())
+            except Exception:
+                pass
         return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
 
     @property
@@ -155,18 +160,13 @@ class _BudgetProxy:
     def spend(self, amount_usd: float) -> bool:
         """Add cost to the ExecutionContext and return True if within budget."""
         try:
-            backend = getattr(self._ctx, "_budget_backend", None)
-            if backend is not None:
-                add_fn = getattr(backend, "add", None)
-                get_fn = getattr(backend, "get", None)
-                if add_fn is not None:
-                    add_fn(amount_usd)
-                    if get_fn is not None:
-                        return float(get_fn()) <= self._limit_usd
-                    return True
-            lock = getattr(self._ctx, "_lock", None)
-            if lock is not None:
-                with lock:
+            if self._add_fn is not None:
+                self._add_fn(amount_usd)
+                if self._get_fn is not None:
+                    return float(self._get_fn()) <= self._limit_usd
+                return True
+            if self._lock is not None:
+                with self._lock:
                     self._ctx._cost_usd_accumulated += amount_usd
                     return self._ctx._cost_usd_accumulated <= self._limit_usd
             self._ctx._cost_usd_accumulated = (
@@ -183,6 +183,7 @@ class _StepGuardProxy:
     def __init__(self, ctx: Any, max_steps: int) -> None:
         self._ctx = ctx
         self._max_steps = max_steps
+        self._lock = getattr(ctx, "_lock", None)
 
     @property
     def current_step(self) -> int:
@@ -195,9 +196,8 @@ class _StepGuardProxy:
     def step(self, result: Any = None) -> bool:
         """Increment step counter; return True if still within limit."""
         try:
-            lock = getattr(self._ctx, "_lock", None)
-            if lock is not None:
-                with lock:
+            if self._lock is not None:
+                with self._lock:
                     self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1
                     return self._ctx._step_count < self._max_steps
             self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1

@@ -136,6 +136,7 @@ from veronica_core.pricing import estimate_cost_usd, resolve_model_pricing, Pric
 # Distributed Budget (v0.10.0)
 from veronica_core.distributed import (
     BudgetBackend,
+    ReservableBudgetBackend,
     LocalBudgetBackend,
     RedisBudgetBackend,
     get_default_backend,
@@ -303,6 +304,7 @@ __all__ = [
     "extract_usage_from_response",
     # Distributed Budget (v0.10.0)
     "BudgetBackend",
+    "ReservableBudgetBackend",
     "LocalBudgetBackend",
     "RedisBudgetBackend",
     "get_default_backend",
