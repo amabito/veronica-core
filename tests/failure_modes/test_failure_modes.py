@@ -5,7 +5,7 @@ Covers 8 specific failure scenarios:
 2. Rollback after commit is a no-op (KeyError)
 3. Redis disconnect during commit — state not corrupted
 4. Lua atomicity failure — budget state unchanged on error
-5. Partial commit recovery — reconciliation after interrupted commit
+5. Reserve then rollback — clean state after escrow release
 6. WebSocket step limit — close code 1008 on step exhaustion
 7. CancellationToken cascade — parent cancel propagates to children
 8. SharedTimeoutPool exhaustion — single daemon thread under load
@@ -175,16 +175,16 @@ def test_lua_atomicity_failure() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: Partial commit recovery
+# Test 5: Reserve then rollback leaves clean state
 # ---------------------------------------------------------------------------
 
 
-def test_partial_commit_recovery() -> None:
-    """Reserve then simulate interrupted commit; reconciliation leaves state clean.
+def test_reserve_rollback_clean_state() -> None:
+    """Reserve then rollback must leave budget state fully clean.
 
-    If a commit call is interrupted (simulated by patching so it raises
-    after the Lua phase), the reservation timeout mechanism ensures the
-    escrow is eventually released, leaving the committed total at 0.
+    After a rollback, no dangling reservations or phantom charges must
+    remain, and a subsequent reservation of the same amount must succeed
+    (proving the ceiling was fully released).
     """
     b = LocalBudgetBackend()
     rid = b.reserve(0.2, ceiling=1.0)
