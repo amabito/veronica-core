@@ -1,4 +1,5 @@
 """Tests for pricing.py lru_cache behavior (Task #4)."""
+
 from __future__ import annotations
 
 

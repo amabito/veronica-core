@@ -43,96 +43,112 @@ class TestAdaptiveBudgetImportControlState:
     def test_hold_action_sanitized_to_none(self) -> None:
         """'hold' is never set by adjust(); must be sanitized on import."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 0.9,
-            "last_adjustment_ts": None,
-            "last_action": "hold",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.9,
+                "last_adjustment_ts": None,
+                "last_action": "hold",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_direction_locked_action_sanitized_to_none(self) -> None:
         """'direction_locked' is never set by adjust(); must be sanitized."""
         hook = self._make_hook(direction_lock=True)
-        hook.import_control_state({
-            "adaptive_multiplier": 0.9,
-            "last_adjustment_ts": None,
-            "last_action": "direction_locked",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.9,
+                "last_adjustment_ts": None,
+                "last_action": "direction_locked",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_cooldown_blocked_action_sanitized_to_none(self) -> None:
         """'cooldown_blocked' is never set; must be sanitized."""
         hook = self._make_hook(cooldown_seconds=60.0)
-        hook.import_control_state({
-            "adaptive_multiplier": 0.9,
-            "last_adjustment_ts": None,
-            "last_action": "cooldown_blocked",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.9,
+                "last_adjustment_ts": None,
+                "last_action": "cooldown_blocked",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_arbitrary_string_sanitized_to_none(self) -> None:
         """Attacker-supplied arbitrary string must be sanitized."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 1.0,
-            "last_adjustment_ts": None,
-            "last_action": "injected_malicious_value; DROP TABLE",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 1.0,
+                "last_adjustment_ts": None,
+                "last_action": "injected_malicious_value; DROP TABLE",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_tighten_passes_through(self) -> None:
         """Valid 'tighten' must be preserved."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 0.85,
-            "last_adjustment_ts": 12345.0,
-            "last_action": "tighten",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.85,
+                "last_adjustment_ts": 12345.0,
+                "last_action": "tighten",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action == "tighten"
 
     def test_loosen_passes_through(self) -> None:
         """Valid 'loosen' must be preserved."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 1.1,
-            "last_adjustment_ts": 12345.0,
-            "last_action": "loosen",
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 1.1,
+                "last_adjustment_ts": 12345.0,
+                "last_action": "loosen",
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action == "loosen"
 
     def test_none_action_preserved(self) -> None:
         """None (initial state) must be preserved."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 1.0,
-            "last_adjustment_ts": None,
-            "last_action": None,
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 1.0,
+                "last_adjustment_ts": None,
+                "last_action": None,
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_missing_last_action_defaults_to_none(self) -> None:
         """Missing 'last_action' key must default to None."""
         hook = self._make_hook()
-        hook.import_control_state({
-            "adaptive_multiplier": 1.0,
-            "last_adjustment_ts": None,
-            "anomaly_active": False,
-            "anomaly_activated_ts": None,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 1.0,
+                "last_adjustment_ts": None,
+                "anomaly_active": False,
+                "anomaly_activated_ts": None,
+            }
+        )
         assert hook.last_action is None
 
     def test_adjust_sets_only_tighten_or_loosen(self) -> None:
@@ -333,6 +349,7 @@ class TestCircuitBreakerBoundaries:
 
     def test_failure_predicate_exception_counts_as_failure(self) -> None:
         """Predicate that raises must count the failure (fail-safe behavior)."""
+
         def crashing_predicate(exc: BaseException) -> bool:
             raise RuntimeError("predicate crashed")
 
@@ -342,6 +359,7 @@ class TestCircuitBreakerBoundaries:
 
     def test_failure_predicate_none_error_always_counts(self) -> None:
         """When error=None, failure always counts regardless of predicate."""
+
         def never_count(_: BaseException) -> bool:
             return False  # Should be ignored when error=None
 
@@ -360,6 +378,7 @@ class TestCircuitBreakerBoundaries:
 
     def test_half_open_slot_released_on_filtered_failure(self) -> None:
         """Filtered failure (predicate=False) must release HALF_OPEN in-flight slot."""
+
         def always_filter(_: BaseException) -> bool:
             return False
 
@@ -439,6 +458,7 @@ class TestInjectEdgeCases:
 
     def test_sync_guard_active_resets_on_exception(self) -> None:
         """ContextVar must reset to False even when sync function raises."""
+
         @veronica_guard()
         def boom() -> None:
             raise ValueError("sync boom")
@@ -449,6 +469,7 @@ class TestInjectEdgeCases:
 
     def test_sync_guard_return_value_propagated(self) -> None:
         """Return value from sync guard must be propagated correctly."""
+
         @veronica_guard()
         def returns_tuple() -> tuple[int, str]:
             return (42, "hello")
@@ -458,6 +479,7 @@ class TestInjectEdgeCases:
 
     def test_async_guard_return_value_propagated(self) -> None:
         """Return value from async guard must be propagated correctly."""
+
         @veronica_guard()
         async def returns_tuple() -> tuple[int, str]:
             return (42, "hello")
@@ -467,6 +489,7 @@ class TestInjectEdgeCases:
 
     def test_guard_with_generator_function_sync(self) -> None:
         """sync generator functions are not coroutines, must use sync wrapper."""
+
         @veronica_guard()
         def gen_fn() -> Any:
             yield 1
@@ -494,6 +517,7 @@ class TestPricingEdgeCases:
         # (or the longest prefix, NOT 'gpt-4o' if 'gpt-4o-mini' exists in table)
         exact = resolve_model_pricing("gpt-4o-mini")
         from veronica_core.pricing import PRICING_TABLE
+
         if "gpt-4o-mini" in PRICING_TABLE:
             assert exact is PRICING_TABLE["gpt-4o-mini"]
         # else: prefix match, still valid
@@ -501,6 +525,7 @@ class TestPricingEdgeCases:
     def test_unknown_model_uses_fallback_pricing(self) -> None:
         """Completely unknown model must use conservative fallback."""
         from veronica_core.pricing import _UNKNOWN_MODEL_FALLBACK
+
         result = resolve_model_pricing("totally-unknown-model-xyz-99999")
         assert result is _UNKNOWN_MODEL_FALLBACK
 

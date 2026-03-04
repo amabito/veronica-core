@@ -176,7 +176,10 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                     cost_estimate, self._ctx._config.max_cost_usd
                 )
             except OverflowError:
-                logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT (reserve)", tool_name)
+                logger.debug(
+                    "[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT (reserve)",
+                    tool_name,
+                )
                 async with self._stats_lock:
                     self._stats[tool_name].call_count += 1
                 return MCPToolResult(
@@ -194,7 +197,9 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             ec_decision = self._ctx.wrap_tool_call(fn=_budget_probe, options=opts)
 
             if ec_decision == Decision.HALT:
-                logger.debug("[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
+                logger.debug(
+                    "[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name
+                )
                 async with self._stats_lock:
                     self._stats[tool_name].call_count += 1
                 return MCPToolResult(
@@ -246,9 +251,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
 
         # isError detection: application-level error, not a CB trip.
         if getattr(result_value, "isError", False):
-            logger.debug(
-                "[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name
-            )
+            logger.debug("[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name)
             if _reservation_id is not None:
                 try:
                     budget_backend.rollback(_reservation_id)
@@ -396,7 +399,9 @@ async def wrap_mcp_server(
                     )
         except Exception:  # noqa: BLE001
             # list_tools failure must not prevent adapter creation.
-            logger.warning("[wrap_mcp_server] list_tools() failed; proceeding without discovery")
+            logger.warning(
+                "[wrap_mcp_server] list_tools() failed; proceeding without discovery"
+            )
 
     return _BoundMCPAdapter(
         session=session,

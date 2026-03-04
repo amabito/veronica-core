@@ -59,7 +59,9 @@ class CircuitBreaker:
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.failure_threshold, int) or math.isnan(float(self.failure_threshold)):
+        if not isinstance(self.failure_threshold, int) or math.isnan(
+            float(self.failure_threshold)
+        ):
             raise ValueError(
                 f"failure_threshold must be a finite integer >= 1, got {self.failure_threshold}"
             )
@@ -71,10 +73,13 @@ class CircuitBreaker:
             raise ValueError(
                 f"recovery_timeout must be a finite float >= 0, got {self.recovery_timeout}"
             )
+
     _failure_count: int = field(default=0, init=False)
     _last_failure_time: Optional[float] = field(default=None, init=False)
     _success_count: int = field(default=0, init=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
     _owner_id: Optional[str] = field(default=None, init=False, repr=False)
     _half_open_in_flight: int = field(default=0, init=False)
 
@@ -128,8 +133,7 @@ class CircuitBreaker:
                     allowed=False,
                     policy_type=self.policy_type,
                     reason=(
-                        f"Circuit OPEN: "
-                        f"{self._failure_count} consecutive failures"
+                        f"Circuit OPEN: {self._failure_count} consecutive failures"
                     ),
                 )
 
@@ -214,14 +218,11 @@ class CircuitBreaker:
 
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.OPEN
-                logger.warning(
-                    "[VERONICA_CIRCUIT] Circuit reopened after failed test"
-                )
+                logger.warning("[VERONICA_CIRCUIT] Circuit reopened after failed test")
             elif self._failure_count >= self.failure_threshold:
                 self._state = CircuitState.OPEN
                 logger.warning(
-                    "[VERONICA_CIRCUIT] Circuit opened: "
-                    "%d consecutive failures",
+                    "[VERONICA_CIRCUIT] Circuit opened: %d consecutive failures",
                     self._failure_count,
                 )
         return True
@@ -237,9 +238,7 @@ class CircuitBreaker:
             and time.time() - self._last_failure_time >= self.recovery_timeout
         ):
             self._state = CircuitState.HALF_OPEN
-            logger.info(
-                "[VERONICA_CIRCUIT] Circuit half-open, allowing test request"
-            )
+            logger.info("[VERONICA_CIRCUIT] Circuit half-open, allowing test request")
 
     def reset(self) -> None:
         """Reset circuit to CLOSED state."""
@@ -295,8 +294,10 @@ def ignore_exception_types(
             failure_predicate=ignore_exception_types(ValueError, BadRequestError),
         )
     """
+
     def predicate(error: BaseException) -> bool:
         return not isinstance(error, exception_types)
+
     return predicate
 
 
@@ -314,8 +315,10 @@ def count_exception_types(
             failure_predicate=count_exception_types(TimeoutError, ServerError),
         )
     """
+
     def predicate(error: BaseException) -> bool:
         return isinstance(error, exception_types)
+
     return predicate
 
 
@@ -343,4 +346,5 @@ def ignore_status_codes(*codes: int) -> FailurePredicate:
         if status is not None and status in code_set:
             return False
         return True
+
     return predicate

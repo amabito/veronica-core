@@ -127,7 +127,9 @@ def estimate_cost_usd(model: str, tokens_in: int, tokens_out: int) -> float:
     if tokens_in == 0 and tokens_out == 0:
         return 0.0
     pricing = resolve_model_pricing(model)
-    cost = (tokens_in / 1000.0) * pricing.input_per_1k + (tokens_out / 1000.0) * pricing.output_per_1k
+    cost = (tokens_in / 1000.0) * pricing.input_per_1k + (
+        tokens_out / 1000.0
+    ) * pricing.output_per_1k
     return cost
 
 

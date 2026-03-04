@@ -153,7 +153,6 @@ class SharedTimeoutPool:
             self._wakeup.clear()
             self._wakeup.wait(timeout=sleep_s)
 
-
     @classmethod
     def instance(cls) -> "SharedTimeoutPool":
         """Return the module-level singleton SharedTimeoutPool."""

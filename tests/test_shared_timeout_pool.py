@@ -23,7 +23,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from veronica_core.containment.timeout_pool import SharedTimeoutPool
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 from veronica_core.shield.types import Decision
 
 
@@ -117,9 +120,7 @@ def test_callback_fires_immediately_for_past_deadline() -> None:
 def test_double_cancel_is_noop() -> None:
     """Cancelling the same handle twice does not raise."""
     pool = _pool()
-    handle = pool.schedule(
-        deadline=time.monotonic() + 10.0, callback=lambda: None
-    )
+    handle = pool.schedule(deadline=time.monotonic() + 10.0, callback=lambda: None)
     pool.cancel(handle)
     pool.cancel(handle)  # Should not raise
     pool.shutdown()
@@ -233,9 +234,7 @@ def test_execution_context_pool_cancel_on_exit_prevents_callback() -> None:
         "CancellationToken must be cancelled after context exit"
     )
     # Pool handle cleared after cancellation
-    assert ctx._timeout_pool_handle is None, (
-        "Pool handle must be cleared in __exit__"
-    )
+    assert ctx._timeout_pool_handle is None, "Pool handle must be cleared in __exit__"
 
 
 def test_execution_context_timeout_still_works_via_pool() -> None:

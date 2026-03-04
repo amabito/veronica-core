@@ -60,6 +60,7 @@ class _StubVeronicaAgent(_StubConversableAgent):
         super().__init__(name, **kwargs)
         # Build the AIContainer the same way the real adapter does
         from veronica_core.adapters._shared import build_adapter_container
+
         self._container = build_adapter_container(config, None)
 
     def generate_reply(

@@ -71,6 +71,7 @@ class AsyncBudgetBackendProtocol(Protocol):
 # 1. Adapter unification: AIContainer passed as execution_context
 # ---------------------------------------------------------------------------
 
+
 class TestAIContainerAsExecutionContext:
     """Attack: pass an AIContainer where ExecutionContext is expected."""
 
@@ -106,6 +107,7 @@ class TestAIContainerAsExecutionContext:
 # ---------------------------------------------------------------------------
 # 2. None / invalid type as execution_context
 # ---------------------------------------------------------------------------
+
 
 class TestNoneAndInvalidExecutionContext:
     """Attack: pass None or garbage as execution_context."""
@@ -147,12 +149,15 @@ class TestNoneAndInvalidExecutionContext:
 # 3. Protocol compliance: minimal mock satisfying MCPAdapterProtocol
 # ---------------------------------------------------------------------------
 
+
 class TestMCPAdapterProtocolMinimalMock:
     """Protocol structural check: minimal object that satisfies MCPAdapterProtocol."""
 
     def _make_minimal_mcp_mock(self) -> Any:
         class _MinimalMCP:
-            def wrap_tool_call(self, tool_name: str, arguments: dict, call_fn: Any) -> Any:
+            def wrap_tool_call(
+                self, tool_name: str, arguments: dict, call_fn: Any
+            ) -> Any:
                 return call_fn()
 
             def get_tool_stats(self) -> dict:
@@ -183,11 +188,13 @@ class TestMCPAdapterProtocolMinimalMock:
 # 4. Protocol violation: object missing required methods
 # ---------------------------------------------------------------------------
 
+
 class TestMCPAdapterProtocolViolation:
     """Attack: object missing one or both required methods."""
 
     def test_object_missing_wrap_tool_call_fails_isinstance(self) -> None:
         """Object with only get_tool_stats must fail MCPAdapterProtocol check."""
+
         class _MissingWrap:
             def get_tool_stats(self) -> dict:
                 return {}
@@ -196,8 +203,11 @@ class TestMCPAdapterProtocolViolation:
 
     def test_object_missing_get_tool_stats_fails_isinstance(self) -> None:
         """Object with only wrap_tool_call must fail MCPAdapterProtocol check."""
+
         class _MissingStats:
-            def wrap_tool_call(self, tool_name: str, arguments: dict, call_fn: Any) -> Any:
+            def wrap_tool_call(
+                self, tool_name: str, arguments: dict, call_fn: Any
+            ) -> Any:
                 return None
 
         assert not isinstance(_MissingStats(), MCPAdapterProtocol)
@@ -215,11 +225,13 @@ class TestMCPAdapterProtocolViolation:
 # 5. AsyncBudgetBackendProtocol: sync backend where async expected
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncBudgetBackendProtocol:
     """Attack: sync backend passed where async protocol expected."""
 
     def _make_sync_backend(self) -> Any:
         """A sync backend that has no async methods."""
+
         class _SyncBackend:
             def add(self, amount: float) -> None:
                 pass
@@ -257,6 +269,7 @@ class TestAsyncBudgetBackendProtocol:
 
     def test_async_backend_missing_rollback_fails(self) -> None:
         """Async backend missing rollback must fail protocol check."""
+
         class _IncompleteAsync:
             async def reserve(self, amount: float, ceiling: float) -> str:
                 return "r1"
@@ -273,6 +286,7 @@ class TestAsyncBudgetBackendProtocol:
 # ---------------------------------------------------------------------------
 # 6. Deprecated APIs: VeronicaPersistence via veronica_core module __getattr__
 # ---------------------------------------------------------------------------
+
 
 class TestVeronicaPersistenceDeprecation:
     """VeronicaPersistence access via veronica_core must emit DeprecationWarning."""
@@ -310,6 +324,7 @@ class TestVeronicaPersistenceDeprecation:
 # ---------------------------------------------------------------------------
 # 7. Deprecated APIs: CLIApprover.sign() v1 emits DeprecationWarning
 # ---------------------------------------------------------------------------
+
 
 class TestCLIApproverV1Deprecated:
     """CLIApprover.sign() v1 is deprecated; must emit DeprecationWarning when called."""
@@ -365,6 +380,7 @@ class TestCLIApproverV1Deprecated:
 # 8. GuardConfig.timeout_ms field behavior
 # ---------------------------------------------------------------------------
 
+
 class TestGuardConfigTimeoutMs:
     """GuardConfig.timeout_ms exists as an optional field (None by default)."""
 
@@ -392,12 +408,14 @@ class TestGuardConfigTimeoutMs:
 # 9. Container __init__: AIcontainer deprecated alias emits DeprecationWarning
 # ---------------------------------------------------------------------------
 
+
 class TestAIContainerDeprecatedAlias:
     """AIcontainer (lowercase c) is deprecated; must emit DeprecationWarning."""
 
     def test_container_module_warns(self) -> None:
         """veronica_core.container.AIcontainer must emit DeprecationWarning."""
         from veronica_core import container as _container_mod
+
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             cls = _container_mod.AIcontainer  # type: ignore[attr-defined]
@@ -425,6 +443,7 @@ class TestAIContainerDeprecatedAlias:
 # ---------------------------------------------------------------------------
 # 10. _shared.py edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestSharedUtilsCostFromTotalTokens:
     """Attack edge cases for cost_from_total_tokens."""
@@ -463,31 +482,39 @@ class TestSharedUtilsExtractLlmResultCost:
         assert extract_llm_result_cost({"llm_output": {"model_name": "gpt-4"}}) == 0.0
 
     def test_dict_with_zero_total_tokens_returns_zero(self) -> None:
-        result = extract_llm_result_cost({
-            "token_usage": {"total_tokens": 0},
-        })
+        result = extract_llm_result_cost(
+            {
+                "token_usage": {"total_tokens": 0},
+            }
+        )
         assert result == 0.0
 
     def test_dict_with_negative_total_tokens_returns_zero(self) -> None:
-        result = extract_llm_result_cost({
-            "token_usage": {"total_tokens": -50},
-        })
+        result = extract_llm_result_cost(
+            {
+                "token_usage": {"total_tokens": -50},
+            }
+        )
         assert result == 0.0
 
     def test_dict_with_nan_total_tokens_returns_zero_or_not_negative(self) -> None:
         """NaN in total_tokens must not propagate to a negative cost."""
-        result = extract_llm_result_cost({
-            "token_usage": {"total_tokens": float("nan")},
-        })
+        result = extract_llm_result_cost(
+            {
+                "token_usage": {"total_tokens": float("nan")},
+            }
+        )
         # int(nan) raises ValueError — should be caught and return 0.0
         assert result == 0.0
 
     def test_dict_with_prompt_and_completion_tokens(self) -> None:
         """Proper token split should produce non-negative cost."""
-        result = extract_llm_result_cost({
-            "token_usage": {"prompt_tokens": 100, "completion_tokens": 50},
-            "model_name": "gpt-3.5-turbo",
-        })
+        result = extract_llm_result_cost(
+            {
+                "token_usage": {"prompt_tokens": 100, "completion_tokens": 50},
+                "model_name": "gpt-3.5-turbo",
+            }
+        )
         assert result >= 0.0
 
     def test_llm_result_object_with_llm_output_attr(self) -> None:
@@ -502,14 +529,17 @@ class TestSharedUtilsExtractLlmResultCost:
 
     def test_llm_result_with_anthropic_token_names(self) -> None:
         """input_tokens / output_tokens keys (Anthropic-style)."""
-        result = extract_llm_result_cost({
-            "token_usage": {"input_tokens": 80, "output_tokens": 40},
-            "model_name": "claude-3-5-sonnet-20241022",
-        })
+        result = extract_llm_result_cost(
+            {
+                "token_usage": {"input_tokens": 80, "output_tokens": 40},
+                "model_name": "claude-3-5-sonnet-20241022",
+            }
+        )
         assert result >= 0.0
 
     def test_deeply_garbage_object_returns_zero(self) -> None:
         """Completely garbage object (raises on every attr access) returns 0.0."""
+
         class _Explode:
             def __getattr__(self, name: str) -> Any:
                 raise RuntimeError("boom")
@@ -529,18 +559,21 @@ class TestSharedUtilsRecordBudgetSpend:
 
     def test_container_within_budget_returns_true(self) -> None:
         from veronica_core.budget import BudgetEnforcer
+
         container = AIContainer(budget=BudgetEnforcer(limit_usd=10.0))
         result = record_budget_spend(container, 1.0, "[TEST]")
         assert result is True
 
     def test_container_over_budget_returns_false(self) -> None:
         from veronica_core.budget import BudgetEnforcer
+
         container = AIContainer(budget=BudgetEnforcer(limit_usd=0.01))
         result = record_budget_spend(container, 100.0, "[TEST]")
         assert result is False
 
     def test_zero_cost_does_not_affect_budget(self) -> None:
         from veronica_core.budget import BudgetEnforcer
+
         container = AIContainer(budget=BudgetEnforcer(limit_usd=1.0))
         result = record_budget_spend(container, 0.0, "[TEST]")
         assert result is True
@@ -550,12 +583,14 @@ class TestSharedUtilsRecordBudgetSpend:
 # 11. ExecutionContextContainerAdapter: proxy behavior
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionContextContainerAdapter:
     """Adversarial tests for the ExecutionContextContainerAdapter."""
 
     def _make_ctx_stub(self) -> Any:
         """Minimal stub that looks like an ExecutionContext."""
         import threading
+
         class _CtxStub:
             _cost_usd_accumulated: float = 0.0
             _step_count: int = 0
@@ -639,6 +674,7 @@ class TestExecutionContextContainerAdapter:
 
     def test_budget_proxy_with_backend(self) -> None:
         """_BudgetProxy must delegate to backend.add/get when present."""
+
         class _FakeBackend:
             def __init__(self) -> None:
                 self._val = 0.0
@@ -657,6 +693,7 @@ class TestExecutionContextContainerAdapter:
 
     def test_budget_proxy_spend_exception_returns_true_safe(self) -> None:
         """If spend raises internally, it must return True (fail-open)."""
+
         class _ExplodingCtx:
             @property
             def _lock(self) -> Any:
@@ -670,6 +707,7 @@ class TestExecutionContextContainerAdapter:
 # ---------------------------------------------------------------------------
 # 12. build_adapter_container routing
 # ---------------------------------------------------------------------------
+
 
 class TestBuildAdapterContainerRouting:
     """build_adapter_container routing: ExecutionContext vs plain AIContainer."""
@@ -688,6 +726,7 @@ class TestBuildAdapterContainerRouting:
     def test_build_container_produces_valid_aicontainer(self) -> None:
         """build_container (non-adapter path) must produce a working AIContainer."""
         from veronica_core.containment import ExecutionConfig
+
         config = ExecutionConfig(max_cost_usd=2.0, max_steps=15, max_retries_total=3)
         result = build_container(config)
         assert isinstance(result, AIContainer)

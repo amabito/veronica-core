@@ -23,7 +23,10 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 from veronica_core.middleware import (
     VeronicaASGIMiddleware,
     VeronicaWSGIMiddleware,
@@ -112,11 +115,13 @@ async def _call_asgi_lifespan(app: Any) -> None:
 
 
 async def _ok_app(scope: Any, receive: Any, send: Any) -> None:
-    await send({
-        "type": "http.response.start",
-        "status": 200,
-        "headers": [[b"content-type", b"text/plain"]],
-    })
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [[b"content-type", b"text/plain"]],
+        }
+    )
     await send({"type": "http.response.body", "body": b"ok", "more_body": False})
 
 

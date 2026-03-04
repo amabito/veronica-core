@@ -46,16 +46,20 @@ from typing import Any
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision, ToolCallContext
 
-_DEFAULT_TIGHTEN_EVENT_TYPES = frozenset({
-    "BUDGET_EXCEEDED",
-    "BUDGET_WINDOW_EXCEEDED",
-    "TOKEN_BUDGET_EXCEEDED",
-})
+_DEFAULT_TIGHTEN_EVENT_TYPES = frozenset(
+    {
+        "BUDGET_EXCEEDED",
+        "BUDGET_WINDOW_EXCEEDED",
+        "TOKEN_BUDGET_EXCEEDED",
+    }
+)
 
-_DEFAULT_DEGRADE_EVENT_TYPES = frozenset({
-    "BUDGET_WINDOW_EXCEEDED",
-    "TOKEN_BUDGET_EXCEEDED",
-})
+_DEFAULT_DEGRADE_EVENT_TYPES = frozenset(
+    {
+        "BUDGET_WINDOW_EXCEEDED",
+        "TOKEN_BUDGET_EXCEEDED",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -109,46 +113,34 @@ class AdaptiveBudgetHook:
         anomaly_recent_seconds: float = 300.0,
     ) -> None:
         if base_ceiling <= 0:
-            raise ValueError(
-                f"base_ceiling must be positive, got {base_ceiling}"
-            )
+            raise ValueError(f"base_ceiling must be positive, got {base_ceiling}")
         if not (0 < tighten_pct <= 1.0):
-            raise ValueError(
-                f"tighten_pct must be in (0, 1.0], got {tighten_pct}"
-            )
+            raise ValueError(f"tighten_pct must be in (0, 1.0], got {tighten_pct}")
         if not (0 < loosen_pct <= 1.0):
-            raise ValueError(
-                f"loosen_pct must be in (0, 1.0], got {loosen_pct}"
-            )
+            raise ValueError(f"loosen_pct must be in (0, 1.0], got {loosen_pct}")
         if not (0 < max_adjustment <= 1.0):
             raise ValueError(
                 f"max_adjustment must be in (0, 1.0], got {max_adjustment}"
             )
         if tighten_trigger < 1:
-            raise ValueError(
-                f"tighten_trigger must be >= 1, got {tighten_trigger}"
-            )
+            raise ValueError(f"tighten_trigger must be >= 1, got {tighten_trigger}")
         if window_seconds <= 0:
-            raise ValueError(
-                f"window_seconds must be > 0, got {window_seconds}"
-            )
+            raise ValueError(f"window_seconds must be > 0, got {window_seconds}")
         if cooldown_seconds < 0:
-            raise ValueError(
-                f"cooldown_seconds must be >= 0, got {cooldown_seconds}"
-            )
+            raise ValueError(f"cooldown_seconds must be >= 0, got {cooldown_seconds}")
         if not (0 < max_step_pct <= 1.0):
-            raise ValueError(
-                f"max_step_pct must be in (0, 1.0], got {max_step_pct}"
-            )
+            raise ValueError(f"max_step_pct must be in (0, 1.0], got {max_step_pct}")
 
         # Compute floor/ceiling from max_adjustment if not explicitly set
-        resolved_min = min_multiplier if min_multiplier is not None else (1.0 - max_adjustment)
-        resolved_max = max_multiplier if max_multiplier is not None else (1.0 + max_adjustment)
+        resolved_min = (
+            min_multiplier if min_multiplier is not None else (1.0 - max_adjustment)
+        )
+        resolved_max = (
+            max_multiplier if max_multiplier is not None else (1.0 + max_adjustment)
+        )
 
         if resolved_min <= 0:
-            raise ValueError(
-                f"min_multiplier must be > 0, got {resolved_min}"
-            )
+            raise ValueError(f"min_multiplier must be > 0, got {resolved_min}")
         if resolved_min >= resolved_max:
             raise ValueError(
                 f"min_multiplier ({resolved_min}) must be < "
@@ -162,18 +154,15 @@ class AdaptiveBudgetHook:
             )
         if not (0 < anomaly_tighten_pct <= 1.0):
             raise ValueError(
-                f"anomaly_tighten_pct must be in (0, 1.0], "
-                f"got {anomaly_tighten_pct}"
+                f"anomaly_tighten_pct must be in (0, 1.0], got {anomaly_tighten_pct}"
             )
         if anomaly_window_seconds <= 0:
             raise ValueError(
-                f"anomaly_window_seconds must be > 0, "
-                f"got {anomaly_window_seconds}"
+                f"anomaly_window_seconds must be > 0, got {anomaly_window_seconds}"
             )
         if anomaly_recent_seconds <= 0:
             raise ValueError(
-                f"anomaly_recent_seconds must be > 0, "
-                f"got {anomaly_recent_seconds}"
+                f"anomaly_recent_seconds must be > 0, got {anomaly_recent_seconds}"
             )
 
         self._base_ceiling = base_ceiling
@@ -182,12 +171,8 @@ class AdaptiveBudgetHook:
         self._tighten_pct = tighten_pct
         self._loosen_pct = loosen_pct
         self._max_adjustment = max_adjustment
-        self._tighten_event_types = (
-            tighten_event_types or _DEFAULT_TIGHTEN_EVENT_TYPES
-        )
-        self._degrade_event_types = (
-            degrade_event_types or _DEFAULT_DEGRADE_EVENT_TYPES
-        )
+        self._tighten_event_types = tighten_event_types or _DEFAULT_TIGHTEN_EVENT_TYPES
+        self._degrade_event_types = degrade_event_types or _DEFAULT_DEGRADE_EVENT_TYPES
 
         # v0.7.0 stabilization
         self._cooldown_seconds = cooldown_seconds
@@ -220,7 +205,9 @@ class AdaptiveBudgetHook:
         self._safety_events: deque[SafetyEvent] = deque(maxlen=1000)
 
     @staticmethod
-    def _compute_thresholds(resolved_min: float, resolved_max: float) -> tuple[float, float]:
+    def _compute_thresholds(
+        resolved_min: float, resolved_max: float
+    ) -> tuple[float, float]:
         """Return (min_multiplier, max_multiplier) validated pair."""
         return resolved_min, resolved_max
 
@@ -245,11 +232,7 @@ class AdaptiveBudgetHook:
             anomaly_factor = self._anomaly_factor_locked()
             return max(
                 1,
-                round(
-                    self._base_ceiling
-                    * self._ceiling_multiplier
-                    * anomaly_factor
-                ),
+                round(self._base_ceiling * self._ceiling_multiplier * anomaly_factor),
             )
 
     @property
@@ -302,9 +285,7 @@ class AdaptiveBudgetHook:
 
     # -- Event ingestion -----------------------------------------------------
 
-    def feed_event(
-        self, event: SafetyEvent, ts: float | None = None
-    ) -> None:
+    def feed_event(self, event: SafetyEvent, ts: float | None = None) -> None:
         """Feed a SafetyEvent for tracking.
 
         Args:
@@ -342,11 +323,17 @@ class AdaptiveBudgetHook:
         recent_cutoff = now - self._anomaly_recent_seconds
 
         for ts, event in self._event_buffer:
-            if event.event_type in self._tighten_event_types and event.decision == Decision.HALT:
+            if (
+                event.event_type in self._tighten_event_types
+                and event.decision == Decision.HALT
+            ):
                 tighten_count += 1
                 if ts > recent_cutoff:
                     recent_tighten_count += 1
-            if event.event_type in self._degrade_event_types and event.decision == Decision.DEGRADE:
+            if (
+                event.event_type in self._degrade_event_types
+                and event.decision == Decision.DEGRADE
+            ):
                 degrade_count += 1
 
         return tighten_count, degrade_count, recent_tighten_count
@@ -362,10 +349,16 @@ class AdaptiveBudgetHook:
 
         if tighten_count >= self._tighten_trigger:
             step = min(self._tighten_pct, self._max_step_pct)
-            self._ceiling_multiplier = max(self._min_multiplier, self._ceiling_multiplier - step)
+            self._ceiling_multiplier = max(
+                self._min_multiplier, self._ceiling_multiplier - step
+            )
             action = "tighten"
         elif degrade_count == 0:
-            if self._direction_lock and self._last_action == "tighten" and tighten_count > 0:
+            if (
+                self._direction_lock
+                and self._last_action == "tighten"
+                and tighten_count > 0
+            ):
                 action = "direction_locked"
             else:
                 step = min(self._loosen_pct, self._max_step_pct)
@@ -426,7 +419,9 @@ class AdaptiveBudgetHook:
 
         with self._lock:
             self._prune_event_buffer(cutoff)
-            tighten_count, degrade_count, recent_tighten_count = self._count_tighten_events(now)
+            tighten_count, degrade_count, recent_tighten_count = (
+                self._count_tighten_events(now)
+            )
 
             # Anomaly auto-recovery (v0.7.0)
             if (
@@ -450,7 +445,8 @@ class AdaptiveBudgetHook:
                 avg_per_period = tighten_count / periods if periods > 0 else 0.0
                 if (
                     recent_tighten_count >= self._tighten_trigger
-                    and recent_tighten_count > self._anomaly_spike_factor * avg_per_period
+                    and recent_tighten_count
+                    > self._anomaly_spike_factor * avg_per_period
                 ):
                     self._anomaly_active = True
                     self._anomaly_activated_ts = now
@@ -478,7 +474,11 @@ class AdaptiveBudgetHook:
                     anomaly_factor = self._anomaly_factor_locked()
                     adjusted = max(
                         1,
-                        round(self._base_ceiling * self._ceiling_multiplier * anomaly_factor),
+                        round(
+                            self._base_ceiling
+                            * self._ceiling_multiplier
+                            * anomaly_factor
+                        ),
                     )
                     self._record_safety_event(
                         event_type="ADAPTIVE_COOLDOWN_BLOCKED",
@@ -490,7 +490,9 @@ class AdaptiveBudgetHook:
                         metadata={
                             "elapsed_seconds": round(elapsed, 1),
                             "cooldown_seconds": self._cooldown_seconds,
-                            "remaining_seconds": round(self._cooldown_seconds - elapsed, 1),
+                            "remaining_seconds": round(
+                                self._cooldown_seconds - elapsed, 1
+                            ),
                         },
                         request_id=request_id,
                     )
@@ -504,7 +506,9 @@ class AdaptiveBudgetHook:
                         anomaly_active=self._anomaly_active,
                     )
 
-            action, old_multiplier = self._compute_adjustment(tighten_count, degrade_count)
+            action, old_multiplier = self._compute_adjustment(
+                tighten_count, degrade_count
+            )
 
             anomaly_factor = self._anomaly_factor_locked()
             adjusted = max(
@@ -540,7 +544,9 @@ class AdaptiveBudgetHook:
                 self._last_adjustment_ts = now
                 self._record_safety_event(
                     event_type="ADAPTIVE_ADJUSTMENT",
-                    decision=Decision.DEGRADE if action == "tighten" else Decision.ALLOW,
+                    decision=Decision.DEGRADE
+                    if action == "tighten"
+                    else Decision.ALLOW,
                     reason=(
                         f"{action}: multiplier {old_multiplier:.4f} -> "
                         f"{self._ceiling_multiplier:.4f}, "
@@ -617,16 +623,11 @@ class AdaptiveBudgetHook:
             # Compute cooldown status
             cooldown_active = False
             cooldown_remaining: float | None = None
-            if (
-                self._cooldown_seconds > 0
-                and self._last_adjustment_ts is not None
-            ):
+            if self._cooldown_seconds > 0 and self._last_adjustment_ts is not None:
                 elapsed = now - self._last_adjustment_ts
                 if elapsed < self._cooldown_seconds:
                     cooldown_active = True
-                    cooldown_remaining = round(
-                        self._cooldown_seconds - elapsed, 1
-                    )
+                    cooldown_remaining = round(self._cooldown_seconds - elapsed, 1)
 
             # Compute direction lock status
             cutoff = now - self._window_seconds
@@ -663,9 +664,7 @@ class AdaptiveBudgetHook:
             )
 
             return {
-                "adaptive_multiplier": round(
-                    self._ceiling_multiplier, 4
-                ),
+                "adaptive_multiplier": round(self._ceiling_multiplier, 4),
                 "time_multiplier": round(time_multiplier, 4),
                 "anomaly_factor": round(anomaly_factor, 4),
                 "effective_multiplier": round(effective_multiplier, 4),
@@ -697,9 +696,7 @@ class AdaptiveBudgetHook:
             state: A dict previously returned by ``export_control_state()``.
         """
         with self._lock:
-            self._ceiling_multiplier = float(
-                state["adaptive_multiplier"]
-            )
+            self._ceiling_multiplier = float(state["adaptive_multiplier"])
             self._ceiling_multiplier = max(
                 self._min_multiplier,
                 min(self._max_multiplier, self._ceiling_multiplier),

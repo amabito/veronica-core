@@ -191,7 +191,9 @@ class ExecutionConfig:
     max_steps: int
     max_retries_total: int
     timeout_ms: int = 0
-    budget_backend: "Any | None" = None  # BudgetBackend instance for cross-process tracking
+    budget_backend: "Any | None" = (
+        None  # BudgetBackend instance for cross-process tracking
+    )
     redis_url: str | None = None  # Convenience: auto-create RedisBudgetBackend
 
     def __post_init__(self) -> None:
@@ -204,9 +206,7 @@ class ExecutionConfig:
                 f"max_cost_usd must be non-negative, got {self.max_cost_usd!r}"
             )
         if self.max_steps < 0:
-            raise ValueError(
-                f"max_steps must be non-negative, got {self.max_steps!r}"
-            )
+            raise ValueError(f"max_steps must be non-negative, got {self.max_steps!r}")
         if self.max_retries_total < 0:
             raise ValueError(
                 f"max_retries_total must be non-negative, got {self.max_retries_total!r}"
@@ -362,12 +362,14 @@ class ExecutionContext:
             self._budget_backend = config.budget_backend
         elif config.redis_url:
             from veronica_core.distributed import get_default_backend
+
             self._budget_backend = get_default_backend(
                 redis_url=config.redis_url,
                 chain_id=self._metadata.chain_id,
             )
         else:
             from veronica_core.distributed import LocalBudgetBackend
+
             self._budget_backend = LocalBudgetBackend()
 
         # Mutable chain-level counters (protected by _lock)
@@ -402,11 +404,9 @@ class ExecutionContext:
         # Tracks active nesting depth per context. Always starts at 0 for a new
         # context, even if the list was inherited.  This is the invariant that
         # distinguishes "first wrap in this context" from "nested wrap".
-        self._nesting_depth_var: contextvars.ContextVar[int] = (
-            contextvars.ContextVar(
-                f"veronica_nesting_depth_{self._metadata.chain_id[:8]}",
-                default=0,
-            )
+        self._nesting_depth_var: contextvars.ContextVar[int] = contextvars.ContextVar(
+            f"veronica_nesting_depth_{self._metadata.chain_id[:8]}",
+            default=0,
         )
 
         # Partial buffers keyed by graph_node_id. Populated when WrapOptions.partial_buffer
@@ -456,7 +456,9 @@ class ExecutionContext:
             self._timeout_pool_handle = None
         if hasattr(self, "_budget_backend"):
             self._budget_backend.close()
-        if hasattr(self, "_circuit_breaker") and hasattr(self._circuit_breaker, "close"):
+        if hasattr(self, "_circuit_breaker") and hasattr(
+            self._circuit_breaker, "close"
+        ):
             try:
                 self._circuit_breaker.close()
             except Exception:
@@ -555,7 +557,9 @@ class ExecutionContext:
                 nodes=list(self._nodes),
                 events=list(self._events),
                 graph_summary=graph_summary,
-                parent_chain_id=self._parent._metadata.chain_id if self._parent is not None else None,
+                parent_chain_id=self._parent._metadata.chain_id
+                if self._parent is not None
+                else None,
             )
 
     def get_graph_snapshot(self) -> dict[str, Any]:
@@ -671,13 +675,18 @@ class ExecutionContext:
                         )
                         self._emit_chain_event("budget_exceeded", reason)
                         return self._halt_node(
-                            node, stack, graph_node_id, reason,
+                            node,
+                            stack,
+                            graph_node_id,
+                            reason,
                         )
                 else:
                     exceeded = self._check_budget_estimate(node, opts)
                     if exceeded:
                         stack.pop()
-                        self._graph.mark_halt(graph_node_id, stop_reason="budget_exceeded")
+                        self._graph.mark_halt(
+                            graph_node_id, stop_reason="budget_exceeded"
+                        )
                         return Decision.HALT
 
             # Pipeline pre-dispatch check.
@@ -734,7 +743,9 @@ class ExecutionContext:
                 except ValueError:
                     pass
                 try:
-                    self._graph.mark_failure(graph_node_id, error_class="UnexpectedException")
+                    self._graph.mark_failure(
+                        graph_node_id, error_class="UnexpectedException"
+                    )
                 except Exception:
                     pass
             if node.end_ts is None:
@@ -835,9 +846,7 @@ class ExecutionContext:
                 )
         return Decision.HALT
 
-    def _check_budget_estimate(
-        self, node: NodeRecord, opts: WrapOptions
-    ) -> bool:
+    def _check_budget_estimate(self, node: NodeRecord, opts: WrapOptions) -> bool:
         """Check projected cost against ceiling. Records node and emits event if exceeded.
 
         Returns:
@@ -895,7 +904,10 @@ class ExecutionContext:
             with self._lock:
                 for ev in pre_halt_events:
                     dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                    if (
+                        len(self._events) < _MAX_CHAIN_EVENTS
+                        and dk not in self._event_dedup_keys
+                    ):
                         self._events.append(ev)
                         self._event_dedup_keys.add(dk)
                 if len(self._nodes) < _MAX_NODES:
@@ -913,6 +925,7 @@ class ExecutionContext:
     ) -> Decision | None:
         """Run CircuitBreaker.check(). Returns Decision.HALT or None."""
         from veronica_core.runtime_policy import PolicyContext
+
         with self._lock:
             cost = self._cost_usd_accumulated
             step = self._step_count
@@ -925,7 +938,9 @@ class ExecutionContext:
         pd = self._circuit_breaker.check(policy_ctx)  # type: ignore[union-attr]
         if not pd.allowed:
             with self._lock:
-                self._emit_chain_event("circuit_open", f"circuit breaker denied: {pd.reason}")
+                self._emit_chain_event(
+                    "circuit_open", f"circuit breaker denied: {pd.reason}"
+                )
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
@@ -966,8 +981,17 @@ class ExecutionContext:
                 metadata=metadata,
             )
             with self._lock:
-                dk = (safe_evt.event_type, safe_evt.decision, safe_evt.reason, safe_evt.hook, safe_evt.request_id)
-                if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                dk = (
+                    safe_evt.event_type,
+                    safe_evt.decision,
+                    safe_evt.reason,
+                    safe_evt.hook,
+                    safe_evt.request_id,
+                )
+                if (
+                    len(self._events) < _MAX_CHAIN_EVENTS
+                    and dk not in self._event_dedup_keys
+                ):
                     self._events.append(safe_evt)
                     self._event_dedup_keys.add(dk)
 
@@ -1076,7 +1100,11 @@ class ExecutionContext:
         """
         actual_cost = opts.cost_estimate_hint
         if actual_cost == 0.0 and kind == "llm":
-            from veronica_core.pricing import estimate_cost_usd, extract_usage_from_response
+            from veronica_core.pricing import (
+                estimate_cost_usd,
+                extract_usage_from_response,
+            )
+
             model_name = opts.model or self._metadata.model or ""
             usage = None
             if opts.response_hint is not None:
@@ -1094,8 +1122,17 @@ class ExecutionContext:
                     hook="AutoPricing",
                 )
                 with self._lock:
-                    dk = (_ev.event_type, _ev.decision, _ev.reason, _ev.hook, _ev.request_id)
-                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                    dk = (
+                        _ev.event_type,
+                        _ev.decision,
+                        _ev.reason,
+                        _ev.hook,
+                        _ev.request_id,
+                    )
+                    if (
+                        len(self._events) < _MAX_CHAIN_EVENTS
+                        and dk not in self._event_dedup_keys
+                    ):
                         self._events.append(_ev)
                         self._event_dedup_keys.add(dk)
         return actual_cost
@@ -1121,7 +1158,10 @@ class ExecutionContext:
             with self._lock:
                 for ev in before_charge_events:
                     dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                    if (
+                        len(self._events) < _MAX_CHAIN_EVENTS
+                        and dk not in self._event_dedup_keys
+                    ):
                         self._events.append(ev)
                         self._event_dedup_keys.add(dk)
                 if len(self._nodes) < _MAX_NODES:
@@ -1158,7 +1198,9 @@ class ExecutionContext:
 
         # M6: Collect pipeline events outside lock to avoid potential re-entrant
         # deadlock if pipeline hooks call back into ExecutionContext methods.
-        pipeline_events = self._pipeline.get_events() if self._pipeline is not None else []
+        pipeline_events = (
+            self._pipeline.get_events() if self._pipeline is not None else []
+        )
 
         with self._lock:
             self._step_count += 1
@@ -1177,7 +1219,10 @@ class ExecutionContext:
 
             for ev in pipeline_events:
                 dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                if (
+                    len(self._events) < _MAX_CHAIN_EVENTS
+                    and dk not in self._event_dedup_keys
+                ):
                     self._events.append(ev)
                     self._event_dedup_keys.add(dk)
 
@@ -1203,6 +1248,7 @@ class ExecutionContext:
                 self._metrics.record_latency(_agent_id, _dur)
                 if opts.response_hint is not None:
                     from veronica_core.pricing import extract_usage_from_response
+
                     _usage = extract_usage_from_response(opts.response_hint)
                     if _usage is not None:
                         self._metrics.record_tokens(_agent_id, _usage[0], _usage[1])
@@ -1245,7 +1291,10 @@ class ExecutionContext:
             if self._aborted:
                 return "aborted"
 
-            if self._cost_usd_accumulated + _BUDGET_EPSILON >= self._config.max_cost_usd:
+            if (
+                self._cost_usd_accumulated + _BUDGET_EPSILON
+                >= self._config.max_cost_usd
+            ):
                 reason = (
                     f"cost ${self._cost_usd_accumulated:.4f} >= "
                     f"ceiling ${self._config.max_cost_usd:.4f}"
@@ -1332,7 +1381,9 @@ class ExecutionContext:
             },
         )
 
-    def _propagate_child_cost(self, cost_usd: float, _visited: frozenset[int] | None = None) -> None:
+    def _propagate_child_cost(
+        self, cost_usd: float, _visited: frozenset[int] | None = None
+    ) -> None:
         """Receive cost from a child context and accumulate it here.
 
         If accumulated cost exceeds ceiling, marks context as aborted and
@@ -1362,7 +1413,10 @@ class ExecutionContext:
         _just_aborted = False
         with self._lock:
             self._cost_usd_accumulated += cost_usd
-            if self._cost_usd_accumulated >= self._config.max_cost_usd and not self._aborted:
+            if (
+                self._cost_usd_accumulated >= self._config.max_cost_usd
+                and not self._aborted
+            ):
                 self._emit_chain_event(
                     "budget_exceeded_by_child",
                     f"child propagation pushed chain total "
@@ -1439,7 +1493,9 @@ class ExecutionContext:
         with self._lock:
             remaining = self._config.max_cost_usd - self._cost_usd_accumulated
 
-        effective_allocator: BudgetAllocator = allocator if allocator is not None else FairShareAllocator()
+        effective_allocator: BudgetAllocator = (
+            allocator if allocator is not None else FairShareAllocator()
+        )
         usage = current_usage or {}
         result = effective_allocator.allocate(
             total_budget=max(0.0, remaining),
@@ -1524,8 +1580,17 @@ class ExecutionContext:
         # equal under the default frozen-dataclass __eq__. Compare by key tuple
         # instead to correctly suppress duplicate limit-check emissions.
         # M4: O(1) dedup using pre-built key set (was O(n) any() linear scan)
-        dedup_key = (event.event_type, event.decision, event.reason, event.hook, event.request_id)
-        if len(self._events) < _MAX_CHAIN_EVENTS and dedup_key not in self._event_dedup_keys:
+        dedup_key = (
+            event.event_type,
+            event.decision,
+            event.reason,
+            event.hook,
+            event.request_id,
+        )
+        if (
+            len(self._events) < _MAX_CHAIN_EVENTS
+            and dedup_key not in self._event_dedup_keys
+        ):
             self._events.append(event)
             self._event_dedup_keys.add(dedup_key)
 

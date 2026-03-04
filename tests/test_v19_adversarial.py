@@ -9,6 +9,7 @@ Covers attack vectors NOT tested by happy-path tests:
 - async veronica_guard cancellation + timeout
 - lru_cache poisoning via unhashable/adversarial model strings
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,6 +48,7 @@ class TestAdversarialWrapOptionsNaN:
     def test_max_float_allowed(self):
         """sys.float_info.max is finite; must be accepted."""
         import sys
+
         opts = WrapOptions(cost_estimate_hint=sys.float_info.max)
         assert math.isfinite(opts.cost_estimate_hint)
 
@@ -71,14 +73,18 @@ class TestAdversarialWrapStackLeak:
 
     def test_concurrent_wraps_no_stack_leak(self):
         """Multiple threads calling wrap_llm_call must not corrupt the shared context."""
-        config = ExecutionConfig(max_cost_usd=1000.0, max_steps=200, max_retries_total=200)
+        config = ExecutionConfig(
+            max_cost_usd=1000.0, max_steps=200, max_retries_total=200
+        )
         ctx = ExecutionContext(config=config)
         errors: list[str] = []
 
         def worker(idx: int) -> None:
             try:
                 for _ in range(20):
-                    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                    ctx.wrap_llm_call(
+                        fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                    )
             except Exception as exc:
                 errors.append(f"worker-{idx}: {exc}")
 
@@ -103,7 +109,9 @@ class TestAdversarialWrapStackLeak:
         def gen_exit_fn():
             raise GeneratorExit("generator cleaned up")
 
-        d = ctx.wrap_llm_call(fn=gen_exit_fn, options=WrapOptions(cost_estimate_hint=0.0))
+        d = ctx.wrap_llm_call(
+            fn=gen_exit_fn, options=WrapOptions(cost_estimate_hint=0.0)
+        )
         # GeneratorExit is handled as a retryable error, not re-raised
         assert d == Decision.RETRY
 
@@ -133,7 +141,9 @@ class TestAdversarialNodesCap:
         def fill(count: int) -> None:
             barrier.wait()
             for _ in range(count):
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
 
         # 4 threads each doing _MAX_NODES/4 + 100 calls
         per_thread = _MAX_NODES // 4 + 100
@@ -211,22 +221,26 @@ class TestAdversarialPricingCache:
 
     def test_unknown_model_returns_fallback(self):
         from veronica_core.pricing import resolve_model_pricing
+
         p = resolve_model_pricing("totally-fake-model-xyz")
         assert p.input_per_1k > 0
 
     def test_many_unique_models_dont_crash(self):
         """Attacker sends 1000 unique model strings; cache eviction must not crash."""
         from veronica_core.pricing import resolve_model_pricing
+
         for i in range(1000):
             p = resolve_model_pricing(f"adversarial-model-{i}")
             assert p.input_per_1k > 0
 
     def test_empty_string_model(self):
         from veronica_core.pricing import resolve_model_pricing
+
         p = resolve_model_pricing("")
         assert p.input_per_1k > 0
 
     def test_very_long_model_name(self):
         from veronica_core.pricing import resolve_model_pricing
+
         p = resolve_model_pricing("x" * 10_000)
         assert p.input_per_1k > 0

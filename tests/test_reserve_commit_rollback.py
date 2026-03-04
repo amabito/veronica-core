@@ -9,6 +9,7 @@ Tests cover:
 6. ExecutionContext: two-phase integration with _wrap()
 7. Item 1c: CancellationToken signalled by _propagate_child_cost
 """
+
 from __future__ import annotations
 
 import threading
@@ -145,6 +146,7 @@ class TestLocalReservationExpiry:
         b = LocalBudgetBackend()
         # Monkey-patch _RESERVATION_TIMEOUT_S to 0 so reservation expires immediately
         import veronica_core.distributed as dm
+
         original = dm._RESERVATION_TIMEOUT_S
         monkeypatch.setattr(dm, "_RESERVATION_TIMEOUT_S", 0.0)
         rid = b.reserve(0.5, ceiling=1.0)
@@ -158,6 +160,7 @@ class TestLocalReservationExpiry:
     def test_commit_expired_reservation_raises_key_error(self, monkeypatch):
         b = LocalBudgetBackend()
         import veronica_core.distributed as dm
+
         original = dm._RESERVATION_TIMEOUT_S
         # Use negative timeout so deadline is in the past at creation time.
         # Zero timeout is unreliable on Windows due to timer granularity.
@@ -481,7 +484,9 @@ class TestExecutionContextReserveIntegration:
 class TestCancellationTokenPropagation:
     def test_cancellation_token_signalled_when_child_exceeds_budget(self):
         """After child cost pushes parent over ceiling, token is cancelled."""
-        parent_cfg = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
+        parent_cfg = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=3
+        )
         parent = ExecutionContext(config=parent_cfg)
 
         # Manually accumulate some cost so that child propagation will exceed ceiling
@@ -497,7 +502,9 @@ class TestCancellationTokenPropagation:
 
     def test_cancellation_token_not_signalled_when_within_budget(self):
         """Child cost within budget does not cancel token."""
-        parent_cfg = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
+        parent_cfg = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=3
+        )
         parent = ExecutionContext(config=parent_cfg)
 
         parent._propagate_child_cost(0.3)
@@ -507,7 +514,9 @@ class TestCancellationTokenPropagation:
 
     def test_subsequent_wrap_halts_after_child_budget_exceeded(self):
         """After child exceeds parent budget (token cancelled), new wraps return HALT."""
-        parent_cfg = ExecutionConfig(max_cost_usd=0.5, max_steps=10, max_retries_total=3)
+        parent_cfg = ExecutionConfig(
+            max_cost_usd=0.5, max_steps=10, max_retries_total=3
+        )
         parent = ExecutionContext(config=parent_cfg)
 
         # Simulate child cost that blows the ceiling
@@ -520,10 +529,14 @@ class TestCancellationTokenPropagation:
 
     def test_cancellation_propagates_up_chain(self):
         """Cancellation token is set on all ancestors when deepest child overflows."""
-        grandparent_cfg = ExecutionConfig(max_cost_usd=2.0, max_steps=10, max_retries_total=3)
+        grandparent_cfg = ExecutionConfig(
+            max_cost_usd=2.0, max_steps=10, max_retries_total=3
+        )
         grandparent = ExecutionContext(config=grandparent_cfg)
 
-        parent_cfg = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
+        parent_cfg = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=3
+        )
         parent = ExecutionContext(config=parent_cfg, parent=grandparent)
 
         # Accumulate near ceiling on grandparent

@@ -3,6 +3,7 @@
 Internal module — not part of the public API. Centralizes patterns
 that all adapter modules (langchain, crewai, langgraph, etc.) share.
 """
+
 from __future__ import annotations
 
 import logging
@@ -84,7 +85,14 @@ def extract_llm_result_cost(response: Any) -> float:
         if total_raw is None:
             return 0.0
         return cost_from_total_tokens(int(total_raw), model)
-    except (AttributeError, TypeError, ValueError, KeyError, OverflowError, RuntimeError):
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        OverflowError,
+        RuntimeError,
+    ):
         return 0.0
 
 
@@ -120,6 +128,7 @@ def record_budget_spend(
 
 
 # NEW: ExecutionContext adapter classes
+
 
 class _BudgetProxy:
     """Budget view backed by an ExecutionContext."""
@@ -219,13 +228,16 @@ class ExecutionContextContainerAdapter:
     def check(self, cost_usd: float = 0.0, **_kwargs: Any) -> Any:
         """Policy gate mirroring AIContainer.check()."""
         from veronica_core.runtime_policy import PolicyDecision
+
         snap = None
         try:
             snap = self._ctx.get_snapshot()
         except Exception:
             pass
         if snap is not None and getattr(snap, "aborted", False):
-            return PolicyDecision(allowed=False, reason="Context aborted", policy_type="containment")
+            return PolicyDecision(
+                allowed=False, reason="Context aborted", policy_type="containment"
+            )
         spent = self.budget.spent_usd
         if self._config.max_cost_usd > 0 and spent >= self._config.max_cost_usd:
             return PolicyDecision(

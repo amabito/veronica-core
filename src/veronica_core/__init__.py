@@ -131,7 +131,12 @@ from veronica_core.patch import patch_openai, patch_anthropic, unpatch_all
 from veronica_core.semantic import SemanticLoopGuard
 
 # Auto Pricing (v0.10.0)
-from veronica_core.pricing import estimate_cost_usd, resolve_model_pricing, Pricing, extract_usage_from_response
+from veronica_core.pricing import (
+    estimate_cost_usd,
+    resolve_model_pricing,
+    Pricing,
+    extract_usage_from_response,
+)
 
 # Distributed Budget (v0.10.0)
 from veronica_core.distributed import (
@@ -155,10 +160,20 @@ from veronica_core.otel import (
 )
 
 # Degradation Ladder (v0.10.0)
-from veronica_core.shield.degradation import DegradationLadder, DegradationConfig, Trimmer, NoOpTrimmer
+from veronica_core.shield.degradation import (
+    DegradationLadder,
+    DegradationConfig,
+    Trimmer,
+    NoOpTrimmer,
+)
 
 # PolicyDecision helpers (v0.10.0)
-from veronica_core.runtime_policy import allow, deny, model_downgrade, rate_limit_decision
+from veronica_core.runtime_policy import (
+    allow,
+    deny,
+    model_downgrade,
+    rate_limit_decision,
+)
 
 # AG2 AgentCapability-compatible adapters (v0.11.0)
 from veronica_core.adapters.ag2_capability import CircuitBreakerCapability

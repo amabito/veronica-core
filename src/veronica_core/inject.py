@@ -12,6 +12,7 @@ Changelog:
            Use ``ExecutionContext(config=ExecutionConfig(timeout_ms=...))``
            for real timeout enforcement.
 """
+
 from __future__ import annotations
 
 import functools
@@ -23,7 +24,13 @@ from typing import Any, Callable, Optional
 
 from veronica_core.runtime_policy import PolicyDecision
 
-__all__ = ["veronica_guard", "GuardConfig", "VeronicaHalt", "is_guard_active", "get_active_container"]
+__all__ = [
+    "veronica_guard",
+    "GuardConfig",
+    "VeronicaHalt",
+    "is_guard_active",
+    "get_active_container",
+]
 
 # ContextVar: set to True while inside a guard-wrapped call.
 # Lets future transparent injection detect an active guard without inspecting
@@ -33,7 +40,9 @@ _guard_active: ContextVar[bool] = ContextVar("veronica_guard_active", default=Fa
 # ContextVar: holds the current AIcontainer while inside a guard boundary.
 # Allows patch.py and other transparent injection layers to retrieve the
 # container without modifying call sites.
-_active_container: ContextVar[Optional[Any]] = ContextVar("veronica_active_container", default=None)
+_active_container: ContextVar[Optional[Any]] = ContextVar(
+    "veronica_active_container", default=None
+)
 
 
 def is_guard_active() -> bool:
@@ -128,8 +137,10 @@ def veronica_guard(
             DeprecationWarning,
             stacklevel=2,
         )
+
     def decorator(func: Callable) -> Callable:
         if inspect.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard

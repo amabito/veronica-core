@@ -167,13 +167,19 @@ class _MCPAdapterBase:
     def _compute_cost_estimate(self, tool_name: str) -> float:
         """Return the cost estimate (USD) for the given tool_name."""
         tool_cost = self._tool_costs.get(tool_name)
-        return tool_cost.cost_per_call if tool_cost is not None else self._default_cost_per_call
+        return (
+            tool_cost.cost_per_call
+            if tool_cost is not None
+            else self._default_cost_per_call
+        )
 
     def _compute_actual_cost(self, tool_name: str, result_value: Any) -> float:
         """Return actual cost including per-token charge if configured."""
         tool_cost = self._tool_costs.get(tool_name)
         cost_estimate = (
-            tool_cost.cost_per_call if tool_cost is not None else self._default_cost_per_call
+            tool_cost.cost_per_call
+            if tool_cost is not None
+            else self._default_cost_per_call
         )
         if tool_cost is not None and tool_cost.cost_per_token > 0:
             token_count = _extract_token_count(result_value)

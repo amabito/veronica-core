@@ -56,7 +56,12 @@ def main() -> None:
     llm = _StubLLM(callbacks=[handler])
 
     # 3. Call as normal — handler enforces limits transparently
-    prompts = ["Summarize VERONICA", "List key features", "Give a TL;DR", "What are limits?"]
+    prompts = [
+        "Summarize VERONICA",
+        "List key features",
+        "Give a TL;DR",
+        "What are limits?",
+    ]
     for i, prompt in enumerate(prompts, 1):
         print(f"Call {i}: {prompt}")
         try:
@@ -66,7 +71,9 @@ def main() -> None:
             spent = budget.spent_usd if budget else 0.0
             used = steps.current_step if steps else 0
             print(f"  OK: {reply}")
-            print(f"  budget=${spent:.4f}/{config.max_cost_usd}  steps={used}/{config.max_steps}")
+            print(
+                f"  budget=${spent:.4f}/{config.max_cost_usd}  steps={used}/{config.max_steps}"
+            )
         except VeronicaHalt as exc:
             print(f"  HALTED: {exc}")
             break

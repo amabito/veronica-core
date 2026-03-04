@@ -177,10 +177,9 @@ class TestAgentStepConcurrency:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=do_steps) for _ in range(5)]
-            + [threading.Thread(target=do_reset) for _ in range(2)]
-        )
+        threads = [threading.Thread(target=do_steps) for _ in range(5)] + [
+            threading.Thread(target=do_reset) for _ in range(2)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -210,10 +209,9 @@ class TestAgentStepCheckConcurrency:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=do_step) for _ in range(5)]
-            + [threading.Thread(target=do_check) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=do_step) for _ in range(5)] + [
+            threading.Thread(target=do_check) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:

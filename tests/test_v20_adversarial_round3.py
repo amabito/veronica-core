@@ -31,6 +31,7 @@ Attack vectors:
 25. AsyncBudgetBackendProtocol: isinstance check for conforming async class
 26. _visited frozenset is not mutated between sibling propagation paths
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,7 +65,9 @@ from veronica_core.protocols import AsyncBudgetBackendProtocol, ReconciliationCa
 
 def _make_ctx(max_cost: float = 10.0, max_steps: int = 100) -> ExecutionContext:
     return ExecutionContext(
-        config=ExecutionConfig(max_cost_usd=max_cost, max_steps=max_steps, max_retries_total=10)
+        config=ExecutionConfig(
+            max_cost_usd=max_cost, max_steps=max_steps, max_retries_total=10
+        )
     )
 
 
@@ -142,13 +145,17 @@ class TestCycleDetectionBypassAttempts:
         # chain[0] must have accumulated the cost.
         assert chain[0]._cost_usd_accumulated == pytest.approx(0.01, abs=1e-9)  # type: ignore[attr-defined]
 
-    def test_cycle_detection_warning_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_cycle_detection_warning_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Warning must be logged exactly once when a circular chain is detected."""
         ctx_a = _make_ctx()
         ctx_b = _make_ctx()
         _force_circular(ctx_a, ctx_b)
 
-        with caplog.at_level(logging.WARNING, logger="veronica_core.containment.execution_context"):
+        with caplog.at_level(
+            logging.WARNING, logger="veronica_core.containment.execution_context"
+        ):
             # Must not raise.
             ctx_a._propagate_child_cost(0.1)  # type: ignore[attr-defined]
 
@@ -404,6 +411,7 @@ class TestProtocolIsinstanceChecks:
 
     def test_non_conforming_class_fails_reconciliation_callback_check(self) -> None:
         """A class missing on_reconcile must not pass isinstance check."""
+
         class NotACallback:
             pass
 
@@ -411,6 +419,7 @@ class TestProtocolIsinstanceChecks:
 
     def test_conforming_class_passes_reconciliation_callback_check(self) -> None:
         """A class implementing on_reconcile must pass isinstance check."""
+
         class MyCallback:
             def on_reconcile(self, estimated_cost: float, actual_cost: float) -> None:
                 pass
@@ -419,6 +428,7 @@ class TestProtocolIsinstanceChecks:
 
     def test_async_budget_backend_protocol_isinstance(self) -> None:
         """A class implementing all async methods must pass isinstance check."""
+
         class MyAsyncBackend:
             async def reserve(self, amount: float, ceiling: float) -> str:
                 return "rid"
@@ -436,9 +446,11 @@ class TestProtocolIsinstanceChecks:
 
     def test_partial_async_backend_fails_isinstance_check(self) -> None:
         """Missing any async method must fail the isinstance check."""
+
         class PartialBackend:
             async def reserve(self, amount: float, ceiling: float) -> str:
                 return "rid"
+
             # Missing commit, rollback, get
 
         assert not isinstance(PartialBackend(), AsyncBudgetBackendProtocol)

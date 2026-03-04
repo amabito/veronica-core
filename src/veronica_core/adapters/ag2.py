@@ -34,6 +34,7 @@ Usage (hook)::
     agent = ConversableAgent("assistant")
     register_veronica_hook(agent, GuardConfig(max_cost_usd=1.0, max_steps=20))
 """
+
 from __future__ import annotations
 
 try:

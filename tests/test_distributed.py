@@ -1,4 +1,5 @@
 """Tests for distributed budget backends (P1-2)."""
+
 from __future__ import annotations
 
 import threading
@@ -60,9 +61,7 @@ def test_local_backend_basic():
 
 def test_local_backend_thread_safety():
     backend = LocalBudgetBackend()
-    threads = [
-        threading.Thread(target=lambda: backend.add(0.1)) for _ in range(10)
-    ]
+    threads = [threading.Thread(target=lambda: backend.add(0.1)) for _ in range(10)]
     for t in threads:
         t.start()
     for t in threads:
@@ -210,9 +209,14 @@ def test_redis_backend_reconcile_failure_preserves_fallback_delta():
 
     # Sabotage the pipeline so execute() raises.
     class BrokenPipeline:
-        def incrbyfloat(self, *a, **kw): pass
-        def expire(self, *a, **kw): pass
-        def execute(self): raise ConnectionError("Redis gone")
+        def incrbyfloat(self, *a, **kw):
+            pass
+
+        def expire(self, *a, **kw):
+            pass
+
+        def execute(self):
+            raise ConnectionError("Redis gone")
 
     original_pipeline = fake_client.pipeline
     fake_client.pipeline = lambda: BrokenPipeline()
@@ -247,9 +251,14 @@ def test_try_reconnect_failure_preserves_using_fallback():
 
     # Sabotage the pipeline so reconciliation always fails.
     class BrokenPipeline:
-        def incrbyfloat(self, *a, **kw): pass
-        def expire(self, *a, **kw): pass
-        def execute(self): raise ConnectionError("Redis gone")
+        def incrbyfloat(self, *a, **kw):
+            pass
+
+        def expire(self, *a, **kw):
+            pass
+
+        def execute(self):
+            raise ConnectionError("Redis gone")
 
     def fake_connect_success(self_inner):
         """Simulate successful Redis reconnect by clearing _using_fallback."""
@@ -403,8 +412,12 @@ def test_concurrent_failover_does_not_double_seed():
 
     # Break the pipeline after the Redis total is readable via .get().
     class DelayedBrokenPipeline:
-        def incrbyfloat(self, *a, **kw): pass
-        def expire(self, *a, **kw): pass
+        def incrbyfloat(self, *a, **kw):
+            pass
+
+        def expire(self, *a, **kw):
+            pass
+
         def execute(self):
             time.sleep(0.01)  # allow threads to pile up
             raise ConnectionError("concurrent failure")
@@ -453,9 +466,15 @@ def test_failover_seeded_with_redis_total():
     class HalfBrokenPipeline:
         def __init__(self, real_client):
             self._real_client = real_client
-        def incrbyfloat(self, *a, **kw): pass
-        def expire(self, *a, **kw): pass
-        def execute(self): raise ConnectionError("broken mid-way")
+
+        def incrbyfloat(self, *a, **kw):
+            pass
+
+        def expire(self, *a, **kw):
+            pass
+
+        def execute(self):
+            raise ConnectionError("broken mid-way")
 
     original_pipeline = fake_client.pipeline
     fake_client.pipeline = lambda: HalfBrokenPipeline(fake_client)
@@ -530,7 +549,9 @@ def test_execution_context_with_redis_backend(fake_redis_client):
 
 class TestRedactExc:
     def test_redacts_password_in_redis_url(self) -> None:
-        exc = ConnectionError("Error connecting to redis://admin:s3cret@redis.example.com:6379/0")
+        exc = ConnectionError(
+            "Error connecting to redis://admin:s3cret@redis.example.com:6379/0"
+        )
         result = _redact_exc(exc)
         assert "s3cret" not in result
         assert "admin" not in result
@@ -579,9 +600,14 @@ class TestAdversarialRedactExcInLogs:
         credential_url = "redis://admin:sup3rs3cret@redis.internal:6379/0"
 
         class CredentialLeakingPipeline:
-            def incrbyfloat(self, *a, **kw): pass
-            def expire(self, *a, **kw): pass
-            def execute(self): raise ConnectionError(f"failed connecting to {credential_url}")
+            def incrbyfloat(self, *a, **kw):
+                pass
+
+            def expire(self, *a, **kw):
+                pass
+
+            def execute(self):
+                raise ConnectionError(f"failed connecting to {credential_url}")
 
         fake_client.pipeline = lambda: CredentialLeakingPipeline()
 
@@ -673,6 +699,7 @@ class TestAdversarialRedactExcInLogs:
             dcb._using_fallback = False
             dcb._lock = threading.Lock()
             from veronica_core.circuit_breaker import CircuitBreaker
+
             dcb._fallback = CircuitBreaker(failure_threshold=3, recovery_timeout=30.0)
             dcb._client = None
             dcb._seed_fallback_from_redis = lambda: None  # type: ignore[method-assign]
@@ -710,8 +737,13 @@ class TestAdversarialH4TOCTOUFallbackTransition:
 
         class SlowBrokenPipeline:
             """Simulates slow-failing pipeline to expose TOCTOU window."""
-            def incrbyfloat(self, *a, **kw): pass
-            def expire(self, *a, **kw): pass
+
+            def incrbyfloat(self, *a, **kw):
+                pass
+
+            def expire(self, *a, **kw):
+                pass
+
             def execute(self):
                 time.sleep(0.005)  # widen the TOCTOU window
                 raise ConnectionError("pipeline failed")
@@ -957,7 +989,6 @@ class TestAdversarialDistributedCBConcurrentFallbackFlip:
     ) -> None:
         """10 concurrent record_failure() calls with Redis broken must activate fallback once."""
 
-
         server = fakeredis.FakeServer()
         fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
 
@@ -1150,6 +1181,7 @@ class TestAdversarialDistributedCBReconnectRace:
 
         # Step 3: add 1 more failure to fallback directly (simulates outage period).
         from veronica_core.circuit_breaker import CircuitState
+
         with dcb._fallback._lock:
             dcb._fallback._failure_count = 3
             dcb._fallback._state = CircuitState.CLOSED
@@ -1214,10 +1246,9 @@ class TestAdversarialRedisBudgetAddGetRace:
             with lock:
                 get_results.append(val)
 
-        threads = (
-            [threading.Thread(target=do_add) for _ in range(5)]
-            + [threading.Thread(target=do_get) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=do_add) for _ in range(5)] + [
+            threading.Thread(target=do_get) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -1411,8 +1442,12 @@ class TestAdversarialRedisBudgetReconcileConnectionFailure:
 
         # Break the pipeline so INCRBYFLOAT fails.
         class DropPipeline:
-            def incrbyfloat(self, *a, **kw) -> None: pass
-            def expire(self, *a, **kw) -> None: pass
+            def incrbyfloat(self, *a, **kw) -> None:
+                pass
+
+            def expire(self, *a, **kw) -> None:
+                pass
+
             def execute(self) -> None:
                 raise ConnectionError("connection dropped mid-reconcile")
 

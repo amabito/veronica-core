@@ -5,6 +5,7 @@ Tests:
 - SEC4: Tamper audit log does NOT contain expected HMAC value (oracle redacted)
 - SEC3: Symlink traversal is caught by resolving realpath before pattern matching
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -123,16 +124,20 @@ class TestAdversarialHmacOracle:
         dev_key = hashlib.sha256(b"veronica-dev-key").digest()
         monkeypatch.setenv("VERONICA_POLICY_KEY", dev_key.hex())
         from veronica_core.security import security_level as _sl
+
         _sl.reset_security_level()
 
     def _make_tampered_policy(self, tmp_path: Path) -> tuple[Path, Path]:
         """Create a policy file and a deliberately wrong .sig file."""
         policy_path = tmp_path / "policy.yaml"
         sig_path = tmp_path / "policy.yaml.sig"
-        policy_path.write_text(textwrap.dedent("""\
+        policy_path.write_text(
+            textwrap.dedent("""\
             version: 1
             rules: []
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
         # Wrong signature — triggers tamper detection
         sig_path.write_text("deadbeef" * 8, encoding="utf-8")
         return policy_path, sig_path
@@ -165,7 +170,9 @@ class TestAdversarialHmacOracle:
             "attacker can enumerate valid HMAC prefix lengths via actual field"
         )
 
-    def test_tamper_audit_payload_serialisable_without_hmac(self, tmp_path: Path) -> None:
+    def test_tamper_audit_payload_serialisable_without_hmac(
+        self, tmp_path: Path
+    ) -> None:
         """The audit payload must be JSON-serialisable and contain no hex strings."""
         policy_path, sig_path = self._make_tampered_policy(tmp_path)
 
@@ -184,6 +191,7 @@ class TestAdversarialHmacOracle:
 
         # A real HMAC-SHA256 hex string is 64 hex chars. Verify none appear.
         import re
+
         hex64_pattern = re.compile(r"[0-9a-f]{64}")
         assert not hex64_pattern.search(serialised), (
             f"Audit payload contains what looks like a 64-char hex HMAC: {serialised!r}"

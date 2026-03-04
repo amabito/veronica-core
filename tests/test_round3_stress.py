@@ -6,6 +6,7 @@ Targets:
 3. Error cascade: every call raises, alternating success/failure, BaseException cleanup
 4. ContextVar edge cases: nested veronica_guard, asyncio.create_task inside guard, mixed usage
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -271,6 +272,7 @@ class TestAsyncConcurrentGuard:
 
     def test_async_guard_cancelled_error_resets_contextvar(self) -> None:
         """CancelledError in guarded async function resets ContextVar."""
+
         async def run() -> None:
             @veronica_guard(max_cost_usd=10.0)
             async def guarded() -> None:
@@ -415,7 +417,9 @@ class TestErrorCascade:
         retry_count = 0
 
         for _ in range(100):
-            d = ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+            d = ctx.wrap_llm_call(
+                fn=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
             assert d == Decision.RETRY
             retry_count += 1
 
@@ -455,9 +459,7 @@ class TestErrorCascade:
         ctx = _make_ctx()
 
         with pytest.raises(KeyboardInterrupt):
-            ctx.wrap_llm_call(
-                fn=lambda: (_ for _ in ()).throw(KeyboardInterrupt())
-            )
+            ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
 
         # Context still usable after KeyboardInterrupt
         d = ctx.wrap_llm_call(fn=lambda: None)
@@ -468,18 +470,14 @@ class TestErrorCascade:
         ctx = _make_ctx()
 
         with pytest.raises(SystemExit):
-            ctx.wrap_llm_call(
-                fn=lambda: (_ for _ in ()).throw(SystemExit(0))
-            )
+            ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(SystemExit(0)))
 
     def test_node_closed_on_unexpected_exception(self) -> None:
         """Unexpected BaseException in fn(): node.end_ts is set, graph not left open."""
         ctx = _make_ctx()
 
         with pytest.raises(KeyboardInterrupt):
-            ctx.wrap_llm_call(
-                fn=lambda: (_ for _ in ()).throw(KeyboardInterrupt())
-            )
+            ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
 
         # Subsequent call must succeed (graph not corrupted)
         d = ctx.wrap_llm_call(fn=lambda: None)
@@ -495,6 +493,7 @@ class TestErrorCascade:
             def fn() -> None:
                 if idx % 2 != 0:
                     raise RuntimeError("x")
+
             try:
                 d = ctx.wrap_llm_call(fn=fn)
                 with lock:
@@ -570,6 +569,7 @@ class TestContextVarEdgeCases:
                 @veronica_guard(max_cost_usd=1.0)
                 async def inner() -> None:
                     pass
+
                 await inner()
 
             task = asyncio.create_task(child())
@@ -584,6 +584,7 @@ class TestContextVarEdgeCases:
 
     def test_contextvar_reset_on_exception_in_sync(self) -> None:
         """Exception inside sync guard resets _guard_active via finally."""
+
         @veronica_guard(max_cost_usd=5.0)
         def failing() -> None:
             raise ValueError("test")
@@ -595,6 +596,7 @@ class TestContextVarEdgeCases:
 
     def test_contextvar_reset_on_exception_in_async(self) -> None:
         """Exception inside async guard resets _guard_active via finally."""
+
         async def run() -> None:
             @veronica_guard(max_cost_usd=5.0)
             async def failing() -> None:

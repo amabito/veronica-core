@@ -1,4 +1,5 @@
 """Distributed budget backends and circuit breakers for cross-process coordination."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -170,9 +171,7 @@ class LocalBudgetBackend:
         """Remove expired reservations. Must be called with self._lock held."""
         now = time.monotonic()
         expired = [
-            rid
-            for rid, (_, deadline) in self._reservations.items()
-            if now > deadline
+            rid for rid, (_, deadline) in self._reservations.items() if now > deadline
         ]
         for rid in expired:
             amt, _ = self._reservations.pop(rid)
@@ -460,13 +459,15 @@ class RedisBudgetBackend:
                 sep = v.find(":")
                 if sep >= 0:
                     amt = float(v[:sep])
-                    dl = float(v[sep + 1:])
+                    dl = float(v[sep + 1 :])
                     if dl > now:
                         total += amt
             return total
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("RedisBudgetBackend.get_reserved failed: %s", _redact_exc(exc))
+                logger.error(
+                    "RedisBudgetBackend.get_reserved failed: %s", _redact_exc(exc)
+                )
                 return self._fallback.get_reserved()
             raise
 
@@ -547,7 +548,9 @@ return 1
         except Exception as exc:
             exc_str = str(exc)
             if "ceiling exceeded" in exc_str:
-                raise OverflowError(f"Budget ceiling {ceiling:.6f} would be exceeded") from exc
+                raise OverflowError(
+                    f"Budget ceiling {ceiling:.6f} would be exceeded"
+                ) from exc
             if self._fallback_on_error:
                 logger.error(
                     "RedisBudgetBackend.reserve failed: %s — using local fallback",
@@ -956,17 +959,11 @@ class DistributedCircuitBreaker:
         failure_predicate: Optional[FailurePredicate] = None,
     ) -> None:
         if failure_threshold < 1:
-            raise ValueError(
-                f"failure_threshold must be >= 1, got {failure_threshold}"
-            )
+            raise ValueError(f"failure_threshold must be >= 1, got {failure_threshold}")
         if recovery_timeout < 0:
-            raise ValueError(
-                f"recovery_timeout must be >= 0, got {recovery_timeout}"
-            )
+            raise ValueError(f"recovery_timeout must be >= 0, got {recovery_timeout}")
         if ttl_seconds < 1:
-            raise ValueError(
-                f"ttl_seconds must be >= 1, got {ttl_seconds}"
-            )
+            raise ValueError(f"ttl_seconds must be >= 1, got {ttl_seconds}")
         if half_open_slot_timeout < 0:
             raise ValueError(
                 f"half_open_slot_timeout must be >= 0, got {half_open_slot_timeout}"
@@ -1183,7 +1180,9 @@ class DistributedCircuitBreaker:
                 self._seed_fallback_from_redis()
                 self._using_fallback = True
 
-    def _resolve_state_str(self, state_str: str, last_failure_time: Optional[float]) -> CircuitState:
+    def _resolve_state_str(
+        self, state_str: str, last_failure_time: Optional[float]
+    ) -> CircuitState:
         """Parse state string, applying OPEN->HALF_OPEN timeout if appropriate."""
         if state_str == "OPEN" and last_failure_time is not None:
             if time.time() - last_failure_time >= self._recovery_timeout:
@@ -1232,9 +1231,7 @@ class DistributedCircuitBreaker:
             return self._resolve_state_str(state_str, lft)
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.state read failed: %s", exc
-                )
+                logger.error("DistributedCircuitBreaker.state read failed: %s", exc)
                 return self._fallback.state
             raise
 
@@ -1453,9 +1450,7 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error(
-                    "DistributedCircuitBreaker.reset failed: %s", exc
-                )
+                logger.error("DistributedCircuitBreaker.reset failed: %s", exc)
                 self._fallback.reset()
             else:
                 raise
@@ -1503,7 +1498,9 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("DistributedCircuitBreaker.snapshot failed: %s", _redact_exc(exc))
+                logger.error(
+                    "DistributedCircuitBreaker.snapshot failed: %s", _redact_exc(exc)
+                )
                 with self._fallback._lock:
                     return CircuitSnapshot(
                         state=self._fallback._state,

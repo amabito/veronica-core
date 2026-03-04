@@ -1,4 +1,5 @@
 """Adversarial tests for distributed.py fixes: C1/C2/H1/H2/H6/M6."""
+
 from __future__ import annotations
 
 import threading
@@ -163,8 +164,7 @@ class TestAdversarialC2ClaimedAtGarbage:
         ctx = PolicyContext()
         decision = dcb.check(ctx)
         assert decision.allowed is False, (
-            "Live HALF_OPEN slot must NOT be released; "
-            f"got allowed={decision.allowed}"
+            f"Live HALF_OPEN slot must NOT be released; got allowed={decision.allowed}"
         )
 
 
@@ -235,7 +235,12 @@ class TestAdversarialH6LuaArgvNilGuard:
         try:
             result = dcb._script_check(
                 keys=[dcb._key],
-                args=[str(dcb._recovery_timeout), str(time.time()), str(dcb._ttl), "GARBAGE_TIMEOUT"],
+                args=[
+                    str(dcb._recovery_timeout),
+                    str(time.time()),
+                    str(dcb._ttl),
+                    "GARBAGE_TIMEOUT",
+                ],
             )
             # If it didn't raise, result must be a valid 3-element list.
             assert len(result) == 3
@@ -415,7 +420,9 @@ class TestAdversarialM6ReconcileDeltaRace:
         import inspect
         from veronica_core import distributed
 
-        source = inspect.getsource(distributed.RedisBudgetBackend._reconcile_on_reconnect)
+        source = inspect.getsource(
+            distributed.RedisBudgetBackend._reconcile_on_reconnect
+        )
         assert "M6 INVARIANT" in source, (
             "M6 race-safety invariant comment must be present in _reconcile_on_reconnect docstring"
         )

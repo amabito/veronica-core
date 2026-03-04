@@ -10,6 +10,7 @@ Attack vectors not covered by Round 1:
 7. Two-phase budget: cross-context reservation commit (shared backend)
 8. Decision: hash stability as dict key
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -237,7 +238,9 @@ class TestReconciliationCallbackThreadSafety:
 
     def test_concurrent_wrap_calls_reconciliation_safety(self) -> None:
         """Multiple threads calling wrap_llm_call with reconciliation_callback must not crash."""
-        config = ExecutionConfig(max_cost_usd=100.0, max_steps=1000, max_retries_total=100)
+        config = ExecutionConfig(
+            max_cost_usd=100.0, max_steps=1000, max_retries_total=100
+        )
         ctx = ExecutionContext(config=config)
 
         calls: list[tuple[float, float]] = []
@@ -638,6 +641,7 @@ class TestDeprecatedGetattr:
     def test_aicontainer_alias_from_package_emits_deprecation(self) -> None:
         import warnings
         import veronica_core
+
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             alias = veronica_core.AIcontainer  # noqa: F821
@@ -648,6 +652,7 @@ class TestDeprecatedGetattr:
     def test_veronica_persistence_emits_deprecation(self) -> None:
         import warnings
         import veronica_core
+
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             _ = veronica_core.VeronicaPersistence  # noqa: F821
@@ -657,20 +662,24 @@ class TestDeprecatedGetattr:
     def test_unknown_attribute_raises_attribute_error(self) -> None:
         """Accessing a completely unknown attribute must raise AttributeError."""
         import veronica_core
+
         with pytest.raises(AttributeError):
             _ = veronica_core.NonExistentAttribute12345  # noqa: F821
 
     def test_container_module_aicontainer_alias_emits_deprecation(self) -> None:
         """veronica_core.container.AIcontainer must emit DeprecationWarning."""
         import warnings
+
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             from veronica_core.container import AIcontainer  # noqa: F401
+
             dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
             assert dep, "container.AIcontainer must emit DeprecationWarning"
 
     def test_container_module_unknown_raises_attribute_error(self) -> None:
         """veronica_core.container.UnknownName must raise AttributeError."""
         import veronica_core.container as c
+
         with pytest.raises(AttributeError):
             _ = c.UnknownAttribute99999  # noqa: F821

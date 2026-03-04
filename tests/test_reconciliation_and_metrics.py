@@ -21,6 +21,7 @@ Adversarial (Item 7 + 3b):
 13. TestAdversarialReconciliationCallback
 14. TestAdversarialMetricsTokens
 """
+
 from __future__ import annotations
 
 import threading
@@ -117,7 +118,9 @@ def test_reconciliation_callback_exception_swallowed() -> None:
             raise RuntimeError("billing system unavailable")
 
     ctx = _make_ctx()
-    opts = WrapOptions(cost_estimate_hint=0.01, reconciliation_callback=CrashingCallback())
+    opts = WrapOptions(
+        cost_estimate_hint=0.01, reconciliation_callback=CrashingCallback()
+    )
     # Must not raise
     result = ctx.wrap_llm_call(fn=lambda: None, options=opts)
     assert result == Decision.ALLOW
@@ -132,7 +135,9 @@ def test_reconciliation_callback_protocol_isinstance() -> None:
 def test_reconciliation_callback_none_no_error() -> None:
     """reconciliation_callback=None (default) must not cause any error."""
     ctx = _make_ctx()
-    opts = WrapOptions(cost_estimate_hint=0.01)  # reconciliation_callback defaults to None
+    opts = WrapOptions(
+        cost_estimate_hint=0.01
+    )  # reconciliation_callback defaults to None
     result = ctx.wrap_llm_call(fn=lambda: None, options=opts)
     assert result == Decision.ALLOW
 
@@ -307,7 +312,9 @@ class TestAdversarialReconciliationCallback:
         ctx = _make_ctx()
         callback = ConcreteReconciliationCallback()
 
-        opts = WrapOptions(reconciliation_callback=callback)  # cost_estimate_hint defaults to 0.0
+        opts = WrapOptions(
+            reconciliation_callback=callback
+        )  # cost_estimate_hint defaults to 0.0
         ctx.wrap_llm_call(fn=lambda: None, options=opts)
 
         assert len(callback.calls) == 1

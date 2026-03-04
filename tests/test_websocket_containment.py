@@ -21,8 +21,14 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
-from veronica_core.middleware import VeronicaASGIMiddleware, get_current_execution_context
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
+from veronica_core.middleware import (
+    VeronicaASGIMiddleware,
+    get_current_execution_context,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +147,7 @@ def test_ws_preflight_halt_closes_1008() -> None:
 
 def test_ws_budget_exceeded_mid_session_closes_1008() -> None:
     """Budget exceeded during session: close 1008 sent after step limit hit."""
+
     # max_steps=2: accept (1 step for receive) + one echo (1 step for receive) = 2
     # Third receive would be step 3 → HALT
     async def _looping_app(scope: Any, receive: Any, send: Any) -> None:
@@ -151,7 +158,9 @@ def test_ws_budget_exceeded_mid_session_closes_1008() -> None:
                 break
             await send({"type": "websocket.send", "text": "echo"})
 
-    middleware = VeronicaASGIMiddleware(_looping_app, config=_tight_steps_config(max_steps=2))
+    middleware = VeronicaASGIMiddleware(
+        _looping_app, config=_tight_steps_config(max_steps=2)
+    )
     messages = [
         {"type": "websocket.connect"},
         {"type": "websocket.receive", "text": "msg1"},
@@ -249,9 +258,7 @@ def test_ws_inner_app_exception_propagates() -> None:
     middleware = VeronicaASGIMiddleware(_raising_app, config=_make_config())
     raised = False
     try:
-        asyncio.run(
-            _call_ws(middleware, [{"type": "websocket.connect"}])
-        )
+        asyncio.run(_call_ws(middleware, [{"type": "websocket.connect"}]))
     except ValueError:
         raised = True
 
@@ -320,4 +327,6 @@ def test_ws_steps_counted_per_message() -> None:
     assert len(step_counts) == 3, f"Expected 3 snapshots, got {step_counts}"
     assert step_counts[0] == 1, f"After first receive: expected 1, got {step_counts[0]}"
     assert step_counts[1] == 2, f"After first send: expected 2, got {step_counts[1]}"
-    assert step_counts[2] == 3, f"After second receive: expected 3, got {step_counts[2]}"
+    assert step_counts[2] == 3, (
+        f"After second receive: expected 3, got {step_counts[2]}"
+    )

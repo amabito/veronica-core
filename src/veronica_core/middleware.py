@@ -33,7 +33,10 @@ from __future__ import annotations
 import contextvars
 from typing import Any, Callable, Iterable
 
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 from typing import TYPE_CHECKING
 

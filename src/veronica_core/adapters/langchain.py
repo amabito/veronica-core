@@ -19,6 +19,7 @@ Usage::
     llm = ChatOpenAI(callbacks=[handler])
     response = llm.invoke("Hello!")
 """
+
 from __future__ import annotations
 
 try:
@@ -37,7 +38,11 @@ except ImportError:
 import logging
 from typing import Any, Dict, List, Union
 
-from veronica_core.adapters._shared import build_adapter_container, extract_llm_result_cost, record_budget_spend
+from veronica_core.adapters._shared import (
+    build_adapter_container,
+    extract_llm_result_cost,
+    record_budget_spend,
+)
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
@@ -125,5 +130,3 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
     def container(self) -> AIContainer:
         """The underlying AIContainer (for testing and introspection)."""
         return self._container
-
-

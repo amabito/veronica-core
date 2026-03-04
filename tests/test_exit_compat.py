@@ -6,6 +6,7 @@ Covers:
     DeprecationWarning and still saves without error.
   - ShieldPipeline.on_error_policy: default=HALT, explicit ALLOW opt-in.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -24,6 +25,7 @@ from veronica_core.state import VeronicaStateMachine
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_state_machine() -> VeronicaStateMachine:
     return VeronicaStateMachine()
 
@@ -34,6 +36,7 @@ CTX = ToolCallContext(request_id="compat-test")
 # ---------------------------------------------------------------------------
 # Test: VeronicaExit with new PersistenceBackend (no warning)
 # ---------------------------------------------------------------------------
+
 
 class TestVeronicaExitNewBackend:
     def test_new_backend_accepted_without_warning(self) -> None:
@@ -63,6 +66,7 @@ class TestVeronicaExitNewBackend:
 # ---------------------------------------------------------------------------
 # Test: VeronicaExit with legacy VeronicaPersistence (warns + works)
 # ---------------------------------------------------------------------------
+
 
 class TestVeronicaExitLegacyBackend:
     """Legacy VeronicaPersistence expects save(state_machine), not save(dict).
@@ -114,6 +118,7 @@ class TestVeronicaExitLegacyBackend:
 # Test: ShieldPipeline.on_error default HALT and explicit ALLOW
 # ---------------------------------------------------------------------------
 
+
 class TestShieldPipelineOnErrorPolicy:
     def test_default_no_hook_halts(self) -> None:
         """No retry hook + default policy → HALT (fail-closed)."""
@@ -138,7 +143,9 @@ class TestShieldPipelineOnErrorPolicy:
         from veronica_core.shield.hooks import RetryBoundaryHook
 
         class AllowRetryHook(RetryBoundaryHook):
-            def on_error(self, ctx: ToolCallContext, err: BaseException) -> Optional[Decision]:
+            def on_error(
+                self, ctx: ToolCallContext, err: BaseException
+            ) -> Optional[Decision]:
                 return Decision.ALLOW
 
         # Policy is HALT but hook returns ALLOW → hook wins.
@@ -182,6 +189,7 @@ class TestVeronicaPersistenceGetattr:
             warnings.simplefilter("ignore", DeprecationWarning)
             klass = veronica_core.VeronicaPersistence
         from veronica_core.persist import VeronicaPersistence as _VP
+
         assert klass is _VP
 
     def test_unknown_module_getattr_raises_attribute_error(self) -> None:
@@ -208,8 +216,10 @@ class TestVeronicaExitExceptionSafety:
 
         # Sabotage transition to raise
         _original_transition = sm.transition
+
         def failing_transition(*args, **kwargs):
             raise RuntimeError("transition broken")
+
         sm.transition = failing_transition
 
         # Must not raise
@@ -274,6 +284,7 @@ class TestVeronicaExitCoverage:
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         ve.request_exit(ExitTier.GRACEFUL, "first")
         # Second call must not raise and must not change the tier
         ve.request_exit(ExitTier.EMERGENCY, "second")
@@ -288,6 +299,7 @@ class TestVeronicaExitCoverage:
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         ve.request_exit(ExitTier.FORCE, "forced")
 
         # Force exit should not persist state
@@ -304,11 +316,13 @@ class TestVeronicaExitCoverage:
     def test_signal_handler_sigterm_triggers_graceful(self) -> None:
         """_signal_handler with SIGTERM must request GRACEFUL exit."""
         import signal as _signal
+
         sm = _make_state_machine()
         backend = MemoryBackend()
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         ve._signal_handler(_signal.SIGTERM, None)
         assert ve.exit_requested
         assert ve.exit_tier == ExitTier.GRACEFUL
@@ -316,11 +330,13 @@ class TestVeronicaExitCoverage:
     def test_signal_handler_sigint_triggers_emergency(self) -> None:
         """_signal_handler with SIGINT must request EMERGENCY exit."""
         import signal as _signal
+
         sm = _make_state_machine()
         backend = MemoryBackend()
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         ve._signal_handler(_signal.SIGINT, None)
         assert ve.exit_requested
         assert ve.exit_tier == ExitTier.EMERGENCY
@@ -332,6 +348,7 @@ class TestVeronicaExitCoverage:
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         assert not ve.exit_requested
         ve._atexit_handler()
         assert ve.exit_requested
@@ -344,6 +361,7 @@ class TestVeronicaExitCoverage:
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 
         from veronica_core.exit import ExitTier
+
         ve.request_exit(ExitTier.GRACEFUL, "explicit")
         ve._atexit_handler()  # Must not change state
 
@@ -386,6 +404,7 @@ class TestVeronicaExitCoverage:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             from veronica_core.exit import _wrap_legacy_persistence
+
             adapted = _wrap_legacy_persistence(LegacyWithLoad())
 
         result = adapted.load()
@@ -405,6 +424,7 @@ class TestVeronicaExitCoverage:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             from veronica_core.exit import _wrap_legacy_persistence
+
             adapted = _wrap_legacy_persistence(LegacyWithNoneLoad())
 
         assert adapted.load() is None
@@ -420,24 +440,30 @@ class TestVeronicaPersistenceCoverage:
 
     def _make_persist(self, tmp_path) -> object:
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             from veronica_core.persist import VeronicaPersistence
+
             return VeronicaPersistence(path=tmp_path / "state.json")
 
     def test_str_path_coercion(self, tmp_path) -> None:
         """VeronicaPersistence must accept str path (coerced to Path)."""
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             from veronica_core.persist import VeronicaPersistence
+
             p = VeronicaPersistence(path=str(tmp_path / "state.json"))
         from pathlib import Path
+
         assert isinstance(p.path, Path)
 
     def test_save_and_load_roundtrip(self, tmp_path) -> None:
         """save() then load() must recover the same state."""
         from veronica_core.state import VeronicaStateMachine
+
         p = self._make_persist(tmp_path)
         sm = VeronicaStateMachine()
         assert p.save(sm) is True
@@ -464,6 +490,7 @@ class TestVeronicaPersistenceCoverage:
     def test_save_failure_returns_false(self, tmp_path) -> None:
         """save() when writing fails must return False."""
         from veronica_core.state import VeronicaStateMachine
+
         p = self._make_persist(tmp_path)
         # Make path a directory so open() fails
         p.path.mkdir(parents=True, exist_ok=True)
@@ -473,6 +500,7 @@ class TestVeronicaPersistenceCoverage:
     def test_backup_creates_file(self, tmp_path) -> None:
         """backup() must create a timestamped copy of the state file."""
         from veronica_core.state import VeronicaStateMachine
+
         p = self._make_persist(tmp_path)
         p.save(VeronicaStateMachine())
 
@@ -521,7 +549,9 @@ class TestVeronicaExitGracefulEdgePaths:
     def test_graceful_exit_cleanup_raises_is_swallowed(self) -> None:
         """_graceful_exit must continue when cleanup_expired() raises."""
         sm = _make_state_machine()
-        sm.cleanup_expired = lambda: (_ for _ in ()).throw(RuntimeError("cleanup error"))
+        sm.cleanup_expired = lambda: (_ for _ in ()).throw(
+            RuntimeError("cleanup error")
+        )
         backend = MemoryBackend()
         ve = VeronicaExit(state_machine=sm, persistence=backend)
 

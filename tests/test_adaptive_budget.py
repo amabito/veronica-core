@@ -130,9 +130,7 @@ class TestAdjustHold:
 
 class TestAdjustTighten:
     def test_budget_ceiling_reduced_when_halt_events_reach_trigger_count(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         for _ in range(3):
             hook.feed_event(_halt_event(), ts=1000.0)
 
@@ -142,9 +140,7 @@ class TestAdjustTighten:
         assert result.adjusted_ceiling == 90
 
     def test_tighten_records_degrade_event(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         for _ in range(3):
             hook.feed_event(_halt_event(), ts=1000.0)
 
@@ -155,9 +151,7 @@ class TestAdjustTighten:
         assert events[0].decision == Decision.DEGRADE
 
     def test_tighten_event_metadata(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         for _ in range(3):
             hook.feed_event(_halt_event(), ts=1000.0)
 
@@ -186,9 +180,7 @@ class TestAdjustTighten:
         assert hook.adjusted_ceiling == 80
 
     def test_budget_ceiling_tightens_further_on_each_adjustment_cycle(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.05
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.05)
         # First round: 3 HALT events
         for _ in range(3):
             hook.feed_event(_halt_event(), ts=1000.0)
@@ -202,22 +194,16 @@ class TestAdjustTighten:
         assert result2.ceiling_multiplier == 0.90
 
     def test_token_budget_exceeded_events_also_trigger_tightening(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         for _ in range(3):
-            hook.feed_event(
-                _halt_event("TOKEN_BUDGET_EXCEEDED"), ts=1000.0
-            )
+            hook.feed_event(_halt_event("TOKEN_BUDGET_EXCEEDED"), ts=1000.0)
 
         result = hook.adjust(_now=1000.0)
         assert result.action == "tighten"
 
     def test_tighten_ignores_degrade_events_for_count(self):
         """Only HALT events count toward tighten trigger."""
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         # 2 HALT + 5 DEGRADE -> tighten_count = 2 < 3
         for _ in range(2):
             hook.feed_event(_halt_event(), ts=1000.0)
@@ -235,9 +221,7 @@ class TestAdjustTighten:
 
 class TestAdjustLoosen:
     def test_budget_ceiling_increases_when_no_degrade_events_occur_in_window(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, loosen_pct=0.05
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.05)
         # Empty window -> no degrade events -> loosen
         result = hook.adjust(_now=1000.0)
         assert result.action == "loosen"
@@ -502,9 +486,7 @@ class TestConfigRoundTrip:
             ShieldConfig,
         )
 
-        cfg = ShieldConfig(
-            adaptive_budget=AdaptiveBudgetConfig(enabled=True)
-        )
+        cfg = ShieldConfig(adaptive_budget=AdaptiveBudgetConfig(enabled=True))
         assert cfg.is_any_enabled is True
 
     def test_shield_config_default_disabled(self):
@@ -572,9 +554,7 @@ class TestCooldown:
         assert r2.action == "loosen"
 
     def test_cooldown_blocks_rapid_adjustment(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         # First adjustment succeeds (no prior adjustment)
         r1 = hook.adjust(_now=1000.0)
         assert r1.action == "loosen"
@@ -584,9 +564,7 @@ class TestCooldown:
         assert r2.adjusted_ceiling == r1.adjusted_ceiling
 
     def test_cooldown_expires(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         r1 = hook.adjust(_now=1000.0)
         assert r1.action == "loosen"
         # After cooldown expires
@@ -594,9 +572,7 @@ class TestCooldown:
         assert r2.action == "loosen"
 
     def test_cooldown_records_event(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         hook.adjust(CTX, _now=1000.0)
         hook.adjust(CTX, _now=1030.0)  # blocked
         events = hook.get_events()
@@ -607,9 +583,7 @@ class TestCooldown:
         assert events[1].request_id == "test-adaptive"
 
     def test_cooldown_event_metadata(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         hook.adjust(_now=1000.0)
         hook.adjust(_now=1030.0)  # blocked
         ev = hook.get_events()[1]
@@ -651,9 +625,7 @@ class TestCooldown:
         assert hook.last_adjustment_ts == 1000.0
 
     def test_cooldown_reset_clears_timestamp(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         hook.adjust(_now=1000.0)
         assert hook.last_adjustment_ts == 1000.0
         hook.reset()
@@ -668,17 +640,13 @@ class TestCooldown:
 class TestSmoothing:
     def test_default_no_smoothing(self):
         """Default max_step_pct=1.0 means no per-step cap."""
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, loosen_pct=0.15
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.15)
         assert hook.max_step_pct == 1.0
         r = hook.adjust(_now=1000.0)
         assert r.ceiling_multiplier == 1.15  # full loosen_pct applied
 
     def test_smoothing_caps_loosen(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, loosen_pct=0.10, max_step_pct=0.05
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.10, max_step_pct=0.05)
         r = hook.adjust(_now=1000.0)
         # loosen_pct=0.10 but capped by max_step_pct=0.05
         assert r.ceiling_multiplier == 1.05
@@ -697,18 +665,14 @@ class TestSmoothing:
         assert r.ceiling_multiplier == 0.95
 
     def test_smoothing_no_effect_when_step_larger(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, loosen_pct=0.03, max_step_pct=0.05
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.03, max_step_pct=0.05)
         r = hook.adjust(_now=1000.0)
         # loosen_pct=0.03 < max_step_pct=0.05 -> no cap
         assert r.ceiling_multiplier == 1.03
 
     def test_smoothing_gradual_convergence(self):
         """Multiple capped steps converge gradually."""
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, loosen_pct=0.10, max_step_pct=0.03
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, loosen_pct=0.10, max_step_pct=0.03)
         for i in range(5):
             hook.adjust(_now=1000.0 + i)
         # 5 steps at +0.03 each = 1.15
@@ -723,22 +687,16 @@ class TestSmoothing:
 class TestFloorCeiling:
     def test_defaults_from_max_adjustment(self):
         """Without explicit min/max, computed from max_adjustment."""
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, max_adjustment=0.30
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, max_adjustment=0.30)
         assert hook.min_multiplier == pytest.approx(0.70)
         assert hook.max_multiplier == pytest.approx(1.30)
 
     def test_explicit_min_multiplier(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, min_multiplier=0.50
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, min_multiplier=0.50)
         assert hook.min_multiplier == 0.50
 
     def test_explicit_max_multiplier(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, max_multiplier=1.50
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, max_multiplier=1.50)
         assert hook.max_multiplier == 1.50
 
     def test_floor_enforced_on_tighten(self):
@@ -769,9 +727,7 @@ class TestFloorCeiling:
 
     def test_validates_min_positive(self):
         with pytest.raises(ValueError, match="min_multiplier must be > 0"):
-            AdaptiveBudgetHook(
-                base_ceiling=100, min_multiplier=0.0
-            )
+            AdaptiveBudgetHook(base_ceiling=100, min_multiplier=0.0)
 
     def test_validates_min_less_than_max(self):
         with pytest.raises(ValueError, match="min_multiplier.*must be <"):
@@ -1013,8 +969,7 @@ class TestDirectionLock:
         hook.adjust(CTX, _now=1001.0)  # direction_locked (1 event remains)
         events = hook.get_events()
         locked_events = [
-            e for e in events
-            if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
+            e for e in events if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
         ]
         assert len(locked_events) == 1
         assert locked_events[0].decision == Decision.DEGRADE
@@ -1033,8 +988,7 @@ class TestDirectionLock:
         hook.adjust(_now=950.0)  # tighten
         hook.adjust(_now=1001.0)  # direction_locked (1 remains at t=950)
         ev = [
-            e for e in hook.get_events()
-            if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
+            e for e in hook.get_events() if e.event_type == "ADAPTIVE_DIRECTION_LOCKED"
         ][0]
         assert ev.metadata["tighten_events"] == 1
         assert "ceiling_multiplier" in ev.metadata
@@ -1091,9 +1045,7 @@ class TestDirectionLock:
         assert r2.action == "loosen"  # no block
 
     def test_reset_clears_last_action(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, direction_lock=True
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, direction_lock=True)
         hook.adjust(_now=1000.0)  # loosen
         assert hook.last_action == "loosen"
         hook.reset()
@@ -1119,9 +1071,7 @@ class TestConfigDirectionLock:
         )
 
         cfg = ShieldConfig(
-            adaptive_budget=AdaptiveBudgetConfig(
-                enabled=True, direction_lock=False
-            )
+            adaptive_budget=AdaptiveBudgetConfig(enabled=True, direction_lock=False)
         )
         d = cfg.to_dict()
         restored = ShieldConfig.from_dict(d)
@@ -1313,9 +1263,7 @@ class TestAnomalyRecovery:
         hook.adjust(CTX, _now=550.0)
         hook.adjust(CTX, _now=851.0)
         events = hook.get_events()
-        recovery_events = [
-            e for e in events if e.event_type == "ANOMALY_RECOVERED"
-        ]
+        recovery_events = [e for e in events if e.event_type == "ANOMALY_RECOVERED"]
         assert len(recovery_events) == 1
         assert recovery_events[0].decision == Decision.ALLOW
         assert recovery_events[0].request_id == "test-adaptive"
@@ -1397,8 +1345,7 @@ class TestAnomalyEvents:
         hook.adjust(CTX, _now=550.0)
         events = hook.get_events()
         anomaly_events = [
-            e for e in events
-            if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
+            e for e in events if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
         ]
         assert len(anomaly_events) == 1
         assert anomaly_events[0].decision == Decision.DEGRADE
@@ -1418,8 +1365,7 @@ class TestAnomalyEvents:
             hook.feed_event(_halt_event(), ts=550.0)
         hook.adjust(_now=550.0)
         ev = [
-            e for e in hook.get_events()
-            if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
+            e for e in hook.get_events() if e.event_type == "ANOMALY_TIGHTENING_APPLIED"
         ][0]
         assert ev.metadata["recent_tighten_count"] == 3
         assert ev.metadata["spike_factor"] == 2.0
@@ -1440,10 +1386,7 @@ class TestAnomalyEvents:
             hook.feed_event(_halt_event(), ts=550.0)
         hook.adjust(_now=550.0)
         hook.adjust(_now=851.0)
-        ev = [
-            e for e in hook.get_events()
-            if e.event_type == "ANOMALY_RECOVERED"
-        ][0]
+        ev = [e for e in hook.get_events() if e.event_type == "ANOMALY_RECOVERED"][0]
         assert ev.metadata["anomaly_window_seconds"] == 300.0
 
 
@@ -1549,27 +1492,19 @@ class TestAnomalyReset:
 class TestAnomalyValidation:
     def test_validates_spike_factor_positive(self):
         with pytest.raises(ValueError, match="anomaly_spike_factor"):
-            AdaptiveBudgetHook(
-                base_ceiling=100, anomaly_spike_factor=0.0
-            )
+            AdaptiveBudgetHook(base_ceiling=100, anomaly_spike_factor=0.0)
 
     def test_validates_tighten_pct_range(self):
         with pytest.raises(ValueError, match="anomaly_tighten_pct"):
-            AdaptiveBudgetHook(
-                base_ceiling=100, anomaly_tighten_pct=0.0
-            )
+            AdaptiveBudgetHook(base_ceiling=100, anomaly_tighten_pct=0.0)
 
     def test_validates_window_seconds_positive(self):
         with pytest.raises(ValueError, match="anomaly_window_seconds"):
-            AdaptiveBudgetHook(
-                base_ceiling=100, anomaly_window_seconds=0.0
-            )
+            AdaptiveBudgetHook(base_ceiling=100, anomaly_window_seconds=0.0)
 
     def test_validates_recent_seconds_positive(self):
         with pytest.raises(ValueError, match="anomaly_recent_seconds"):
-            AdaptiveBudgetHook(
-                base_ceiling=100, anomaly_recent_seconds=-1.0
-            )
+            AdaptiveBudgetHook(base_ceiling=100, anomaly_recent_seconds=-1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1647,9 +1582,7 @@ class TestExportControlState:
         assert state["recent_event_counts"]["degrade"] == 0
 
     def test_after_tighten(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, tighten_trigger=3, tighten_pct=0.10
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, tighten_trigger=3, tighten_pct=0.10)
         for _ in range(3):
             hook.feed_event(_halt_event(), ts=1000.0)
         hook.adjust(_now=1000.0)
@@ -1661,18 +1594,14 @@ class TestExportControlState:
         assert state["recent_event_counts"]["tighten"] == 3
 
     def test_with_cooldown_active(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         hook.adjust(_now=1000.0)
         state = hook.export_control_state(_now=1030.0)
         assert state["cooldown_active"] is True
         assert state["cooldown_remaining_seconds"] == 30.0
 
     def test_with_cooldown_expired(self):
-        hook = AdaptiveBudgetHook(
-            base_ceiling=100, cooldown_seconds=60.0
-        )
+        hook = AdaptiveBudgetHook(base_ceiling=100, cooldown_seconds=60.0)
         hook.adjust(_now=1000.0)
         state = hook.export_control_state(_now=1061.0)
         assert state["cooldown_active"] is False
@@ -1680,9 +1609,7 @@ class TestExportControlState:
 
     def test_with_time_multiplier(self):
         hook = AdaptiveBudgetHook(base_ceiling=100)
-        state = hook.export_control_state(
-            time_multiplier=0.85, _now=1000.0
-        )
+        state = hook.export_control_state(time_multiplier=0.85, _now=1000.0)
         assert state["time_multiplier"] == 0.85
         assert state["effective_multiplier"] == pytest.approx(0.85)
         assert state["adjusted_ceiling"] == 85
@@ -1752,16 +1679,10 @@ class TestExportControlState:
             hook.feed_event(_halt_event(), ts=550.0)
         hook.adjust(_now=550.0)
         # adaptive=0.90, anomaly=0.85, time=0.90
-        state = hook.export_control_state(
-            time_multiplier=0.90, _now=550.0
-        )
+        state = hook.export_control_state(time_multiplier=0.90, _now=550.0)
         expected = 0.90 * 0.90 * 0.85
-        assert state["effective_multiplier"] == pytest.approx(
-            expected, abs=0.001
-        )
-        assert state["adjusted_ceiling"] == max(
-            1, round(1000 * expected)
-        )
+        assert state["effective_multiplier"] == pytest.approx(expected, abs=0.001)
+        assert state["adjusted_ceiling"] == max(1, round(1000 * expected))
 
 
 # ---------------------------------------------------------------------------
@@ -1803,13 +1724,15 @@ class TestImportControlState:
             anomaly_tighten_pct=0.15,
         )
         # Manually import anomaly state
-        hook.import_control_state({
-            "adaptive_multiplier": 0.85,
-            "last_adjustment_ts": 500.0,
-            "last_action": "tighten",
-            "anomaly_active": True,
-            "anomaly_activated_ts": 450.0,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.85,
+                "last_adjustment_ts": 500.0,
+                "last_action": "tighten",
+                "anomaly_active": True,
+                "anomaly_activated_ts": 450.0,
+            }
+        )
         assert hook.ceiling_multiplier == 0.85
         assert hook.anomaly_active is True
         assert hook.anomaly_activated_ts == 450.0
@@ -1819,9 +1742,11 @@ class TestImportControlState:
     def test_import_resets_missing_fields(self):
         """Fields not in state dict get safe defaults."""
         hook = AdaptiveBudgetHook(base_ceiling=100)
-        hook.import_control_state({
-            "adaptive_multiplier": 0.95,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.95,
+            }
+        )
         assert hook.ceiling_multiplier == 0.95
         assert hook.last_adjustment_ts is None
         assert hook.last_action is None
@@ -1834,9 +1759,11 @@ class TestImportControlState:
         hook.adjust(_now=1000.0)  # creates an event
         assert len(hook.get_events()) == 1
 
-        hook.import_control_state({
-            "adaptive_multiplier": 0.80,
-        })
+        hook.import_control_state(
+            {
+                "adaptive_multiplier": 0.80,
+            }
+        )
         # Events should still be there
         assert len(hook.get_events()) == 1
         # But multiplier changed

@@ -1,4 +1,5 @@
 """Tests for veronica_core.patch -- SDK monkey-patching with guard-context awareness."""
+
 from __future__ import annotations
 
 import logging
@@ -52,12 +53,14 @@ def _inject_fake_openai():
     resources.chat = chat_mod
     oa.resources = resources
 
-    sys.modules.update({
-        "openai": oa,
-        "openai.resources": resources,
-        "openai.resources.chat": chat_mod,
-        "openai.resources.chat.completions": comp_mod,
-    })
+    sys.modules.update(
+        {
+            "openai": oa,
+            "openai.resources": resources,
+            "openai.resources.chat": chat_mod,
+            "openai.resources.chat.completions": comp_mod,
+        }
+    )
     return comp_mod
 
 
@@ -75,11 +78,13 @@ def _inject_fake_anthropic():
     res_mod.messages = msg_mod
     ant.resources = res_mod
 
-    sys.modules.update({
-        "anthropic": ant,
-        "anthropic.resources": res_mod,
-        "anthropic.resources.messages": msg_mod,
-    })
+    sys.modules.update(
+        {
+            "anthropic": ant,
+            "anthropic.resources": res_mod,
+            "anthropic.resources.messages": msg_mod,
+        }
+    )
     return msg_mod
 
 

@@ -11,6 +11,7 @@ Tests cover:
 
 Uses asyncio.run() wrappers since pytest-asyncio is not available.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,10 @@ import pytest
 
 from veronica_core.adapters.mcp import MCPToolCost
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 from veronica_core.distributed import LocalBudgetBackend
 from veronica_core.protocols import AsyncBudgetBackendProtocol
 from veronica_core.shield.types import Decision
@@ -33,7 +37,9 @@ from veronica_core.shield.types import Decision
 # ---------------------------------------------------------------------------
 
 
-def make_adapter(max_cost: float = 10.0, tool_cost: float = 0.1) -> tuple[AsyncMCPContainmentAdapter, LocalBudgetBackend]:
+def make_adapter(
+    max_cost: float = 10.0, tool_cost: float = 0.1
+) -> tuple[AsyncMCPContainmentAdapter, LocalBudgetBackend]:
     backend = LocalBudgetBackend()
     config = ExecutionConfig(
         max_cost_usd=max_cost,
@@ -73,6 +79,7 @@ class TestAsyncBudgetAtomicity:
             # Cost should be committed (not in reservation)
             assert backend.get() == pytest.approx(0.1)
             assert backend.get_reserved() == 0.0
+
         asyncio.run(run())
 
     def test_failed_call_rolls_back_reservation(self):
@@ -83,6 +90,7 @@ class TestAsyncBudgetAtomicity:
             # No cost committed — reservation was rolled back
             assert backend.get() == 0.0
             assert backend.get_reserved() == 0.0
+
         asyncio.run(run())
 
     def test_is_error_result_rolls_back_reservation(self):
@@ -98,6 +106,7 @@ class TestAsyncBudgetAtomicity:
             # No cost committed
             assert backend.get() == 0.0
             assert backend.get_reserved() == 0.0
+
         asyncio.run(run())
 
     def test_budget_ceiling_exceeded_returns_halt(self):
@@ -106,23 +115,29 @@ class TestAsyncBudgetAtomicity:
             result = await adapter.wrap_tool_call("test_tool", {}, success_fn)
             assert result.decision == Decision.HALT
             assert backend.get() == 0.0
+
         asyncio.run(run())
 
     def test_no_reservation_held_during_await(self):
         """Reservation should be committed after call, not held indefinitely."""
+
         async def run():
             adapter, backend = make_adapter()
             result = await adapter.wrap_tool_call("test_tool", {}, success_fn)
             assert result.success is True
             assert backend.get_reserved() == 0.0
+
         asyncio.run(run())
 
     def test_zero_cost_tool_no_reservation(self):
         """Zero-cost tools skip reservation but still succeed."""
+
         async def run():
             backend = LocalBudgetBackend()
             config = ExecutionConfig(
-                max_cost_usd=1.0, max_steps=100, max_retries_total=10,
+                max_cost_usd=1.0,
+                max_steps=100,
+                max_retries_total=10,
                 budget_backend=backend,
             )
             ctx = ExecutionContext(config=config)
@@ -133,6 +148,7 @@ class TestAsyncBudgetAtomicity:
             )
             result = await adapter.wrap_tool_call("free_tool", {}, success_fn)
             assert result.success is True
+
         asyncio.run(run())
 
 
@@ -146,10 +162,13 @@ class TestAdversarialAsyncBudgetConcurrency:
         """10 concurrent calls of $0.15 each against $1.0 ceiling.
         At most 6 should succeed; none should cause over-spend.
         """
+
         async def run():
             backend = LocalBudgetBackend()
             config = ExecutionConfig(
-                max_cost_usd=1.0, max_steps=100, max_retries_total=100,
+                max_cost_usd=1.0,
+                max_steps=100,
+                max_retries_total=100,
                 budget_backend=backend,
             )
             ctx = ExecutionContext(config=config)
@@ -174,14 +193,18 @@ class TestAdversarialAsyncBudgetConcurrency:
             assert backend.get() <= 1.0 + 1e-9
             # No reservations left dangling
             assert backend.get_reserved() == 0.0
+
         asyncio.run(run())
 
     def test_exception_during_await_rolls_back(self):
         """Concurrent coroutines: the one that raises must not leave a dangling reservation."""
+
         async def run():
             backend = LocalBudgetBackend()
             config = ExecutionConfig(
-                max_cost_usd=10.0, max_steps=100, max_retries_total=100,
+                max_cost_usd=10.0,
+                max_steps=100,
+                max_retries_total=100,
                 budget_backend=backend,
             )
             ctx = ExecutionContext(config=config)
@@ -209,6 +232,7 @@ class TestAdversarialAsyncBudgetConcurrency:
             success_count = sum(1 for r in results if r.success)
             expected = success_count * 0.1
             assert backend.get() == pytest.approx(expected, abs=1e-9)
+
         asyncio.run(run())
 
 
@@ -245,7 +269,9 @@ class TestLegacyBackendCompat:
         async def run():
             backend = LegacyBackend()
             config = ExecutionConfig(
-                max_cost_usd=1.0, max_steps=100, max_retries_total=10,
+                max_cost_usd=1.0,
+                max_steps=100,
+                max_retries_total=10,
                 budget_backend=backend,
             )
             ctx = ExecutionContext(config=config)
@@ -257,6 +283,7 @@ class TestLegacyBackendCompat:
 
             result = await adapter.wrap_tool_call("tool", {}, success_fn)
             assert result.success is True
+
         asyncio.run(run())
 
 
@@ -268,12 +295,14 @@ class TestLegacyBackendCompat:
 class TestAsyncBudgetBackendProtocol:
     def test_protocol_is_runtime_checkable(self):
         """isinstance() works against AsyncBudgetBackendProtocol."""
-        assert hasattr(AsyncBudgetBackendProtocol, "__protocol_attrs__") or \
-               hasattr(AsyncBudgetBackendProtocol, "_is_protocol")
+        assert hasattr(AsyncBudgetBackendProtocol, "__protocol_attrs__") or hasattr(
+            AsyncBudgetBackendProtocol, "_is_protocol"
+        )
 
     def test_protocol_has_required_methods(self):
         """Protocol defines reserve, commit, rollback, get."""
         import inspect
+
         members = {name for name, _ in inspect.getmembers(AsyncBudgetBackendProtocol)}
         assert "reserve" in members
         assert "commit" in members

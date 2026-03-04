@@ -29,7 +29,10 @@ import pytest
 from veronica_core.adapters.mcp import MCPContainmentAdapter, MCPToolCost, MCPToolResult
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter, wrap_mcp_server
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +111,7 @@ class TestExtractTokenCountKeys:
 
     def test_tokens_key_used_for_cost(self) -> None:
         """Dict result with 'tokens' key must contribute to per-token cost."""
+
         def tokens_fn(**kwargs: Any) -> dict[str, Any]:
             return {"tokens": 200}
 
@@ -122,47 +126,59 @@ class TestExtractTokenCountKeys:
 
     def test_total_tokens_key_used_for_cost(self) -> None:
         """Dict result with 'total_tokens' key must contribute to per-token cost."""
+
         def total_tokens_fn(**kwargs: Any) -> dict[str, Any]:
             return {"total_tokens": 50}
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.01)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, total_tokens_fn)
         assert result.cost_usd == pytest.approx(0.5)
 
     def test_usage_key_dict_value_ignored(self) -> None:
         """'usage' key with dict value (not int) must return 0 tokens."""
+
         def usage_fn(**kwargs: Any) -> dict[str, Any]:
             return {"usage": {"prompt_tokens": 10, "completion_tokens": 20}}
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, usage_fn)
         # "usage" value is a dict, not int -> 0 tokens -> cost = call only
         assert result.cost_usd == pytest.approx(0.01)
 
     def test_usage_key_int_value_used(self) -> None:
         """'usage' key with int value must be used as token count."""
+
         def usage_int_fn(**kwargs: Any) -> dict[str, Any]:
             return {"usage": 100}
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.001)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, usage_int_fn)
         assert result.cost_usd == pytest.approx(0.1)
 
     def test_multiple_token_keys_first_match_wins(self) -> None:
         """When multiple token keys present, the first found wins."""
+
         def multi_key_fn(**kwargs: Any) -> dict[str, Any]:
             # token_count is checked first in _extract_token_count
             return {"token_count": 10, "tokens": 999}
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.1)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, multi_key_fn)
         # token_count=10 wins -> 10 * 0.1 = 1.0
         assert result.cost_usd == pytest.approx(1.0)
@@ -272,7 +288,9 @@ class TestCostUsdOnException:
         """Sync exception: cost_usd == cost_estimate, not 0.0."""
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.05)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, _sync_raise)
         # Exception path charges cost_estimate
         assert result.cost_usd == pytest.approx(0.05)
@@ -280,6 +298,7 @@ class TestCostUsdOnException:
 
     def test_async_exception_cost_is_estimate(self) -> None:
         """Async exception: cost_usd == cost_estimate, not 0.0."""
+
         async def run() -> MCPToolResult:
             costs = {"tool": MCPToolCost("tool", cost_per_call=0.07)}
             ctx = _make_ctx()
@@ -294,6 +313,7 @@ class TestCostUsdOnException:
 
     def test_timeout_cost_is_estimate_sync(self) -> None:
         """Sync timeout: cost_usd should equal cost_estimate."""
+
         def slow(**kwargs: Any) -> str:
             time.sleep(0.2)
             return "done"
@@ -301,7 +321,10 @@ class TestCostUsdOnException:
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.03)}
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
-            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0, timeout_seconds=0.05
+            execution_context=ctx,
+            tool_costs=costs,
+            default_cost_per_call=0.0,
+            timeout_seconds=0.05,
         )
         result = adapter.wrap_tool_call("tool", {}, slow)
         assert result.success is False
@@ -321,6 +344,7 @@ class TestIsErrorTruthyValues:
 
     def test_is_error_string_true_detected(self) -> None:
         """isError='true' (string) is truthy -> treated as error."""
+
         class StringErrorResult:
             isError = "true"  # truthy non-bool
 
@@ -334,6 +358,7 @@ class TestIsErrorTruthyValues:
 
     def test_is_error_integer_one_detected(self) -> None:
         """isError=1 (int) is truthy -> treated as error."""
+
         class IntErrorResult:
             isError = 1
 
@@ -346,6 +371,7 @@ class TestIsErrorTruthyValues:
 
     def test_is_error_zero_not_detected(self) -> None:
         """isError=0 (int) is falsy -> treated as success."""
+
         class ZeroResult:
             isError = 0
 
@@ -358,6 +384,7 @@ class TestIsErrorTruthyValues:
 
     def test_is_error_none_not_detected(self) -> None:
         """isError=None is falsy -> treated as success."""
+
         class NoneResult:
             isError = None
 
@@ -370,6 +397,7 @@ class TestIsErrorTruthyValues:
 
     def test_is_error_empty_string_not_detected(self) -> None:
         """isError='' (empty string) is falsy -> treated as success."""
+
         class EmptyResult:
             isError = ""
 
@@ -395,6 +423,7 @@ class TestAsyncBaseException:
         The async adapter uses `except Exception`. KeyboardInterrupt bypasses
         this, so it may propagate up. This test documents the observed behavior.
         """
+
         async def kb_fn(**kwargs: Any) -> Any:
             raise KeyboardInterrupt("test interrupt")
 
@@ -415,6 +444,7 @@ class TestAsyncBaseException:
 
     def test_system_exit_propagates_or_is_caught(self) -> None:
         """SystemExit (BaseException, not Exception) behavior documented."""
+
         async def exit_fn(**kwargs: Any) -> Any:
             raise SystemExit(42)
 
@@ -476,6 +506,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_list_tools_returns_none_no_crash(self) -> None:
         """list_tools() returning None must not crash adapter creation."""
+
         async def run() -> Any:
             session = MockSession(list_returns_none=True)
             ctx = _make_ctx()
@@ -486,6 +517,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_empty_tools_list_creates_adapter(self) -> None:
         """Empty tools list (no tools discovered) must create adapter successfully."""
+
         async def run() -> int:
             session = MockSession(tools=[])
             ctx = _make_ctx()
@@ -497,6 +529,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_duplicate_tool_names_from_list_tools(self) -> None:
         """If list_tools returns duplicate names, adapter must not crash."""
+
         class DupeSession(MockSession):
             async def list_tools(self) -> MockListResult:
                 return MockListResult([MockTool("search"), MockTool("search")])
@@ -513,6 +546,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_tool_with_none_name_skipped(self) -> None:
         """Tools with None name must be skipped gracefully."""
+
         class NoneNameSession(MockSession):
             async def list_tools(self) -> MockListResult:
                 t = MockTool.__new__(MockTool)
@@ -531,6 +565,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_wrap_mcp_server_budget_halt_blocks_call_tool(self) -> None:
         """wrap_mcp_server adapter must enforce budget on call_tool()."""
+
         async def run() -> str:
             session = MockSession(tools=["search"], call_result={"ok": True})
             ctx = _make_ctx(max_cost_usd=0.005)
@@ -546,6 +581,7 @@ class TestWrapMCPServerEdgeCases:
 
     def test_wrap_mcp_server_cb_blocks_call_tool(self) -> None:
         """wrap_mcp_server adapter must block call_tool when CB is OPEN."""
+
         async def run() -> str:
             session = MockSession(tools=["tool"], call_raise=RuntimeError("flapping"))
             cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
@@ -574,7 +610,9 @@ class TestEnsureStatsRace:
 
     def test_concurrent_first_calls_same_tool_no_race(self) -> None:
         """50 threads calling same new tool_name simultaneously must not crash."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+        )
         barrier = threading.Barrier(20)
         errors: list[Exception] = []
 
@@ -598,7 +636,9 @@ class TestEnsureStatsRace:
 
     def test_concurrent_distinct_tools_no_corruption(self) -> None:
         """20 threads each calling a unique tool_name must not corrupt each other."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+        )
         errors: list[Exception] = []
 
         def worker(tool_id: int) -> None:
@@ -628,13 +668,16 @@ class TestNegativeCostPerToken:
 
     def test_negative_cost_per_token_does_not_make_cost_negative(self) -> None:
         """cost_per_token < 0 with tokens should not produce negative total cost."""
+
         def token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 1000}
 
         # MCPToolCost is a frozen dataclass; negative values are allowed structurally
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.5, cost_per_token=-0.001)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, token_fn)
         # 0.5 + 1000 * (-0.001) = 0.5 - 1.0 = -0.5 mathematically
         # Whether adapter clamps to 0 or passes through is implementation-defined.
@@ -658,6 +701,7 @@ class TestAsyncTwoPhaseBudget:
 
     def test_budget_consumed_even_if_async_call_fails(self) -> None:
         """Budget probe is charged even when async call_fn raises."""
+
         async def run() -> tuple[float, bool]:
             costs = {"tool": MCPToolCost("tool", cost_per_call=0.01)}
             ctx = _make_ctx(max_cost_usd=0.1)
@@ -689,7 +733,9 @@ class TestAsyncTwoPhaseBudget:
         decision = asyncio.run(run())
         if decision == "HALT":
             # counting_fn should not have been called on the HALT call
-            assert called[0] <= 1  # only the first call (if it passed) could have called fn
+            assert (
+                called[0] <= 1
+            )  # only the first call (if it passed) could have called fn
 
 
 # ---------------------------------------------------------------------------
@@ -702,6 +748,7 @@ class TestSyncPostCallTimeout:
 
     def test_slow_fn_that_completes_still_gets_timeout_error(self) -> None:
         """call_fn that sleeps 0.2s with 0.05s timeout -> TimeoutError after completion."""
+
         def slow_fn(**kwargs: Any) -> str:
             time.sleep(0.2)
             return "completed but too slow"
@@ -715,6 +762,7 @@ class TestSyncPostCallTimeout:
 
     def test_timeout_error_path_increments_error_count(self) -> None:
         """Sync timeout error must increment error_count in stats."""
+
         def slow_fn(**kwargs: Any) -> str:
             time.sleep(0.2)
             return "done"
@@ -726,6 +774,7 @@ class TestSyncPostCallTimeout:
 
     def test_timeout_result_not_stored_in_stats_cost(self) -> None:
         """Sync timeout error: total_cost_usd in stats should not include timed-out call."""
+
         def slow_fn(**kwargs: Any) -> str:
             time.sleep(0.2)
             return "done"
@@ -747,12 +796,15 @@ class TestDeepNestedResult:
 
     def test_nested_dict_no_token_count_at_top(self) -> None:
         """Nested result without top-level token_count -> 0 tokens extracted."""
+
         def nested_fn(**kwargs: Any) -> dict[str, Any]:
             return {"data": {"token_count": 100}}  # nested, not top-level
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, nested_fn)
         # Top-level has no token_count key -> 0 tokens -> cost = call only
         assert result.cost_usd == pytest.approx(0.01)
@@ -760,24 +812,30 @@ class TestDeepNestedResult:
 
     def test_list_result_no_token_count(self) -> None:
         """List result has no token_count -> 0 tokens."""
+
         def list_fn(**kwargs: Any) -> list[str]:
             return ["item1", "item2", "item3"]
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.05, cost_per_token=0.01)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, list_fn)
         assert result.cost_usd == pytest.approx(0.05)
         assert result.success is True
 
     def test_integer_result_no_token_count(self) -> None:
         """Integer result must not be interpreted as token_count."""
+
         def int_fn(**kwargs: Any) -> int:
             return 42
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.02, cost_per_token=1.0)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("tool", {}, int_fn)
         assert result.cost_usd == pytest.approx(0.02)
         assert result.success is True
@@ -793,6 +851,7 @@ class TestAsyncCBTripRace:
 
     def test_concurrent_async_cb_trip_no_corruption(self) -> None:
         """Concurrent CB tripping from 5 failures must leave CB in valid state."""
+
         async def run() -> CircuitState:
             cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0)
             adapter = _make_async(circuit_breaker=cb, max_cost_usd=100.0, max_steps=500)
@@ -808,8 +867,11 @@ class TestAsyncCBTripRace:
 
     def test_concurrent_async_stats_call_count_consistent(self) -> None:
         """Concurrent async calls: call_count must equal total calls (no missed increments)."""
+
         async def run() -> int:
-            adapter = _make_async(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+            )
             tasks = [adapter.wrap_tool_call("tool", {}, _async_echo) for _ in range(20)]
             await asyncio.gather(*tasks)
             stats = adapter.get_tool_stats()
@@ -876,6 +938,7 @@ class TestToolNameValidation:
 
     def test_async_none_tool_name_raises(self) -> None:
         """wrap_tool_call(tool_name=None) on async adapter must raise ValueError."""
+
         async def run() -> None:
             adapter = _make_async()
             await adapter.wrap_tool_call(None, {}, _async_echo)  # type: ignore[arg-type]
@@ -885,6 +948,7 @@ class TestToolNameValidation:
 
     def test_async_empty_tool_name_raises(self) -> None:
         """wrap_tool_call(tool_name='') on async adapter must raise ValueError."""
+
         async def run() -> None:
             adapter = _make_async()
             await adapter.wrap_tool_call("", {}, _async_echo)
@@ -900,6 +964,7 @@ class TestToolNameValidation:
 
     def test_async_valid_tool_name_not_raises(self) -> None:
         """A valid non-empty string tool_name must NOT raise ValueError (async)."""
+
         async def run() -> MCPToolResult:
             adapter = _make_async()
             return await adapter.wrap_tool_call("my_tool", {}, _async_echo)
@@ -918,8 +983,11 @@ class TestAsyncConcurrentStatsConsistency:
 
     def test_concurrent_async_stats_call_count_exact(self) -> None:
         """20 concurrent async successful calls must yield call_count == 20 (with lock)."""
+
         async def run() -> int:
-            adapter = _make_async(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+            )
             tasks = [
                 asyncio.create_task(adapter.wrap_tool_call("tool", {}, _async_echo))
                 for _ in range(20)
@@ -937,6 +1005,7 @@ class TestAsyncConcurrentStatsConsistency:
 
     def test_concurrent_async_stats_cost_consistency(self) -> None:
         """20 concurrent async calls with fixed cost: total_cost_usd must be consistent."""
+
         async def run() -> float:
             adapter = _make_async(
                 max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.01
@@ -955,8 +1024,11 @@ class TestAsyncConcurrentStatsConsistency:
 
     def test_concurrent_async_error_count_no_corruption(self) -> None:
         """10 concurrent failures: error_count must equal 10 (no torn updates)."""
+
         async def run() -> tuple[int, int]:
-            adapter = _make_async(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+            )
             tasks = [
                 asyncio.create_task(adapter.wrap_tool_call("tool", {}, _async_raise))
                 for _ in range(10)
@@ -978,7 +1050,9 @@ class TestAsyncConcurrentStatsConsistency:
 class TestWrapMCPServerLogLevel:
     """L7: list_tools() failure in wrap_mcp_server must log at WARNING, not DEBUG."""
 
-    def test_list_tools_failure_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_list_tools_failure_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """list_tools() failure must emit a WARNING log (not DEBUG)."""
         import logging
 
@@ -992,15 +1066,20 @@ class TestWrapMCPServerLogLevel:
         async def run() -> None:
             session = FailingSession()
             ctx = _make_ctx()
-            with caplog.at_level(logging.WARNING, logger="veronica_core.adapters.mcp_async"):
+            with caplog.at_level(
+                logging.WARNING, logger="veronica_core.adapters.mcp_async"
+            ):
                 await wrap_mcp_server(session=session, execution_context=ctx)
 
         asyncio.run(run())
         warning_msgs = [
-            r.message for r in caplog.records
+            r.message
+            for r in caplog.records
             if r.levelno == logging.WARNING and "list_tools" in r.message
         ]
-        assert len(warning_msgs) >= 1, f"Expected WARNING for list_tools failure, got: {caplog.records}"
+        assert len(warning_msgs) >= 1, (
+            f"Expected WARNING for list_tools failure, got: {caplog.records}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1013,7 +1092,9 @@ class TestSyncEnsureStatsConcurrentCallCount:
 
     def test_20_threads_same_new_tool_call_count_exact(self) -> None:
         """20 threads competing on _ensure_stats + wrap_tool_call: call_count == 20."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+        )
         barrier = threading.Barrier(20)
         errors: list[Exception] = []
 
@@ -1032,14 +1113,18 @@ class TestSyncEnsureStatsConcurrentCallCount:
 
         assert errors == [], f"Unexpected exceptions: {errors}"
         stats = adapter.get_tool_stats()
-        assert "brand_new_tool" in stats, "Stats entry missing after concurrent creation"
+        assert "brand_new_tool" in stats, (
+            "Stats entry missing after concurrent creation"
+        )
         assert stats["brand_new_tool"].call_count == 20, (
             f"Expected call_count=20, got {stats['brand_new_tool'].call_count}"
         )
 
     def test_20_threads_same_tool_error_count_exact(self) -> None:
         """20 threads all raising on same tool_name: error_count must == 20."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=500, default_cost_per_call=0.0
+        )
         barrier = threading.Barrier(20)
 
         def worker() -> None:
@@ -1071,12 +1156,15 @@ class TestAsyncStatsLockHighLoad:
 
     def test_100_concurrent_coroutines_call_count_exact(self) -> None:
         """100 concurrent async calls to same tool_name: call_count must == 100."""
+
         async def run() -> int:
             adapter = _make_async(
                 max_cost_usd=1000.0, max_steps=500, default_cost_per_call=0.0
             )
             tasks = [
-                asyncio.create_task(adapter.wrap_tool_call("high_load_tool", {}, _async_echo))
+                asyncio.create_task(
+                    adapter.wrap_tool_call("high_load_tool", {}, _async_echo)
+                )
                 for _ in range(100)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1098,12 +1186,16 @@ class TestAsyncStatsLockHighLoad:
                 max_cost_usd=1000.0, max_steps=500, default_cost_per_call=0.0
             )
             tasks = [
-                asyncio.create_task(adapter.wrap_tool_call("lock_test_tool", {}, _async_echo))
+                asyncio.create_task(
+                    adapter.wrap_tool_call("lock_test_tool", {}, _async_echo)
+                )
                 for _ in range(100)
             ]
             # 5-second wall-clock limit to detect deadlocks
             with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True), timeout=5.0
+                )
             stats = adapter.get_tool_stats()
             return stats.get("lock_test_tool")
 
@@ -1123,7 +1215,9 @@ class TestToolNameCardinalityWarning:
 
     def test_100_distinct_tool_names_no_crash(self) -> None:
         """Creating 100 distinct tool names must not crash the adapter."""
-        adapter = _make_sync(max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0
+        )
         for i in range(100):
             result = adapter.wrap_tool_call(f"tool_{i:03d}", {}, _sync_echo)
             assert result.success is True, f"Call failed for tool_{i:03d}"
@@ -1132,7 +1226,9 @@ class TestToolNameCardinalityWarning:
 
     def test_100_distinct_tool_names_all_call_count_one(self) -> None:
         """Each of 100 distinct tool names must have call_count == 1."""
-        adapter = _make_sync(max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0
+        )
         for i in range(100):
             adapter.wrap_tool_call(f"unique_tool_{i}", {}, _sync_echo)
         stats = adapter.get_tool_stats()
@@ -1145,6 +1241,7 @@ class TestToolNameCardinalityWarning:
 
     def test_async_100_distinct_tool_names_no_crash(self) -> None:
         """100 distinct async tool names: no crash, all stats created."""
+
         async def run() -> int:
             adapter = _make_async(
                 max_cost_usd=1000.0, max_steps=5000, default_cost_per_call=0.0
@@ -1168,7 +1265,9 @@ class TestFnRaisesAfterStatsIncrement:
 
     def test_sync_error_count_after_raise(self) -> None:
         """Sync fn() that raises: error_count == 1, call_count == 1."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01
+        )
         result = adapter.wrap_tool_call("raise_tool", {}, _sync_raise)
 
         assert result.success is False
@@ -1179,7 +1278,9 @@ class TestFnRaisesAfterStatsIncrement:
 
     def test_sync_adapter_usable_after_raise(self) -> None:
         """After fn() raises, subsequent successful calls still work (not corrupted)."""
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0
+        )
         # First call raises
         r1 = adapter.wrap_tool_call("mixed_tool", {}, _sync_raise)
         assert r1.success is False
@@ -1192,11 +1293,18 @@ class TestFnRaisesAfterStatsIncrement:
 
     def test_async_error_count_after_raise(self) -> None:
         """Async fn() that raises: error_count == 1, call_count == 1."""
+
         async def run() -> tuple[bool, int, int]:
-            adapter = _make_async(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01)
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.01
+            )
             result = await adapter.wrap_tool_call("async_raise_tool", {}, _async_raise)
             stats = adapter.get_tool_stats()
-            return result.success, stats["async_raise_tool"].call_count, stats["async_raise_tool"].error_count
+            return (
+                result.success,
+                stats["async_raise_tool"].call_count,
+                stats["async_raise_tool"].error_count,
+            )
 
         success, call_count, error_count = asyncio.run(run())
         assert success is False
@@ -1205,12 +1313,20 @@ class TestFnRaisesAfterStatsIncrement:
 
     def test_async_adapter_usable_after_raise(self) -> None:
         """After async fn() raises, subsequent successful async calls still work."""
+
         async def run() -> tuple[bool, bool, int, int]:
-            adapter = _make_async(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+            adapter = _make_async(
+                max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0
+            )
             r1 = await adapter.wrap_tool_call("async_mixed", {}, _async_raise)
             r2 = await adapter.wrap_tool_call("async_mixed", {}, _async_echo)
             stats = adapter.get_tool_stats()
-            return r1.success, r2.success, stats["async_mixed"].call_count, stats["async_mixed"].error_count
+            return (
+                r1.success,
+                r2.success,
+                stats["async_mixed"].call_count,
+                stats["async_mixed"].error_count,
+            )
 
         s1, s2, cc, ec = asyncio.run(run())
         assert s1 is False
@@ -1222,7 +1338,9 @@ class TestFnRaisesAfterStatsIncrement:
         """Sync fn() raises: cost_usd in result must be cost_estimate (not 0)."""
         costs = {"raise_tool_cost": MCPToolCost("raise_tool_cost", cost_per_call=0.05)}
         ctx = _make_ctx()
-        adapter = MCPContainmentAdapter(execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0)
+        adapter = MCPContainmentAdapter(
+            execution_context=ctx, tool_costs=costs, default_cost_per_call=0.0
+        )
         result = adapter.wrap_tool_call("raise_tool_cost", {}, _sync_raise)
         assert result.success is False
         assert result.cost_usd == pytest.approx(0.05)
@@ -1262,7 +1380,9 @@ class TestBudgetBackendRaises:
         """After budget backend exception, adapter is still functional on next call."""
         from unittest.mock import patch
 
-        adapter = _make_sync(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+        adapter = _make_sync(
+            max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0
+        )
 
         with patch.object(
             adapter._ctx,

@@ -97,12 +97,15 @@ class TestDummyClientBasicBehavior:
         assert result == "empty_ok"
         assert client.last_prompt == ""
 
-    @pytest.mark.parametrize("response", [
-        "",
-        "DENY",
-        '{"allowed": false}',
-        "a" * 10000,
-    ])
+    @pytest.mark.parametrize(
+        "response",
+        [
+            "",
+            "DENY",
+            '{"allowed": false}',
+            "a" * 10000,
+        ],
+    )
     def test_various_fixed_responses(self, response: str) -> None:
         client = DummyClient(fixed_response=response)
         assert client.generate("p") == response

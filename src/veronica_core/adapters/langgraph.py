@@ -33,6 +33,7 @@ Usage::
     builder = StateGraph(dict)
     builder.add_node("my_node", my_node)
 """
+
 from __future__ import annotations
 
 try:
@@ -92,7 +93,14 @@ def _extract_token_cost(result: Any) -> float:
         if total is None:
             return 0.0
         return cost_from_total_tokens(int(total), model)
-    except (AttributeError, TypeError, ValueError, KeyError, OverflowError, RuntimeError):
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        OverflowError,
+        RuntimeError,
+    ):
         return 0.0
 
 

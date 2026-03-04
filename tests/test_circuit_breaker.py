@@ -112,7 +112,7 @@ class TestCircuitBreakerHalfOpenConcurrency:
         _ = cb.state
 
         cb.check(_make_context())  # slot consumed
-        cb.record_success()        # resets in_flight + closes circuit
+        cb.record_success()  # resets in_flight + closes circuit
         assert cb._half_open_in_flight == 0
 
     def test_in_flight_reset_after_record_failure(self):
@@ -121,7 +121,7 @@ class TestCircuitBreakerHalfOpenConcurrency:
         _ = cb.state
 
         cb.check(_make_context())  # slot consumed
-        cb.record_failure()        # resets in_flight + reopens
+        cb.record_failure()  # resets in_flight + reopens
         assert cb._half_open_in_flight == 0
 
 
@@ -155,10 +155,12 @@ class TestCircuitBreakerConstructorValidation:
 
     def test_recovery_timeout_nan_raises(self):
         import math
+
         with pytest.raises(ValueError, match="recovery_timeout"):
             CircuitBreaker(recovery_timeout=math.nan)
 
     def test_recovery_timeout_inf_raises(self):
         import math
+
         with pytest.raises(ValueError, match="recovery_timeout"):
             CircuitBreaker(recovery_timeout=math.inf)

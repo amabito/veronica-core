@@ -23,13 +23,16 @@ from veronica_core.runtime_policy import PolicyContext
 class TestBudgetSpendInvalidInputs:
     """spend() must raise ValueError for non-finite or negative amounts."""
 
-    @pytest.mark.parametrize("bad_amount", [
-        float("nan"),
-        float("inf"),
-        float("-inf"),
-        -0.01,
-        -100.0,
-    ])
+    @pytest.mark.parametrize(
+        "bad_amount",
+        [
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            -0.01,
+            -100.0,
+        ],
+    )
     def test_spend_raises_on_invalid_amount(self, bad_amount: float) -> None:
         b = BudgetEnforcer(limit_usd=100.0)
         with pytest.raises(ValueError):
@@ -56,13 +59,16 @@ class TestBudgetSpendInvalidInputs:
 class TestBudgetCheckInvalidCost:
     """check() must deny requests with invalid cost_usd in context."""
 
-    @pytest.mark.parametrize("bad_cost", [
-        float("nan"),
-        float("inf"),
-        float("-inf"),
-        -1.0,
-        -0.001,
-    ])
+    @pytest.mark.parametrize(
+        "bad_cost",
+        [
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            -1.0,
+            -0.001,
+        ],
+    )
     def test_check_denies_invalid_cost_usd(self, bad_cost: float) -> None:
         b = BudgetEnforcer(limit_usd=100.0)
         decision = b.check(PolicyContext(cost_usd=bad_cost))

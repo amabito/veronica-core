@@ -31,16 +31,15 @@ class BudgetEnforcer:
 
     def __post_init__(self) -> None:
         if math.isnan(self.limit_usd) or math.isinf(self.limit_usd):
-            raise ValueError(
-                f"limit_usd must be finite, got {self.limit_usd!r}"
-            )
+            raise ValueError(f"limit_usd must be finite, got {self.limit_usd!r}")
         if self.limit_usd < 0:
-            raise ValueError(
-                f"limit_usd must be non-negative, got {self.limit_usd!r}"
-            )
+            raise ValueError(f"limit_usd must be non-negative, got {self.limit_usd!r}")
+
     _call_count: int = field(default=0, init=False)
     _exceeded: bool = field(default=False, init=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def spend(self, amount_usd: float) -> bool:
         """Record spending. Returns True if within budget, False if exceeded.
@@ -56,13 +55,9 @@ class BudgetEnforcer:
         """
         with self._lock:
             if math.isnan(amount_usd) or math.isinf(amount_usd):
-                raise ValueError(
-                    f"amount must be a finite number, got {amount_usd}"
-                )
+                raise ValueError(f"amount must be a finite number, got {amount_usd}")
             if amount_usd < 0:
-                raise ValueError(
-                    f"amount must be non-negative, got {amount_usd}"
-                )
+                raise ValueError(f"amount must be non-negative, got {amount_usd}")
             projected = self._spent_usd + amount_usd
             if projected > self.limit_usd:
                 logger.warning(
@@ -162,8 +157,7 @@ class BudgetEnforcer:
                     allowed=False,
                     policy_type=self.policy_type,
                     reason=(
-                        f"Budget would exceed: "
-                        f"${projected:.2f} > ${self.limit_usd:.2f}"
+                        f"Budget would exceed: ${projected:.2f} > ${self.limit_usd:.2f}"
                     ),
                 )
             return PolicyDecision(allowed=True, policy_type=self.policy_type)

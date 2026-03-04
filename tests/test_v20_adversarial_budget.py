@@ -12,6 +12,7 @@ Attack vectors:
 9. Redis Lua script atomicity under concurrent reserve+commit+rollback
 10. Budget ceiling exactly at boundary (epsilon edge cases)
 """
+
 from __future__ import annotations
 
 import threading
@@ -184,7 +185,9 @@ class TestAdversarialConcurrentReserve:
         for t in threads:
             t.join()
 
-        assert len(successes) <= 6, f"Too many Redis reservations succeeded: {len(successes)}"
+        assert len(successes) <= 6, (
+            f"Too many Redis reservations succeeded: {len(successes)}"
+        )
         total_reserved = backend.get_reserved()
         assert total_reserved <= ceiling + _BUDGET_EPSILON * 100
 
@@ -357,7 +360,9 @@ class TestAdversarialSharedTimeoutPool:
         event.wait(timeout=2.0)
         pool.shutdown()
 
-        assert len(fired_after) == 1, "Good callback must fire despite earlier exception"
+        assert len(fired_after) == 1, (
+            "Good callback must fire despite earlier exception"
+        )
 
     def test_cancel_before_fire(self):
         """Cancelled callback must not fire."""

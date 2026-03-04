@@ -1,4 +1,5 @@
 """Tests for async veronica_guard ContextVar behavior (Task #4)."""
+
 from __future__ import annotations
 
 import asyncio

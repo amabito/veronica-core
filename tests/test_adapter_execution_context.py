@@ -3,6 +3,7 @@
 Verifies that all 5 adapters (langchain, ag2, crewai, llamaindex, langgraph)
 can accept an ExecutionContext and share budget tracking across components.
 """
+
 from __future__ import annotations
 
 import sys
@@ -35,11 +36,13 @@ def _inject_all_stubs() -> dict:
     lc_outputs.LLMResult = FakeLLMResult
     lc_core.callbacks = lc_callbacks
     lc_core.outputs = lc_outputs
-    sys.modules.update({
-        "langchain_core": lc_core,
-        "langchain_core.callbacks": lc_callbacks,
-        "langchain_core.outputs": lc_outputs,
-    })
+    sys.modules.update(
+        {
+            "langchain_core": lc_core,
+            "langchain_core.callbacks": lc_callbacks,
+            "langchain_core.outputs": lc_outputs,
+        }
+    )
     stubs["FakeLLMResult"] = FakeLLMResult
 
     # --- ag2 ---
@@ -60,7 +63,6 @@ def _inject_all_stubs() -> dict:
     sys.modules["ag2"] = ag2_mod
     stubs["FakeConversableAgent"] = FakeConversableAgent
 
-
     # --- langgraph ---
     lg = types.ModuleType("langgraph")
     lg_graph = types.ModuleType("langgraph.graph")
@@ -68,11 +70,13 @@ def _inject_all_stubs() -> dict:
     lg_graph.StateGraph = object
     lg.graph = lg_graph
     lg.prebuilt = lg_prebuilt
-    sys.modules.update({
-        "langgraph": lg,
-        "langgraph.graph": lg_graph,
-        "langgraph.prebuilt": lg_prebuilt,
-    })
+    sys.modules.update(
+        {
+            "langgraph": lg,
+            "langgraph.graph": lg_graph,
+            "langgraph.prebuilt": lg_prebuilt,
+        }
+    )
 
     return stubs
 
@@ -91,7 +95,10 @@ from veronica_core import GuardConfig  # noqa: E402
 from veronica_core.adapters.ag2 import VeronicaConversableAgent  # noqa: E402
 from veronica_core.adapters._shared import ExecutionContextContainerAdapter  # noqa: E402
 from veronica_core.adapters.langchain import VeronicaCallbackHandler  # noqa: E402
-from veronica_core.adapters.langgraph import VeronicaLangGraphCallback, veronica_node_wrapper  # noqa: E402
+from veronica_core.adapters.langgraph import (
+    VeronicaLangGraphCallback,
+    veronica_node_wrapper,
+)  # noqa: E402
 from veronica_core.containment import ExecutionConfig  # noqa: E402
 from veronica_core.containment.execution_context import ExecutionContext  # noqa: E402
 from veronica_core.inject import VeronicaHalt  # noqa: E402

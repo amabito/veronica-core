@@ -133,11 +133,15 @@ class TestAdversarialC6AtexitDeduplication:
         monkeypatch.setattr(_mod.atexit, "register", _tracking_register)
         return save_calls
 
-    def test_single_instance_registers_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_single_instance_registers_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """One VeronicaIntegration with backend must register _save_all_instances via atexit."""
         save_calls = self._track_save_registrations(monkeypatch)
         VeronicaIntegration(backend=_NullBackend())
-        assert len(save_calls) == 1, f"Expected 1 save registration, got {len(save_calls)}"
+        assert len(save_calls) == 1, (
+            f"Expected 1 save registration, got {len(save_calls)}"
+        )
 
     def test_two_instances_register_at_most_once_total(
         self, monkeypatch: pytest.MonkeyPatch
@@ -178,7 +182,9 @@ class TestAdversarialC6AtexitDeduplication:
         VeronicaIntegration(backend=_NullBackend())
         assert VeronicaIntegration._atexit_registered is True
 
-    def test_no_backend_does_not_register(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_backend_does_not_register(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Instance without a backend must not register save via atexit and must not set flag."""
         save_calls = self._track_save_registrations(monkeypatch)
         assert VeronicaIntegration._atexit_registered is False
@@ -270,9 +276,7 @@ class TestAdversarialA2ZeroTokenNotMasked:
 
     def test_prompt_tokens_absent_falls_back_to_input_tokens(self) -> None:
         """When prompt_tokens key is absent, input_tokens must be used."""
-        response = _make_llm_result(
-            {"input_tokens": 100, "completion_tokens": 50}
-        )
+        response = _make_llm_result({"input_tokens": 100, "completion_tokens": 50})
         cost = extract_llm_result_cost(response)
         from veronica_core.pricing import estimate_cost_usd
 
@@ -284,9 +288,7 @@ class TestAdversarialA2ZeroTokenNotMasked:
 
     def test_completion_tokens_absent_falls_back_to_output_tokens(self) -> None:
         """When completion_tokens key is absent, output_tokens must be used."""
-        response = _make_llm_result(
-            {"prompt_tokens": 100, "output_tokens": 50}
-        )
+        response = _make_llm_result({"prompt_tokens": 100, "output_tokens": 50})
         cost = extract_llm_result_cost(response)
         from veronica_core.pricing import estimate_cost_usd
 
@@ -299,9 +301,7 @@ class TestAdversarialA2ZeroTokenNotMasked:
     def test_input_tokens_zero_honored(self) -> None:
         """Fallback key input_tokens=0 must also not be masked by or-logic."""
         # prompt_tokens absent; input_tokens=0 must be used as 0.
-        response = _make_llm_result(
-            {"input_tokens": 0, "completion_tokens": 5}
-        )
+        response = _make_llm_result({"input_tokens": 0, "completion_tokens": 5})
         cost = extract_llm_result_cost(response)
         from veronica_core.pricing import estimate_cost_usd
 

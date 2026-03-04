@@ -40,9 +40,15 @@ import pytest
 
 from veronica_core.adapters.mcp import MCPToolCost, MCPToolResult
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 from veronica_core.distributed import LocalBudgetBackend
-from veronica_core.middleware import VeronicaASGIMiddleware, get_current_execution_context
+from veronica_core.middleware import (
+    VeronicaASGIMiddleware,
+    get_current_execution_context,
+)
 from veronica_core.shield.types import Decision
 
 
@@ -571,7 +577,9 @@ class TestWrapMcpServer:
         async def run() -> Any:
             from veronica_core.adapters.mcp_async import wrap_mcp_server
 
-            config = ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=5)
+            config = ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=5
+            )
             ctx = ExecutionContext(config=config)
             return await wrap_mcp_server(_BrokenSession(), execution_context=ctx)
 
@@ -588,7 +596,9 @@ class TestWrapMcpServer:
         async def run() -> MCPToolResult:
             from veronica_core.adapters.mcp_async import wrap_mcp_server
 
-            config = ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=5)
+            config = ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=5
+            )
             ctx = ExecutionContext(config=config)
             adapter = await wrap_mcp_server(_MockSession(), execution_context=ctx)
             return await adapter.call_tool("search", {"q": "test"})
@@ -608,6 +618,7 @@ class TestWrapMcpServer:
             async def list_tools(self) -> Any:
                 class _Response:
                     tools = [_FakeTool("search"), _FakeTool("calculator")]
+
                 return _Response()
 
             async def call_tool(self, name: str, arguments: Any) -> dict:
@@ -616,7 +627,9 @@ class TestWrapMcpServer:
         async def run() -> MCPToolResult:
             from veronica_core.adapters.mcp_async import wrap_mcp_server
 
-            config = ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=5)
+            config = ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=5
+            )
             ctx = ExecutionContext(config=config)
             adapter = await wrap_mcp_server(
                 _DiscoverySession(),

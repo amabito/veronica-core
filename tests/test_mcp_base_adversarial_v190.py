@@ -29,7 +29,10 @@ from veronica_core.adapters._mcp_base import (
 )
 from veronica_core.adapters.mcp import MCPContainmentAdapter
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 from veronica_core.inject import (
     VeronicaHalt,
     get_active_container,
@@ -81,26 +84,32 @@ class TestBackwardCompatImports:
 
     def test_mcp_module_exports_tool_cost(self) -> None:
         from veronica_core.adapters.mcp import MCPToolCost as C
+
         assert C is MCPToolCost
 
     def test_mcp_module_exports_tool_result(self) -> None:
         from veronica_core.adapters.mcp import MCPToolResult as R
+
         assert R is MCPToolResult
 
     def test_mcp_module_exports_tool_stats(self) -> None:
         from veronica_core.adapters.mcp import MCPToolStats as S
+
         assert S is MCPToolStats
 
     def test_mcp_async_module_exports_tool_cost(self) -> None:
         from veronica_core.adapters.mcp_async import MCPToolCost as C
+
         assert C is MCPToolCost
 
     def test_mcp_async_module_exports_tool_result(self) -> None:
         from veronica_core.adapters.mcp_async import MCPToolResult as R
+
         assert R is MCPToolResult
 
     def test_mcp_async_module_exports_tool_stats(self) -> None:
         from veronica_core.adapters.mcp_async import MCPToolStats as S
+
         assert S is MCPToolStats
 
     def test_stats_warn_limit_consistent(self) -> None:
@@ -191,7 +200,9 @@ class TestExtractTokenCountEdgeCases:
 
         The priority list is: token_count, tokens, total_tokens, usage.
         """
-        result = _extract_token_count({"token_count": 10, "tokens": 20, "total_tokens": 30})
+        result = _extract_token_count(
+            {"token_count": 10, "tokens": 20, "total_tokens": 30}
+        )
         # token_count is checked first
         assert result == 10
 
@@ -262,6 +273,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_async_wrapper_preserves_function_name(self) -> None:
         """functools.wraps must preserve __name__."""
+
         @veronica_guard()
         async def my_special_function() -> None:
             pass
@@ -270,6 +282,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_async_wrapper_preserves_docstring(self) -> None:
         """functools.wraps must preserve __doc__."""
+
         @veronica_guard()
         async def documented() -> None:
             """My docstring."""
@@ -309,6 +322,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_async_container_token_resets_on_cancellation(self) -> None:
         """_active_container ContextVar must reset even on CancelledError."""
+
         @veronica_guard()
         async def cancellable() -> None:
             await asyncio.sleep(10.0)
@@ -349,6 +363,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_async_guard_deny_does_not_set_contextvar(self) -> None:
         """When container.check() denies, ContextVar must NOT be set."""
+
         @veronica_guard(max_steps=0)
         async def denied() -> None:
             pass  # pragma: no cover
@@ -361,6 +376,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_async_return_decision_deny_no_contextvar_set(self) -> None:
         """return_decision=True path on deny must not set ContextVar."""
+
         @veronica_guard(max_steps=0, return_decision=True)
         async def denied() -> None:
             pass  # pragma: no cover
@@ -390,6 +406,7 @@ class TestInjectAsyncGuardEdgeCases:
 
     def test_sync_guard_contextvar_resets_on_exception(self) -> None:
         """ContextVar must reset even if the wrapped sync function raises."""
+
         @veronica_guard()
         def failing() -> None:
             raise ValueError("boom")
@@ -461,12 +478,14 @@ class TestPricingCaseSensitivity:
         # Verify exact match takes priority over prefix
         exact = resolve_model_pricing("claude-3-5-sonnet-20241022")
         from veronica_core.pricing import PRICING_TABLE
+
         assert exact is PRICING_TABLE["claude-3-5-sonnet-20241022"]
 
     def test_model_with_version_suffix_uses_prefix(self) -> None:
         """'gpt-4o-2024-11-20' should match 'gpt-4o' via prefix."""
         pricing = resolve_model_pricing("gpt-4o-2024-11-20")
         from veronica_core.pricing import PRICING_TABLE
+
         # Must match via prefix (gpt-4o is prefix of gpt-4o-2024-11-20)
         assert pricing is PRICING_TABLE["gpt-4o"]
 
@@ -621,10 +640,7 @@ class TestAsyncEnsureStatsConcurrentRace:
         )
 
         async def run() -> None:
-            tasks = [
-                adapter.wrap_tool_call("tool", {}, _async_echo)
-                for _ in range(10)
-            ]
+            tasks = [adapter.wrap_tool_call("tool", {}, _async_echo) for _ in range(10)]
             await asyncio.gather(*tasks)
 
         asyncio.run(run())
@@ -705,7 +721,9 @@ class TestAdversarialExhaustedContext:
         from veronica_core.containment.execution_context import WrapOptions
         from veronica_core.shield.types import Decision
 
-        config = ExecutionConfig(max_cost_usd=0.001, max_steps=100, max_retries_total=100)
+        config = ExecutionConfig(
+            max_cost_usd=0.001, max_steps=100, max_retries_total=100
+        )
         ctx = ExecutionContext(config=config)
 
         def expensive_fn() -> str:
@@ -718,7 +736,9 @@ class TestAdversarialExhaustedContext:
         snap = ctx.get_snapshot()
         if snap.cost_usd_accumulated >= 0.001:
             # Budget is spent; next call must be denied
-            result2 = ctx.wrap_llm_call(fn=expensive_fn, options=WrapOptions(cost_estimate_hint=0.0))
+            result2 = ctx.wrap_llm_call(
+                fn=expensive_fn, options=WrapOptions(cost_estimate_hint=0.0)
+            )
             assert result2 in (Decision.HALT, Decision.RETRY) or result2 is None
 
     def test_wrap_after_max_steps_reached_returns_halt(self) -> None:
@@ -726,7 +746,9 @@ class TestAdversarialExhaustedContext:
         from veronica_core.containment.execution_context import WrapOptions
         from veronica_core.shield.types import Decision
 
-        config = ExecutionConfig(max_cost_usd=1000.0, max_steps=2, max_retries_total=100)
+        config = ExecutionConfig(
+            max_cost_usd=1000.0, max_steps=2, max_retries_total=100
+        )
         ctx = ExecutionContext(config=config)
 
         opts = WrapOptions(cost_estimate_hint=0.0)
@@ -781,7 +803,9 @@ class TestAdversarialCircuitBreakerMidCall:
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
             execution_context=ctx,
-            tool_costs={"tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)},
+            tool_costs={
+                "tool": MCPToolCost("tool", cost_per_call=0.01, cost_per_token=0.001)
+            },
         )
 
         # Result with negative token_count — _extract_token_count returns 0
@@ -795,7 +819,9 @@ class TestAdversarialCircuitBreakerMidCall:
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
             execution_context=ctx,
-            tool_costs={"tool": MCPToolCost("tool", cost_per_call=0.05, cost_per_token=0.001)},
+            tool_costs={
+                "tool": MCPToolCost("tool", cost_per_call=0.05, cost_per_token=0.001)
+            },
         )
 
         cost = adapter._compute_actual_cost("tool", {"token_count": 0})

@@ -8,6 +8,7 @@ Tests:
 5. LocalBudgetBackend: 50 threads doing reserve+commit or reserve+rollback randomly
 6. ReconciliationCallback called from wrap_llm_call under concurrent load
 """
+
 from __future__ import annotations
 
 import random
@@ -74,7 +75,9 @@ class TestConcurrentWrapLlmCall:
         lock = threading.Lock()
 
         def worker() -> None:
-            decision = ctx.wrap_llm_call(fn=_noop, options=WrapOptions(cost_estimate_hint=0.01))
+            decision = ctx.wrap_llm_call(
+                fn=_noop, options=WrapOptions(cost_estimate_hint=0.01)
+            )
             with lock:
                 results.append(decision)
 
@@ -269,11 +272,15 @@ class TestParentChildConcurrentWrap:
     def test_parent_cost_includes_child_propagation(self) -> None:
         """Parent cost must include all child costs after propagation."""
         parent_backend = LocalBudgetBackend()
-        parent_config = _make_config(max_cost=100.0, max_steps=1000, budget_backend=parent_backend)
+        parent_config = _make_config(
+            max_cost=100.0, max_steps=1000, budget_backend=parent_backend
+        )
         parent_ctx = ExecutionContext(config=parent_config)
 
         child_backend = LocalBudgetBackend()
-        child_config = _make_config(max_cost=50.0, max_steps=500, budget_backend=child_backend)
+        child_config = _make_config(
+            max_cost=50.0, max_steps=500, budget_backend=child_backend
+        )
         child_ctx = ExecutionContext(config=child_config, parent=parent_ctx)
 
         cost_per_call = 0.01
@@ -299,10 +306,9 @@ class TestParentChildConcurrentWrap:
             with parent_lock:
                 parent_results.append(decision)
 
-        threads = (
-            [threading.Thread(target=child_worker) for _ in range(n_child_threads)]
-            + [threading.Thread(target=parent_worker) for _ in range(n_parent_threads)]
-        )
+        threads = [
+            threading.Thread(target=child_worker) for _ in range(n_child_threads)
+        ] + [threading.Thread(target=parent_worker) for _ in range(n_parent_threads)]
         for t in threads:
             t.start()
         for t in threads:
@@ -320,7 +326,9 @@ class TestParentChildConcurrentWrap:
             f"parent_cost={parent_snap.cost_usd_accumulated:.6f} != "
             f"expected={expected_parent_cost:.6f}"
         )
-        assert abs(child_snap.cost_usd_accumulated - child_allowed * cost_per_call) < 1e-9
+        assert (
+            abs(child_snap.cost_usd_accumulated - child_allowed * cost_per_call) < 1e-9
+        )
 
     def test_no_deadlock_within_timeout(self) -> None:
         """20 concurrent threads on parent + child must complete within 10 seconds."""
@@ -338,10 +346,13 @@ class TestParentChildConcurrentWrap:
             with lock:
                 completed.append(True)
 
-        threads = (
-            [threading.Thread(target=worker, args=(child_ctx,)) for _ in range(n_threads // 2)]
-            + [threading.Thread(target=worker, args=(parent_ctx,)) for _ in range(n_threads // 2)]
-        )
+        threads = [
+            threading.Thread(target=worker, args=(child_ctx,))
+            for _ in range(n_threads // 2)
+        ] + [
+            threading.Thread(target=worker, args=(parent_ctx,))
+            for _ in range(n_threads // 2)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -376,6 +387,7 @@ class TestSharedTimeoutPoolCancelAccuracy:
                 def cb() -> None:
                     with fire_lock:
                         fired.append(idx)
+
                 return cb
 
             h = pool.schedule(deadline, make_callback(idx))
@@ -578,7 +590,9 @@ class TestReconciliationCallbackConcurrent:
         ctx = ExecutionContext(config=config)
 
         n_threads = 10
-        received: dict[int, list[tuple[float, float]]] = {i: [] for i in range(n_threads)}
+        received: dict[int, list[tuple[float, float]]] = {
+            i: [] for i in range(n_threads)
+        }
         recv_lock = threading.Lock()
 
         class ThreadCallback:
@@ -690,7 +704,9 @@ class TestCancellationTokenConcurrency:
             t.join(timeout=5.0)
 
         assert not errors, f"cancel() raised exceptions: {errors}"
-        assert token.is_cancelled, "Token must be cancelled after concurrent cancel() calls"
+        assert token.is_cancelled, (
+            "Token must be cancelled after concurrent cancel() calls"
+        )
 
     def test_wait_unblocks_after_concurrent_cancel(self) -> None:
         """wait() must unblock when cancel() is called from another thread."""
@@ -712,4 +728,6 @@ class TestCancellationTokenConcurrency:
         t_cancel.join(timeout=2.0)
         t_wait.join(timeout=2.0)
 
-        assert unblocked.is_set(), "wait() must unblock after cancel() from another thread"
+        assert unblocked.is_set(), (
+            "wait() must unblock after cancel() from another thread"
+        )

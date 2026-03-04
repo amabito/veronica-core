@@ -171,36 +171,48 @@ class TestAdversarialExecutionConfig:
     def test_nan_max_cost_raises(self):
         """NaN max_cost_usd must raise ValueError — bypasses all budget checks."""
         import pytest
+
         with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(max_cost_usd=float("nan"), max_steps=10, max_retries_total=3)
+            ExecutionConfig(
+                max_cost_usd=float("nan"), max_steps=10, max_retries_total=3
+            )
 
     def test_positive_inf_max_cost_raises(self):
         """+Inf max_cost_usd must raise ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(max_cost_usd=float("inf"), max_steps=10, max_retries_total=3)
+            ExecutionConfig(
+                max_cost_usd=float("inf"), max_steps=10, max_retries_total=3
+            )
 
     def test_negative_inf_max_cost_raises(self):
         """-Inf max_cost_usd must raise ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(max_cost_usd=float("-inf"), max_steps=10, max_retries_total=3)
+            ExecutionConfig(
+                max_cost_usd=float("-inf"), max_steps=10, max_retries_total=3
+            )
 
     def test_negative_max_cost_raises(self):
         """Negative max_cost_usd must raise ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="non-negative"):
             ExecutionConfig(max_cost_usd=-1.0, max_steps=10, max_retries_total=3)
 
     def test_negative_max_steps_raises(self):
         """Negative max_steps must raise ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="non-negative"):
             ExecutionConfig(max_cost_usd=1.0, max_steps=-1, max_retries_total=3)
 
     def test_negative_max_retries_raises(self):
         """Negative max_retries_total must raise ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="non-negative"):
             ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=-1)
 
@@ -250,7 +262,9 @@ class TestAdversarialH3BackendOutsideLock:
         errors: list[str] = []
 
         def wrap_thread():
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01)
+            )
 
         def snapshot_thread():
             # Wait until slow backend.add() has started, then try to snapshot.
@@ -282,14 +296,18 @@ class TestAdversarialM4DedupPerformance:
 
     def test_emit_chain_event_dedup_with_many_events(self):
         """Dedup must work correctly even near the _MAX_CHAIN_EVENTS cap."""
-        config = ExecutionConfig(max_cost_usd=10.0, max_steps=10000, max_retries_total=10000)
+        config = ExecutionConfig(
+            max_cost_usd=10.0, max_steps=10000, max_retries_total=10000
+        )
         ctx = ExecutionContext(config=config)
 
         # Generate 900 unique events by running many calls that emit budget events.
         # The easiest way: exhaust retries to emit repeated retry_budget_exceeded.
         # But for performance test, directly call abort() with many distinct reasons.
         for i in range(200):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         # Should complete without exponential slowdown
         snap = ctx.get_snapshot()
@@ -301,14 +319,22 @@ class TestAdversarialM4DedupPerformance:
         ctx = ExecutionContext(config=config)
 
         # First call: accumulate cost that triggers budget_exceeded on second call.
-        ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001))
+        ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
+        )
         # Second call: budget exceeded event emitted.
-        ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001))
+        ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
+        )
         # Third call: same budget exceeded event — must be deduped.
-        ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001))
+        ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
+        )
 
         snap = ctx.get_snapshot()
-        budget_events = [e for e in snap.events if e.event_type == "CHAIN_BUDGET_EXCEEDED"]
+        budget_events = [
+            e for e in snap.events if e.event_type == "CHAIN_BUDGET_EXCEEDED"
+        ]
         assert len(budget_events) == 1, (
             f"Expected exactly 1 CHAIN_BUDGET_EXCEEDED event, got {len(budget_events)}"
         )
@@ -319,14 +345,18 @@ class TestAdversarialL6GraphSnapshotLock:
 
     def test_get_graph_snapshot_concurrent_with_writes(self):
         """get_graph_snapshot() must not return torn data during concurrent writes."""
-        config = ExecutionConfig(max_cost_usd=100.0, max_steps=1000, max_retries_total=1000)
+        config = ExecutionConfig(
+            max_cost_usd=100.0, max_steps=1000, max_retries_total=1000
+        )
         ctx = ExecutionContext(config=config)
         errors: list[str] = []
         stop_flag = threading.Event()
 
         def writer():
             while not stop_flag.is_set():
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
 
         def reader():
             for _ in range(50):
@@ -366,14 +396,18 @@ class TestAdversarialExecutionContext:
         ctx = ExecutionContext(config=config)
 
         for i in range(5):
-            d = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
-            assert d == Decision.ALLOW, f"Call {i+1} of 5 must ALLOW, got {d}"
+            d = ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
+            assert d == Decision.ALLOW, f"Call {i + 1} of 5 must ALLOW, got {d}"
 
         snap = ctx.get_snapshot()
         assert snap.step_count == 5, f"Expected step_count=5, got {snap.step_count}"
 
         # 6th call: step_count >= max_steps -> HALT
-        d6 = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+        d6 = ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+        )
         assert d6 == Decision.HALT, f"6th call must HALT, got {d6}"
 
     def test_step_boundary_fn_not_called_when_halted(self):
@@ -385,7 +419,9 @@ class TestAdversarialExecutionContext:
         # step_count == 1 == max_steps now
 
         called = []
-        ctx.wrap_llm_call(fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.0))
+        ctx.wrap_llm_call(
+            fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.0)
+        )
         assert called == [], "fn must not be called when step limit already reached"
 
     def test_step_boundary_zero_max_steps_halts_immediately(self):
@@ -394,7 +430,9 @@ class TestAdversarialExecutionContext:
         ctx = ExecutionContext(config=config)
 
         called = []
-        d = ctx.wrap_llm_call(fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.0))
+        d = ctx.wrap_llm_call(
+            fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.0)
+        )
         assert d == Decision.HALT, f"max_steps=0 must HALT immediately, got {d}"
         assert called == [], "fn must not be called when max_steps=0"
 
@@ -407,15 +445,20 @@ class TestAdversarialExecutionContext:
         Call 3: any cost -> HALT (accumulated >= ceiling post-call 2).
         """
         import pytest
+
         config = ExecutionConfig(max_cost_usd=0.10, max_steps=100, max_retries_total=10)
         ctx = ExecutionContext(config=config)
 
         # Call 1: projected=0.05 < 0.10 -> ALLOW
-        d1 = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.05))
+        d1 = ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.05)
+        )
         assert d1 == Decision.ALLOW, f"Call 1 must ALLOW, got {d1}"
 
         # Call 2: projected=0.10, not > 0.10 -> ALLOW (at ceiling but not exceeding estimate check)
-        d2 = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.05))
+        d2 = ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.05)
+        )
         assert d2 == Decision.ALLOW, f"Call 2 must ALLOW, got {d2}"
 
         snap = ctx.get_snapshot()
@@ -425,17 +468,22 @@ class TestAdversarialExecutionContext:
 
         # Call 3: accumulated=0.10 >= max=0.10 -> _post_success_checks halts on NEXT entry
         # OR: projected estimate check 0.10+X > 0.10 -> halts before fn()
-        d3 = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01))
+        d3 = ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01)
+        )
         assert d3 == Decision.HALT, f"Call 3 must HALT (budget exhausted), got {d3}"
 
     def test_cost_boundary_float_accumulation_precision(self):
         """10 calls x 0.01 = 0.10 should equal max_cost_usd exactly (pytest.approx)."""
         import pytest
+
         config = ExecutionConfig(max_cost_usd=0.10, max_steps=100, max_retries_total=10)
         ctx = ExecutionContext(config=config)
 
         for i in range(10):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
             # Force actual cost accumulation by using _cost_usd_accumulated directly:
             # We use cost_estimate_hint=0.0 so no budget check blocks us,
             # then we manually verify the accumulated cost stays 0.
@@ -450,7 +498,9 @@ class TestAdversarialExecutionContext:
         ctx = ExecutionContext(config=config)
 
         called = []
-        d = ctx.wrap_llm_call(fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.01))
+        d = ctx.wrap_llm_call(
+            fn=lambda: called.append(1), options=WrapOptions(cost_estimate_hint=0.01)
+        )
         assert d == Decision.HALT, f"max_cost=0 with hint>0 must HALT, got {d}"
         assert called == [], "fn must not be called when budget is zero"
 
@@ -460,11 +510,15 @@ class TestAdversarialExecutionContext:
 
     def test_step_count_increments_exactly_once_per_call(self):
         """step_count must increment by exactly 1 per successful wrap_llm_call."""
-        config = ExecutionConfig(max_cost_usd=100.0, max_steps=100, max_retries_total=10)
+        config = ExecutionConfig(
+            max_cost_usd=100.0, max_steps=100, max_retries_total=10
+        )
         ctx = ExecutionContext(config=config)
 
         for expected in range(1, 6):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
             snap = ctx.get_snapshot()
             assert snap.step_count == expected, (
                 f"After {expected} calls, step_count should be {expected}, got {snap.step_count}"
@@ -489,7 +543,9 @@ class TestAdversarialExecutionContext:
 
     def test_step_count_not_incremented_when_fn_raises(self):
         """step_count must NOT increment when fn() raises an exception."""
-        config = ExecutionConfig(max_cost_usd=100.0, max_steps=100, max_retries_total=10)
+        config = ExecutionConfig(
+            max_cost_usd=100.0, max_steps=100, max_retries_total=10
+        )
         ctx = ExecutionContext(config=config)
 
         def bad_fn():
@@ -512,11 +568,15 @@ class TestAdversarialExecutionContext:
         """
 
         # Set a very low budget so many calls will trigger budget_exceeded
-        config = ExecutionConfig(max_cost_usd=0.001, max_steps=1000, max_retries_total=1000)
+        config = ExecutionConfig(
+            max_cost_usd=0.001, max_steps=1000, max_retries_total=1000
+        )
         ctx = ExecutionContext(config=config)
 
         # First call: accumulate cost to hit ceiling
-        ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001))
+        ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
+        )
 
         n_threads = 10
         barrier = threading.Barrier(n_threads)
@@ -525,7 +585,9 @@ class TestAdversarialExecutionContext:
         def trigger_event():
             barrier.wait()  # synchronized start
             # All threads call simultaneously; each should trigger budget_exceeded
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
+            )
             results.append(1)
 
         threads = [threading.Thread(target=trigger_event) for _ in range(n_threads)]
@@ -535,14 +597,18 @@ class TestAdversarialExecutionContext:
             t.join(timeout=5.0)
 
         snap = ctx.get_snapshot()
-        budget_events = [e for e in snap.events if e.event_type == "CHAIN_BUDGET_EXCEEDED"]
+        budget_events = [
+            e for e in snap.events if e.event_type == "CHAIN_BUDGET_EXCEEDED"
+        ]
         assert len(budget_events) <= 1, (
             f"Dedup failed: {len(budget_events)} CHAIN_BUDGET_EXCEEDED events (expected <= 1)"
         )
 
     def test_concurrent_step_limit_event_dedup(self):
         """10 threads hit step limit simultaneously — CHAIN_STEP_LIMIT_EXCEEDED at most once."""
-        config = ExecutionConfig(max_cost_usd=100.0, max_steps=1, max_retries_total=1000)
+        config = ExecutionConfig(
+            max_cost_usd=100.0, max_steps=1, max_retries_total=1000
+        )
         ctx = ExecutionContext(config=config)
 
         ctx.wrap_llm_call(fn=lambda: None)  # consume the one step
@@ -552,7 +618,9 @@ class TestAdversarialExecutionContext:
 
         def trigger():
             barrier.wait()
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         threads = [threading.Thread(target=trigger) for _ in range(n_threads)]
         for t in threads:
@@ -561,7 +629,9 @@ class TestAdversarialExecutionContext:
             t.join(timeout=5.0)
 
         snap = ctx.get_snapshot()
-        step_events = [e for e in snap.events if e.event_type == "CHAIN_STEP_LIMIT_EXCEEDED"]
+        step_events = [
+            e for e in snap.events if e.event_type == "CHAIN_STEP_LIMIT_EXCEEDED"
+        ]
         assert len(step_events) <= 1, (
             f"Dedup failed: {len(step_events)} CHAIN_STEP_LIMIT_EXCEEDED events"
         )
@@ -574,7 +644,9 @@ class TestAdversarialExecutionContext:
         """Thread A: rapid wrap_llm_call loop. Thread B: rapid get_graph_snapshot loop.
         No exception must occur. Snapshot must always return a valid dict.
         """
-        config = ExecutionConfig(max_cost_usd=1000.0, max_steps=10000, max_retries_total=10000)
+        config = ExecutionConfig(
+            max_cost_usd=1000.0, max_steps=10000, max_retries_total=10000
+        )
         ctx = ExecutionContext(config=config)
         errors: list[str] = []
         stop_flag = threading.Event()
@@ -585,7 +657,9 @@ class TestAdversarialExecutionContext:
             for _ in range(200):
                 if stop_flag.is_set():
                     break
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
 
         def reader():
             barrier.wait()
@@ -609,7 +683,9 @@ class TestAdversarialExecutionContext:
 
     def test_concurrent_get_snapshot_always_valid(self):
         """get_snapshot() during concurrent writes must always return a consistent object."""
-        config = ExecutionConfig(max_cost_usd=1000.0, max_steps=10000, max_retries_total=10000)
+        config = ExecutionConfig(
+            max_cost_usd=1000.0, max_steps=10000, max_retries_total=10000
+        )
         ctx = ExecutionContext(config=config)
         errors: list[str] = []
         stop_flag = threading.Event()
@@ -620,7 +696,9 @@ class TestAdversarialExecutionContext:
             for _ in range(100):
                 if stop_flag.is_set():
                     break
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
 
         def reader():
             barrier.wait()
@@ -628,7 +706,9 @@ class TestAdversarialExecutionContext:
                 try:
                     snap = ctx.get_snapshot()
                     # step_count and cost must be consistent (non-negative)
-                    assert snap.step_count >= 0, f"step_count negative: {snap.step_count}"
+                    assert snap.step_count >= 0, (
+                        f"step_count negative: {snap.step_count}"
+                    )
                     assert snap.cost_usd_accumulated >= 0.0, (
                         f"cost negative: {snap.cost_usd_accumulated}"
                     )
@@ -685,12 +765,16 @@ class TestAdversarialExecutionContext:
         # First call: backend.add() raises — context should handle gracefully
         # (implementation may swallow or propagate; we verify no corrupt state)
         try:
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01)
+            )
         except RuntimeError:
             pass  # acceptable if propagated
 
         # Second call must succeed and local cost must accumulate correctly
-        d2 = ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.02))
+        d2 = ctx.wrap_llm_call(
+            fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.02)
+        )
         # At minimum, no exception — ALLOW or HALT are both acceptable outcomes
         assert d2 in (Decision.ALLOW, Decision.HALT), f"Unexpected decision: {d2}"
 
@@ -700,6 +784,7 @@ class TestAdversarialExecutionContext:
             f"Corrupted cost after backend failure: {snap.cost_usd_accumulated}"
         )
         import math
+
         assert not math.isnan(snap.cost_usd_accumulated), (
             "cost_usd_accumulated is NaN after backend failure"
         )
@@ -729,7 +814,9 @@ class TestAdversarialExecutionContext:
         errors: list[str] = []
         for i in range(10):
             try:
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
             except RuntimeError as e:
                 errors.append(str(e))
 
@@ -750,15 +837,22 @@ class TestExecutionConfigTimeoutValidation:
 
     def test_negative_timeout_ms_raises(self):
         import pytest
+
         with pytest.raises(ValueError, match="timeout_ms must be non-negative"):
-            ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=-1)
+            ExecutionConfig(
+                max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=-1
+            )
 
     def test_zero_timeout_ms_accepted(self):
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=0
+        )
         assert config.timeout_ms == 0
 
     def test_positive_timeout_ms_accepted(self):
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=30000)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=30000
+        )
         assert config.timeout_ms == 30000
 
 
@@ -774,8 +868,10 @@ class TestMetricsRecordingFailure:
         class FailingMetrics:
             def record_cost(self, agent_id, cost_usd):
                 raise RuntimeError("metrics backend down")
+
             def record_decision(self, agent_id, decision):
                 raise RuntimeError("metrics backend down")
+
             def record_latency(self, agent_id, duration_ms):
                 raise RuntimeError("metrics backend down")
 
@@ -784,15 +880,19 @@ class TestMetricsRecordingFailure:
 
         # wrap_llm_call should succeed even though metrics recording fails
         with ctx:
-            d = ctx.wrap_llm_call(fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0))
+            d = ctx.wrap_llm_call(
+                fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0)
+            )
             assert d == Decision.ALLOW
 
     def test_metrics_failure_does_not_affect_decision(self):
         class ExplodingMetrics:
             def record_cost(self, agent_id, cost_usd):
                 raise TypeError("boom")
+
             def record_decision(self, agent_id, decision):
                 raise TypeError("boom")
+
             def record_latency(self, agent_id, duration_ms):
                 raise TypeError("boom")
 
@@ -801,7 +901,9 @@ class TestMetricsRecordingFailure:
         with ctx:
             results = []
             for _ in range(3):
-                d = ctx.wrap_llm_call(fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0))
+                d = ctx.wrap_llm_call(
+                    fn=lambda: "ok", options=WrapOptions(cost_estimate_hint=0.0)
+                )
                 results.append(d)
             assert all(d == Decision.ALLOW for d in results)
 
@@ -924,6 +1026,7 @@ class TestWrapFinallyStackCleanup:
 
             def on_error(self, ctx, exc):
                 from veronica_core.shield.types import Decision
+
                 return Decision.RETRY
 
             def get_events(self):
@@ -935,6 +1038,7 @@ class TestWrapFinallyStackCleanup:
         pipeline = BombPipeline()
 
         from veronica_core.shield.pipeline import ShieldPipeline
+
         # Use a real pipeline wrapping the bomb as pre_dispatch
         real_pipeline = ShieldPipeline(pre_dispatch=pipeline)
 
@@ -962,6 +1066,7 @@ class TestWrapFinallyStackCleanup:
 
             def on_error(self, ctx, exc):
                 from veronica_core.shield.types import Decision
+
                 return Decision.RETRY
 
             def get_events(self):
@@ -971,6 +1076,7 @@ class TestWrapFinallyStackCleanup:
                 return None
 
         from veronica_core.shield.pipeline import ShieldPipeline
+
         real_pipeline = ShieldPipeline(pre_dispatch=PipelineThatRaises())
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=10, max_retries_total=5)
         ctx = ExecutionContext(config=config, pipeline=real_pipeline)
@@ -999,14 +1105,18 @@ class TestNodesCap:
 
         # Fill to cap
         for _ in range(_MAX_NODES):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         snap = ctx.get_snapshot()
         assert len(snap.nodes) == _MAX_NODES
 
         # Push 10 more beyond cap — must not grow list
         for _ in range(10):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         snap2 = ctx.get_snapshot()
         assert len(snap2.nodes) == _MAX_NODES, (
@@ -1065,6 +1175,7 @@ class TestSilentExceptsLogged:
                 class Perm:
                     allowed = True
                     reason = ""
+
                 return Perm()
 
             def bind_to_context(self, chain_id):
@@ -1082,7 +1193,9 @@ class TestSilentExceptsLogged:
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=5)
         ctx = ExecutionContext(config=config, circuit_breaker=BrokenBreaker())
 
-        with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
+        with caplog.at_level(
+            logging.DEBUG, logger="veronica_core.containment.execution_context"
+        ):
             ctx.__exit__(None, None, None)
 
         assert any("circuit_breaker.close" in r.message for r in caplog.records), (
@@ -1106,14 +1219,20 @@ class TestSilentExceptsLogged:
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=0, max_retries_total=5)
         ctx = ExecutionContext(config=config, metrics=BrokenMetrics())
 
-        with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+        with caplog.at_level(
+            logging.DEBUG, logger="veronica_core.containment.execution_context"
+        ):
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         assert any(
             "metrics" in r.message.lower()
             for r in caplog.records
             if r.levelno == logging.DEBUG
-        ), f"Expected DEBUG log for metrics failure. Got: {[r.message for r in caplog.records]}"
+        ), (
+            f"Expected DEBUG log for metrics failure. Got: {[r.message for r in caplog.records]}"
+        )
 
     def test_backend_unavailable_in_check_limits_logged(self, caplog):
         """Budget backend failure in _check_limits must log at DEBUG, not silently pass."""
@@ -1131,6 +1250,7 @@ class TestSilentExceptsLogged:
 
         class _FakeLocalBudgetBackend:
             """Sentinel for isinstance check bypass."""
+
             pass
 
         # We need the isinstance check to fail so _check_limits uses the cross-process path.
@@ -1141,6 +1261,7 @@ class TestSilentExceptsLogged:
 
         class NotLocal:
             """Not a LocalBudgetBackend subclass."""
+
             pass
 
         try:
@@ -1155,8 +1276,12 @@ class TestSilentExceptsLogged:
             )
             ctx = ExecutionContext(config=config)
 
-            with caplog.at_level(logging.DEBUG, logger="veronica_core.containment.execution_context"):
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            with caplog.at_level(
+                logging.DEBUG, logger="veronica_core.containment.execution_context"
+            ):
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
 
         finally:
             dist_mod.LocalBudgetBackend = orig_local
@@ -1165,7 +1290,9 @@ class TestSilentExceptsLogged:
             "budget backend unavailable" in r.message or "backend" in r.message.lower()
             for r in caplog.records
             if r.levelno == logging.DEBUG
-        ), f"Expected DEBUG log for backend failure. Got: {[r.message for r in caplog.records]}"
+        ), (
+            f"Expected DEBUG log for backend failure. Got: {[r.message for r in caplog.records]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1206,7 +1333,9 @@ class TestContextVarNodeStack:
         def thread_a():
             try:
                 barrier.wait()
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
                 stacks["a"] = list(ctx._node_stack_var.get() or [])
             except Exception as exc:
                 errors.append(f"thread_a: {exc}")
@@ -1214,7 +1343,9 @@ class TestContextVarNodeStack:
         def thread_b():
             try:
                 barrier.wait()
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
                 stacks["b"] = list(ctx._node_stack_var.get() or [])
             except Exception as exc:
                 errors.append(f"thread_b: {exc}")
@@ -1269,6 +1400,7 @@ class TestComputeActualCostEventCap:
             max_retries_total=over,
         )
         from veronica_core.containment.execution_context import ChainMetadata
+
         meta = ChainMetadata(
             request_id="test-req",
             chain_id="test-chain",
@@ -1281,7 +1413,9 @@ class TestComputeActualCostEventCap:
         # The dedup key includes the reason string, but it's the same every call,
         # so after the first event, subsequent ones are deduped.
         for _ in range(over):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         snap = ctx.get_snapshot()
         assert len(snap.events) <= _MAX_CHAIN_EVENTS, (
@@ -1290,8 +1424,11 @@ class TestComputeActualCostEventCap:
 
     def test_cost_estimation_skipped_event_deduped(self):
         """Identical COST_ESTIMATION_SKIPPED events must appear at most once (dedup)."""
-        config = ExecutionConfig(max_cost_usd=1_000_000.0, max_steps=10, max_retries_total=10)
+        config = ExecutionConfig(
+            max_cost_usd=1_000_000.0, max_steps=10, max_retries_total=10
+        )
         from veronica_core.containment.execution_context import ChainMetadata
+
         meta = ChainMetadata(
             request_id="test-req",
             chain_id="test-chain",
@@ -1300,10 +1437,14 @@ class TestComputeActualCostEventCap:
         ctx = ExecutionContext(config=config, metadata=meta)
 
         for _ in range(5):
-            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+            ctx.wrap_llm_call(
+                fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+            )
 
         snap = ctx.get_snapshot()
-        skipped_events = [e for e in snap.events if e.event_type == "COST_ESTIMATION_SKIPPED"]
+        skipped_events = [
+            e for e in snap.events if e.event_type == "COST_ESTIMATION_SKIPPED"
+        ]
         assert len(skipped_events) <= 1, (
             f"COST_ESTIMATION_SKIPPED must be deduped; got {len(skipped_events)} events"
         )
@@ -1324,6 +1465,7 @@ class TestWrapBaseExceptionDoubleStackCheck:
 
             def on_error(self, ctx, exc):
                 from veronica_core.shield.types import Decision
+
                 return Decision.RETRY
 
             def get_events(self):
@@ -1333,6 +1475,7 @@ class TestWrapBaseExceptionDoubleStackCheck:
                 return None
 
         from veronica_core.shield.pipeline import ShieldPipeline
+
         pipeline = ShieldPipeline(pre_dispatch=BombPreDispatch())
 
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=5)
@@ -1367,12 +1510,16 @@ class TestContextVarAsyncIsolation:
 
         async def task_wrap(name: str) -> None:
             try:
-                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
+                )
                 s = ctx._node_stack_var.get()
                 stacks_seen[name] = list(s) if s else []
                 depth = ctx._nesting_depth_var.get()
                 if depth != 0:
-                    errors.append(f"{name}: nesting_depth={depth} after wrap (expected 0)")
+                    errors.append(
+                        f"{name}: nesting_depth={depth} after wrap (expected 0)"
+                    )
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
 
@@ -1384,9 +1531,7 @@ class TestContextVarAsyncIsolation:
         assert not errors, f"Task errors: {errors}"
         # Both stacks must be empty after wrap completes (popped on success)
         for name, stack in stacks_seen.items():
-            assert stack == [], (
-                f"Task {name} stack not empty after wrap: {stack}"
-            )
+            assert stack == [], f"Task {name} stack not empty after wrap: {stack}"
 
     def test_asyncio_nested_wraps_share_stack_within_same_task(self):
         """Within a single asyncio task, nested wraps must build depth on the same stack."""
@@ -1404,7 +1549,9 @@ class TestContextVarAsyncIsolation:
                 depth_seen.append(len(s) if s else 0)
 
             try:
-                ctx.wrap_llm_call(fn=inner_fn, options=WrapOptions(cost_estimate_hint=0.0))
+                ctx.wrap_llm_call(
+                    fn=inner_fn, options=WrapOptions(cost_estimate_hint=0.0)
+                )
             except Exception as exc:
                 errors.append(str(exc))
 
@@ -1450,9 +1597,7 @@ class TestContextVarAsyncIsolation:
         asyncio.run(parent_task())
 
         # Parent and child must have used different list objects
-        assert "parent" in list_ids and "child" in list_ids, (
-            f"Missing IDs: {list_ids}"
-        )
+        assert "parent" in list_ids and "child" in list_ids, f"Missing IDs: {list_ids}"
         assert list_ids["parent"] != list_ids["child"], (
             f"Parent and child shared the same stack list (id={list_ids['parent']}). "
             "Bug K: asyncio task isolation broken."
