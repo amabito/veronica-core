@@ -161,7 +161,10 @@ class VeronicaIntegration:
             self.state.transition(VeronicaState.SCREENING, "Bot startup")
         else:
             # Loaded existing state - preserve critical states
-            if self.state.current_state not in (VeronicaState.SAFE_MODE, VeronicaState.ERROR):
+            if self.state.current_state not in (
+                VeronicaState.SAFE_MODE,
+                VeronicaState.ERROR,
+            ):
                 self.state.transition(VeronicaState.SCREENING, "Bot startup resumed")
             else:
                 logger.warning(
@@ -228,8 +231,12 @@ class VeronicaIntegration:
             # valid context payload and must not skip the guard check.
             if self.guard and context is not None:
                 if self.guard.should_cooldown(pair, context):
-                    logger.info(f"[VERONICA_INTEGRATION] Guard triggered cooldown for {pair}")
-                    self.state.set_cooldown(pair, time.time() + self.state.cooldown_seconds)
+                    logger.info(
+                        f"[VERONICA_INTEGRATION] Guard triggered cooldown for {pair}"
+                    )
+                    self.state.set_cooldown(
+                        pair, time.time() + self.state.cooldown_seconds
+                    )
                     self.guard.on_cooldown_activated(pair, context)
                     activated = True
 
@@ -299,7 +306,9 @@ class VeronicaIntegration:
 
         # Validate via guard
         if self.guard and not self.guard.validate_state(state_data):
-            logger.warning("[VERONICA_INTEGRATION] State validation failed, aborting save")
+            logger.warning(
+                "[VERONICA_INTEGRATION] State validation failed, aborting save"
+            )
             return False
 
         # Save via backend or legacy persistence
@@ -320,9 +329,7 @@ class VeronicaIntegration:
                 self.operation_count = 0
 
         if should_save:
-            logger.debug(
-                "[VERONICA_INTEGRATION] Auto-save triggered"
-            )
+            logger.debug("[VERONICA_INTEGRATION] Auto-save triggered")
             self.save()  # Use save() method (includes guard validation)
 
 

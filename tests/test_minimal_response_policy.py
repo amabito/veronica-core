@@ -45,7 +45,9 @@ class TestMinimalResponseEnabled:
         assert "No follow-up questions." in result
 
     def test_inject_allows_questions_when_configured(self):
-        policy = MinimalResponsePolicy(enabled=True, allow_questions=True, max_questions=2)
+        policy = MinimalResponsePolicy(
+            enabled=True, allow_questions=True, max_questions=2
+        )
         result = policy.inject("test")
         assert "At most 2 question" in result
 

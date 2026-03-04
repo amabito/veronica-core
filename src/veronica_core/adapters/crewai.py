@@ -38,6 +38,7 @@ Usage (event bus only, for monitoring)::
     listener = VeronicaCrewAIListener(GuardConfig(max_cost_usd=1.0, max_steps=20))
     # Events are automatically monitored; inspect listener.container for state.
 """
+
 from __future__ import annotations
 
 try:
@@ -56,7 +57,11 @@ except ImportError as _exc:
 import logging
 from typing import Any, Union
 
-from veronica_core.adapters._shared import build_container, cost_from_total_tokens, record_budget_spend
+from veronica_core.adapters._shared import (
+    build_container,
+    cost_from_total_tokens,
+    record_budget_spend,
+)
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
@@ -221,7 +226,14 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
             return 0.0
 
         return cost_from_total_tokens(int(total_raw), model)
-    except (AttributeError, TypeError, ValueError, KeyError, OverflowError, RuntimeError):
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        OverflowError,
+        RuntimeError,
+    ):
         return 0.0
 
 

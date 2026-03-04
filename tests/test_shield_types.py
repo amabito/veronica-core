@@ -31,4 +31,3 @@ class TestToolCallContext:
         b = ToolCallContext(request_id="b")
         assert a.metadata is not b.metadata
         assert a.metadata == {}
-

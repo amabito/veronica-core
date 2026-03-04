@@ -1,4 +1,5 @@
 """Tests for G-1: Policy Tamper Resistance — HMAC-SHA256 signing."""
+
 from __future__ import annotations
 
 import hashlib
@@ -88,7 +89,9 @@ def test_missing_sig_file_returns_false(tmp_policy: Path, signer: PolicySigner) 
 # ---------------------------------------------------------------------------
 
 
-def test_env_var_overrides_key(tmp_policy: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_env_var_overrides_key(
+    tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     custom_key = b"\xde\xad\xbe\xef" * 8  # 32-byte custom key
     monkeypatch.setenv("VERONICA_POLICY_KEY", custom_key.hex())
 
@@ -171,7 +174,9 @@ def test_policy_engine_missing_sig_loads_ok(
 
     _sl.reset_security_level()
     try:
-        with caplog.at_level(logging.WARNING, logger="veronica_core.security.policy_engine"):
+        with caplog.at_level(
+            logging.WARNING, logger="veronica_core.security.policy_engine"
+        ):
             engine = PolicyEngine(policy_path=tmp_policy)
     finally:
         _sl.reset_security_level()

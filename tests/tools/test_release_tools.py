@@ -16,7 +16,9 @@ SIGN_SCRIPT = TOOLS_DIR / "release_sign_policy.py"
 VERIFY_SCRIPT = TOOLS_DIR / "verify_release.py"
 
 
-def _run(script: Path, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
+def _run(
+    script: Path, *args: str, env: dict | None = None
+) -> subprocess.CompletedProcess:
     """Run a tool script via the current Python interpreter.
 
     Args:
@@ -61,8 +63,7 @@ class TestVerifyRelease:
         """verify_release.py --help exits 0 and prints usage."""
         result = _run(VERIFY_SCRIPT, "--help")
         assert result.returncode == 0, (
-            f"--help exited {result.returncode}\n"
-            f"stderr: {result.stderr}"
+            f"--help exited {result.returncode}\nstderr: {result.stderr}"
         )
         # argparse prints "usage:" to stdout.
         assert "usage" in result.stdout.lower()
@@ -79,8 +80,9 @@ class TestReleaseSign:
         import os
 
         # Strip the env var if present so the tool cannot fall back on it.
-        env_override = {k: v for k, v in os.environ.items()
-                        if k != "VERONICA_PRIVATE_KEY_PEM"}
+        env_override = {
+            k: v for k, v in os.environ.items() if k != "VERONICA_PRIVATE_KEY_PEM"
+        }
 
         result = subprocess.run(
             [sys.executable, str(SIGN_SCRIPT)],

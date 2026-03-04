@@ -27,6 +27,7 @@ Example::
     veronica = VeronicaIntegration(backend=MemoryBackend())
     cap = CircuitBreakerCapability(failure_threshold=3, veronica=veronica)
 """
+
 from __future__ import annotations
 
 import logging
@@ -156,12 +157,8 @@ class CircuitBreakerCapability:
             # System-wide halt check (SAFE_MODE)
             if cap._veronica is not None:
                 if cap._veronica.state.current_state == VeronicaState.SAFE_MODE:
-                    logger.debug(
-                        "[VERONICA_CAP] %s blocked: SAFE_MODE active", name
-                    )
-                    _emit_ag2_otel_event(
-                        name, "HALT", "SAFE_MODE active", "safe_mode"
-                    )
+                    logger.debug("[VERONICA_CAP] %s blocked: SAFE_MODE active", name)
+                    _emit_ag2_otel_event(name, "HALT", "SAFE_MODE active", "safe_mode")
                     return None
 
             # Per-agent circuit check (uses check() to enforce HALF_OPEN
@@ -174,7 +171,10 @@ class CircuitBreakerCapability:
                     cb_decision.reason,
                 )
                 _emit_ag2_otel_event(
-                    name, "HALT", cb_decision.reason or "circuit open", "circuit_breaker"
+                    name,
+                    "HALT",
+                    cb_decision.reason or "circuit open",
+                    "circuit_breaker",
                 )
                 return None
 
@@ -183,9 +183,7 @@ class CircuitBreakerCapability:
                 ctx = ToolCallContext(request_id=str(uuid4()), tool_name="llm")
                 decision = cap._token_budget_hook.before_llm_call(ctx)
                 if decision == Decision.HALT:
-                    logger.debug(
-                        "[VERONICA_CAP] %s blocked: token budget HALT", name
-                    )
+                    logger.debug("[VERONICA_CAP] %s blocked: token budget HALT", name)
                     _emit_ag2_otel_event(
                         name, "HALT", "token budget exceeded", "token_budget"
                     )
@@ -200,15 +198,16 @@ class CircuitBreakerCapability:
             except Exception as exc:
                 breaker.record_failure(error=exc)
                 _emit_ag2_otel_event(
-                    name, "FAILURE", f"generate_reply raised {type(exc).__name__}", "post_call"
+                    name,
+                    "FAILURE",
+                    f"generate_reply raised {type(exc).__name__}",
+                    "post_call",
                 )
                 raise
 
             # Record token usage after successful reply
             if reply is not None and cap._token_budget_hook is not None:
-                cap._token_budget_hook.record_usage(
-                    output_tokens=len(str(reply)) // 4
-                )
+                cap._token_budget_hook.record_usage(output_tokens=len(str(reply)) // 4)
 
             # Record result to drive state transitions
             if reply is None:

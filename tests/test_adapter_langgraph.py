@@ -3,6 +3,7 @@
 Uses fake langgraph stubs injected into sys.modules so langgraph does not
 need to be installed.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -233,9 +234,9 @@ class TestNodeWrapper:
     def test_wrapped_node_records_token_cost_from_state(self) -> None:
         """veronica_node_wrapper: cost is recorded when state contains token_usage."""
         state_with_usage = {"token_usage": {"total_tokens": 1000}}
-        wrapped = veronica_node_wrapper(
-            GuardConfig(max_cost_usd=10.0)
-        )(_make_node(state_with_usage))
+        wrapped = veronica_node_wrapper(GuardConfig(max_cost_usd=10.0))(
+            _make_node(state_with_usage)
+        )
         wrapped({})
         # 1000 tokens: 750 in + 250 out → $0.0375 at unknown-model pricing
         assert wrapped.container.budget.spent_usd == pytest.approx(0.0375)
@@ -377,7 +378,9 @@ class TestAdversarialLangGraph:
 
     def test_on_llm_end_nan_tokens_does_not_produce_nan(self) -> None:
         """on_llm_end: NaN in token_usage must not produce NaN budget spend."""
-        result = FakeLLMResult(llm_output={"token_usage": {"total_tokens": float("nan")}})
+        result = FakeLLMResult(
+            llm_output={"token_usage": {"total_tokens": float("nan")}}
+        )
         cb = VeronicaLangGraphCallback(GuardConfig(max_cost_usd=10.0))
         cb.on_llm_end(result)
         assert not math.isnan(cb.container.budget.spent_usd)
@@ -430,6 +433,7 @@ class TestAdversarialLangGraph:
 
     def test_node_wrapper_nan_total_tokens(self) -> None:
         """veronica_node_wrapper: NaN total_tokens in state must not propagate."""
+
         def nan_node(state: dict) -> dict:
             return {"token_usage": {"total_tokens": float("nan")}}
 
@@ -491,7 +495,9 @@ class TestAdversarialLangGraph:
         )(cost_node)
 
         num_threads = 20
-        threads = [threading.Thread(target=wrapped, args=({},)) for _ in range(num_threads)]
+        threads = [
+            threading.Thread(target=wrapped, args=({},)) for _ in range(num_threads)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -523,7 +529,9 @@ class TestAdversarialLangGraph:
 
     def test_huge_token_count_does_not_overflow(self) -> None:
         """on_llm_end: sys.maxsize tokens must not overflow or crash."""
-        result = FakeLLMResult(llm_output={"token_usage": {"total_tokens": sys.maxsize}})
+        result = FakeLLMResult(
+            llm_output={"token_usage": {"total_tokens": sys.maxsize}}
+        )
         cb = VeronicaLangGraphCallback(GuardConfig(max_cost_usd=10.0))
         cb.on_llm_end(result)  # must not raise
 

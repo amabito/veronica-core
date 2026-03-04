@@ -144,9 +144,7 @@ class TestWeekendOffHours:
         assert policy.get_multiplier(SATURDAY_3AM) == 0.85
 
     def test_weekend_offhour_custom_multipliers(self):
-        policy = TimeAwarePolicy(
-            weekend_multiplier=0.70, offhour_multiplier=0.60
-        )
+        policy = TimeAwarePolicy(weekend_multiplier=0.70, offhour_multiplier=0.60)
         # min(0.70, 0.60) = 0.60
         assert policy.get_multiplier(SATURDAY_3AM) == 0.60
 
@@ -339,9 +337,7 @@ class TestConfigRoundTrip:
             TimeAwarePolicyConfig,
         )
 
-        cfg = ShieldConfig(
-            time_aware_policy=TimeAwarePolicyConfig(enabled=True)
-        )
+        cfg = ShieldConfig(time_aware_policy=TimeAwarePolicyConfig(enabled=True))
         assert cfg.is_any_enabled is True
 
 

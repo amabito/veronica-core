@@ -8,6 +8,7 @@ No heavy dependencies — pure Python only.
 Public API:
     SemanticLoopGuard — RuntimePolicy that detects semantic loops
 """
+
 from __future__ import annotations
 
 import re

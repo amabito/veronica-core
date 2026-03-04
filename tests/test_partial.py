@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from veronica_core.partial import PartialBufferOverflow, PartialResultBuffer, _MAX_BYTES, _MAX_CHUNKS
+from veronica_core.partial import (
+    PartialBufferOverflow,
+    PartialResultBuffer,
+    _MAX_BYTES,
+    _MAX_CHUNKS,
+)
 
 
 class TestPartialBufferOverflowOnChunkCount:

@@ -1,4 +1,5 @@
 """Tests for Protocol definitions and their wiring into ExecutionGraph/ExecutionContext."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,7 +45,9 @@ class ConcreteObserver:
     def on_node_start(self, node_id: str, operation: str, metadata: dict) -> None:
         pass
 
-    def on_node_complete(self, node_id: str, cost_usd: float, duration_ms: float) -> None:
+    def on_node_complete(
+        self, node_id: str, cost_usd: float, duration_ms: float
+    ) -> None:
         pass
 
     def on_node_failed(self, node_id: str, error: str) -> None:
@@ -58,7 +61,9 @@ class ConcreteMetrics:
     def record_cost(self, agent_id: str, cost_usd: float) -> None:
         pass
 
-    def record_tokens(self, agent_id: str, input_tokens: int, output_tokens: int) -> None:
+    def record_tokens(
+        self, agent_id: str, input_tokens: int, output_tokens: int
+    ) -> None:
         pass
 
     def record_decision(self, agent_id: str, decision: str) -> None:
@@ -99,6 +104,7 @@ class TestProtocolConformance:
         class Partial:
             def extract_cost(self, result: Any) -> float:
                 return 0.0
+
             # Missing extract_tokens, handle_halt, handle_degrade
 
         assert not isinstance(Partial(), FrameworkAdapterProtocol)
@@ -225,6 +231,7 @@ class TestExecutionContextMetrics:
             ExecutionConfig,
             ExecutionContext,
         )
+
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=10)
         return ExecutionContext(config=config, metrics=metrics)
 
@@ -243,7 +250,9 @@ class TestExecutionContextMetrics:
         ctx.wrap_llm_call(fn=lambda: None, options=None)
 
         # record_decision should have been called with "ALLOW"
-        calls = [c for c in metrics.record_decision.call_args_list if c[0][1] == "ALLOW"]
+        calls = [
+            c for c in metrics.record_decision.call_args_list if c[0][1] == "ALLOW"
+        ]
         assert len(calls) == 1
 
     def test_record_latency_called_on_success(self) -> None:
@@ -260,8 +269,11 @@ class TestExecutionContextMetrics:
             ExecutionContext,
             WrapOptions,
         )
+
         metrics = self._make_metrics()
-        config = ExecutionConfig(max_cost_usd=0.001, max_steps=100, max_retries_total=10)
+        config = ExecutionConfig(
+            max_cost_usd=0.001, max_steps=100, max_retries_total=10
+        )
         ctx = ExecutionContext(config=config, metrics=metrics)
 
         # Exhaust budget with a hinted cost
@@ -277,6 +289,7 @@ class TestExecutionContextMetrics:
         """Without metrics=, the context works normally with no AttributeErrors."""
         ctx = self._make_context(metrics=None)
         from veronica_core.shield.types import Decision
+
         result = ctx.wrap_llm_call(fn=lambda: None)
         assert result == Decision.ALLOW
 
@@ -289,6 +302,7 @@ class TestExecutionContextMetrics:
 
         ctx = self._make_context(metrics=bad_metrics)
         from veronica_core.shield.types import Decision
+
         # Should not raise
         result = ctx.wrap_llm_call(fn=lambda: None)
         assert result == Decision.ALLOW
@@ -321,7 +335,9 @@ class TestLoggingContainmentMetrics:
         from veronica_core.metrics.logging_metrics import LoggingContainmentMetrics
 
         m = LoggingContainmentMetrics(log_level=logging.INFO)
-        with caplog.at_level(logging.INFO, logger="veronica_core.metrics.logging_metrics"):
+        with caplog.at_level(
+            logging.INFO, logger="veronica_core.metrics.logging_metrics"
+        ):
             m.record_cost("agent", 1.23)
         assert any("cost" in r.message for r in caplog.records)
 
@@ -342,11 +358,15 @@ class TestAdversarialObservers:
         log_lock = threading.Lock()
 
         class LoggingObserver:
-            def on_node_start(self, node_id: str, operation: str, metadata: dict) -> None:
+            def on_node_start(
+                self, node_id: str, operation: str, metadata: dict
+            ) -> None:
                 with log_lock:
                     call_log.append(f"start:{node_id}")
 
-            def on_node_complete(self, node_id: str, cost_usd: float, duration_ms: float) -> None:
+            def on_node_complete(
+                self, node_id: str, cost_usd: float, duration_ms: float
+            ) -> None:
                 with log_lock:
                     call_log.append(f"complete:{node_id}")
 
@@ -396,10 +416,14 @@ class TestAdversarialObservers:
             def __init__(self) -> None:
                 self.started: list[str] = []
 
-            def on_node_start(self, node_id: str, operation: str, metadata: dict) -> None:
+            def on_node_start(
+                self, node_id: str, operation: str, metadata: dict
+            ) -> None:
                 self.started.append(node_id)
 
-            def on_node_complete(self, node_id: str, cost_usd: float, duration_ms: float) -> None:
+            def on_node_complete(
+                self, node_id: str, cost_usd: float, duration_ms: float
+            ) -> None:
                 # Re-entrant: read graph state during callback
                 # _notify_observers is called OUTSIDE the lock, so snapshot() should work
                 pass
@@ -457,12 +481,14 @@ class TestAdversarialMetrics:
             ExecutionConfig,
             ExecutionContext,
         )
+
         config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=10)
         return ExecutionContext(config=config, metrics=metrics)
 
     def test_metrics_nan_cost_does_not_crash(self) -> None:
         """Metrics that returns NaN from record_cost must not crash the context."""
         from veronica_core.shield.types import Decision
+
         metrics = MagicMock()
         ctx = self._make_context(metrics=metrics)
         result = ctx.wrap_llm_call(fn=lambda: None)
@@ -471,6 +497,7 @@ class TestAdversarialMetrics:
     def test_metrics_partial_crash_swallows_all_in_block(self) -> None:
         """All metrics calls are in a single try/except; early crash skips later ones."""
         from veronica_core.shield.types import Decision
+
         metrics = MagicMock()
         metrics.record_cost.side_effect = RuntimeError("crash")
         # record_cost crashes -> record_decision and record_latency are NOT called
@@ -489,8 +516,11 @@ class TestAdversarialMetrics:
             ExecutionContext,
             WrapOptions,
         )
+
         metrics = MagicMock()
-        config = ExecutionConfig(max_cost_usd=0.001, max_steps=100, max_retries_total=10)
+        config = ExecutionConfig(
+            max_cost_usd=0.001, max_steps=100, max_retries_total=10
+        )
         ctx = ExecutionContext(config=config, metrics=metrics)
 
         opts = WrapOptions(cost_estimate_hint=1.0)
@@ -504,6 +534,7 @@ class TestAdversarialMetrics:
     def test_logging_metrics_handles_nan_cost(self) -> None:
         """LoggingContainmentMetrics must not crash on NaN/inf values."""
         from veronica_core.metrics.logging_metrics import LoggingContainmentMetrics
+
         m = LoggingContainmentMetrics()
         # None of these should raise
         m.record_cost("agent", float("nan"))
@@ -515,6 +546,7 @@ class TestAdversarialMetrics:
     def test_logging_metrics_handles_empty_strings(self) -> None:
         """LoggingContainmentMetrics must not crash on empty agent/entity IDs."""
         from veronica_core.metrics.logging_metrics import LoggingContainmentMetrics
+
         m = LoggingContainmentMetrics()
         m.record_cost("", 0.5)
         m.record_decision("", "HALT")

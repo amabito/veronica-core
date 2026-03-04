@@ -20,6 +20,7 @@ CTX = ToolCallContext(request_id="test", tool_name="llm")
 # estimate_tokens
 # ---------------------------------------------------------------------------
 
+
 class TestEstimateTokens:
     def test_empty_string(self):
         assert estimate_tokens("") == 0
@@ -40,6 +41,7 @@ class TestEstimateTokens:
 # _sha256
 # ---------------------------------------------------------------------------
 
+
 class TestSha256:
     def test_deterministic(self):
         assert _sha256("hello") == _sha256("hello")
@@ -54,6 +56,7 @@ class TestSha256:
 # ---------------------------------------------------------------------------
 # InputCompressionHook — basic
 # ---------------------------------------------------------------------------
+
 
 class TestInputCompressionBasic:
     def test_allow_below_threshold(self):
@@ -81,6 +84,7 @@ class TestInputCompressionBasic:
 # ---------------------------------------------------------------------------
 # Evidence
 # ---------------------------------------------------------------------------
+
 
 class TestInputCompressionEvidence:
     def test_no_evidence_when_allow(self):
@@ -128,6 +132,7 @@ class TestInputCompressionEvidence:
 # Validation
 # ---------------------------------------------------------------------------
 
+
 class TestInputCompressionValidation:
     def test_halt_must_exceed_compress(self):
         with pytest.raises(ValueError, match="must be greater"):
@@ -146,6 +151,7 @@ class TestInputCompressionValidation:
 # Properties
 # ---------------------------------------------------------------------------
 
+
 class TestInputCompressionProperties:
     def test_threshold_properties(self):
         hook = InputCompressionHook(
@@ -159,6 +165,7 @@ class TestInputCompressionProperties:
 # before_llm_call (passthrough)
 # ---------------------------------------------------------------------------
 
+
 class TestInputCompressionPreDispatch:
     def test_before_llm_call_always_none(self):
         hook = InputCompressionHook(
@@ -171,6 +178,7 @@ class TestInputCompressionPreDispatch:
 # Config
 # ---------------------------------------------------------------------------
 
+
 class TestInputCompressionConfig:
     def test_default_disabled(self):
         cfg = InputCompressionConfig()
@@ -181,9 +189,7 @@ class TestInputCompressionConfig:
         assert cfg.input_compression.enabled is False
 
     def test_shield_is_any_enabled_true(self):
-        cfg = ShieldConfig(
-            input_compression=InputCompressionConfig(enabled=True)
-        )
+        cfg = ShieldConfig(input_compression=InputCompressionConfig(enabled=True))
         assert cfg.is_any_enabled is True
 
     def test_from_dict_round_trip(self):
@@ -205,6 +211,7 @@ class TestInputCompressionConfig:
 # Pipeline event type
 # ---------------------------------------------------------------------------
 
+
 class TestInputCompressionEventType:
     def test_event_type_registered(self):
         assert "InputCompressionHook" in _HOOK_EVENT_TYPES
@@ -214,6 +221,7 @@ class TestInputCompressionEventType:
 # ---------------------------------------------------------------------------
 # Integration wiring
 # ---------------------------------------------------------------------------
+
 
 class TestInputCompressionIntegration:
     def test_disabled_no_hook(self):

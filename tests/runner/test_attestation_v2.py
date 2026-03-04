@@ -1,4 +1,5 @@
 """Tests for SandboxProbe and ProbeResult (I-2)."""
+
 from __future__ import annotations
 
 import json
@@ -69,7 +70,9 @@ class TestProbeRead:
         """OSError without 'access denied' (e.g. file not found) -> passed=False."""
         probe = SandboxProbe(read_target="/fake/path")
         with patch("veronica_core.runner.attestation.Path") as mock_path_cls:
-            mock_path_cls.return_value.stat.side_effect = OSError("No such file or directory")
+            mock_path_cls.return_value.stat.side_effect = OSError(
+                "No such file or directory"
+            )
             result = probe.probe_read()
 
         assert result.passed is False
@@ -85,7 +88,9 @@ class TestProbeNet:
     def test_connection_refused_means_blocked(self) -> None:
         """ConnectionRefusedError -> sandbox is blocking -> passed=True."""
         probe = SandboxProbe(net_target="http://example.com")
-        with patch("veronica_core.runner.attestation.urllib.request.urlopen") as mock_open:
+        with patch(
+            "veronica_core.runner.attestation.urllib.request.urlopen"
+        ) as mock_open:
             mock_open.side_effect = ConnectionRefusedError("refused")
             result = probe.probe_net()
 
@@ -96,7 +101,9 @@ class TestProbeNet:
     def test_oserror_means_blocked(self) -> None:
         """OSError (network unreachable etc.) -> sandbox blocking -> passed=True."""
         probe = SandboxProbe(net_target="http://example.com")
-        with patch("veronica_core.runner.attestation.urllib.request.urlopen") as mock_open:
+        with patch(
+            "veronica_core.runner.attestation.urllib.request.urlopen"
+        ) as mock_open:
             mock_open.side_effect = OSError("Network unreachable")
             result = probe.probe_net()
 
@@ -106,7 +113,9 @@ class TestProbeNet:
     def test_successful_response_means_allowed(self) -> None:
         """HTTP 200 response -> sandbox is NOT blocking -> passed=False."""
         probe = SandboxProbe(net_target="http://example.com")
-        with patch("veronica_core.runner.attestation.urllib.request.urlopen") as mock_open:
+        with patch(
+            "veronica_core.runner.attestation.urllib.request.urlopen"
+        ) as mock_open:
             mock_open.return_value = MagicMock()
             result = probe.probe_net()
 
@@ -117,7 +126,9 @@ class TestProbeNet:
         """Timeout or other exception -> treat as blocked -> passed=True."""
 
         probe = SandboxProbe(net_target="http://example.com")
-        with patch("veronica_core.runner.attestation.urllib.request.urlopen") as mock_open:
+        with patch(
+            "veronica_core.runner.attestation.urllib.request.urlopen"
+        ) as mock_open:
             mock_open.side_effect = TimeoutError("timed out")
             result = probe.probe_net()
 
@@ -136,7 +147,9 @@ class TestRunAll:
         net_passed: bool,
         audit_log=None,
     ) -> SandboxProbe:
-        probe = SandboxProbe(audit_log=audit_log, read_target="/fake", net_target="http://x")
+        probe = SandboxProbe(
+            audit_log=audit_log, read_target="/fake", net_target="http://x"
+        )
         probe.probe_read = lambda: ProbeResult(  # type: ignore[assignment]
             name="read_probe",
             expected="BLOCKED",
@@ -178,11 +191,15 @@ class TestRunAll:
         log_path = tmp_path / "probe_audit.jsonl"
         audit_log = AuditLog(log_path)
 
-        probe = self._make_probe_with_mocks(read_passed=True, net_passed=True, audit_log=audit_log)
+        probe = self._make_probe_with_mocks(
+            read_passed=True, net_passed=True, audit_log=audit_log
+        )
         probe.run_all(sandbox_mode=True)
 
         assert log_path.exists()
-        entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+        entries = [
+            json.loads(line) for line in log_path.read_text().splitlines() if line
+        ]
         assert any(
             e["event_type"] in ("SANDBOX_PROBE_OK", "SANDBOX_PROBE_FAILURE")
             for e in entries
@@ -195,8 +212,12 @@ class TestRunAll:
         log_path = tmp_path / "probe_audit.jsonl"
         audit_log = AuditLog(log_path)
 
-        probe = self._make_probe_with_mocks(read_passed=False, net_passed=True, audit_log=audit_log)
+        probe = self._make_probe_with_mocks(
+            read_passed=False, net_passed=True, audit_log=audit_log
+        )
         probe.run_all(sandbox_mode=True)
 
-        entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+        entries = [
+            json.loads(line) for line in log_path.read_text().splitlines() if line
+        ]
         assert any(e["event_type"] == "SANDBOX_PROBE_FAILURE" for e in entries)

@@ -1,4 +1,5 @@
 """Tests for AuditLog: tamper-evident chained JSONL log."""
+
 from __future__ import annotations
 
 import json

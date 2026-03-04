@@ -3,6 +3,7 @@
 Evaluates PolicyContext against ordered rules and returns PolicyDecision.
 Rules are fail-closed: default verdict is DENY.
 """
+
 from __future__ import annotations
 
 import collections
@@ -26,17 +27,36 @@ from veronica_core.shield.types import Decision, ToolCallContext
 
 ActionLiteral = Literal["shell", "file_read", "file_write", "net", "git", "browser"]
 
-SHELL_DENY_COMMANDS: frozenset[str] = frozenset({
-    "rm", "del", "format", "reg", "schtasks", "wmic",
-    "powershell", "cmd", "certutil", "bitsadmin",
-    "curl", "wget", "scp", "sftp",
-})
+SHELL_DENY_COMMANDS: frozenset[str] = frozenset(
+    {
+        "rm",
+        "del",
+        "format",
+        "reg",
+        "schtasks",
+        "wmic",
+        "powershell",
+        "cmd",
+        "certutil",
+        "bitsadmin",
+        "curl",
+        "wget",
+        "scp",
+        "sftp",
+    }
+)
 
 SHELL_DENY_OPERATORS: tuple[str, ...] = (
-    "|", ">", ">>", "2>", "&&", ";",
+    "|",
+    ">",
+    ">>",
+    "2>",
+    "&&",
+    ";",
     # Command substitution: $(...) and backtick forms allow arbitrary sub-shell execution
     # even in arguments passed to allowlisted commands (e.g. "echo $(cat /etc/passwd)").
-    "$(", "`",
+    "$(",
+    "`",
     # Newline injection: allows multi-command payloads embedded in a single argument string.
     "\n",
     # Null-byte injection: terminates strings in C-based shells, bypasses string comparisons.
@@ -68,13 +88,15 @@ FILE_READ_DENY_PATTERNS: tuple[str, ...] = (
     "/proc/*/cmdline",
 )
 
-NET_ALLOWLIST_HOSTS: frozenset[str] = frozenset({
-    "pypi.org",
-    "files.pythonhosted.org",
-    "github.com",
-    "raw.githubusercontent.com",
-    "registry.npmjs.org",
-})
+NET_ALLOWLIST_HOSTS: frozenset[str] = frozenset(
+    {
+        "pypi.org",
+        "files.pythonhosted.org",
+        "github.com",
+        "raw.githubusercontent.com",
+        "registry.npmjs.org",
+    }
+)
 
 NET_DENY_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
@@ -107,13 +129,22 @@ FILE_WRITE_APPROVAL_PATTERNS: tuple[str, ...] = (
     "policies/*.yaml",
 )
 
-SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
-    "pytest", "python", "uv", "npm", "pnpm", "cargo", "go", "cmake",
-    # "make" removed in v0.10.3 (R-3): Makefile recipes spawn sub-shells that are
-    # invisible to PolicyEngine, enabling arbitrary code execution via a crafted
-    # Makefile even without dangerous flags.  If build automation is needed, run
-    # make inside an OS-level sandbox (Docker, gVisor) outside veronica-core's scope.
-})
+SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset(
+    {
+        "pytest",
+        "python",
+        "uv",
+        "npm",
+        "pnpm",
+        "cargo",
+        "go",
+        "cmake",
+        # "make" removed in v0.10.3 (R-3): Makefile recipes spawn sub-shells that are
+        # invisible to PolicyEngine, enabling arbitrary code execution via a crafted
+        # Makefile even without dangerous flags.  If build automation is needed, run
+        # make inside an OS-level sandbox (Docker, gVisor) outside veronica-core's scope.
+    }
+)
 
 # Per-command inline code execution flags (defense-in-depth).
 # When argv0 matches a key AND any of the associated flags appear in args[1:], DENY
@@ -129,8 +160,8 @@ SHELL_ALLOW_COMMANDS: frozenset[str] = frozenset({
 #   make  -f /tmp/evil.mk      → loads an arbitrary Makefile (defense-in-depth;
 #                                make is also removed from SHELL_ALLOW_COMMANDS)
 SHELL_DENY_EXEC_FLAGS: dict[str, frozenset[str]] = {
-    "cmake":   frozenset({"-P", "-E"}),
-    "make":    frozenset({"--eval", "-f"}),
+    "cmake": frozenset({"-P", "-E"}),
+    "make": frozenset({"--eval", "-f"}),
     # "go run"      — executes arbitrary Go source directly, no compiled artifact needed.
     # "go generate" — runs arbitrary shell commands declared in //go:generate directives.
     # "go tool"     — invokes arbitrary tool binaries (e.g. go tool compile /tmp/evil.go).
@@ -138,7 +169,7 @@ SHELL_DENY_EXEC_FLAGS: dict[str, frozenset[str]] = {
     #                 future module fetches, making supply chain poisoning persistent.
     # "go test", "go build", "go mod" are intentionally absent — they operate only on
     # explicitly checked-in source files and do not allow arbitrary code injection.
-    "go":      frozenset({"run", "generate", "tool", "env"}),
+    "go": frozenset({"run", "generate", "tool", "env"}),
 }
 
 # Inline-execution flags scanned inside "uv run <cmd> ..." wrappers.
@@ -157,12 +188,12 @@ FILE_COUNT_APPROVAL_THRESHOLD = 20
 # Supply chain guard (G-2): package install subcommands requiring approval.
 # Maps argv0 → subcommands that trigger REQUIRE_APPROVAL.
 SHELL_PKG_INSTALL_APPROVAL: tuple[tuple[str, frozenset[str]], ...] = (
-    ("pip",    frozenset({"install", "download"})),
-    ("pip3",   frozenset({"install", "download"})),
-    ("npm",    frozenset({"install", "add", "i"})),
-    ("pnpm",   frozenset({"install", "add", "i"})),
-    ("yarn",   frozenset({"install", "add"})),
-    ("cargo",  frozenset({"add", "install"})),
+    ("pip", frozenset({"install", "download"})),
+    ("pip3", frozenset({"install", "download"})),
+    ("npm", frozenset({"install", "add", "i"})),
+    ("pnpm", frozenset({"install", "add", "i"})),
+    ("yarn", frozenset({"install", "add"})),
+    ("cargo", frozenset({"add", "install"})),
 )
 
 # uv sub-commands that indicate package installation
@@ -184,10 +215,10 @@ FILE_WRITE_LOCKFILE_PATTERNS: tuple[str, ...] = (
 # Each entry: (argv0, blocked_subcommands_set)
 # Evaluated after SHELL_DENY_COMMANDS and before SHELL_ALLOW_COMMANDS.
 SHELL_CREDENTIAL_DENY: tuple[tuple[str, frozenset[str]], ...] = (
-    ("git",  frozenset({"credential", "credentials"})),
-    ("gh",   frozenset({"auth", "token", "secret"})),
-    ("npm",  frozenset({"token", "login", "logout", "adduser", "set-script"})),
-    ("pip",  frozenset({"config"})),
+    ("git", frozenset({"credential", "credentials"})),
+    ("gh", frozenset({"auth", "token", "secret"})),
+    ("npm", frozenset({"token", "login", "logout", "adduser", "set-script"})),
+    ("pip", frozenset({"config"})),
 )
 
 
@@ -235,6 +266,7 @@ PolicyDecision = ExecPolicyDecision
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
     """Return True if *path* matches any glob pattern.
 
@@ -267,7 +299,7 @@ def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
             if pat_prefix:
                 idx = norm.find("/" + pat_prefix)
                 if idx >= 0:
-                    sub = norm[idx + 1:]
+                    sub = norm[idx + 1 :]
                     if fnmatch.fnmatch(sub, suffix_pattern):
                         return True
     return False
@@ -327,6 +359,7 @@ def _url_path(url: str) -> str:
 # ---------------------------------------------------------------------------
 # Rule evaluators — shell sub-functions
 # ---------------------------------------------------------------------------
+
 
 def _check_shell_deny_commands(argv0: str) -> PolicyDecision | None:
     """Return DENY if argv0 is a globally blocked command."""
@@ -412,7 +445,9 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
     return None
 
 
-def _check_pkg_install(argv0: str, argv1: str, args: list[str]) -> PolicyDecision | None:
+def _check_pkg_install(
+    argv0: str, argv1: str, args: list[str]
+) -> PolicyDecision | None:
     """Return REQUIRE_APPROVAL for package installation commands.
 
     Covers pip/pip3/npm/pnpm/yarn/cargo and uv add/pip install patterns.
@@ -477,6 +512,7 @@ def _check_pkg_install(argv0: str, argv1: str, args: list[str]) -> PolicyDecisio
 # ---------------------------------------------------------------------------
 # Rule evaluators
 # ---------------------------------------------------------------------------
+
 
 def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
     """Evaluate shell action rules. Returns decision or None to continue."""
@@ -687,6 +723,7 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     if subcmd in GIT_DENY_SUBCMDS:
         # DENY unless GIT_PUSH_APPROVAL capability is granted
         from veronica_core.security.capabilities import has_cap
+
         if not has_cap(ctx.caps, Capability.GIT_PUSH_APPROVAL):
             return PolicyDecision(
                 verdict="DENY",
@@ -765,7 +802,10 @@ class PolicyEngine:
                              used for v2 verification.  Defaults to
                              ``policies/public_key.pem`` in the repo root.
         """
-        from veronica_core.security.security_level import SecurityLevel, get_security_level
+        from veronica_core.security.security_level import (
+            SecurityLevel,
+            get_security_level,
+        )
         from veronica_core.security.policy_signing import _ED25519_AVAILABLE
 
         self._policy_path = policy_path
@@ -811,6 +851,7 @@ class PolicyEngine:
             import tempfile
 
             from veronica_core.audit.log import AuditLog
+
             audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
             audit_log = AuditLog(audit_dir / "policy.jsonl")
             audit_log.write(event, payload)
@@ -833,7 +874,9 @@ class PolicyEngine:
         from veronica_core.security.policy_signing import PolicySignerV2
 
         _log = _logging.getLogger(__name__)
-        signer_v2 = PolicySignerV2(public_key_path=public_key_path, key_provider=key_provider)
+        signer_v2 = PolicySignerV2(
+            public_key_path=public_key_path, key_provider=key_provider
+        )
 
         if not signer_v2.verify(policy_path, sig_v2_path):
             PolicyEngine._emit_policy_audit(
@@ -850,6 +893,7 @@ class PolicyEngine:
             from veronica_core.security.key_pin import KeyPinChecker
             import tempfile
             from veronica_core.audit.log import AuditLog
+
             audit_dir = Path(tempfile.gettempdir()) / "veronica_audit"
             audit_log: Any
             try:
@@ -884,7 +928,11 @@ class PolicyEngine:
 
         PolicyEngine._emit_policy_audit(
             "policy_tamper",
-            {"policy_path": str(policy_path), "expected": "<redacted>", "actual": "<redacted>"},
+            {
+                "policy_path": str(policy_path),
+                "expected": "<redacted>",
+                "actual": "<redacted>",
+            },
         )
         _log.error("policy_tamper: signature mismatch for %s", policy_path)
         raise RuntimeError(f"Policy tamper detected: {policy_path}")
@@ -923,7 +971,9 @@ class PolicyEngine:
             PolicyEngine._verify_jws_signature(policy_path, sig_v1_path)
             return
 
-        PolicyEngine._emit_policy_audit("policy_sig_missing", {"policy_path": str(policy_path)})
+        PolicyEngine._emit_policy_audit(
+            "policy_sig_missing", {"policy_path": str(policy_path)}
+        )
         _log.warning("policy_sig_missing: no signature file found for %s", policy_path)
 
     @staticmethod
@@ -953,6 +1003,7 @@ class PolicyEngine:
                 parsing fails.
         """
         import logging as _logging
+
         _log = _logging.getLogger(__name__)
 
         # File absent — warn and return empty dict (backward-compatible path).
@@ -1018,6 +1069,7 @@ class PolicyEngine:
 # PolicyHook — ToolDispatchHook + EgressBoundaryHook integration
 # ---------------------------------------------------------------------------
 
+
 class PolicyHook:
     """Implements ToolDispatchHook and EgressBoundaryHook protocols.
 
@@ -1054,7 +1106,9 @@ class PolicyHook:
         with self._last_decision_lock:
             self._last_decision = value
 
-    def _verdict_to_decision(self, verdict: Literal["ALLOW", "DENY", "REQUIRE_APPROVAL"]) -> Decision:
+    def _verdict_to_decision(
+        self, verdict: Literal["ALLOW", "DENY", "REQUIRE_APPROVAL"]
+    ) -> Decision:
         if verdict == "ALLOW":
             return Decision.ALLOW
         if verdict == "REQUIRE_APPROVAL":

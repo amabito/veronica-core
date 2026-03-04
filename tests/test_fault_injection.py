@@ -4,6 +4,7 @@ Verifies graceful handling of:
 1. JSONBackend with corrupted JSON file — must not crash, must return None.
 2. ShieldPipeline hook that raises an exception — pipeline must not silently swallow it.
 """
+
 from __future__ import annotations
 
 import sys
@@ -112,12 +113,14 @@ class TestShieldPipelineHookFaultInjection:
         WHEN before_llm_call() is invoked,
         THEN the RuntimeError propagates to the caller (not silently swallowed).
         """
+
         class BrokenPreDispatch:
             def before_llm_call(self, ctx) -> Decision:
                 raise RuntimeError("pre_dispatch hook exploded")
 
         pipeline = ShieldPipeline(pre_dispatch=BrokenPreDispatch())
         from veronica_core.shield.types import ToolCallContext
+
         ctx = ToolCallContext(request_id="test-req", session_id="s1")
 
         with pytest.raises(RuntimeError, match="pre_dispatch hook exploded"):
@@ -128,12 +131,14 @@ class TestShieldPipelineHookFaultInjection:
         WHEN before_tool_call() is invoked,
         THEN the ValueError propagates (pipeline does not silently absorb it).
         """
+
         class BrokenToolDispatch:
             def before_tool_call(self, ctx) -> Decision:
                 raise ValueError("tool_dispatch hook failure")
 
         pipeline = ShieldPipeline(tool_dispatch=BrokenToolDispatch())
         from veronica_core.shield.types import ToolCallContext
+
         ctx = ToolCallContext(request_id="test-req2", session_id="s2")
 
         with pytest.raises(ValueError, match="tool_dispatch hook failure"):
@@ -146,6 +151,7 @@ class TestShieldPipelineHookFaultInjection:
 
         This verifies that hook failures are not swallowed by the containment layer.
         """
+
         class ExplodingHook:
             def before_llm_call(self, ctx) -> Decision:
                 raise RuntimeError("deliberate hook failure")
@@ -162,6 +168,7 @@ class TestShieldPipelineHookFaultInjection:
         WHEN a successful LLM call completes and charge is attempted,
         THEN the exception propagates rather than being swallowed.
         """
+
         class ExplodingBudgetHook:
             def before_charge(self, ctx, cost_usd: float) -> Decision:
                 raise RuntimeError("budget hook exploded on charge")

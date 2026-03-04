@@ -16,6 +16,7 @@ Usage:
     if decision and decision.degradation_action == "MODEL_DOWNGRADE":
         model = decision.fallback_model  # use this model instead
 """
+
 from __future__ import annotations
 
 import logging

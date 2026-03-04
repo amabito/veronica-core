@@ -39,7 +39,7 @@ def test_quickstart_all_features_smoke():
 
     decisions = []
     for i in range(6):
-        ctx = ToolCallContext(request_id=f"call-{i+1}", tool_name="llm")
+        ctx = ToolCallContext(request_id=f"call-{i + 1}", tool_name="llm")
         decision = pipe.before_llm_call(ctx)
         decisions.append(decision)
         if decision == Decision.HALT:

@@ -5,6 +5,7 @@ Test matrix:
   - Fix 4-G: AIcontainer.reset() and check() are protected by a threading.Lock
   - Fix 3-A: mark_success() feeds divergence detection (not only mark_running)
 """
+
 from __future__ import annotations
 
 import threading
@@ -69,6 +70,7 @@ class TestVeronicaGuardPerCallContainer:
 
         max_steps=0 means _current_step (0) >= max_steps (0) immediately.
         """
+
         @veronica_guard(max_cost_usd=1.0, max_steps=0, max_retries_total=3)
         def fn() -> None:  # pragma: no cover
             pass
@@ -78,6 +80,7 @@ class TestVeronicaGuardPerCallContainer:
 
     def test_return_decision_on_denial(self) -> None:
         """return_decision=True returns PolicyDecision instead of raising."""
+
         @veronica_guard(
             max_cost_usd=1.0,
             max_steps=0,
@@ -93,6 +96,7 @@ class TestVeronicaGuardPerCallContainer:
 
     def test_wrapper_has_no_container_attribute(self) -> None:
         """wrapper._container must not exist — per-call design removes it."""
+
         @veronica_guard(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
         def fn() -> None:
             pass
@@ -230,9 +234,7 @@ class TestMarkSuccessDivergence:
         root_id = graph.create_root(name="agent_run")
 
         for _ in range(4):  # tool threshold = 3
-            node_id = graph.begin_node(
-                parent_id=root_id, kind="tool", name="calc"
-            )
+            node_id = graph.begin_node(parent_id=root_id, kind="tool", name="calc")
             graph.mark_success(node_id, cost_usd=0.001)
 
         events = graph.drain_divergence_events()
@@ -263,9 +265,10 @@ class TestMarkSuccessDivergence:
             graph.mark_success(nid, cost_usd=0.0)
         second_batch = graph.drain_divergence_events()
 
-        assert sum(
-            1 for e in first_batch if e["event_type"] == "divergence_suspected"
-        ) == 1, "Exactly one divergence event expected in first batch"
+        assert (
+            sum(1 for e in first_batch if e["event_type"] == "divergence_suspected")
+            == 1
+        ), "Exactly one divergence event expected in first batch"
         assert not any(
             e["event_type"] == "divergence_suspected" for e in second_batch
         ), "No duplicate divergence events expected after deduplication"
@@ -277,12 +280,10 @@ class TestMarkSuccessDivergence:
         root_id = graph.create_root(name="agent_run")
 
         for _ in range(10):
-            nid = graph.begin_node(
-                parent_id=root_id, kind="system", name="checkpoint"
-            )
+            nid = graph.begin_node(parent_id=root_id, kind="system", name="checkpoint")
             graph.mark_success(nid, cost_usd=0.0)
 
         events = graph.drain_divergence_events()
-        assert not any(
-            e["event_type"] == "divergence_suspected" for e in events
-        ), "system nodes must not trigger divergence at reasonable loop counts"
+        assert not any(e["event_type"] == "divergence_suspected" for e in events), (
+            "system nodes must not trigger divergence at reasonable loop counts"
+        )

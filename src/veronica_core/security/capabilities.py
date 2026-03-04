@@ -1,4 +1,5 @@
 """Capability model for VERONICA Security Containment Layer."""
+
 from __future__ import annotations
 
 import enum

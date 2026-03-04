@@ -6,6 +6,7 @@ Captures an environment fingerprint at startup and detects anomalies
 Also provides active sandbox probing via :class:`SandboxProbe` which
 verifies that the sandbox actually blocks filesystem and network access.
 """
+
 from __future__ import annotations
 
 import os
@@ -88,7 +89,7 @@ class ProbeResult:
 
     name: str
     expected: str  # "BLOCKED"
-    actual: str    # "BLOCKED" or "ALLOWED" or "ERROR:<msg>"
+    actual: str  # "BLOCKED" or "ALLOWED" or "ERROR:<msg>"
     passed: bool
 
 
@@ -299,33 +300,32 @@ class AttestationChecker:
                 f"python_path changed: {self._baseline.python_path!r} -> {current.python_path!r}"
             )
         if current.cwd != self._baseline.cwd:
-            anomalies.append(
-                f"cwd changed: {self._baseline.cwd!r} -> {current.cwd!r}"
-            )
+            anomalies.append(f"cwd changed: {self._baseline.cwd!r} -> {current.cwd!r}")
         if current.uid != self._baseline.uid:
-            anomalies.append(
-                f"uid changed: {self._baseline.uid!r} -> {current.uid!r}"
-            )
+            anomalies.append(f"uid changed: {self._baseline.uid!r} -> {current.uid!r}")
 
         if anomalies:
             if self._audit_log is not None:
-                self._audit_log.write("ATTESTATION_ANOMALY", {
-                    "anomalies": anomalies,
-                    "baseline": {
-                        "username": self._baseline.username,
-                        "platform": self._baseline.platform,
-                        "python_path": self._baseline.python_path,
-                        "cwd": self._baseline.cwd,
-                        "uid": self._baseline.uid,
+                self._audit_log.write(
+                    "ATTESTATION_ANOMALY",
+                    {
+                        "anomalies": anomalies,
+                        "baseline": {
+                            "username": self._baseline.username,
+                            "platform": self._baseline.platform,
+                            "python_path": self._baseline.python_path,
+                            "cwd": self._baseline.cwd,
+                            "uid": self._baseline.uid,
+                        },
+                        "current": {
+                            "username": current.username,
+                            "platform": current.platform,
+                            "python_path": current.python_path,
+                            "cwd": current.cwd,
+                            "uid": current.uid,
+                        },
                     },
-                    "current": {
-                        "username": current.username,
-                        "platform": current.platform,
-                        "python_path": current.python_path,
-                        "cwd": current.cwd,
-                        "uid": current.uid,
-                    },
-                })
+                )
             return False
 
         return True

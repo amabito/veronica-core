@@ -1,4 +1,5 @@
 """Tests for G-2: Supply Chain Guard — pip/npm REQUIRE_APPROVAL + SBOM."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -145,7 +146,10 @@ def test_pip_show_is_allowed() -> None:
     # pip is in neither SHELL_ALLOW_COMMANDS → default DENY (pip not in allowlist)
     # Actually pip is NOT in SHELL_ALLOW_COMMANDS, so it gets default DENY
     # The key constraint is: verdict is NOT REQUIRE_APPROVAL for "show"
-    assert decision.verdict != "REQUIRE_APPROVAL" or decision.rule_id != "SHELL_PKG_INSTALL"
+    assert (
+        decision.verdict != "REQUIRE_APPROVAL"
+        or decision.rule_id != "SHELL_PKG_INSTALL"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +210,7 @@ def test_lockfile_write_package_lock_requires_approval() -> None:
 
 def test_generate_sbom_returns_packages_key() -> None:
     import sys
+
     sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
     from generate_sbom import generate_sbom
 
@@ -222,6 +227,7 @@ def test_generate_sbom_returns_packages_key() -> None:
 
 def test_generate_sbom_entry_fields() -> None:
     import sys
+
     sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
     from generate_sbom import generate_sbom
 
@@ -243,6 +249,7 @@ def test_generate_sbom_entry_fields() -> None:
 
 def test_generate_sbom_writes_file(tmp_path: Path) -> None:
     import sys
+
     sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
     from generate_sbom import generate_sbom
 
@@ -250,5 +257,6 @@ def test_generate_sbom_writes_file(tmp_path: Path) -> None:
     sbom = generate_sbom(out)
     assert out.exists()
     import json
+
     loaded = json.loads(out.read_text())
     assert loaded["packages"] == sbom["packages"]

@@ -1,4 +1,5 @@
 """Tests for ApprovalRateLimiter (Task H)."""
+
 from __future__ import annotations
 
 import threading
@@ -145,10 +146,9 @@ class TestAdversarialRateLimiter:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=acquirer) for _ in range(10)]
-            + [threading.Thread(target=resetter) for _ in range(2)]
-        )
+        threads = [threading.Thread(target=acquirer) for _ in range(10)] + [
+            threading.Thread(target=resetter) for _ in range(2)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -188,10 +188,9 @@ class TestAdversarialRateLimiter:
                 except Exception as exc:
                     errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=worker) for _ in range(5)]
-            + [threading.Thread(target=resetter) for _ in range(2)]
-        )
+        threads = [threading.Thread(target=worker) for _ in range(5)] + [
+            threading.Thread(target=resetter) for _ in range(2)
+        ]
         for t in threads:
             t.start()
         for t in threads:

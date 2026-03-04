@@ -33,7 +33,9 @@ def _add_success_node(
     graph.mark_running(node_id)
     # Drain any signature-based divergence events to keep pending list clean.
     graph.drain_divergence_events()
-    graph.mark_success(node_id, cost_usd=cost_usd, tokens_in=tokens_in, tokens_out=tokens_out)
+    graph.mark_success(
+        node_id, cost_usd=cost_usd, tokens_in=tokens_in, tokens_out=tokens_out
+    )
     return node_id
 
 
@@ -66,7 +68,9 @@ def test_cost_rate_not_fired_below_threshold() -> None:
 
     events = graph.drain_divergence_events()
     types = [e["event_type"] for e in events]
-    assert "COST_RATE_EXCEEDED" not in types, f"Unexpected COST_RATE_EXCEEDED in {types}"
+    assert "COST_RATE_EXCEEDED" not in types, (
+        f"Unexpected COST_RATE_EXCEEDED in {types}"
+    )
 
 
 def test_cost_rate_deduped() -> None:
@@ -83,7 +87,9 @@ def test_cost_rate_deduped() -> None:
     events2 = graph.drain_divergence_events()
     second_count = sum(1 for e in events2 if e["event_type"] == "COST_RATE_EXCEEDED")
 
-    assert first_count == 1, f"Expected exactly 1 event on first call, got {first_count}"
+    assert first_count == 1, (
+        f"Expected exactly 1 event on first call, got {first_count}"
+    )
     assert second_count == 0, f"Expected 0 events on second call, got {second_count}"
 
 
@@ -97,11 +103,15 @@ def test_token_velocity_exceeded_fires() -> None:
     graph, root_id = _make_graph(token_velocity_threshold=0.1)
 
     time.sleep(0.01)
-    _add_success_node(graph, root_id, tokens_out=1000)  # 1000 tok / ~0.01s >> 0.1 threshold
+    _add_success_node(
+        graph, root_id, tokens_out=1000
+    )  # 1000 tok / ~0.01s >> 0.1 threshold
 
     events = graph.drain_divergence_events()
     types = [e["event_type"] for e in events]
-    assert "TOKEN_VELOCITY_EXCEEDED" in types, f"Expected TOKEN_VELOCITY_EXCEEDED in {types}"
+    assert "TOKEN_VELOCITY_EXCEEDED" in types, (
+        f"Expected TOKEN_VELOCITY_EXCEEDED in {types}"
+    )
 
 
 def test_token_velocity_not_fired_below_threshold() -> None:
@@ -113,7 +123,9 @@ def test_token_velocity_not_fired_below_threshold() -> None:
 
     events = graph.drain_divergence_events()
     types = [e["event_type"] for e in events]
-    assert "TOKEN_VELOCITY_EXCEEDED" not in types, f"Unexpected TOKEN_VELOCITY_EXCEEDED in {types}"
+    assert "TOKEN_VELOCITY_EXCEEDED" not in types, (
+        f"Unexpected TOKEN_VELOCITY_EXCEEDED in {types}"
+    )
 
 
 def test_token_velocity_deduped() -> None:
@@ -123,13 +135,19 @@ def test_token_velocity_deduped() -> None:
     time.sleep(0.01)
     _add_success_node(graph, root_id, tokens_out=1000)
     events1 = graph.drain_divergence_events()
-    first_count = sum(1 for e in events1 if e["event_type"] == "TOKEN_VELOCITY_EXCEEDED")
+    first_count = sum(
+        1 for e in events1 if e["event_type"] == "TOKEN_VELOCITY_EXCEEDED"
+    )
 
     _add_success_node(graph, root_id, tokens_out=1000)
     events2 = graph.drain_divergence_events()
-    second_count = sum(1 for e in events2 if e["event_type"] == "TOKEN_VELOCITY_EXCEEDED")
+    second_count = sum(
+        1 for e in events2 if e["event_type"] == "TOKEN_VELOCITY_EXCEEDED"
+    )
 
-    assert first_count == 1, f"Expected exactly 1 event on first call, got {first_count}"
+    assert first_count == 1, (
+        f"Expected exactly 1 event on first call, got {first_count}"
+    )
     assert second_count == 0, f"Expected 0 events on second call, got {second_count}"
 
 
@@ -151,7 +169,9 @@ def test_cost_rate_and_token_velocity_independent() -> None:
     events = graph.drain_divergence_events()
     types = [e["event_type"] for e in events]
     assert "COST_RATE_EXCEEDED" in types, f"Expected COST_RATE_EXCEEDED in {types}"
-    assert "TOKEN_VELOCITY_EXCEEDED" in types, f"Expected TOKEN_VELOCITY_EXCEEDED in {types}"
+    assert "TOKEN_VELOCITY_EXCEEDED" in types, (
+        f"Expected TOKEN_VELOCITY_EXCEEDED in {types}"
+    )
 
 
 def test_drain_clears_both_events() -> None:

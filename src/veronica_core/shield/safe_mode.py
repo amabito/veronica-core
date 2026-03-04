@@ -30,9 +30,7 @@ class SafeModeHook:
             return Decision.HALT
         return None
 
-    def on_error(
-        self, ctx: ToolCallContext, err: BaseException
-    ) -> Decision | None:
+    def on_error(self, ctx: ToolCallContext, err: BaseException) -> Decision | None:
         """Suppress retries when enabled."""
         if self._enabled:
             return Decision.HALT

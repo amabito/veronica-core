@@ -10,9 +10,17 @@ from typing import Any, Optional
 
 import pytest
 
-from veronica_core.adapters.mcp import MCPContainmentAdapter, MCPToolCost, MCPToolResult, MCPToolStats
+from veronica_core.adapters.mcp import (
+    MCPContainmentAdapter,
+    MCPToolCost,
+    MCPToolResult,
+    MCPToolStats,
+)
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +307,9 @@ class TestCostMap:
         def token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 100}
 
-        costs = {"llm_tool": MCPToolCost("llm_tool", cost_per_call=0.0, cost_per_token=0.001)}
+        costs = {
+            "llm_tool": MCPToolCost("llm_tool", cost_per_call=0.0, cost_per_token=0.001)
+        }
         adapter = _make_adapter(tool_costs=costs)
         result = adapter.wrap_tool_call("llm_tool", {}, token_fn)
         assert result.cost_usd == pytest.approx(0.10)
@@ -308,13 +318,19 @@ class TestCostMap:
         def token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 50}
 
-        costs = {"llm_tool": MCPToolCost("llm_tool", cost_per_call=0.01, cost_per_token=0.002)}
+        costs = {
+            "llm_tool": MCPToolCost(
+                "llm_tool", cost_per_call=0.01, cost_per_token=0.002
+            )
+        }
         adapter = _make_adapter(tool_costs=costs)
         result = adapter.wrap_tool_call("llm_tool", {}, token_fn)
         assert result.cost_usd == pytest.approx(0.01 + 50 * 0.002)
 
     def test_no_token_count_in_result(self) -> None:
-        costs = {"llm_tool": MCPToolCost("llm_tool", cost_per_call=0.05, cost_per_token=0.01)}
+        costs = {
+            "llm_tool": MCPToolCost("llm_tool", cost_per_call=0.05, cost_per_token=0.01)
+        }
         adapter = _make_adapter(tool_costs=costs)
         # _echo_fn does not include token_count; per-token cost should be 0
         result = adapter.wrap_tool_call("llm_tool", {}, _echo_fn)
@@ -377,7 +393,9 @@ class TestAdversarial:
 
 class TestThreadSafety:
     def test_concurrent_calls_no_race(self) -> None:
-        adapter = _make_adapter(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.001)
+        adapter = _make_adapter(
+            max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.001
+        )
         errors: list[Exception] = []
 
         def worker() -> None:
@@ -395,7 +413,9 @@ class TestThreadSafety:
         assert errors == [], f"Threads raised: {errors}"
 
     def test_concurrent_calls_count_consistent(self) -> None:
-        adapter = _make_adapter(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.001)
+        adapter = _make_adapter(
+            max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.001
+        )
         barrier = threading.Barrier(10)
 
         def worker() -> None:
@@ -474,6 +494,7 @@ class TestAdversarialMCP:
 
     def test_corrupted_token_count_negative_ignored(self) -> None:
         """Negative token_count in result must not produce negative cost."""
+
         def neg_token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": -100}
 
@@ -486,6 +507,7 @@ class TestAdversarialMCP:
 
     def test_corrupted_token_count_string_ignored(self) -> None:
         """String token_count in result must be ignored (not coerced)."""
+
         def str_token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": "one hundred"}
 
@@ -496,6 +518,7 @@ class TestAdversarialMCP:
 
     def test_corrupted_token_count_float_ignored(self) -> None:
         """Float token_count must be ignored (isinstance int check)."""
+
         def float_token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 99.5}
 
@@ -507,6 +530,7 @@ class TestAdversarialMCP:
 
     def test_corrupted_token_count_nan_int_impossible(self) -> None:
         """NaN cannot be int, so token extraction returns 0."""
+
         def nan_token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": float("nan")}
 
@@ -532,13 +556,20 @@ class TestAdversarialMCP:
 
     def test_tool_name_with_special_chars(self) -> None:
         """Tool name with special characters must not cause issues."""
-        for name in ["tool/sub", "tool::method", "tool with spaces", "\n\t", "\x00null"]:
+        for name in [
+            "tool/sub",
+            "tool::method",
+            "tool with spaces",
+            "\n\t",
+            "\x00null",
+        ]:
             adapter = _make_adapter()
             result = adapter.wrap_tool_call(name, {}, _echo_fn)
             assert result.success is True
 
     def test_call_fn_mutates_arguments_no_side_effect(self) -> None:
         """call_fn modifying the arguments dict must not affect adapter internals."""
+
         def mutating_fn(**kwargs: Any) -> str:
             kwargs["injected"] = "malicious"
             return "ok"
@@ -559,6 +590,7 @@ class TestAdversarialMCP:
 
     def test_call_fn_returns_object_with_token_count_attr(self) -> None:
         """Result with token_count as attribute (not dict key) must be extracted."""
+
         class TokenResult:
             token_count = 50
 
@@ -572,6 +604,7 @@ class TestAdversarialMCP:
 
     def test_call_fn_returns_object_with_negative_token_count_attr(self) -> None:
         """Object with negative token_count attr must be ignored."""
+
         class BadResult:
             token_count = -999
 
@@ -622,6 +655,7 @@ class TestAdversarialMCP:
 
     def test_cost_per_token_zero_with_tokens(self) -> None:
         """cost_per_token=0 with tokens should not add to cost."""
+
         def token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 1000}
 
@@ -632,10 +666,13 @@ class TestAdversarialMCP:
 
     def test_large_token_count_no_overflow(self) -> None:
         """Very large token count must not cause overflow."""
+
         def big_token_fn(**kwargs: Any) -> dict[str, Any]:
             return {"token_count": 10**9}
 
-        costs = {"tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.000001)}
+        costs = {
+            "tool": MCPToolCost("tool", cost_per_call=0.0, cost_per_token=0.000001)
+        }
         adapter = _make_adapter(tool_costs=costs)
         result = adapter.wrap_tool_call("tool", {}, big_token_fn)
         assert result.cost_usd == pytest.approx(1000.0)
@@ -701,6 +738,7 @@ class TestTimeout:
 
         ctx = _make_ctx()
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         timed_adapter = MCPContainmentAdapter(
             execution_context=ctx,
             timeout_seconds=0.05,
@@ -711,6 +749,7 @@ class TestTimeout:
 
     def test_fast_fn_no_timeout(self) -> None:
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         ctx = _make_ctx()
         timed_adapter = MCPContainmentAdapter(
             execution_context=ctx,
@@ -739,6 +778,7 @@ class TestTimeout:
             return "done"
 
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         ctx = _make_ctx()
         timed_adapter = MCPContainmentAdapter(
             execution_context=ctx,
@@ -765,6 +805,7 @@ class TestFailurePredicate:
             return False
 
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
             execution_context=ctx,
@@ -784,6 +825,7 @@ class TestFailurePredicate:
             return True
 
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
             execution_context=ctx,
@@ -805,6 +847,7 @@ class TestFailurePredicate:
             raise RuntimeError("transient")
 
         from veronica_core.adapters.mcp import MCPContainmentAdapter
+
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(
             execution_context=ctx,
@@ -858,6 +901,7 @@ class TestIsErrorHandling:
 
     def test_is_error_true_decision_allow_not_halt(self) -> None:
         """isError is a tool-level error, not a budget halt -- decision stays ALLOW."""
+
         class ErrorResult:
             isError = True
 
@@ -870,6 +914,7 @@ class TestIsErrorHandling:
 
     def test_is_error_true_result_passed_through(self) -> None:
         """The raw result object must be accessible even when isError=True."""
+
         class ErrorResult:
             isError = True
             message = "something went wrong"

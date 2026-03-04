@@ -16,6 +16,7 @@ Usage::
     from veronica_core.otel import OTelExecutionGraphObserver
     graph = ExecutionGraph(observers=[OTelExecutionGraphObserver()])
 """
+
 from __future__ import annotations
 
 import logging

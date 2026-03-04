@@ -50,9 +50,10 @@ def _wrap_legacy_persistence(backend: Any) -> PersistenceBackend:
 
 class ExitTier(IntEnum):
     """Exit priority levels."""
-    GRACEFUL = 1   # Save state, cleanup, log
+
+    GRACEFUL = 1  # Save state, cleanup, log
     EMERGENCY = 2  # Save state, minimal cleanup
-    FORCE = 3      # Immediate exit (no save)
+    FORCE = 3  # Immediate exit (no save)
 
 
 class VeronicaExit:
@@ -66,6 +67,7 @@ class VeronicaExit:
         self.state_machine = state_machine
         if persistence is None:
             from veronica_core.backends import JSONBackend
+
             self.persistence: PersistenceBackend = JSONBackend(
                 "data/state/veronica_state.json"
             )
@@ -91,7 +93,9 @@ class VeronicaExit:
         # Atexit as fallback
         atexit.register(self._atexit_handler)
 
-        logger.info("[VERONICA_EXIT] Exit handlers registered (SIGTERM, SIGINT, atexit)")
+        logger.info(
+            "[VERONICA_EXIT] Exit handlers registered (SIGTERM, SIGINT, atexit)"
+        )
 
     def _signal_handler(self, signum: int, frame) -> None:
         """Handle SIGTERM/SIGINT."""
@@ -106,14 +110,18 @@ class VeronicaExit:
     def _atexit_handler(self) -> None:
         """Atexit fallback (process termination)."""
         if not self.exit_requested:
-            logger.warning("[VERONICA_EXIT] atexit triggered without explicit exit request")
+            logger.warning(
+                "[VERONICA_EXIT] atexit triggered without explicit exit request"
+            )
             self.request_exit(ExitTier.EMERGENCY, "atexit fallback")
 
     def request_exit(self, tier: ExitTier, reason: str) -> None:
         """Request exit at specified tier. Thread-safe against duplicate signals."""
         with self._exit_lock:
             if self.exit_requested:
-                logger.warning(f"[VERONICA_EXIT] Exit already requested (tier={self.exit_tier}), ignoring")
+                logger.warning(
+                    f"[VERONICA_EXIT] Exit already requested (tier={self.exit_tier}), ignoring"
+                )
                 return
 
             self.exit_requested = True
@@ -146,7 +154,9 @@ class VeronicaExit:
         try:
             expired = self.state_machine.cleanup_expired()
             if expired:
-                logger.info(f"[VERONICA_EXIT] Cleaned up {len(expired)} expired cooldowns")
+                logger.info(
+                    f"[VERONICA_EXIT] Cleaned up {len(expired)} expired cooldowns"
+                )
         except Exception:
             logger.exception("[VERONICA_EXIT] Cooldown cleanup failed")
 

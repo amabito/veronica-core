@@ -56,18 +56,14 @@ class TestCustomGuard:
         """Test validate_state accepts valid entities."""
         guard = CustomTestGuard()
 
-        state_data = {
-            "fail_counts": {"task_1": 2, "task_2": 1}
-        }
+        state_data = {"fail_counts": {"task_1": 2, "task_2": 1}}
         assert guard.validate_state(state_data)
 
     def test_validate_state_rejects_invalid_entities(self):
         """Test validate_state rejects invalid entities."""
         guard = CustomTestGuard()
 
-        state_data = {
-            "fail_counts": {"task_1": 2, "unknown_task": 1}
-        }
+        state_data = {"fail_counts": {"task_1": 2, "unknown_task": 1}}
         assert not guard.validate_state(state_data)
 
     def test_hooks_are_optional(self):

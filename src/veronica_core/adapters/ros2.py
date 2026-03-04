@@ -105,7 +105,9 @@ class SafetyMonitor:
         default_factory=lambda: dict(_STATE_TO_MODE),
     )
     logger: object = None  # rclpy logger or stdlib logger
-    on_mode_change: Optional[object] = None  # Callable[[OperatingMode, OperatingMode], None]
+    on_mode_change: Optional[object] = (
+        None  # Callable[[OperatingMode, OperatingMode], None]
+    )
 
     def __post_init__(self) -> None:
         self._last_mode: OperatingMode = self.current_mode
@@ -119,9 +121,7 @@ class SafetyMonitor:
     @property
     def current_mode(self) -> OperatingMode:
         """Derive the operating mode from the circuit breaker state."""
-        return self.state_to_mode.get(
-            self.circuit_breaker.state, OperatingMode.HALT
-        )
+        return self.state_to_mode.get(self.circuit_breaker.state, OperatingMode.HALT)
 
     def record_fault(self, error: BaseException) -> bool:
         """Record a sensor/actuator fault.

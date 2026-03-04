@@ -3,6 +3,7 @@
 Uses fake langchain stubs injected into sys.modules so neither langchain-core
 nor langchain need to be installed.
 """
+
 from __future__ import annotations
 
 import sys
@@ -229,9 +230,7 @@ class TestCostBoundary:
         """total_tokens=None must still return 0.0 (missing data guard remains)."""
         from veronica_core.adapters._shared import extract_llm_result_cost
 
-        result = extract_llm_result_cost(
-            FakeLLMResult(llm_output={"token_usage": {}})
-        )
+        result = extract_llm_result_cost(FakeLLMResult(llm_output={"token_usage": {}}))
         assert result == 0.0, f"Expected 0.0 for missing total_tokens, got {result}"
 
 

@@ -67,8 +67,8 @@ class JSONBackend(PersistenceBackend):
         """Save state to JSON file with atomic write."""
         try:
             # Atomic write: tmp -> rename
-            tmp_path = self.path.with_suffix('.tmp')
-            with open(tmp_path, 'w') as f:
+            tmp_path = self.path.with_suffix(".tmp")
+            with open(tmp_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             tmp_path.replace(self.path)
@@ -86,7 +86,7 @@ class JSONBackend(PersistenceBackend):
             return None
 
         try:
-            with open(self.path, 'r') as f:
+            with open(self.path, "r") as f:
                 data = json.load(f)
             logger.info(f"[JSONBackend] State loaded from {self.path}")
             return data
@@ -105,7 +105,9 @@ class JSONBackend(PersistenceBackend):
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = self.path.with_name(f"{self.path.stem}_backup_{timestamp}.json")
+            backup_path = self.path.with_name(
+                f"{self.path.stem}_backup_{timestamp}.json"
+            )
             shutil.copy2(self.path, backup_path)
             logger.info(f"[JSONBackend] Backup created: {backup_path}")
             return True

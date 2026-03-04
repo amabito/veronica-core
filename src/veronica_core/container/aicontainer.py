@@ -56,7 +56,9 @@ class AIContainer:
     semantic_guard: Optional[SemanticLoopGuard] = None
 
     _pipeline: PolicyPipeline = field(init=False, repr=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         primitives = [

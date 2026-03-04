@@ -1,4 +1,5 @@
 """Tests for risk_score.py: RiskScoreAccumulator, RiskAwareHook, RiskAwareShieldFactory."""
+
 from __future__ import annotations
 
 

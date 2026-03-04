@@ -7,6 +7,7 @@ This has two observable effects:
 
 No private attribute access — only public API used: wrap_llm_call, get_snapshot.
 """
+
 from __future__ import annotations
 
 import sys
@@ -156,7 +157,9 @@ def test_timeout_fn_exception_during_timeout_returns_halt():
         time.sleep(0.25)
 
         # Now call with an fn that raises — timeout token is already set
-        decision = ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(RuntimeError("deliberate")))
+        decision = ctx.wrap_llm_call(
+            fn=lambda: (_ for _ in ()).throw(RuntimeError("deliberate"))
+        )
 
     assert decision == Decision.HALT, (
         f"Expected Decision.HALT when fn raises after timeout, got {decision}"

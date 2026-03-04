@@ -18,7 +18,9 @@ class TestBelowThreshold:
 
     def test_service_allows_calls_when_usage_is_well_below_configured_limit(self):
         # max_calls=10, degrade_threshold=0.8 -> degrade at count >= 8
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.8)
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.8
+        )
         for _ in range(7):
             assert hook.before_llm_call(CTX) is None
 
@@ -32,14 +34,20 @@ class TestAtDegradeThreshold:
 
     def test_system_degrades_service_when_call_rate_approaches_configured_limit(self):
         # max_calls=10, degrade_at=8.0 -> 8th call (0-indexed count=8) returns DEGRADE
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.8)
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.8
+        )
         for _ in range(8):
             hook.before_llm_call(CTX)
         # count is now 8 >= 8.0 -> DEGRADE
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
-    def test_service_remains_degraded_for_all_calls_between_threshold_and_hard_limit(self):
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.8)
+    def test_service_remains_degraded_for_all_calls_between_threshold_and_hard_limit(
+        self,
+    ):
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.8
+        )
         for _ in range(8):
             hook.before_llm_call(CTX)
         # calls 9 and 10 (count 8 and 9) are in DEGRADE zone
@@ -51,7 +59,9 @@ class TestAtMaxCalls:
     """At 100% (max_calls): returns HALT."""
 
     def test_service_halts_all_calls_once_window_budget_is_exhausted(self):
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.8)
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.8
+        )
         for _ in range(10):
             hook.before_llm_call(CTX)
         assert hook.before_llm_call(CTX) is Decision.HALT
@@ -69,13 +79,17 @@ class TestCustomThreshold:
 
     def test_service_degrades_earlier_when_operator_sets_conservative_threshold(self):
         # max_calls=10, degrade_at=5.0 -> 5th call returns DEGRADE
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.5)
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.5
+        )
         for _ in range(5):
             hook.before_llm_call(CTX)
         assert hook.before_llm_call(CTX) is Decision.DEGRADE
 
     def test_service_allows_calls_below_conservative_degrade_threshold(self):
-        hook = BudgetWindowHook(max_calls=10, window_seconds=60.0, degrade_threshold=0.5)
+        hook = BudgetWindowHook(
+            max_calls=10, window_seconds=60.0, degrade_threshold=0.5
+        )
         for _ in range(4):
             assert hook.before_llm_call(CTX) is None
 
@@ -91,7 +105,9 @@ class TestCustomThreshold:
 class TestDefaultThreshold:
     """No degrade_threshold set: default 0.8 behavior."""
 
-    def test_service_degrades_at_80_percent_capacity_when_no_threshold_is_specified(self):
+    def test_service_degrades_at_80_percent_capacity_when_no_threshold_is_specified(
+        self,
+    ):
         hook = BudgetWindowHook(max_calls=10)
         # calls 0..7 = None
         for _ in range(8):

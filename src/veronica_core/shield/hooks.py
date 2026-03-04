@@ -39,9 +39,7 @@ class EgressBoundaryHook(Protocol):
 class RetryBoundaryHook(Protocol):
     """Evaluated when a tool call raises an exception."""
 
-    def on_error(
-        self, ctx: ToolCallContext, err: BaseException
-    ) -> Decision | None: ...
+    def on_error(self, ctx: ToolCallContext, err: BaseException) -> Decision | None: ...
 
 
 @runtime_checkable

@@ -3,6 +3,7 @@
 Each test has a docstring stating the requirement:
   "REQUIREMENT: When [condition], the system shall [action]."
 """
+
 from __future__ import annotations
 
 import sys
@@ -86,7 +87,9 @@ def test_child_budget_exhaustion_halts_parent():
     child.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.20))
 
     # Then: the parent cannot make further calls
-    decision = parent.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01))
+    decision = parent.wrap_llm_call(
+        fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01)
+    )
     assert decision == Decision.HALT
 
 
@@ -124,11 +127,16 @@ def test_degradation_ladder_triggers_rate_limit_at_90pct():
     ladder = DegradationLadder(DegradationConfig())
 
     # When: cost fraction is at 91%
-    decision = ladder.evaluate(cost_accumulated=0.91, max_cost_usd=1.0, current_model="gpt-4o")
+    decision = ladder.evaluate(
+        cost_accumulated=0.91, max_cost_usd=1.0, current_model="gpt-4o"
+    )
 
     # Then: a RATE_LIMIT action is returned
     assert decision is not None
-    assert decision.degradation_action == "RATE_LIMIT" or decision.policy_type == "rate_limit"
+    assert (
+        decision.degradation_action == "RATE_LIMIT"
+        or decision.policy_type == "rate_limit"
+    )
 
 
 def test_degradation_ladder_triggers_model_downgrade_at_80pct():
@@ -136,12 +144,12 @@ def test_degradation_ladder_triggers_model_downgrade_at_80pct():
     from veronica_core.shield.degradation import DegradationConfig, DegradationLadder
 
     # Given: a ladder with a model map configured
-    ladder = DegradationLadder(
-        DegradationConfig(model_map={"gpt-4o": "gpt-4o-mini"})
-    )
+    ladder = DegradationLadder(DegradationConfig(model_map={"gpt-4o": "gpt-4o-mini"}))
 
     # When: cost fraction is at 82%
-    decision = ladder.evaluate(cost_accumulated=0.82, max_cost_usd=1.0, current_model="gpt-4o")
+    decision = ladder.evaluate(
+        cost_accumulated=0.82, max_cost_usd=1.0, current_model="gpt-4o"
+    )
 
     # Then: a MODEL_DOWNGRADE action is returned
     assert decision is not None

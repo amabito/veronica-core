@@ -377,18 +377,22 @@ class TestAdversarialCorruptedInput:
         exporter.close()
 
     @patch("urllib.request.urlopen")
-    def test_send_one_with_non_serializable_value(self, mock_urlopen: MagicMock) -> None:
+    def test_send_one_with_non_serializable_value(
+        self, mock_urlopen: MagicMock
+    ) -> None:
         """Payload containing non-JSON-serializable type uses default=str fallback."""
         mock_urlopen.return_value = FakeResponse(200)
 
         exporter = _make_exporter()
         exporter._httpx = None
         # set, bytes, lambda -- all non-serializable
-        exporter._send_one({
-            "a_set": {1, 2, 3},
-            "some_bytes": b"binary",
-            "a_lambda": lambda: None,
-        })
+        exporter._send_one(
+            {
+                "a_set": {1, 2, 3},
+                "some_bytes": b"binary",
+                "a_lambda": lambda: None,
+            }
+        )
         # json.dumps(default=str) should handle all of these
         mock_urlopen.assert_called_once()
         exporter.close()
@@ -400,11 +404,13 @@ class TestAdversarialCorruptedInput:
 
         exporter = _make_exporter()
         exporter._httpx = None
-        exporter._send_one({
-            "nan_val": float("nan"),
-            "inf_val": float("inf"),
-            "neg_inf": float("-inf"),
-        })
+        exporter._send_one(
+            {
+                "nan_val": float("nan"),
+                "inf_val": float("inf"),
+                "neg_inf": float("-inf"),
+            }
+        )
         mock_urlopen.assert_called_once()
         exporter.close()
 
@@ -434,7 +440,9 @@ class TestAdversarialStatCorruption:
         exporter.flush()  # Must not raise
 
     @patch("veronica_core.compliance.exporter.ComplianceExporter._send_one")
-    def test_flush_batch_with_shutdown_sentinel_in_queue(self, mock_send: MagicMock) -> None:
+    def test_flush_batch_with_shutdown_sentinel_in_queue(
+        self, mock_send: MagicMock
+    ) -> None:
         """_flush_batch encountering _SHUTDOWN sentinel must stop cleanly."""
         exporter = _make_exporter()
         exporter._closed = True
@@ -731,6 +739,7 @@ class TestAdversarialExporter:
 
         # Monkey-patch the bound method on the instance
         import types
+
         exporter._send_one = types.MethodType(patched_send, exporter)
 
         # Enqueue items that will trigger failures
@@ -746,7 +755,9 @@ class TestAdversarialExporter:
         exporter.close()
 
     @patch("urllib.request.urlopen")
-    def test_subsequent_exports_work_after_failures(self, mock_urlopen: MagicMock) -> None:
+    def test_subsequent_exports_work_after_failures(
+        self, mock_urlopen: MagicMock
+    ) -> None:
         """After repeated send failures, subsequent exports must still succeed.
 
         The background thread's error recovery (sleep + retry loop) must not
@@ -852,9 +863,15 @@ class TestAttach:
     @patch("veronica_core.compliance.exporter.ComplianceExporter._send_one")
     def test_attach_exports_on_close(self, mock_send: MagicMock) -> None:
         """attach() followed by close() exports the context snapshot."""
-        from veronica_core.containment import ExecutionConfig, ExecutionContext, WrapOptions
+        from veronica_core.containment import (
+            ExecutionConfig,
+            ExecutionContext,
+            WrapOptions,
+        )
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
 
         with ExecutionContext(config=config) as ctx:
@@ -882,7 +899,9 @@ class TestAttach:
             ExecutionContext,
         )
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         meta = CM(request_id="r1", chain_id="c1", service="svc", team="eng")
         exporter = _make_exporter()
 
@@ -901,7 +920,9 @@ class TestAttach:
 
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
 
         ctx = ExecutionContext(config=config)
@@ -921,7 +942,9 @@ class TestAttach:
         """Multiple contexts can be attached."""
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
 
         with ExecutionContext(config=config) as ctx1:
@@ -966,10 +989,13 @@ class TestAdversarialAttach:
 
     def test_attach_object_whose_get_snapshot_raises(self) -> None:
         """Attached object raises in get_snapshot() -- drain must not crash."""
+
         class BrokenCtx:
             _metadata = None
+
             def get_snapshot(self):
                 raise RuntimeError("snapshot exploded")
+
             def get_graph_snapshot(self):
                 return None
 
@@ -981,10 +1007,13 @@ class TestAdversarialAttach:
 
     def test_attach_object_whose_get_graph_snapshot_raises(self) -> None:
         """Attached object raises in get_graph_snapshot() -- drain must not crash."""
+
         class BrokenGraphCtx:
             _metadata = None
+
             def get_snapshot(self):
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 raise ValueError("graph exploded")
 
@@ -994,6 +1023,7 @@ class TestAdversarialAttach:
 
     def test_attach_object_missing_get_snapshot(self) -> None:
         """Attached object has no get_snapshot method at all -- drain must not crash."""
+
         class NoSnapshotCtx:
             _metadata = None
 
@@ -1007,7 +1037,9 @@ class TestAdversarialAttach:
         """attach() after close() must not crash or hang."""
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
         exporter.close()
 
@@ -1021,7 +1053,9 @@ class TestAdversarialAttach:
         """Attaching the same context twice should not crash or double-export."""
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
 
         with ExecutionContext(config=config) as ctx:
@@ -1038,7 +1072,9 @@ class TestAdversarialAttach:
         import gc
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
 
         # 1. Live context
@@ -1057,8 +1093,10 @@ class TestAdversarialAttach:
         # 3. Broken object
         class BrokenCtx:
             _metadata = None
+
             def get_snapshot(self):
                 raise RuntimeError("boom")
+
             def get_graph_snapshot(self):
                 return None
 
@@ -1087,8 +1125,10 @@ class TestAdversarialAttach:
 
         class FakeCtx:
             _metadata = None
+
             def get_snapshot(self):
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 return None
 
@@ -1104,7 +1144,9 @@ class TestAdversarialAttach:
         """attach() racing with close() must not deadlock or crash."""
         from veronica_core.containment import ExecutionConfig, ExecutionContext
 
-        config = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0)
+        config = ExecutionConfig(
+            max_cost_usd=1.0, max_steps=10, max_retries_total=10, timeout_ms=0
+        )
         exporter = _make_exporter()
         errors: List[Exception] = []
 
@@ -1143,8 +1185,10 @@ class TestAdversarialAttach:
 
         class FakeCtx:
             _metadata = None
+
             def get_snapshot(self):
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 return None
 
@@ -1177,17 +1221,22 @@ class TestAdversarialAttach:
 
         class SlowCtx:
             """get_snapshot is slow, giving time for another attach to happen."""
+
             _metadata = None
+
             def get_snapshot(self):
                 time.sleep(0.1)  # Simulate slow snapshot
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 return None
 
         class FastCtx:
             _metadata = None
+
             def get_snapshot(self):
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 return None
 
@@ -1229,8 +1278,10 @@ class TestAdversarialAttach:
 
         class FakeCtx:
             _metadata = None
+
             def get_snapshot(self):
                 return _make_snapshot()
+
             def get_graph_snapshot(self):
                 return None
 
@@ -1249,8 +1300,10 @@ class TestAdversarialAttach:
 
         class ExplodingCtx:
             _metadata = None
+
             def get_snapshot(self):
                 raise RuntimeError("atexit boom")
+
             def get_graph_snapshot(self):
                 raise RuntimeError("graph boom")
 

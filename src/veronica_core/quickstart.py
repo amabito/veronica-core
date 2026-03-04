@@ -20,6 +20,7 @@ Thread-safety:
     ``init()`` and ``shutdown()`` are protected by a module-level Lock.
     ``get_context()`` is read-only and safe to call from any thread.
 """
+
 from __future__ import annotations
 
 import atexit
@@ -28,7 +29,10 @@ import math
 import threading
 from typing import Any, Literal, Optional
 
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 __all__ = ["init", "shutdown", "get_context"]
 
@@ -175,10 +179,12 @@ def init(
     # Apply SDK patches outside the lock (they have their own internal lock).
     if patch_openai:
         from veronica_core.patch import patch_openai as _patch_openai
+
         _patch_openai()
 
     if patch_anthropic:
         from veronica_core.patch import patch_anthropic as _patch_anthropic
+
         _patch_anthropic()
 
     if on_halt != "silent":
@@ -270,11 +276,14 @@ def shutdown() -> None:
         try:
             ctx.__exit__(None, None, None)
         except Exception:
-            logger.debug("[VERONICA] Exception during ExecutionContext cleanup", exc_info=True)
+            logger.debug(
+                "[VERONICA] Exception during ExecutionContext cleanup", exc_info=True
+            )
 
     # Remove SDK patches (idempotent — no-op if nothing was patched).
     try:
         from veronica_core.patch import unpatch_all
+
         unpatch_all()
     except Exception:
         logger.debug("[VERONICA] Exception during unpatch_all", exc_info=True)

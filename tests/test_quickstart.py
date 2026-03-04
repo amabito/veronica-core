@@ -319,6 +319,7 @@ class TestOnHaltDispatch:
         # Replace wrap_llm_call with a fake that always returns HALT,
         # then re-install the on_halt dispatcher on top.
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
         _install_on_halt_dispatch(ctx, mode)
         return ctx
@@ -349,6 +350,7 @@ class TestOnHaltDispatch:
         # Replace underlying with ALLOW, then re-install dispatcher.
         ctx.wrap_llm_call = lambda *a, **kw: Decision.ALLOW  # type: ignore[method-assign]
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         _install_on_halt_dispatch(ctx, "raise")
         result = ctx.wrap_llm_call()
         assert result == Decision.ALLOW  # no exception
@@ -366,6 +368,7 @@ class TestAdversarialOnHalt:
         """If wrap_llm_call returns a non-Decision (e.g. raw string), no crash."""
         ctx = init("$100.00", on_halt="raise")
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: "NOT_A_DECISION"  # type: ignore[method-assign]
         _install_on_halt_dispatch(ctx, "raise")
         result = ctx.wrap_llm_call()
@@ -375,6 +378,7 @@ class TestAdversarialOnHalt:
         """wrap_llm_call returning None must not crash dispatcher."""
         ctx = init("$100.00", on_halt="raise")
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: None  # type: ignore[method-assign]
         _install_on_halt_dispatch(ctx, "raise")
         result = ctx.wrap_llm_call()
@@ -397,6 +401,7 @@ class TestAdversarialOnHalt:
         """Multiple threads hitting HALT in raise mode all get VeronicaHalt."""
         ctx = init("$100.00", on_halt="raise")
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
         _install_on_halt_dispatch(ctx, "raise")
 
@@ -421,11 +426,17 @@ class TestAdversarialOnHalt:
 
     def test_all_decision_variants_no_crash(self) -> None:
         """ALLOW, RETRY, DEGRADE, QUARANTINE, QUEUE must not raise in raise mode."""
-        for decision in [Decision.ALLOW, Decision.RETRY, Decision.DEGRADE,
-                         Decision.QUARANTINE, Decision.QUEUE]:
+        for decision in [
+            Decision.ALLOW,
+            Decision.RETRY,
+            Decision.DEGRADE,
+            Decision.QUARANTINE,
+            Decision.QUEUE,
+        ]:
             shutdown()
             ctx = init("$100.00", on_halt="raise")
             from veronica_core.quickstart import _install_on_halt_dispatch
+
             ctx.wrap_llm_call = lambda *a, d=decision, **kw: d  # type: ignore[method-assign]
             _install_on_halt_dispatch(ctx, "raise")
             result = ctx.wrap_llm_call()
@@ -435,6 +446,7 @@ class TestAdversarialOnHalt:
         """After on_halt=raise triggers VeronicaHalt, shutdown() is still safe."""
         ctx = init("$100.00", on_halt="raise")
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
         _install_on_halt_dispatch(ctx, "raise")
         with pytest.raises(VeronicaHalt):
@@ -442,7 +454,9 @@ class TestAdversarialOnHalt:
         shutdown()
         assert get_context() is None
 
-    def test_double_install_warn_logs_once(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_double_install_warn_logs_once(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Double-calling _install_on_halt_dispatch must NOT stack wrappers.
 
         If stacked, warn mode would log twice per HALT.  This test verifies
@@ -450,6 +464,7 @@ class TestAdversarialOnHalt:
         """
         ctx = init("$100.00", on_halt="warn")
         from veronica_core.quickstart import _install_on_halt_dispatch
+
         ctx.wrap_llm_call = lambda *a, **kw: Decision.HALT  # type: ignore[method-assign]
         # Install twice -- the second call must NOT stack on top of the first.
         _install_on_halt_dispatch(ctx, "warn")

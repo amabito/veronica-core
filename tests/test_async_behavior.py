@@ -10,6 +10,7 @@ Observable behavior verified:
 - Multiple concurrent calls via asyncio.gather work correctly
 - Each call gets an independent container (no shared budget state)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -54,6 +55,7 @@ def test_async_guard_return_value_is_correct():
     WHEN the result is awaited,
     THEN the exact return value from the async body is returned.
     """
+
     @veronica_guard(max_cost_usd=10.0, max_steps=50, max_retries_total=5)
     async def _async_fn(x: int) -> int:
         await asyncio.sleep(0)
@@ -74,6 +76,7 @@ def test_async_multiple_concurrent_calls_via_gather():
     Each veronica_guard call creates a fresh container, so shared budget
     state does not interfere between calls.
     """
+
     @veronica_guard(max_cost_usd=100.0, max_steps=100, max_retries_total=10)
     async def _concurrent_fn(n: int) -> int:
         await asyncio.sleep(0)
@@ -135,6 +138,7 @@ def test_async_guard_raises_veronica_halt_when_policy_denies():
     cannot be blocked by a previous call's state. This test verifies the
     fresh-container guarantee at the async level.
     """
+
     @veronica_guard(max_cost_usd=100.0, max_steps=100, max_retries_total=10)
     async def _permissive() -> str:
         await asyncio.sleep(0)

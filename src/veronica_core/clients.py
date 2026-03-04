@@ -28,11 +28,7 @@ class LLMClient(Protocol):
     """
 
     def generate(
-        self,
-        prompt: str,
-        *,
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
+        self, prompt: str, *, context: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> str:
         """Generate text response from LLM.
 
@@ -58,11 +54,7 @@ class NullClient:
     """
 
     def generate(
-        self,
-        prompt: str,
-        *,
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
+        self, prompt: str, *, context: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> str:
         """Raise error - LLM client not configured."""
         raise RuntimeError(
@@ -88,11 +80,7 @@ class DummyClient:
         self.last_prompt: Optional[str] = None
 
     def generate(
-        self,
-        prompt: str,
-        *,
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
+        self, prompt: str, *, context: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> str:
         """Return fixed response (for testing)."""
         self.call_count += 1

@@ -255,8 +255,12 @@ class TestBenchLocalFallback:
 
         overhead = r_redis["mean_us"] / r_local["mean_us"]
         print(f"\n  Redis overhead: {overhead:.2f}x vs local")
-        print(f"  Redis mean: {r_redis['mean_us']:.1f}us, Local mean: {r_local['mean_us']:.1f}us")
-        print(f"  Absolute overhead: {r_redis['mean_us'] - r_local['mean_us']:.1f}us per call")
+        print(
+            f"  Redis mean: {r_redis['mean_us']:.1f}us, Local mean: {r_local['mean_us']:.1f}us"
+        )
+        print(
+            f"  Absolute overhead: {r_redis['mean_us'] - r_local['mean_us']:.1f}us per call"
+        )
 
         # For context: LLM calls are 200ms-30s
         llm_min_ms = 200
@@ -277,6 +281,7 @@ class TestBenchReset:
 # ---------------------------------------------------------------------------
 # Standalone runner
 # ---------------------------------------------------------------------------
+
 
 def _run_all_benchmarks() -> None:
     """Run all benchmarks and print summary table."""
@@ -340,8 +345,10 @@ def _run_all_benchmarks() -> None:
     results.append(_bench(lambda: dcb8.check(_CTX), label="check() [LOCAL fallback]"))
 
     print("\n  Results:")
-    print(f"  {'Operation':40s} | {'mean':>10s} | {'median':>10s} | {'p95':>10s} | {'p99':>10s}")
-    print(f"  {'-'*40}-+-{'-'*10}-+-{'-'*10}-+-{'-'*10}-+-{'-'*10}")
+    print(
+        f"  {'Operation':40s} | {'mean':>10s} | {'median':>10s} | {'p95':>10s} | {'p99':>10s}"
+    )
+    print(f"  {'-' * 40}-+-{'-' * 10}-+-{'-' * 10}-+-{'-' * 10}-+-{'-' * 10}")
     for r in results:
         print(
             f"  {r['label']:40s} | "
@@ -358,8 +365,12 @@ def _run_all_benchmarks() -> None:
     props_mean = results[5]["mean_us"]
 
     print("\n  Summary:")
-    print(f"    Redis overhead vs local: {redis_mean / local_mean:.2f}x ({redis_mean - local_mean:.1f}us)")
-    print(f"    snapshot() vs 3 reads:   {props_mean / snapshot_mean:.2f}x faster ({props_mean - snapshot_mean:.1f}us saved)")
+    print(
+        f"    Redis overhead vs local: {redis_mean / local_mean:.2f}x ({redis_mean - local_mean:.1f}us)"
+    )
+    print(
+        f"    snapshot() vs 3 reads:   {props_mean / snapshot_mean:.2f}x faster ({props_mean - snapshot_mean:.1f}us saved)"
+    )
     print(f"    As % of LLM call (200ms): {redis_mean / 1000 / 200 * 100:.4f}%")
     print(f"    As % of LLM call (2000ms): {redis_mean / 1000 / 2000 * 100:.5f}%")
     print()

@@ -22,7 +22,10 @@ from veronica_core.containment.budget_allocator import (
     FairShareAllocator,
     WeightedAllocator,
 )
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -53,12 +56,16 @@ def _assert_invariant(result: AllocationResult, total_budget: float) -> None:
 
 class TestAllocationResult:
     def test_frozen(self) -> None:
-        r = AllocationResult(allocations={"a": 0.5}, total_allocated=0.5, total_remaining=0.5)
+        r = AllocationResult(
+            allocations={"a": 0.5}, total_allocated=0.5, total_remaining=0.5
+        )
         with pytest.raises((AttributeError, TypeError)):
             r.total_allocated = 1.0  # type: ignore[misc]
 
     def test_allocations_field_is_dict(self) -> None:
-        r = AllocationResult(allocations={"a": 1.0, "b": 2.0}, total_allocated=3.0, total_remaining=0.0)
+        r = AllocationResult(
+            allocations={"a": 1.0, "b": 2.0}, total_allocated=3.0, total_remaining=0.0
+        )
         assert r.allocations["a"] == pytest.approx(1.0)
         assert r.allocations["b"] == pytest.approx(2.0)
 

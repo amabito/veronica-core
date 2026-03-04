@@ -1,4 +1,5 @@
 """Tests for RollbackGuard: policy rollback protection."""
+
 from __future__ import annotations
 
 import json
@@ -142,7 +143,9 @@ class TestRollbackGuardEngineVersion:
 class TestAuditLogPolicyMethods:
     """Tests for the policy version tracking methods added to AuditLog."""
 
-    def test_get_last_policy_version_empty_log_returns_none(self, tmp_path: Path) -> None:
+    def test_get_last_policy_version_empty_log_returns_none(
+        self, tmp_path: Path
+    ) -> None:
         """get_last_policy_version on empty log must return None."""
         log = _audit_log(tmp_path)
         assert log.get_last_policy_version() is None

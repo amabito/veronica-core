@@ -5,6 +5,7 @@ intercepting and validating all file path arguments before execution.
 
 No external dependencies required — stdlib only.
 """
+
 from __future__ import annotations
 
 import os
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Default blocked path prefixes
 # ---------------------------------------------------------------------------
+
 
 def _default_blocked_paths() -> list[str]:
     """Return default list of paths that should be blocked inside the sandbox.
@@ -193,9 +195,7 @@ class WindowsSandboxRunner:
         # Validate all argv elements for blocked paths
         for arg in argv:
             if self._looks_like_path(arg) and self.read_path_blocked(arg):
-                raise PermissionError(
-                    f"Argument references a blocked path: {arg!r}"
-                )
+                raise PermissionError(f"Argument references a blocked path: {arg!r}")
 
         return self._executor.execute_shell(
             argv,
@@ -242,10 +242,18 @@ class WindowsSandboxRunner:
                 dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns(
                     # Build artifacts
-                    "__pycache__", "*.pyc", ".git",
+                    "__pycache__",
+                    "*.pyc",
+                    ".git",
                     # Secrets and credentials — never copy into sandbox
-                    ".env", ".env.*", "*.env",
-                    "*.key", "*.pem", "*.pfx", "*.p12", "*.secret",
+                    ".env",
+                    ".env.*",
+                    "*.env",
+                    "*.key",
+                    "*.pem",
+                    "*.pfx",
+                    "*.p12",
+                    "*.secret",
                 ),
             )
             self._temp_dir = str(dest)

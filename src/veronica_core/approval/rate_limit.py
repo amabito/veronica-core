@@ -3,6 +3,7 @@
 Token-bucket rate limiter that caps approval requests to prevent
 operators from being overwhelmed by automated approval spam.
 """
+
 from __future__ import annotations
 
 import threading

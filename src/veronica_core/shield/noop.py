@@ -46,18 +46,14 @@ class NoopEgressBoundaryHook:
 class NoopRetryBoundaryHook:
     """Retry boundary hook that always defers."""
 
-    def on_error(
-        self, ctx: ToolCallContext, err: BaseException
-    ) -> Decision | None:
+    def on_error(self, ctx: ToolCallContext, err: BaseException) -> Decision | None:
         return None
 
 
 class NoopBudgetBoundaryHook:
     """Budget boundary hook that always defers."""
 
-    def before_charge(
-        self, ctx: ToolCallContext, cost_usd: float
-    ) -> Decision | None:
+    def before_charge(self, ctx: ToolCallContext, cost_usd: float) -> Decision | None:
         return None
 
 

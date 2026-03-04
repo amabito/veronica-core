@@ -1,4 +1,5 @@
 """Tests for SemanticLoopGuard."""
+
 from __future__ import annotations
 
 
@@ -10,6 +11,7 @@ from veronica_core.runtime_policy import PolicyContext
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _long(text: str, pad_to: int = 100) -> str:
     """Pad text to at least `pad_to` chars to exceed min_chars."""
     if len(text) >= pad_to:
@@ -20,6 +22,7 @@ def _long(text: str, pad_to: int = 100) -> str:
 # ---------------------------------------------------------------------------
 # Core detection
 # ---------------------------------------------------------------------------
+
 
 class TestSemanticLoopGuard:
     def test_exact_repetition_triggers_deny(self):

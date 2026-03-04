@@ -194,7 +194,9 @@ class TestSerializeSnapshot:
         result = serialize_snapshot(snapshot)
         assert isinstance(result["chain"]["started_at"], str)
         # Must contain timezone info (not naive datetime.min)
-        assert "+" in result["chain"]["started_at"] or "Z" in result["chain"]["started_at"]
+        assert (
+            "+" in result["chain"]["started_at"] or "Z" in result["chain"]["started_at"]
+        )
 
     def test_events_serialized(self) -> None:
         snapshot = _make_snapshot()
@@ -303,12 +305,14 @@ class TestAdversarialSerializers:
 
     def test_metadata_with_nested_objects(self) -> None:
         """Metadata containing non-primitive types should still serialize."""
-        event = _make_event(metadata={
-            "normal": "ok",
-            "timestamp": _TS,  # datetime in metadata
-            "nested": {"deep": [1, 2, 3]},
-            "bytes_val": b"raw-bytes",
-        })
+        event = _make_event(
+            metadata={
+                "normal": "ok",
+                "timestamp": _TS,  # datetime in metadata
+                "nested": {"deep": [1, 2, 3]},
+                "bytes_val": b"raw-bytes",
+            }
+        )
         result = serialize_safety_event(event)
         # metadata is passed through as-is -- json.dumps(default=str) in
         # exporter handles non-serializable types, but serializer just copies
@@ -393,15 +397,14 @@ class TestAdversarialSerializers:
 
     def test_all_empty_strings(self) -> None:
         """Snapshot with all-empty string fields must serialize cleanly."""
-        event = _make_event(
-            event_type="", reason="", hook="", request_id=""
-        )
-        node = _make_node(
-            node_id="", parent_id="", operation_name=""
-        )
+        event = _make_event(event_type="", reason="", hook="", request_id="")
+        node = _make_node(node_id="", parent_id="", operation_name="")
         snapshot = _make_snapshot(
-            chain_id="", request_id="", abort_reason="",
-            nodes=[node], events=[event],
+            chain_id="",
+            request_id="",
+            abort_reason="",
+            nodes=[node],
+            events=[event],
         )
         result = serialize_snapshot(snapshot)
         assert result["chain"]["chain_id"] == ""
@@ -462,11 +465,13 @@ class TestAdversarialNaNInfSerializer:
         result = serialize_node_record(node)
         # Serializer passes NaN through as-is (no json.dumps here)
         import math
+
         assert math.isnan(result["cost_usd"])
 
     def test_inf_in_node_cost_usd(self) -> None:
         """cost_usd=Infinity must not crash serialize_node_record."""
         import math
+
         node = _make_node(cost_usd=float("inf"))
         result = serialize_node_record(node)
         assert math.isinf(result["cost_usd"])
@@ -475,6 +480,7 @@ class TestAdversarialNaNInfSerializer:
     def test_nan_in_snapshot_cost(self) -> None:
         """cost_usd_accumulated=NaN must not crash serialize_snapshot."""
         import math
+
         snapshot = _make_snapshot(cost_usd_accumulated=float("nan"))
         result = serialize_snapshot(snapshot)
         # The chain dict must exist; cost_usd may be NaN
@@ -484,6 +490,7 @@ class TestAdversarialNaNInfSerializer:
     def test_inf_in_snapshot_elapsed_ms(self) -> None:
         """elapsed_ms=Infinity must not crash serialize_snapshot."""
         import math
+
         snapshot = _make_snapshot(elapsed_ms=float("inf"))
         result = serialize_snapshot(snapshot)
         assert math.isinf(result["chain"]["elapsed_ms"])
@@ -491,6 +498,7 @@ class TestAdversarialNaNInfSerializer:
     def test_nan_in_event_metadata_value(self) -> None:
         """NaN in event metadata must pass through serialize_safety_event."""
         import math
+
         event = _make_event(metadata={"score": float("nan"), "normal": 1.0})
         result = serialize_safety_event(event)
         assert isinstance(result["metadata"], dict)
@@ -500,6 +508,7 @@ class TestAdversarialNaNInfSerializer:
     def test_inf_in_event_metadata_value(self) -> None:
         """Inf in event metadata must pass through serialize_safety_event."""
         import math
+
         event = _make_event(metadata={"limit": float("inf")})
         result = serialize_safety_event(event)
         assert math.isinf(result["metadata"]["limit"])

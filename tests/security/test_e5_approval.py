@@ -9,6 +9,7 @@ Covers:
 - audit_log receives APPROVAL_GRANTED event on success
 - audit_log receives APPROVAL_DENIED event on replay
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -44,12 +45,15 @@ def _request(
     action: str = "file_write",
     args: list[str] | None = None,
 ) -> ApprovalRequest:
-    return approver.create_request(rule_id, action, args or [".github/workflows/ci.yml"])
+    return approver.create_request(
+        rule_id, action, args or [".github/workflows/ci.yml"]
+    )
 
 
 # ---------------------------------------------------------------------------
 # sign_v2 basic round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestSignV2RoundTrip:
     def test_sign_v2_then_approve_returns_true(self) -> None:
@@ -91,6 +95,7 @@ class TestSignV2RoundTrip:
 # Replay prevention
 # ---------------------------------------------------------------------------
 
+
 class TestReplayPrevention:
     def test_approve_same_token_twice_second_returns_false(self) -> None:
         approver = _approver()
@@ -111,6 +116,7 @@ class TestReplayPrevention:
 # ---------------------------------------------------------------------------
 # Tampered token detection
 # ---------------------------------------------------------------------------
+
 
 class TestTamperedToken:
     def test_tampered_nonce_verify_returns_false(self) -> None:
@@ -166,6 +172,7 @@ class TestTamperedToken:
 # Expired token
 # ---------------------------------------------------------------------------
 
+
 class TestExpiredToken:
     def test_expired_token_approve_returns_false(self) -> None:
         approver = _approver()
@@ -182,6 +189,7 @@ class TestExpiredToken:
 # ---------------------------------------------------------------------------
 # Scope mismatch
 # ---------------------------------------------------------------------------
+
 
 class TestScopeMismatch:
     def test_wrong_scope_approve_returns_false(self) -> None:
@@ -227,9 +235,13 @@ class TestScopeMismatch:
 # Audit log integration
 # ---------------------------------------------------------------------------
 
+
 class TestAuditLogIntegration:
-    def test_audit_log_receives_approval_granted_on_success(self, tmp_path: Path) -> None:
+    def test_audit_log_receives_approval_granted_on_success(
+        self, tmp_path: Path
+    ) -> None:
         from veronica_core.audit.log import AuditLog
+
         log_path = tmp_path / "audit.jsonl"
         audit_log = AuditLog(log_path)
         approver = _approver()
@@ -239,12 +251,14 @@ class TestAuditLogIntegration:
         # Verify log was written
         lines = log_path.read_text(encoding="utf-8").strip().splitlines()
         import json
+
         entry = json.loads(lines[-1])
         assert entry["event_type"] == "APPROVAL_GRANTED"
         assert entry["data"]["action"] == "file_write"
 
     def test_audit_log_receives_approval_denied_on_replay(self, tmp_path: Path) -> None:
         from veronica_core.audit.log import AuditLog
+
         log_path = tmp_path / "audit.jsonl"
         audit_log = AuditLog(log_path)
         approver = _approver()
@@ -254,6 +268,7 @@ class TestAuditLogIntegration:
         # Second approval: denied (replay)
         assert approver.approve(token, audit_log=audit_log) is False
         import json
+
         lines = log_path.read_text(encoding="utf-8").strip().splitlines()
         entries = [json.loads(line) for line in lines]
         event_types = [e["event_type"] for e in entries]
@@ -262,6 +277,7 @@ class TestAuditLogIntegration:
 
     def test_audit_log_denied_on_invalid_signature(self, tmp_path: Path) -> None:
         from veronica_core.audit.log import AuditLog
+
         log_path = tmp_path / "audit.jsonl"
         audit_log = AuditLog(log_path)
         approver = _approver()
@@ -280,6 +296,7 @@ class TestAuditLogIntegration:
         result = approver.approve(tampered, audit_log=audit_log)
         assert result is False
         import json
+
         lines = log_path.read_text(encoding="utf-8").strip().splitlines()
         entry = json.loads(lines[-1])
         assert entry["event_type"] == "APPROVAL_DENIED"
@@ -294,6 +311,7 @@ class TestAuditLogIntegration:
 # ---------------------------------------------------------------------------
 # NonceRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestNonceRegistry:
     def test_fresh_nonce_returns_true(self) -> None:
@@ -339,7 +357,9 @@ class TestNonceRegistry:
             with lock:
                 results.append(result)
 
-        threads = [threading.Thread(target=consume, args=("shared_nonce",)) for _ in range(50)]
+        threads = [
+            threading.Thread(target=consume, args=("shared_nonce",)) for _ in range(50)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -353,6 +373,7 @@ class TestNonceRegistry:
 # ---------------------------------------------------------------------------
 # Backward compatibility — v1 sign still works
 # ---------------------------------------------------------------------------
+
 
 class TestBackwardCompatibility:
     def test_v1_sign_approve_still_works(self) -> None:

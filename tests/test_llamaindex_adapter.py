@@ -3,6 +3,7 @@
 LlamaIndex is an optional dependency. These tests use mocks to avoid
 requiring llama-index-core to be installed.
 """
+
 from __future__ import annotations
 
 import sys
@@ -97,6 +98,7 @@ def inject_llama_stub(monkeypatch):
 
 def _make_handler(**kwargs) -> "VeronicaLlamaIndexHandler":  # noqa: F821
     from veronica_core.adapters.llamaindex import VeronicaLlamaIndexHandler
+
     return VeronicaLlamaIndexHandler(**kwargs)
 
 
@@ -143,6 +145,7 @@ class TestInstantiation:
 class TestOnEventStart:
     def _cbtype(self):
         from llama_index.core.callbacks.schema import CBEventType
+
         return CBEventType
 
     def test_allows_llm_event_within_budget(self):
@@ -211,6 +214,7 @@ class TestOnEventStart:
 class TestOnEventEnd:
     def _cbtype(self):
         from llama_index.core.callbacks.schema import CBEventType
+
         return CBEventType
 
     def test_increments_step_count(self):
@@ -265,6 +269,7 @@ class TestOnEventEnd:
 class TestCircuitBreakerIntegration:
     def _cbtype(self):
         from llama_index.core.callbacks.schema import CBEventType
+
         return CBEventType
 
     def test_circuit_open_raises_veronica_halt(self):
@@ -307,6 +312,7 @@ class TestCircuitBreakerIntegration:
 class TestExtractCostFromPayload:
     def _extract(self, payload):
         from veronica_core.adapters.llamaindex import _extract_cost_from_payload
+
         return _extract_cost_from_payload(payload)
 
     def test_returns_zero_for_empty_dict(self):

@@ -14,7 +14,10 @@ import pytest
 from veronica_core.adapters.mcp import MCPToolCost, MCPToolResult
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter, wrap_mcp_server
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +209,9 @@ class TestCallToolDelegation:
 
     def test_call_tool_session_error_returns_failure(self) -> None:
         async def run() -> MCPToolResult:
-            session = _make_session(tools=["tool"], call_raise=RuntimeError("server error"))
+            session = _make_session(
+                tools=["tool"], call_raise=RuntimeError("server error")
+            )
             ctx = _make_ctx()
             adapter = await wrap_mcp_server(session=session, execution_context=ctx)
             return await adapter.call_tool("tool", {})

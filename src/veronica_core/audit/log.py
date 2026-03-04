@@ -4,6 +4,7 @@ Each log entry is a JSON object with a SHA256 hash chained from the
 previous entry. Verifying the hash chain detects any modification,
 insertion, or deletion of log records.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -173,20 +174,26 @@ class AuditLog:
         Args:
             policy_version: The current maximum accepted policy version.
         """
-        self.append({"event": "policy_checkpoint", "max_policy_version": policy_version})
+        self.append(
+            {"event": "policy_checkpoint", "max_policy_version": policy_version}
+        )
 
-    def log_policy_version_accepted(self, policy_version: int, policy_path: str) -> None:
+    def log_policy_version_accepted(
+        self, policy_version: int, policy_path: str
+    ) -> None:
         """Log that a policy version was accepted.
 
         Args:
             policy_version: The accepted policy version number.
             policy_path: Path to the accepted policy file.
         """
-        self.append({
-            "event": "policy_version_accepted",
-            "policy_version": policy_version,
-            "policy_path": policy_path,
-        })
+        self.append(
+            {
+                "event": "policy_version_accepted",
+                "policy_version": policy_version,
+                "policy_path": policy_path,
+            }
+        )
 
     def log_policy_rollback(self, current_version: int, last_seen: int) -> None:
         """Log that a policy rollback was attempted.
@@ -195,11 +202,13 @@ class AuditLog:
             current_version: The version number in the attempted policy.
             last_seen: The last accepted (higher) version number.
         """
-        self.append({
-            "event": "policy_rollback",
-            "current_version": current_version,
-            "last_seen_version": last_seen,
-        })
+        self.append(
+            {
+                "event": "policy_rollback",
+                "current_version": current_version,
+                "last_seen_version": last_seen,
+            }
+        )
 
     def log_sbom_diff(
         self,
@@ -265,9 +274,7 @@ class AuditLog:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _build_entry(
-        self, event_type: str, data: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _build_entry(self, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a new log entry dict including hash."""
         entry: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -286,7 +293,9 @@ class AuditLog:
         """
         entry_without_hash = {k: v for k, v in entry.items() if k != "hash"}
         prev = entry_without_hash.get("prev_hash", _GENESIS_HASH)
-        payload = prev + json.dumps(entry_without_hash, separators=(",", ":"), sort_keys=True)
+        payload = prev + json.dumps(
+            entry_without_hash, separators=(",", ":"), sort_keys=True
+        )
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def _load_last_hash(self) -> str:

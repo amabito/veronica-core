@@ -3,6 +3,7 @@
 Provides an ephemeral working directory isolated from the original repo.
 Writes in the sandbox do NOT propagate to the original repository.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -98,7 +99,9 @@ class SandboxRunner:
     def sandbox_dir(self) -> str:
         """Absolute path to the ephemeral working directory."""
         if self._temp_dir is None:
-            raise RuntimeError("SandboxRunner is not active; use it as a context manager")
+            raise RuntimeError(
+                "SandboxRunner is not active; use it as a context manager"
+            )
         return self._temp_dir
 
     def run_in_sandbox(
@@ -125,7 +128,9 @@ class SandboxRunner:
             ApprovalRequiredError: If PolicyEngine returns REQUIRE_APPROVAL.
         """
         if self._temp_dir is None:
-            raise RuntimeError("SandboxRunner is not active; use it as a context manager")
+            raise RuntimeError(
+                "SandboxRunner is not active; use it as a context manager"
+            )
 
         return self._config.executor.execute_shell(
             argv,

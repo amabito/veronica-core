@@ -25,7 +25,10 @@ class TestPRMode:
         result = _run("--mode=pr")
         # May pass or fail depending on repo state, but should not crash
         assert result.returncode in (0, 1)
-        assert "Version Consistency" in result.stderr or "Version Consistency" in result.stdout
+        assert (
+            "Version Consistency" in result.stderr
+            or "Version Consistency" in result.stdout
+        )
 
     def test_checks_all_sections(self) -> None:
         """All four check sections appear in output."""

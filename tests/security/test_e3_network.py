@@ -8,6 +8,7 @@ Covers:
 - Per-host path allowlist (net.path_not_allowed)
 - Allowlisted host + valid path → ALLOW
 """
+
 from __future__ import annotations
 
 
@@ -18,6 +19,7 @@ from veronica_core.security.policy_engine import PolicyContext, PolicyEngine
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _net_ctx(url: str, method: str = "GET") -> PolicyContext:
     return PolicyContext(
@@ -37,6 +39,7 @@ engine = PolicyEngine()
 # ---------------------------------------------------------------------------
 # URL length limit
 # ---------------------------------------------------------------------------
+
 
 class TestUrlLengthLimit:
     def test_url_exceeding_2048_chars_is_denied(self) -> None:
@@ -62,6 +65,7 @@ class TestUrlLengthLimit:
 # Base64 in query string
 # ---------------------------------------------------------------------------
 
+
 class TestBase64QueryDetection:
     def test_base64_query_value_is_denied(self) -> None:
         # "this is a secret" base64-encoded
@@ -82,11 +86,14 @@ class TestBase64QueryDetection:
 # Hex string in query string
 # ---------------------------------------------------------------------------
 
+
 class TestHexQueryDetection:
     def test_hex_token_is_denied(self) -> None:
         # Pure hex string (matches hex regex but NOT base64: contains no A-Z other than a-f)
         # Use only lowercase a-f + digits to avoid base64 match
-        url = "https://pypi.org/pypi/requests/json?token=deadbeef0123456789abcdef01234567"
+        url = (
+            "https://pypi.org/pypi/requests/json?token=deadbeef0123456789abcdef01234567"
+        )
         decision = engine.evaluate(_net_ctx(url))
         assert decision.verdict == "DENY"
         # Note: pure lowercase hex also matches base64 regex since [A-Za-z0-9+/]
@@ -104,6 +111,7 @@ class TestHexQueryDetection:
 # ---------------------------------------------------------------------------
 # High-entropy query string
 # ---------------------------------------------------------------------------
+
 
 class TestHighEntropyQueryDetection:
     def test_high_entropy_value_is_denied(self) -> None:
@@ -134,6 +142,7 @@ class TestHighEntropyQueryDetection:
 # ---------------------------------------------------------------------------
 # Per-host path allowlist
 # ---------------------------------------------------------------------------
+
 
 class TestPathAllowlist:
     def test_pypi_valid_path_is_allowed(self) -> None:
@@ -180,6 +189,7 @@ class TestPathAllowlist:
 # General / regression
 # ---------------------------------------------------------------------------
 
+
 class TestGeneralNetworkRules:
     def test_non_allowlisted_host_is_denied(self) -> None:
         url = "https://evil.example.com/steal"
@@ -192,4 +202,3 @@ class TestGeneralNetworkRules:
         decision = engine.evaluate(_net_ctx(url, method="POST"))
         assert decision.verdict == "DENY"
         assert decision.rule_id == "NET_DENY_METHOD"
-

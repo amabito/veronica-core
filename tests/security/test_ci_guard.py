@@ -1,4 +1,5 @@
 """Tests for CIGuard — CI-specific secret leak detection (Task #2)."""
+
 from __future__ import annotations
 
 import time
@@ -46,7 +47,9 @@ class TestFinding:
         assert f.severity == "HIGH"
 
     def test_frozen_raises_on_mutation(self) -> None:
-        f = Finding(pattern_name="X", line_number=1, masked_snippet="y", severity="HIGH")
+        f = Finding(
+            pattern_name="X", line_number=1, masked_snippet="y", severity="HIGH"
+        )
         with pytest.raises((AttributeError, TypeError)):
             f.pattern_name = "Y"  # type: ignore[misc]
 
@@ -166,7 +169,9 @@ class TestCIGuardScan:
         # for that pattern (dedup guard).
         text = "ghs_" + "A" * 36
         findings = guard.scan(text)
-        github_action_findings = [f for f in findings if f.pattern_name == "GITHUB_ACTIONS_TOKEN"]
+        github_action_findings = [
+            f for f in findings if f.pattern_name == "GITHUB_ACTIONS_TOKEN"
+        ]
         assert len(github_action_findings) == 1
 
     def test_empty_string_returns_empty_list(self, guard: CIGuard) -> None:
@@ -189,7 +194,9 @@ class TestCIGuardScanFile:
         names = [f.pattern_name for f in findings]
         assert "GITHUB_ACTIONS_TOKEN" in names
 
-    def test_scan_file_clean_returns_empty(self, guard: CIGuard, tmp_path: Path) -> None:
+    def test_scan_file_clean_returns_empty(
+        self, guard: CIGuard, tmp_path: Path
+    ) -> None:
         clean_file = tmp_path / "clean.txt"
         clean_file.write_text("No secrets here. Build passed.\n", encoding="utf-8")
         findings = guard.scan_file(clean_file)
@@ -197,9 +204,7 @@ class TestCIGuardScanFile:
 
     def test_scan_file_multiple_secrets(self, guard: CIGuard, tmp_path: Path) -> None:
         content = (
-            f"line1: ghs_{'A' * 36}\n"
-            f"line2: AKIAIOSFODNN7EXAMPLE\n"
-            f"line3: clean output\n"
+            f"line1: ghs_{'A' * 36}\nline2: AKIAIOSFODNN7EXAMPLE\nline3: clean output\n"
         )
         secret_file = tmp_path / "multi.txt"
         secret_file.write_text(content, encoding="utf-8")
@@ -208,14 +213,18 @@ class TestCIGuardScanFile:
         assert "GITHUB_ACTIONS_TOKEN" in names
         assert "AWS_KEY" in names
 
-    def test_scan_file_with_unicode_content(self, guard: CIGuard, tmp_path: Path) -> None:
+    def test_scan_file_with_unicode_content(
+        self, guard: CIGuard, tmp_path: Path
+    ) -> None:
         # File with unicode chars mixed in — should not raise
         unicode_file = tmp_path / "unicode.txt"
         unicode_file.write_text("日本語テスト\nNo secrets\n", encoding="utf-8")
         findings = guard.scan_file(unicode_file)
         assert findings == []
 
-    def test_scan_file_invalid_utf8_does_not_crash(self, guard: CIGuard, tmp_path: Path) -> None:
+    def test_scan_file_invalid_utf8_does_not_crash(
+        self, guard: CIGuard, tmp_path: Path
+    ) -> None:
         # Invalid UTF-8 bytes — errors="replace" should handle gracefully
         binary_file = tmp_path / "binary.bin"
         binary_file.write_bytes(b"\xff\xfe invalid utf8 bytes\n")
@@ -323,7 +332,9 @@ class TestAdversarialCIGuard:
 
     def test_large_input_completes_within_5_seconds(self, guard: CIGuard) -> None:
         # 10,000 clean lines — performance check
-        text = "\n".join([f"log line {i}: all clear, no secrets here" for i in range(10_000)])
+        text = "\n".join(
+            [f"log line {i}: all clear, no secrets here" for i in range(10_000)]
+        )
         start = time.monotonic()
         findings = guard.scan(text)
         elapsed = time.monotonic() - start
@@ -394,13 +405,12 @@ class TestAdversarialCIGuard:
 
     def test_findings_have_valid_severity_values(self, guard: CIGuard) -> None:
         valid_severities = {"CRITICAL", "HIGH", "MEDIUM"}
-        text = (
-            f"ghs_{'A' * 36}\n"
-            "AKIAIOSFODNN7EXAMPLE\n"
-        )
+        text = f"ghs_{'A' * 36}\nAKIAIOSFODNN7EXAMPLE\n"
         findings = guard.scan(text)
         for f in findings:
-            assert f.severity in valid_severities, f"Invalid severity '{f.severity}' in {f}"
+            assert f.severity in valid_severities, (
+                f"Invalid severity '{f.severity}' in {f}"
+            )
 
     # -- protect_output double-match: CI replacement creating new base matches --
 
@@ -433,7 +443,9 @@ class TestAdversarialCIGuard:
 
     # -- ReDoS resistance --
 
-    def test_jenkins_pattern_no_redos_on_adversarial_input(self, guard: CIGuard) -> None:
+    def test_jenkins_pattern_no_redos_on_adversarial_input(
+        self, guard: CIGuard
+    ) -> None:
         """JENKINS_TOKEN pattern `JENKINS_[A-Z_]*TOKEN\\s*=\\s*\\S{8,}` must not
         exhibit catastrophic backtracking on adversarial input.
 
@@ -522,13 +534,21 @@ class TestAdversarialCIGuard:
         no_match_text = "bkua_" + "a" * 39
         assert any(f.pattern_name == "BUILDKITE_TOKEN" for f in guard.scan(match_text))
         # 39 chars should NOT match the exact-40 pattern
-        bk_findings = [f for f in guard.scan(no_match_text) if f.pattern_name == "BUILDKITE_TOKEN"]
+        bk_findings = [
+            f for f in guard.scan(no_match_text) if f.pattern_name == "BUILDKITE_TOKEN"
+        ]
         assert len(bk_findings) == 0
 
     def test_github_actions_token_boundary_36_chars(self, guard: CIGuard) -> None:
         """ghs_ + exactly 36 chars should match. 35 should not."""
         match_text = "ghs_" + "a" * 36
         no_match_text = "ghs_" + "a" * 35
-        assert any(f.pattern_name == "GITHUB_ACTIONS_TOKEN" for f in guard.scan(match_text))
-        gha_short = [f for f in guard.scan(no_match_text) if f.pattern_name == "GITHUB_ACTIONS_TOKEN"]
+        assert any(
+            f.pattern_name == "GITHUB_ACTIONS_TOKEN" for f in guard.scan(match_text)
+        )
+        gha_short = [
+            f
+            for f in guard.scan(no_match_text)
+            if f.pattern_name == "GITHUB_ACTIONS_TOKEN"
+        ]
         assert len(gha_short) == 0

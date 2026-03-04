@@ -38,6 +38,7 @@ def _make_ctx(max_steps: int = 10) -> ExecutionContext:
 # Test 1: ContextVar carries the buffer into fn()
 # ---------------------------------------------------------------------------
 
+
 def test_partial_buffer_injected_via_contextvars():
     """Inside fn(), get_current_partial_buffer() returns the buffer passed in WrapOptions."""
     ctx = _make_ctx()
@@ -57,6 +58,7 @@ def test_partial_buffer_injected_via_contextvars():
 # Test 2: ContextVar is reset to None after wrap completes
 # ---------------------------------------------------------------------------
 
+
 def test_partial_buffer_cleared_after_wrap():
     """After wrap_llm_call completes, get_current_partial_buffer() returns None."""
     ctx = _make_ctx()
@@ -70,6 +72,7 @@ def test_partial_buffer_cleared_after_wrap():
 # ---------------------------------------------------------------------------
 # Test 3: No buffer set → None inside fn()
 # ---------------------------------------------------------------------------
+
 
 def test_partial_buffer_none_by_default():
     """Calling wrap_llm_call with no partial_buffer yields None inside fn()."""
@@ -87,6 +90,7 @@ def test_partial_buffer_none_by_default():
 # ---------------------------------------------------------------------------
 # Test 4: get_partial_result returns the buffer object
 # ---------------------------------------------------------------------------
+
 
 def test_get_partial_result_returns_buffer():
     """fn() appends to buffer; ctx.get_partial_result(node_id) returns the buffer."""
@@ -110,6 +114,7 @@ def test_get_partial_result_returns_buffer():
 # Test 5: Unknown node_id returns None
 # ---------------------------------------------------------------------------
 
+
 def test_get_partial_result_none_for_unknown_node():
     """get_partial_result returns None for an unrecognised node_id."""
     ctx = _make_ctx()
@@ -119,6 +124,7 @@ def test_get_partial_result_none_for_unknown_node():
 # ---------------------------------------------------------------------------
 # Test 6: Two sequential calls each get their own buffer
 # ---------------------------------------------------------------------------
+
 
 def test_partial_buffer_not_shared_across_calls():
     """Two sequential wrap_llm_call calls each see their own buffer inside fn()."""
@@ -146,6 +152,7 @@ def test_partial_buffer_not_shared_across_calls():
 # Test 7: Exception in fn() still resets ContextVar; buffer is not marked complete
 # ---------------------------------------------------------------------------
 
+
 def test_partial_buffer_survives_exception_in_fn():
     """fn() raises; buffer retains appended data; ContextVar is reset; is_complete stays False."""
     ctx = _make_ctx()
@@ -169,6 +176,7 @@ def test_partial_buffer_survives_exception_in_fn():
 # Test 8: Existing wrap behavior unchanged when partial_buffer=None
 # ---------------------------------------------------------------------------
 
+
 def test_wrap_without_partial_buffer_unchanged():
     """Existing wrap behavior is unchanged when partial_buffer is not set."""
     ctx = _make_ctx()
@@ -185,6 +193,7 @@ def test_wrap_without_partial_buffer_unchanged():
 # ---------------------------------------------------------------------------
 # Test 9: mark_complete() called automatically on clean success
 # ---------------------------------------------------------------------------
+
 
 def test_partial_buffer_marks_complete():
     """After a clean wrap_llm_call, the buffer's is_complete is True."""
@@ -203,6 +212,7 @@ def test_partial_buffer_marks_complete():
 # ---------------------------------------------------------------------------
 # Test 10: Multiple buffers per context, get_partial_result correct per node
 # ---------------------------------------------------------------------------
+
 
 def test_multiple_buffers_per_context():
     """Multiple wrap calls each with a separate buffer; get_partial_result returns the correct buffer per node."""
@@ -236,6 +246,7 @@ def test_multiple_buffers_per_context():
 # Test 11: attach_partial_buffer raises outside wrap context
 # ---------------------------------------------------------------------------
 
+
 def test_attach_partial_buffer_raises_outside_wrap():
     """attach_partial_buffer() raises RuntimeError when called outside wrap_llm_call."""
     buf = PartialResultBuffer()
@@ -249,6 +260,7 @@ def test_attach_partial_buffer_raises_outside_wrap():
 # ---------------------------------------------------------------------------
 # Test 12: NodeRecord stores the buffer reference
 # ---------------------------------------------------------------------------
+
 
 def test_node_record_stores_partial_buffer():
     """The NodeRecord for a wrap call has partial_buffer set to the passed buffer."""
@@ -265,6 +277,7 @@ def test_node_record_stores_partial_buffer():
 # ---------------------------------------------------------------------------
 # Test 13: attach_partial_buffer guard — overwrite prevention
 # ---------------------------------------------------------------------------
+
 
 def test_attach_partial_buffer_same_buffer_is_idempotent():
     """attach_partial_buffer() with the same buffer as already set must not raise."""
@@ -296,7 +309,10 @@ def test_attach_partial_buffer_different_buffer_raises():
 
     ctx.wrap_llm_call(fn=fn, options=WrapOptions(partial_buffer=buf_original))
     assert len(errors) == 1
-    assert "different buffer" in str(errors[0]).lower() or "already attached" in str(errors[0]).lower()
+    assert (
+        "different buffer" in str(errors[0]).lower()
+        or "already attached" in str(errors[0]).lower()
+    )
 
 
 # ---------------------------------------------------------------------------

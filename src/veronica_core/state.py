@@ -17,19 +17,31 @@ logger = logging.getLogger(__name__)
 
 class VeronicaState(Enum):
     """VERONICA operational states."""
-    IDLE = "IDLE"           # No active trading
-    SCREENING = "SCREENING" # Active market screening
-    COOLDOWN = "COOLDOWN"   # Pair-specific cooldown active
-    SAFE_MODE = "SAFE_MODE" # Emergency safe mode (all trading halted)
-    ERROR = "ERROR"         # System error state
+
+    IDLE = "IDLE"  # No active trading
+    SCREENING = "SCREENING"  # Active market screening
+    COOLDOWN = "COOLDOWN"  # Pair-specific cooldown active
+    SAFE_MODE = "SAFE_MODE"  # Emergency safe mode (all trading halted)
+    ERROR = "ERROR"  # System error state
 
 
 # Valid state transitions: from_state -> frozenset of allowed to_states.
 # Final + frozenset values prevents accidental mutation by any caller.
 VALID_TRANSITIONS: Final[Dict[VeronicaState, frozenset]] = {
-    VeronicaState.IDLE: frozenset({VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
-    VeronicaState.SCREENING: frozenset({VeronicaState.IDLE, VeronicaState.COOLDOWN, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
-    VeronicaState.COOLDOWN: frozenset({VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}),
+    VeronicaState.IDLE: frozenset(
+        {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}
+    ),
+    VeronicaState.SCREENING: frozenset(
+        {
+            VeronicaState.IDLE,
+            VeronicaState.COOLDOWN,
+            VeronicaState.SAFE_MODE,
+            VeronicaState.ERROR,
+        }
+    ),
+    VeronicaState.COOLDOWN: frozenset(
+        {VeronicaState.SCREENING, VeronicaState.SAFE_MODE, VeronicaState.ERROR}
+    ),
     VeronicaState.SAFE_MODE: frozenset({VeronicaState.IDLE, VeronicaState.ERROR}),
     VeronicaState.ERROR: frozenset({VeronicaState.IDLE, VeronicaState.SAFE_MODE}),
 }
@@ -38,6 +50,7 @@ VALID_TRANSITIONS: Final[Dict[VeronicaState, frozenset]] = {
 @dataclass
 class StateTransition:
     """Record of state transition."""
+
     from_state: VeronicaState
     to_state: VeronicaState
     timestamp: float
@@ -54,14 +67,18 @@ class VeronicaStateMachine:
 
     # State tracking (per-pair)
     fail_counts: Dict[str, int] = field(default_factory=dict)
-    cooldowns: Dict[str, float] = field(default_factory=dict)  # {pair: expiry_timestamp}
+    cooldowns: Dict[str, float] = field(
+        default_factory=dict
+    )  # {pair: expiry_timestamp}
 
     # Global state
     current_state: VeronicaState = VeronicaState.IDLE
     state_history: List[StateTransition] = field(default_factory=list)
 
     # Thread safety
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def is_in_cooldown(self, pair: str) -> bool:
         """Check if pair is in cooldown."""
@@ -99,7 +116,9 @@ class VeronicaStateMachine:
         """Record sanity_pass for pair. Resets fail counter."""
         with self._lock:
             if pair in self.fail_counts:
-                logger.info(f"[VERONICA_STATE] {pair} fail counter reset (was {self.fail_counts[pair]})")
+                logger.info(
+                    f"[VERONICA_STATE] {pair} fail counter reset (was {self.fail_counts[pair]})"
+                )
                 self.fail_counts.pop(pair, None)
 
     def set_cooldown(self, pair: str, cooldown_until: float) -> None:
@@ -154,7 +173,7 @@ class VeronicaStateMachine:
                 from_state=self.current_state,
                 to_state=to_state,
                 timestamp=time.time(),
-                reason=reason
+                reason=reason,
             )
             self.state_history.append(transition)
 
@@ -189,7 +208,8 @@ class VeronicaStateMachine:
                         "reason": self.state_history[-1].reason,
                         "timestamp": self.state_history[-1].timestamp,
                     }
-                    if self.state_history else None
+                    if self.state_history
+                    else None
                 ),
             }
 

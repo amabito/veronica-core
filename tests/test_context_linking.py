@@ -17,7 +17,9 @@ from veronica_core.containment import ExecutionConfig, ExecutionContext
 
 
 def make_config(max_cost: float = 1.0, max_steps: int = 50) -> ExecutionConfig:
-    return ExecutionConfig(max_cost_usd=max_cost, max_steps=max_steps, max_retries_total=10)
+    return ExecutionConfig(
+        max_cost_usd=max_cost, max_steps=max_steps, max_retries_total=10
+    )
 
 
 def test_no_parent_backward_compat() -> None:
@@ -99,8 +101,12 @@ def test_three_level_chain() -> None:
         with ctx_a.spawn_child(max_cost_usd=0.8) as ctx_b:
             with ctx_b.spawn_child(max_cost_usd=0.5) as ctx_c:
                 ctx_c._propagate_child_cost(0.2)
-            assert ctx_b.get_snapshot().cost_usd_accumulated == pytest.approx(0.2, abs=0.001)
-        assert ctx_a.get_snapshot().cost_usd_accumulated == pytest.approx(0.2, abs=0.001)
+            assert ctx_b.get_snapshot().cost_usd_accumulated == pytest.approx(
+                0.2, abs=0.001
+            )
+        assert ctx_a.get_snapshot().cost_usd_accumulated == pytest.approx(
+            0.2, abs=0.001
+        )
 
 
 def test_parent_aborted_prevents_further_wrap() -> None:
@@ -125,7 +131,6 @@ def test_spawn_child_inherits_step_and_retry_limits() -> None:
         child = parent_ctx.spawn_child()
         assert child._config.max_steps == 25
         assert child._config.max_retries_total == parent_cfg.max_retries_total
-
 
 
 def test_child_propagate_zero_cost_no_abort() -> None:

@@ -1,4 +1,5 @@
 """Tests for DegradationLadder (P2-3)."""
+
 from __future__ import annotations
 
 import pytest
@@ -10,7 +11,11 @@ from veronica_core.runtime_policy import (
     model_downgrade,
     rate_limit_decision,
 )
-from veronica_core.shield.degradation import DegradationConfig, DegradationLadder, NoOpTrimmer
+from veronica_core.shield.degradation import (
+    DegradationConfig,
+    DegradationLadder,
+    NoOpTrimmer,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +137,10 @@ def test_apply_rate_limit_zero_ms_no_sleep(monkeypatch):
 
 def test_apply_context_trim_noop():
     ladder = DegradationLadder(DegradationConfig(trimmer=NoOpTrimmer()))
-    msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+    msgs = [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+    ]
     result = ladder.apply_context_trim(msgs)
     assert result == msgs
 
@@ -171,7 +179,9 @@ def test_policy_decision_backward_compat():
 
 
 def test_model_downgrade_helper():
-    d = model_downgrade(current_model="gpt-4o", fallback_model="gpt-4o-mini", reason="budget")
+    d = model_downgrade(
+        current_model="gpt-4o", fallback_model="gpt-4o-mini", reason="budget"
+    )
     assert d.allowed is True
     assert d.policy_type == "model_downgrade"
     assert d.degradation_action == "MODEL_DOWNGRADE"

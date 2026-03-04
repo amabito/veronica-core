@@ -1,4 +1,5 @@
 """Tests for KeyProvider abstractions."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,9 @@ from veronica_core.security.policy_signing import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-SAMPLE_PEM = b"-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VdAyEAtest\n-----END PUBLIC KEY-----\n"
+SAMPLE_PEM = (
+    b"-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VdAyEAtest\n-----END PUBLIC KEY-----\n"
+)
 
 
 @pytest.fixture()
@@ -51,6 +54,7 @@ def tmp_policy(tmp_path: Path) -> Path:
 # TestFileKeyProvider
 # ---------------------------------------------------------------------------
 
+
 class TestFileKeyProvider:
     def test_read_success(self, pem_file: Path) -> None:
         provider = FileKeyProvider(pem_file)
@@ -70,9 +74,13 @@ class TestFileKeyProvider:
 # TestEnvKeyProvider
 # ---------------------------------------------------------------------------
 
+
 class TestEnvKeyProvider:
     def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VERONICA_PUBLIC_KEY_PEM", "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----\n")
+        monkeypatch.setenv(
+            "VERONICA_PUBLIC_KEY_PEM",
+            "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----\n",
+        )
         provider = EnvKeyProvider()
         result = provider.get_public_key_pem()
         assert result == b"-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----\n"
@@ -88,7 +96,9 @@ class TestEnvKeyProvider:
         with pytest.raises(RuntimeError, match="VERONICA_PUBLIC_KEY_PEM"):
             provider.get_public_key_pem()
 
-    def test_missing_custom_env_var_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_custom_env_var_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("MY_KEY", raising=False)
         provider = EnvKeyProvider(env_var="MY_KEY")
         with pytest.raises(RuntimeError, match="MY_KEY"):
@@ -104,6 +114,7 @@ class TestEnvKeyProvider:
 # TestVaultKeyProvider
 # ---------------------------------------------------------------------------
 
+
 class TestVaultKeyProvider:
     def test_raises_without_hvac(self) -> None:
         with patch("veronica_core.security.key_providers._VAULT_AVAILABLE", False):
@@ -116,7 +127,9 @@ class TestVaultKeyProvider:
         mock_client.secrets.transit.get_key.return_value = {
             "data": {
                 "keys": {
-                    "1": {"public_key": "-----BEGIN PUBLIC KEY-----\nvault_key\n-----END PUBLIC KEY-----\n"},
+                    "1": {
+                        "public_key": "-----BEGIN PUBLIC KEY-----\nvault_key\n-----END PUBLIC KEY-----\n"
+                    },
                 }
             }
         }
@@ -127,12 +140,17 @@ class TestVaultKeyProvider:
                 key_name="veronica-policy",
             )
             result = provider.get_public_key_pem()
-        assert result == b"-----BEGIN PUBLIC KEY-----\nvault_key\n-----END PUBLIC KEY-----\n"
+        assert (
+            result
+            == b"-----BEGIN PUBLIC KEY-----\nvault_key\n-----END PUBLIC KEY-----\n"
+        )
 
     @pytest.mark.skipif(not _VAULT_AVAILABLE, reason="hvac not installed")
     def test_vault_connection_failure_raises(self) -> None:
         mock_client = MagicMock()
-        mock_client.secrets.transit.get_key.side_effect = ConnectionError("connection refused")
+        mock_client.secrets.transit.get_key.side_effect = ConnectionError(
+            "connection refused"
+        )
         with patch("veronica_core.security.key_providers.hvac") as mock_hvac:
             mock_hvac.Client.return_value = mock_client
             provider = VaultKeyProvider(vault_url="https://vault.example.com")
@@ -152,9 +170,7 @@ class TestVaultKeyProvider:
     @pytest.mark.skipif(not _VAULT_AVAILABLE, reason="hvac not installed")
     def test_vault_missing_public_key_raises(self) -> None:
         mock_client = MagicMock()
-        mock_client.secrets.transit.get_key.return_value = {
-            "data": {"keys": {"1": {}}}
-        }
+        mock_client.secrets.transit.get_key.return_value = {"data": {"keys": {"1": {}}}}
         with patch("veronica_core.security.key_providers.hvac") as mock_hvac:
             mock_hvac.Client.return_value = mock_client
             provider = VaultKeyProvider(vault_url="https://vault.example.com")
@@ -200,6 +216,7 @@ class TestVaultKeyProvider:
 # TestKeyProviderProtocol — custom class satisfies Protocol
 # ---------------------------------------------------------------------------
 
+
 class TestKeyProviderProtocol:
     def test_custom_class_satisfies_protocol(self) -> None:
         class MyKeyProvider:
@@ -220,6 +237,7 @@ class TestKeyProviderProtocol:
 # ---------------------------------------------------------------------------
 # TestPolicySignerV2WithKeyProvider
 # ---------------------------------------------------------------------------
+
 
 class TestPolicySignerV2WithKeyProvider:
     def test_verify_via_env_key_provider(
@@ -268,6 +286,7 @@ class TestPolicySignerV2WithKeyProvider:
         signer = PolicySignerV2(public_key_path=pub_path)
         # Should have a key_provider attribute (FileKeyProvider)
         from veronica_core.security.key_providers import FileKeyProvider as FKP
+
         assert isinstance(signer._key_provider, FKP)
 
     def test_key_provider_overrides_file_path_for_verify(
@@ -318,6 +337,7 @@ class TestPolicySignerV2WithKeyProvider:
 # ---------------------------------------------------------------------------
 # TestPolicyEngineWithKeyProvider
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyEngineWithKeyProvider:
     def test_init_accepts_key_provider(self) -> None:
@@ -399,9 +419,7 @@ class TestAdversarialKeyProvider:
         provider = EnvKeyProvider()
         assert provider.get_public_key_pem() == b""
 
-    def test_env_provider_non_ascii_utf8(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_provider_non_ascii_utf8(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Non-ASCII UTF-8 in env var should encode correctly."""
         monkeypatch.setenv("VERONICA_PUBLIC_KEY_PEM", "日本語キー")
         provider = EnvKeyProvider()
@@ -483,7 +501,11 @@ class TestAdversarialKeyProvider:
     def test_file_provider_large_pem_file(self, tmp_path: Path) -> None:
         """Large PEM file (1MB) should be read without issue."""
         large = tmp_path / "large.pem"
-        content = b"-----BEGIN PUBLIC KEY-----\n" + b"A" * (1024 * 1024) + b"\n-----END PUBLIC KEY-----\n"
+        content = (
+            b"-----BEGIN PUBLIC KEY-----\n"
+            + b"A" * (1024 * 1024)
+            + b"\n-----END PUBLIC KEY-----\n"
+        )
         large.write_bytes(content)
         provider = FileKeyProvider(large)
         result = provider.get_public_key_pem()
@@ -603,7 +625,13 @@ class TestAdversarialKeyProvider:
     @pytest.mark.parametrize(
         "exc_type",
         [ConnectionError, KeyError, TypeError, AttributeError, UnicodeDecodeError],
-        ids=["ConnectionError", "KeyError", "TypeError", "AttributeError", "UnicodeDecodeError"],
+        ids=[
+            "ConnectionError",
+            "KeyError",
+            "TypeError",
+            "AttributeError",
+            "UnicodeDecodeError",
+        ],
     )
     def test_signer_verify_uncaught_provider_exception_does_not_crash(
         self,

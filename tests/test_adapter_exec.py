@@ -8,6 +8,7 @@ Covers:
 
 All subprocess and urllib calls are mocked to avoid real system calls.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -57,7 +58,10 @@ def _approval_engine(rule_id: str = "TEST_APPROVAL") -> PolicyEngine:
     """Return a PolicyEngine stub that always requires APPROVAL."""
     engine = Mock(spec=PolicyEngine)
     engine.evaluate.return_value = ExecPolicyDecision(
-        verdict="REQUIRE_APPROVAL", rule_id=rule_id, reason="test approval", risk_score_delta=3
+        verdict="REQUIRE_APPROVAL",
+        rule_id=rule_id,
+        reason="test approval",
+        risk_score_delta=3,
     )
     return engine
 
@@ -140,15 +144,15 @@ class TestExecuteShellPolicy:
         _, call_kwargs = mock_run.call_args
         # shell kwarg should be False
         assert mock_run.call_args.kwargs.get("shell") is False or (
-            len(mock_run.call_args.args) >= 2
-            and mock_run.call_args.args[1] is False
+            len(mock_run.call_args.args) >= 2 and mock_run.call_args.args[1] is False
         )
 
     def test_timeout_propagates(self) -> None:
         """subprocess.TimeoutExpired must propagate from execute_shell."""
         exe, _ = _make_executor(engine=_allow_engine())
         with patch(
-            "subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["pytest"], timeout=1)
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["pytest"], timeout=1),
         ):
             with pytest.raises(subprocess.TimeoutExpired):
                 exe.execute_shell(["pytest"], timeout=1)
@@ -501,7 +505,9 @@ class TestWriteFile:
             exe = SecureExecutor(cfg)
             exe.write_file("relative.txt", "relative write")
 
-            assert (Path(root) / "relative.txt").read_text(encoding="utf-8") == "relative write"
+            assert (Path(root) / "relative.txt").read_text(
+                encoding="utf-8"
+            ) == "relative write"
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +526,9 @@ class TestAdversarialExec:
 
     def test_approval_required_error_has_args_hash(self) -> None:
         """ApprovalRequiredError must expose args_hash for approval systems."""
-        err = ApprovalRequiredError("SHELL_PKG_INSTALL", "approval needed", "abc123hash")
+        err = ApprovalRequiredError(
+            "SHELL_PKG_INSTALL", "approval needed", "abc123hash"
+        )
         assert err.args_hash == "abc123hash"
         assert "abc123hash" in str(err)
 

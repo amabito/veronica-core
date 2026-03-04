@@ -23,6 +23,7 @@ Usage::
     handler = VeronicaLlamaIndexHandler(GuardConfig(max_cost_usd=1.0, max_steps=20))
     Settings.callback_manager.add_handler(handler)
 """
+
 from __future__ import annotations
 
 import logging
@@ -286,7 +287,9 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
             if completion_tokens is None:
                 completion_tokens = usage.get("output_tokens")
             if prompt_tokens is not None and completion_tokens is not None:
-                return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))
+                return estimate_cost_usd(
+                    model, int(prompt_tokens), int(completion_tokens)
+                )
 
         return 0.0
     except Exception:

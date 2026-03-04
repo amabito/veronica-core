@@ -3,6 +3,7 @@
 Extends SecretMasker with CI-specific patterns for GitHub Actions,
 GitLab CI, Docker, CircleCI, Jenkins, Artifactory, and Buildkite tokens.
 """
+
 from __future__ import annotations
 
 import re

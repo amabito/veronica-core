@@ -7,6 +7,7 @@ Version history:
 - v1 (sign): token covers rule_id:action:args_hash:timestamp
 - v2 (sign_v2): token adds nonce + scope + expiry, with replay prevention
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,8 +37,8 @@ class ApprovalRequest:
 
     rule_id: str
     action: str
-    args_hash: str   # SHA256 hex of repr(args)
-    timestamp: str   # ISO8601
+    args_hash: str  # SHA256 hex of repr(args)
+    timestamp: str  # ISO8601
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,7 @@ class ApprovalToken:
     action: str
     args_hash: str
     timestamp: str
-    signature: str   # HMAC-SHA256 payload (v1 or v2, see below)
+    signature: str  # HMAC-SHA256 payload (v1 or v2, see below)
     # v2 fields — default to empty string for backward compatibility
     expiry: str = ""
     nonce: str = ""
@@ -298,7 +299,9 @@ class CLIApprover:
             )
         else:
             # v1 token: legacy HMAC payload
-            message = f"{token.rule_id}:{token.action}:{token.args_hash}:{token.timestamp}"
+            message = (
+                f"{token.rule_id}:{token.action}:{token.args_hash}:{token.timestamp}"
+            )
 
         expected = hmac.new(
             self._key,
@@ -377,14 +380,18 @@ class CLIApprover:
         Returns:
             True if all checks pass, False otherwise.
         """
+
         def _deny(reason: str) -> bool:
             if audit_log is not None:
-                audit_log.write("APPROVAL_DENIED", {
-                    "request_id": token.request_id,
-                    "rule_id": token.rule_id,
-                    "action": token.action,
-                    "reason": reason,
-                })
+                audit_log.write(
+                    "APPROVAL_DENIED",
+                    {
+                        "request_id": token.request_id,
+                        "rule_id": token.rule_id,
+                        "action": token.action,
+                        "reason": reason,
+                    },
+                )
             return False
 
         result = self._check_approval_conditions(token, _deny)
@@ -392,9 +399,12 @@ class CLIApprover:
             return result
 
         if audit_log is not None:
-            audit_log.write("APPROVAL_GRANTED", {
-                "request_id": token.request_id,
-                "rule_id": token.rule_id,
-                "action": token.action,
-            })
+            audit_log.write(
+                "APPROVAL_GRANTED",
+                {
+                    "request_id": token.request_id,
+                    "rule_id": token.rule_id,
+                    "action": token.action,
+                },
+            )
         return True

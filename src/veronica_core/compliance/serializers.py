@@ -21,7 +21,9 @@ def serialize_safety_event(event: SafetyEvent) -> Dict[str, Any]:
     """Convert a SafetyEvent to a JSON-serializable dict."""
     return {
         "event_type": event.event_type,
-        "decision": event.decision.value if hasattr(event.decision, "value") else str(event.decision),
+        "decision": event.decision.value
+        if hasattr(event.decision, "value")
+        else str(event.decision),
         "reason": event.reason,
         "hook": event.hook,
         "request_id": event.request_id,
@@ -65,7 +67,9 @@ def serialize_snapshot(
         "aborted": snapshot.aborted,
         "abort_reason": snapshot.abort_reason,
         "elapsed_ms": snapshot.elapsed_ms,
-        "started_at": _iso(snapshot.nodes[0].start_ts) if snapshot.nodes else _iso(datetime.min.replace(tzinfo=timezone.utc)),
+        "started_at": _iso(snapshot.nodes[0].start_ts)
+        if snapshot.nodes
+        else _iso(datetime.min.replace(tzinfo=timezone.utc)),
     }
 
     if graph is not None:
@@ -77,9 +81,7 @@ def serialize_snapshot(
         chain["model"] = metadata.model
         chain["tags"] = dict(metadata.tags) if metadata.tags else {}
 
-    events: List[Dict[str, Any]] = [
-        serialize_safety_event(e) for e in snapshot.events
-    ]
+    events: List[Dict[str, Any]] = [serialize_safety_event(e) for e in snapshot.events]
 
     return {"chain": chain, "events": events}
 

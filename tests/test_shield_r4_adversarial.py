@@ -73,13 +73,13 @@ class TestAdversarialS1HaltTimestamp:
         # HALT check fires first (count >= max_calls), so no DEGRADE zone confusion.
         hook = BudgetWindowHook(max_calls=2, window_seconds=60.0, degrade_threshold=1.0)
 
-        assert hook.before_llm_call(CTX) is None          # call #1: ALLOW
-        assert hook.before_llm_call(CTX) is None          # call #2: ALLOW
-        result_halt = hook.before_llm_call(CTX)           # call #3: should HALT
+        assert hook.before_llm_call(CTX) is None  # call #1: ALLOW
+        assert hook.before_llm_call(CTX) is None  # call #2: ALLOW
+        result_halt = hook.before_llm_call(CTX)  # call #3: should HALT
         assert result_halt is Decision.HALT
 
         # S1: HALT appended ts=0.0, so next call sees count=3 >= 2 -> HALT
-        result_halt2 = hook.before_llm_call(CTX)          # call #4
+        result_halt2 = hook.before_llm_call(CTX)  # call #4
         assert result_halt2 is Decision.HALT
 
     def test_halt_timestamp_expires_after_full_window(self, monkeypatch):
@@ -95,12 +95,12 @@ class TestAdversarialS1HaltTimestamp:
 
         hook = BudgetWindowHook(max_calls=2, window_seconds=60.0, degrade_threshold=1.0)
 
-        assert hook.before_llm_call(CTX) is None           # t=0.0, ALLOW
-        assert hook.before_llm_call(CTX) is None           # t=0.0, ALLOW
+        assert hook.before_llm_call(CTX) is None  # t=0.0, ALLOW
+        assert hook.before_llm_call(CTX) is None  # t=0.0, ALLOW
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=0.0, HALT (appended)
 
         # At t=120.001 all three ts=0.0 are pruned -> fresh window
-        assert hook.before_llm_call(CTX) is None           # t=120.001, ALLOW
+        assert hook.before_llm_call(CTX) is None  # t=120.001, ALLOW
 
     def test_repeated_halt_calls_keep_window_saturated(self, monkeypatch):
         """Each HALT call pushes a new timestamp; window stays saturated.
@@ -117,7 +117,7 @@ class TestAdversarialS1HaltTimestamp:
         # degrade_threshold=1.0: degrade_at=1.0*1=1; HALT check fires first.
         hook = BudgetWindowHook(max_calls=1, window_seconds=60.0, degrade_threshold=1.0)
 
-        assert hook.before_llm_call(CTX) is None           # t=0.0, ALLOW
+        assert hook.before_llm_call(CTX) is None  # t=0.0, ALLOW
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=1.0, HALT (appended)
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=2.0, HALT (appended)
 
@@ -260,18 +260,14 @@ class TestAdversarialS3DegradeConcurrentReservation:
             f"Only 3 DEGRADE calls fit under ceiling, got {degrade_count}. "
             "S3 reservation must prevent concurrent overrun."
         )
-        assert halt_count >= 7, (
-            f"Remaining calls must HALT, got {halt_count}"
-        )
+        assert halt_count >= 7, f"Remaining calls must HALT, got {halt_count}"
 
     def test_degrade_reservation_released_on_record_usage(self):
         """Pending reservation from DEGRADE path is released when usage is recorded."""
         hook = TokenBudgetHook(max_output_tokens=100, degrade_threshold=0.8)
         hook.record_usage(output_tokens=80)
 
-        ctx = ToolCallContext(
-            request_id="release-test", tool_name="llm", tokens_out=10
-        )
+        ctx = ToolCallContext(request_id="release-test", tool_name="llm", tokens_out=10)
         result = hook.before_llm_call(ctx)
         assert result is Decision.DEGRADE
         assert hook.pending_output == 10

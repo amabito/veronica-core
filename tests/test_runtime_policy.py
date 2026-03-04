@@ -391,11 +391,13 @@ class TestPolicyPipeline:
         assert decision.allowed
 
     def test_all_policies_pass(self):
-        pipeline = PolicyPipeline([
-            BudgetEnforcer(limit_usd=100.0),
-            AgentStepGuard(max_steps=25),
-            CircuitBreaker(failure_threshold=5),
-        ])
+        pipeline = PolicyPipeline(
+            [
+                BudgetEnforcer(limit_usd=100.0),
+                AgentStepGuard(max_steps=25),
+                CircuitBreaker(failure_threshold=5),
+            ]
+        )
         decision = pipeline.evaluate(PolicyContext(cost_usd=10.0))
         assert decision.allowed
 
@@ -436,11 +438,13 @@ class TestPolicyPipeline:
         assert len(pipeline) == 1
 
     def test_len(self):
-        pipeline = PolicyPipeline([
-            BudgetEnforcer(),
-            AgentStepGuard(),
-            CircuitBreaker(),
-        ])
+        pipeline = PolicyPipeline(
+            [
+                BudgetEnforcer(),
+                AgentStepGuard(),
+                CircuitBreaker(),
+            ]
+        )
         assert len(pipeline) == 3
 
     def test_policies_returns_copy(self):
@@ -552,6 +556,7 @@ class TestBackwardCompatibility:
             PartialResultBuffer,
             RetryContainer,
         )
+
         # Just verify they're importable
         assert BudgetEnforcer is not None
         assert AgentStepGuard is not None
@@ -565,6 +570,7 @@ class TestBackwardCompatibility:
             PolicyPipeline,
             CircuitBreaker,
         )
+
         assert RuntimePolicy is not None
         assert PolicyPipeline is not None
         assert CircuitBreaker is not None

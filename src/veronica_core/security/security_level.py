@@ -4,6 +4,7 @@ Provides DEV / CI / PROD environment tiers.  The level governs
 how strictly the PolicyEngine enforces signature and cryptography
 requirements.
 """
+
 from __future__ import annotations
 
 import os
@@ -45,6 +46,7 @@ class SecurityLevel(Enum):
 # ---------------------------------------------------------------------------
 # Detection logic
 # ---------------------------------------------------------------------------
+
 
 def detect_security_level() -> SecurityLevel:
     """Detect the current security level from the environment.

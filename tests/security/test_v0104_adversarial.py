@@ -4,6 +4,7 @@ Tests:
 - Part 7: Context isolation — each BudgetEnforcer/container is independent
 - Part 8: Adversarial harness — 50-100 concurrent threads, race conditions
 """
+
 from __future__ import annotations
 
 import threading
@@ -45,12 +46,16 @@ def test_budget_enforcer_per_thread_isolation() -> None:
         ok2 = budget.spend(0.02)
         if ok2:
             with errors_lock:
-                errors.append(f"Thread {tid}: second spend (0.02) allowed unexpectedly; total would be 0.06")
+                errors.append(
+                    f"Thread {tid}: second spend (0.02) allowed unexpectedly; total would be 0.06"
+                )
 
         # Verify no leakage: spent must be exactly 0.04
         if abs(budget.spent_usd - 0.04) > 1e-9:
             with errors_lock:
-                errors.append(f"Thread {tid}: spent_usd={budget.spent_usd}, expected 0.04")
+                errors.append(
+                    f"Thread {tid}: spent_usd={budget.spent_usd}, expected 0.04"
+                )
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(NUM_THREADS)]
     for t in threads:

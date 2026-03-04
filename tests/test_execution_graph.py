@@ -89,7 +89,9 @@ def test_aggregates_monotonic():
 
     snap = graph.snapshot()
     agg = snap["aggregates"]
-    assert abs(agg["total_cost_usd"] - 0.03) < 1e-9, f"Expected 0.03, got {agg['total_cost_usd']}"
+    assert abs(agg["total_cost_usd"] - 0.03) < 1e-9, (
+        f"Expected 0.03, got {agg['total_cost_usd']}"
+    )
     assert agg["total_llm_calls"] == 3
     assert agg["total_tool_calls"] == 0
     assert agg["total_retries"] >= 0
@@ -465,7 +467,9 @@ def test_divergence_mixed_no_trigger():
         graph.mark_running(nid)
         total_events += len(graph.drain_divergence_events())
 
-    assert total_events == 0, f"Expected 0 events for alternating pattern, got {total_events}"
+    assert total_events == 0, (
+        f"Expected 0 events for alternating pattern, got {total_events}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -533,8 +537,7 @@ def test_frequency_divergence_alternating_pattern():
 
     freq_events = [e for e in all_events if e.get("detection_mode") == "frequency"]
     assert len(freq_events) >= 1, (
-        f"Expected at least one frequency divergence event, "
-        f"got events: {all_events}"
+        f"Expected at least one frequency divergence event, got events: {all_events}"
     )
     # Check that the event has the right structure
     ev = freq_events[0]
@@ -569,6 +572,7 @@ def test_frequency_divergence_does_not_spam():
 
     # Count frequency events per signature
     from collections import Counter
+
     freq_counts: Counter = Counter()
     for ev in all_events:
         if ev.get("detection_mode") == "frequency":

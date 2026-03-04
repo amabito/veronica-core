@@ -6,6 +6,7 @@ PolicySignerV2 — ed25519 using the 'cryptography' package (conditional import)
 If 'cryptography' is not installed, _ED25519_AVAILABLE is False and
 PolicySignerV2 raises RuntimeError on any operation that requires the key.
 """
+
 from __future__ import annotations
 
 import base64
@@ -177,6 +178,7 @@ class PolicySignerV2:
             self._public_key_path = public_key_path or _DEFAULT_PUBLIC_KEY_PATH
         else:
             from veronica_core.security.key_providers import FileKeyProvider
+
             self._public_key_path = public_key_path or _DEFAULT_PUBLIC_KEY_PATH
             self._key_provider = FileKeyProvider(self._public_key_path)
 
@@ -220,7 +222,9 @@ class PolicySignerV2:
             )
         key = Ed25519PrivateKey.generate()
         priv_pem = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
-        pub_pem = key.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        pub_pem = key.public_key().public_bytes(
+            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
+        )
         return priv_pem, pub_pem
 
     # ------------------------------------------------------------------
@@ -249,15 +253,15 @@ class PolicySignerV2:
             RuntimeError: If 'cryptography' is not installed.
         """
         if not _ED25519_AVAILABLE:
-            raise RuntimeError(
-                "cryptography package is required for ed25519 signing."
-            )
+            raise RuntimeError("cryptography package is required for ed25519 signing.")
         content = self._normalize(policy_path.read_bytes())
         private_key = load_pem_private_key(private_key_pem, password=None)
         raw_sig: bytes = private_key.sign(content)  # type: ignore[attr-defined]
 
         sig_path = Path(str(policy_path) + _SIG_V2_SUFFIX)
-        sig_path.write_text(base64.b64encode(raw_sig).decode("ascii") + "\n", encoding="utf-8")
+        sig_path.write_text(
+            base64.b64encode(raw_sig).decode("ascii") + "\n", encoding="utf-8"
+        )
 
         return raw_sig
 

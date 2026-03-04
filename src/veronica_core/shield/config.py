@@ -185,25 +185,31 @@ class ShieldConfig:
     secret_guard: SecretGuardConfig = field(default_factory=SecretGuardConfig)
     budget_window: BudgetWindowConfig = field(default_factory=BudgetWindowConfig)
     token_budget: TokenBudgetConfig = field(default_factory=TokenBudgetConfig)
-    input_compression: InputCompressionConfig = field(default_factory=InputCompressionConfig)
+    input_compression: InputCompressionConfig = field(
+        default_factory=InputCompressionConfig
+    )
     adaptive_budget: AdaptiveBudgetConfig = field(default_factory=AdaptiveBudgetConfig)
-    time_aware_policy: TimeAwarePolicyConfig = field(default_factory=TimeAwarePolicyConfig)
+    time_aware_policy: TimeAwarePolicyConfig = field(
+        default_factory=TimeAwarePolicyConfig
+    )
 
     @property
     def is_any_enabled(self) -> bool:
         """Return True if at least one shield feature is enabled."""
-        return any((
-            self.safe_mode.enabled,
-            self.budget.enabled,
-            self.circuit_breaker.enabled,
-            self.egress.enabled,
-            self.secret_guard.enabled,
-            self.budget_window.enabled,
-            self.token_budget.enabled,
-            self.input_compression.enabled,
-            self.adaptive_budget.enabled,
-            self.time_aware_policy.enabled,
-        ))
+        return any(
+            (
+                self.safe_mode.enabled,
+                self.budget.enabled,
+                self.circuit_breaker.enabled,
+                self.egress.enabled,
+                self.secret_guard.enabled,
+                self.budget_window.enabled,
+                self.token_budget.enabled,
+                self.input_compression.enabled,
+                self.adaptive_budget.enabled,
+                self.time_aware_policy.enabled,
+            )
+        )
 
     def to_dict(self) -> dict:
         """Serialize to a plain dictionary (JSON-safe)."""
@@ -227,14 +233,22 @@ class ShieldConfig:
         return cls(
             safe_mode=_safe_init(SafeModeConfig, data.get("safe_mode", {})),
             budget=_safe_init(BudgetConfig, data.get("budget", {})),
-            circuit_breaker=_safe_init(CircuitBreakerConfig, data.get("circuit_breaker", {})),
+            circuit_breaker=_safe_init(
+                CircuitBreakerConfig, data.get("circuit_breaker", {})
+            ),
             egress=_safe_init(EgressConfig, data.get("egress", {})),
             secret_guard=_safe_init(SecretGuardConfig, data.get("secret_guard", {})),
             budget_window=_safe_init(BudgetWindowConfig, data.get("budget_window", {})),
             token_budget=_safe_init(TokenBudgetConfig, data.get("token_budget", {})),
-            input_compression=_safe_init(InputCompressionConfig, data.get("input_compression", {})),
-            adaptive_budget=_safe_init(AdaptiveBudgetConfig, data.get("adaptive_budget", {})),
-            time_aware_policy=_safe_init(TimeAwarePolicyConfig, data.get("time_aware_policy", {})),
+            input_compression=_safe_init(
+                InputCompressionConfig, data.get("input_compression", {})
+            ),
+            adaptive_budget=_safe_init(
+                AdaptiveBudgetConfig, data.get("adaptive_budget", {})
+            ),
+            time_aware_policy=_safe_init(
+                TimeAwarePolicyConfig, data.get("time_aware_policy", {})
+            ),
         )
 
     @classmethod

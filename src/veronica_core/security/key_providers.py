@@ -3,6 +3,7 @@
 Supports pluggable key material sourcing: file, environment variable,
 or HashiCorp Vault transit engine.
 """
+
 from __future__ import annotations
 
 import os
@@ -12,6 +13,7 @@ from typing import Protocol, runtime_checkable
 # Conditional import for Vault support
 try:
     import hvac  # type: ignore[import-untyped]
+
     _VAULT_AVAILABLE = True
 except ImportError:
     _VAULT_AVAILABLE = False
@@ -129,9 +131,7 @@ class VaultKeyProvider:
 
         keys = response.get("data", {}).get("keys", {})
         if not keys:
-            raise RuntimeError(
-                f"No keys found for '{self._key_name}' in Vault"
-            )
+            raise RuntimeError(f"No keys found for '{self._key_name}' in Vault")
         # Get the latest version's public key
         latest_version = max(keys.keys(), key=int)
         public_key = keys[latest_version].get("public_key", "")

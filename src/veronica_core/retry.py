@@ -39,7 +39,9 @@ class RetryContainer:
     _attempt_count: int = field(default=0, init=False)
     _total_retries: int = field(default=0, init=False)
     _last_error: Optional[Exception] = field(default=None, init=False, repr=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def execute(
         self,
@@ -72,9 +74,7 @@ class RetryContainer:
                 with self._lock:
                     self._last_error = None  # Clear error state on success
                 if attempt > 0:
-                    logger.info(
-                        f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}"
-                    )
+                    logger.info(f"[VERONICA_RETRY] Succeeded on attempt {attempt + 1}")
                 return result
 
             except Exception as e:
@@ -145,10 +145,7 @@ class RetryContainer:
             return PolicyDecision(
                 allowed=False,
                 policy_type=self.policy_type,
-                reason=(
-                    f"Retry budget exhausted "
-                    f"({total_retries} retries used)"
-                ),
+                reason=(f"Retry budget exhausted ({total_retries} retries used)"),
             )
         return PolicyDecision(allowed=True, policy_type=self.policy_type)
 

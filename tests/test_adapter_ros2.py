@@ -264,8 +264,10 @@ class TestLoggerFallback:
         class FakeLogger:
             def __init__(self):
                 self.messages = []
+
             def info(self, msg):
                 self.messages.append(("info", msg))
+
             def warn(self, msg):
                 self.messages.append(("warn", msg))
 
@@ -278,4 +280,3 @@ class TestLoggerFallback:
             raise SensorFault("test")
 
         assert any("Fault suppressed" in m[1] for m in fake.messages)
-

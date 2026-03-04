@@ -58,13 +58,13 @@ class TestBudgetWindowExpiry:
         monkeypatch.setattr(time, "time", lambda: next(times))
 
         hook = BudgetWindowHook(max_calls=2, window_seconds=60.0)
-        assert hook.before_llm_call(CTX) is None   # t=0.0, count=1
-        assert hook.before_llm_call(CTX) is None   # t=0.5, count=2  (already at limit)
+        assert hook.before_llm_call(CTX) is None  # t=0.0, count=1
+        assert hook.before_llm_call(CTX) is None  # t=0.5, count=2  (already at limit)
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=1.0, HALT
 
         # After window expires, timestamps at 0.0 and 0.5 are pruned (cutoff = 61.5-60 = 1.5)
-        assert hook.before_llm_call(CTX) is None   # t=61.5, count=1
-        assert hook.before_llm_call(CTX) is None   # t=62.0, count=2
+        assert hook.before_llm_call(CTX) is None  # t=61.5, count=1
+        assert hook.before_llm_call(CTX) is None  # t=62.0, count=2
 
 
 class TestBudgetWindowBoundary:
@@ -99,7 +99,7 @@ class TestBudgetWindowPipelineIntegration:
         pipe = ShieldPipeline(pre_dispatch=hook)
         assert pipe.before_llm_call(CTX) is Decision.ALLOW  # call 1
         assert pipe.before_llm_call(CTX) is Decision.ALLOW  # call 2
-        assert pipe.before_llm_call(CTX) is Decision.HALT   # call 3 (over limit)
+        assert pipe.before_llm_call(CTX) is Decision.HALT  # call 3 (over limit)
 
     def test_pipeline_without_hook_always_allows(self):
         pipe = ShieldPipeline()
@@ -141,17 +141,19 @@ class TestBudgetWindowExpiryBoundary:
         monkeypatch.setattr(time, "time", lambda: next(times))
 
         hook = BudgetWindowHook(max_calls=1, window_seconds=60.0)
-        assert hook.before_llm_call(CTX) is None        # t=0.0, reserved slot
+        assert hook.before_llm_call(CTX) is None  # t=0.0, reserved slot
 
         # At t=60: cutoff=0.0, ts=0.0 -> 0.0 < 0.0 is False -> NOT expired -> HALT
         # HALT appends ts=60.0 into window (S1 fix)
         assert hook.before_llm_call(CTX) is Decision.HALT  # t=60.0, still within window
 
         # At t=60.001: ts=0.0 pruned (0.0 < 0.001), ts=60.0 retained -> HALT
-        assert hook.before_llm_call(CTX) is Decision.HALT  # t=60.001, HALT ts still live
+        assert (
+            hook.before_llm_call(CTX) is Decision.HALT
+        )  # t=60.001, HALT ts still live
 
         # At t=120.001: cutoff=60.001, ts=60.0 < 60.001 -> pruned -> fresh window
-        assert hook.before_llm_call(CTX) is None        # t=120.001, all old calls expired
+        assert hook.before_llm_call(CTX) is None  # t=120.001, all old calls expired
 
 
 class TestBudgetWindowIntegrationWiring:
@@ -168,13 +170,15 @@ class TestBudgetWindowIntegrationWiring:
         from veronica_core.integration import VeronicaIntegration
 
         cfg = ShieldConfig(
-            budget_window=BudgetWindowConfig(enabled=True, max_calls=3, window_seconds=60.0)
+            budget_window=BudgetWindowConfig(
+                enabled=True, max_calls=3, window_seconds=60.0
+            )
         )
         vi = VeronicaIntegration(shield=cfg)
         assert vi._shield_pipeline.before_llm_call(CTX) is Decision.ALLOW  # call 1
         assert vi._shield_pipeline.before_llm_call(CTX) is Decision.ALLOW  # call 2
         assert vi._shield_pipeline.before_llm_call(CTX) is Decision.ALLOW  # call 3
-        assert vi._shield_pipeline.before_llm_call(CTX) is Decision.HALT   # call 4
+        assert vi._shield_pipeline.before_llm_call(CTX) is Decision.HALT  # call 4
 
     def test_safe_mode_takes_priority_over_budget_window(self):
         from veronica_core.integration import VeronicaIntegration

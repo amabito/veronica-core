@@ -44,8 +44,8 @@ class VeronicaPersistence:
             data = state.to_dict()
 
             # Atomic write: tmp -> rename
-            tmp_path = self.path.with_suffix('.tmp')
-            with open(tmp_path, 'w') as f:
+            tmp_path = self.path.with_suffix(".tmp")
+            with open(tmp_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             tmp_path.replace(self.path)
@@ -59,11 +59,13 @@ class VeronicaPersistence:
     def load(self) -> Optional[VeronicaStateMachine]:
         """Load state from disk. Returns None if file missing or invalid."""
         if not self.path.exists():
-            logger.warning(f"[VERONICA_PERSIST] No state file at {self.path}, creating fresh state")
+            logger.warning(
+                f"[VERONICA_PERSIST] No state file at {self.path}, creating fresh state"
+            )
             return None
 
         try:
-            with open(self.path, 'r') as f:
+            with open(self.path, "r") as f:
                 data = json.load(f)
 
             state = VeronicaStateMachine.from_dict(data)
@@ -88,7 +90,9 @@ class VeronicaPersistence:
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = self.path.with_name(f"{self.path.stem}_backup_{timestamp}.json")
+            backup_path = self.path.with_name(
+                f"{self.path.stem}_backup_{timestamp}.json"
+            )
             shutil.copy2(self.path, backup_path)
             logger.info(f"[VERONICA_PERSIST] Backup created: {backup_path}")
             return True

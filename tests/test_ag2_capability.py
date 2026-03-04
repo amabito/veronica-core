@@ -2,6 +2,7 @@
 
 Uses a minimal stub agent -- ag2 is not required.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -63,6 +64,7 @@ class TestAddToAgent:
         agent = StubAgent("a")
         breaker = cap.add_to_agent(agent)
         from veronica_core.circuit_breaker import CircuitBreaker
+
         assert isinstance(breaker, CircuitBreaker)
 
     def test_circuit_starts_closed(self) -> None:
@@ -334,8 +336,10 @@ class TestRemoveFromAgent:
         cap = CircuitBreakerCapability(failure_threshold=3)
         cap.add_to_agent(agent)
         # After wrapping, the method should be the closure, not the original
-        assert not hasattr(agent.generate_reply, "__func__") or \
-            agent.generate_reply.__func__ is not original_func
+        assert (
+            not hasattr(agent.generate_reply, "__func__")
+            or agent.generate_reply.__func__ is not original_func
+        )
         cap.remove_from_agent(agent)
         # After removal, the underlying function must be the original again
         assert agent.generate_reply.__func__ is original_func

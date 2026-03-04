@@ -147,4 +147,3 @@ def test_api_priority_run_over_callable():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

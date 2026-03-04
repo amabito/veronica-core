@@ -128,7 +128,9 @@ class ExecutionGraph:
         self._lock = threading.RLock()
         # Observers are called outside the lock to avoid deadlocks.
         # Immutable after __init__: no lock needed for reads.
-        self._observers: List["ExecutionGraphObserver"] = list(observers) if observers else []
+        self._observers: List["ExecutionGraphObserver"] = (
+            list(observers) if observers else []
+        )
 
         # Node storage and ID counter.
         self._nodes: dict[str, Node] = {}
@@ -419,14 +421,16 @@ class ExecutionGraph:
         if cost_key in self._emitted_divergences:
             return
         self._emitted_divergences.add(cost_key)
-        self._pending_divergence_events.append({
-            "event_type": "COST_RATE_EXCEEDED",
-            "severity": "warn",
-            "cost_rate": cost_rate,
-            "threshold": self._cost_rate_threshold_usd_per_sec,
-            "node_id": node_id,
-            "chain_id": self._chain_id,
-        })
+        self._pending_divergence_events.append(
+            {
+                "event_type": "COST_RATE_EXCEEDED",
+                "severity": "warn",
+                "cost_rate": cost_rate,
+                "threshold": self._cost_rate_threshold_usd_per_sec,
+                "node_id": node_id,
+                "chain_id": self._chain_id,
+            }
+        )
 
     def _check_token_velocity_divergence(
         self,
@@ -452,14 +456,16 @@ class ExecutionGraph:
         if velocity_key in self._emitted_divergences:
             return
         self._emitted_divergences.add(velocity_key)
-        self._pending_divergence_events.append({
-            "event_type": "TOKEN_VELOCITY_EXCEEDED",
-            "severity": "warn",
-            "token_velocity": token_velocity,
-            "threshold": self._token_velocity_threshold,
-            "node_id": node_id,
-            "chain_id": self._chain_id,
-        })
+        self._pending_divergence_events.append(
+            {
+                "event_type": "TOKEN_VELOCITY_EXCEEDED",
+                "severity": "warn",
+                "token_velocity": token_velocity,
+                "threshold": self._token_velocity_threshold,
+                "node_id": node_id,
+                "chain_id": self._chain_id,
+            }
+        )
 
     def mark_failure(
         self,
@@ -731,7 +737,10 @@ class ExecutionGraph:
 
         consec_threshold = self._diverge_thresholds.get(sig[0], 999)
         consec_key = (sig, "consecutive")
-        if consecutive >= consec_threshold and consec_key not in self._emitted_divergences:
+        if (
+            consecutive >= consec_threshold
+            and consec_key not in self._emitted_divergences
+        ):
             self._emitted_divergences.add(consec_key)
             return {
                 "event_type": "divergence_suspected",
@@ -752,7 +761,10 @@ class ExecutionGraph:
             freq_count = sum(1 for entry in self._sig_window if entry == sig)
             freq_threshold = self._freq_thresholds.get(sig[0], 999)
             freq_key = (sig, "frequency")
-            if freq_count >= freq_threshold and freq_key not in self._emitted_divergences:
+            if (
+                freq_count >= freq_threshold
+                and freq_key not in self._emitted_divergences
+            ):
                 self._emitted_divergences.add(freq_key)
                 return {
                     "event_type": "divergence_suspected",

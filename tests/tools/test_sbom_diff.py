@@ -1,4 +1,5 @@
 """Tests for sbom_diff.py (I-3)."""
+
 from __future__ import annotations
 
 import json
@@ -112,7 +113,6 @@ class TestDiffSbomChanged:
         assert diff.removed == []
 
 
-
 # ---------------------------------------------------------------------------
 # diff_sbom: combined scenarios
 # ---------------------------------------------------------------------------
@@ -195,7 +195,9 @@ class TestApprovalToken:
     def test_different_diffs_produce_different_tokens(self) -> None:
         diff_a = SbomDiff(added=["pkg-a"], removed=[], changed=[])
         diff_b = SbomDiff(added=["pkg-b"], removed=[], changed=[])
-        assert compute_diff_token(diff_a, _SECRET) != compute_diff_token(diff_b, _SECRET)
+        assert compute_diff_token(diff_a, _SECRET) != compute_diff_token(
+            diff_b, _SECRET
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -245,12 +247,16 @@ class TestAuditLogSbomDiff:
         audit_log.log_sbom_diff(
             added=["pkg-new"],
             removed=["pkg-old"],
-            changed=[{"name": "pkg-changed", "old_version": "1.0", "new_version": "2.0"}],
+            changed=[
+                {"name": "pkg-changed", "old_version": "1.0", "new_version": "2.0"}
+            ],
             approved=False,
         )
 
         assert log_path.exists()
-        entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+        entries = [
+            json.loads(line) for line in log_path.read_text().splitlines() if line
+        ]
         sbom_entries = [e for e in entries if e["event_type"] == "SBOM_DIFF"]
         assert len(sbom_entries) == 1
         data = sbom_entries[0]["data"]
@@ -265,5 +271,7 @@ class TestAuditLogSbomDiff:
         audit_log = AuditLog(log_path)
         audit_log.log_sbom_diff(added=[], removed=[], changed=[], approved=True)
 
-        entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+        entries = [
+            json.loads(line) for line in log_path.read_text().splitlines() if line
+        ]
         assert entries[0]["data"]["approved"] is True

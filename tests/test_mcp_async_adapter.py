@@ -13,7 +13,10 @@ import pytest
 from veronica_core.adapters.mcp import MCPToolCost, MCPToolResult, MCPToolStats
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.containment.execution_context import ExecutionConfig, ExecutionContext
+from veronica_core.containment.execution_context import (
+    ExecutionConfig,
+    ExecutionContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +142,9 @@ class TestBasicSuccess:
 
         async def run() -> None:
             adapter = _make_adapter()
-            await adapter.wrap_tool_call("search", {"query": "hello", "limit": 5}, capturing_fn)
+            await adapter.wrap_tool_call(
+                "search", {"query": "hello", "limit": 5}, capturing_fn
+            )
 
         asyncio.run(run())
         assert received == [{"query": "hello", "limit": 5}]
@@ -603,7 +608,9 @@ class TestConstructorValidation:
     def test_negative_default_cost_raises(self) -> None:
         ctx = _make_ctx()
         with pytest.raises(ValueError, match="default_cost_per_call"):
-            AsyncMCPContainmentAdapter(execution_context=ctx, default_cost_per_call=-0.1)
+            AsyncMCPContainmentAdapter(
+                execution_context=ctx, default_cost_per_call=-0.1
+            )
 
     def test_zero_default_cost_valid(self) -> None:
         async def run() -> MCPToolResult:
@@ -625,7 +632,9 @@ class TestConcurrentAsync:
         async def run() -> list[MCPToolResult]:
             adapter = _make_adapter(max_cost_usd=100.0, max_steps=200)
             tasks = [
-                asyncio.create_task(adapter.wrap_tool_call("search", {"i": i}, _echo_fn))
+                asyncio.create_task(
+                    adapter.wrap_tool_call("search", {"i": i}, _echo_fn)
+                )
                 for i in range(10)
             ]
             return await asyncio.gather(*tasks)
@@ -635,7 +644,9 @@ class TestConcurrentAsync:
 
     def test_concurrent_calls_stats_consistent(self) -> None:
         async def run() -> int:
-            adapter = _make_adapter(max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0)
+            adapter = _make_adapter(
+                max_cost_usd=100.0, max_steps=200, default_cost_per_call=0.0
+            )
             tasks = [
                 asyncio.create_task(adapter.wrap_tool_call("search", {}, _echo_fn))
                 for _ in range(10)
@@ -653,7 +664,9 @@ class TestConcurrentAsync:
             tasks = []
             for i in range(10):
                 fn = _raise_fn if i % 2 == 0 else _echo_fn
-                tasks.append(asyncio.create_task(adapter.wrap_tool_call("search", {}, fn)))
+                tasks.append(
+                    asyncio.create_task(adapter.wrap_tool_call("search", {}, fn))
+                )
             results = await asyncio.gather(*tasks)
             successes = sum(1 for r in results if r.success)
             failures = sum(1 for r in results if not r.success)
@@ -684,4 +697,6 @@ class TestConcurrentAsync:
             return stats["search"].call_count
 
         count = asyncio.run(run())
-        assert count == 50, f"Expected 50 calls counted, got {count} (stats entry was replaced)"
+        assert count == 50, (
+            f"Expected 50 calls counted, got {count} (stats entry was replaced)"
+        )

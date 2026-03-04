@@ -3,6 +3,7 @@
 Verifies that the hash chain remains valid and no entries are lost
 when 10 threads each append 100 entries simultaneously.
 """
+
 from __future__ import annotations
 
 import sys
@@ -46,7 +47,9 @@ class TestAuditLogThreadSafety:
             t.join()
 
         assert errors == [], f"Writer threads raised errors: {errors}"
-        assert log.verify_chain() is True, "Hash chain must be valid after concurrent writes"
+        assert log.verify_chain() is True, (
+            "Hash chain must be valid after concurrent writes"
+        )
 
     def test_concurrent_writes_no_lost_entries(self, tmp_path: Path) -> None:
         """GIVEN 10 threads each appending 100 entries simultaneously,
@@ -72,7 +75,8 @@ class TestAuditLogThreadSafety:
             t.join()
 
         lines = [
-            line for line in log_path.read_text(encoding="utf-8").splitlines()
+            line
+            for line in log_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
         expected_count = num_threads * entries_per_thread
@@ -109,7 +113,9 @@ class TestAuditLogThreadSafety:
             "Reopened log must pass chain verification after concurrent writes"
         )
 
-    def test_two_concurrent_writers_no_duplicate_hash_links(self, tmp_path: Path) -> None:
+    def test_two_concurrent_writers_no_duplicate_hash_links(
+        self, tmp_path: Path
+    ) -> None:
         """GIVEN two threads writing simultaneously,
         WHEN both finish,
         THEN no two consecutive entries share the same prev_hash (no race in chain linking).
@@ -131,7 +137,8 @@ class TestAuditLogThreadSafety:
             t.join()
 
         lines = [
-            line for line in log_path.read_text(encoding="utf-8").splitlines()
+            line
+            for line in log_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
         assert len(lines) == 100

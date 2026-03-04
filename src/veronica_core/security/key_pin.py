@@ -4,6 +4,7 @@ Computes a SHA-256 hash of the ed25519 public key PEM and compares it
 against a pinned value stored in an environment variable or a file.
 In CI/PROD environments, a mismatch raises RuntimeError.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +24,7 @@ _DEFAULT_PIN_FILE = Path(__file__).parents[4] / "policies" / "key_pin.txt"
 # Hash computation
 # ---------------------------------------------------------------------------
 
+
 def compute_key_hash(pem_bytes: bytes) -> str:
     """Return the SHA-256 hex digest of *pem_bytes* (stripped of whitespace).
 
@@ -39,6 +41,7 @@ def compute_key_hash(pem_bytes: bytes) -> str:
 # ---------------------------------------------------------------------------
 # Expected pin loading
 # ---------------------------------------------------------------------------
+
 
 def load_expected_pin() -> str | None:
     """Return the expected key pin from env var or the default pin file.
@@ -68,6 +71,7 @@ def load_expected_pin() -> str | None:
 # ---------------------------------------------------------------------------
 # KeyPinChecker
 # ---------------------------------------------------------------------------
+
 
 class KeyPinChecker:
     """Verifies that a public key PEM matches the pinned SHA-256 hash.
@@ -122,7 +126,10 @@ class KeyPinChecker:
             RuntimeError: If the key pin does not match in CI or PROD
                           security level.
         """
-        from veronica_core.security.security_level import SecurityLevel, get_security_level
+        from veronica_core.security.security_level import (
+            SecurityLevel,
+            get_security_level,
+        )
 
         ok = self.check(pem_bytes)
         if not ok:

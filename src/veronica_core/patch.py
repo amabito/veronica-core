@@ -12,6 +12,7 @@ Public API:
     patch_anthropic() — patch Anthropic Messages.create
     unpatch_all()     — restore all original methods
 """
+
 from __future__ import annotations
 
 import logging
@@ -73,6 +74,7 @@ def _make_patched(original: Callable, cost_fn: Callable, label: str) -> Callable
             decision = container.check(cost_usd=0.0)
             if not decision.allowed:
                 from veronica_core.inject import VeronicaHalt
+
                 raise VeronicaHalt(decision.reason, decision)
 
         response = original(*args, **kwargs)
@@ -118,10 +120,15 @@ def patch_openai() -> None:
         if "openai_modern" not in _patches:
             try:
                 import openai.resources.chat.completions as _mod  # type: ignore[import]
+
                 orig = _mod.Completions.create
-                _mod.Completions.create = _make_patched(orig, _estimate_cost_openai, "openai")
+                _mod.Completions.create = _make_patched(
+                    orig, _estimate_cost_openai, "openai"
+                )
                 _patches["openai_modern"] = (_mod.Completions, "create", orig)
-                logger.info("[VERONICA_PATCH] Patched openai.resources.chat.completions.Completions.create")
+                logger.info(
+                    "[VERONICA_PATCH] Patched openai.resources.chat.completions.Completions.create"
+                )
                 patched_any = True
             except (ImportError, AttributeError):
                 pass
@@ -130,18 +137,27 @@ def patch_openai() -> None:
         if "openai_legacy" not in _patches:
             try:
                 import openai as _oa  # type: ignore[import]
+
                 cls = getattr(_oa, "ChatCompletion", None)
                 if cls is not None:
                     orig = cls.create
-                    cls.create = _make_patched(orig, _estimate_cost_openai, "openai-legacy")
+                    cls.create = _make_patched(
+                        orig, _estimate_cost_openai, "openai-legacy"
+                    )
                     _patches["openai_legacy"] = (cls, "create", orig)
                     logger.info("[VERONICA_PATCH] Patched openai.ChatCompletion.create")
                     patched_any = True
             except (ImportError, AttributeError, TypeError):
                 pass
 
-        if not patched_any and "openai_modern" not in _patches and "openai_legacy" not in _patches:
-            logger.warning("[VERONICA_PATCH] openai not installed or no patchable targets found")
+        if (
+            not patched_any
+            and "openai_modern" not in _patches
+            and "openai_legacy" not in _patches
+        ):
+            logger.warning(
+                "[VERONICA_PATCH] openai not installed or no patchable targets found"
+            )
 
 
 def patch_anthropic() -> None:
@@ -165,12 +181,19 @@ def patch_anthropic() -> None:
 
         try:
             import anthropic.resources.messages as _mod  # type: ignore[import]
+
             orig = _mod.Messages.create
-            _mod.Messages.create = _make_patched(orig, _estimate_cost_anthropic, "anthropic")
+            _mod.Messages.create = _make_patched(
+                orig, _estimate_cost_anthropic, "anthropic"
+            )
             _patches["anthropic"] = (_mod.Messages, "create", orig)
-            logger.info("[VERONICA_PATCH] Patched anthropic.resources.messages.Messages.create")
+            logger.info(
+                "[VERONICA_PATCH] Patched anthropic.resources.messages.Messages.create"
+            )
         except (ImportError, AttributeError):
-            logger.warning("[VERONICA_PATCH] anthropic not installed or no patchable targets found")
+            logger.warning(
+                "[VERONICA_PATCH] anthropic not installed or no patchable targets found"
+            )
 
 
 def unpatch_all() -> None:

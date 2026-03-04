@@ -33,6 +33,7 @@ class TestRetryContainerThreadSafety:
                 in_flight.append(1)
                 max_concurrent[0] = max(max_concurrent[0], len(in_flight))
             import time
+
             time.sleep(0.01)
             with lock:
                 in_flight.pop()

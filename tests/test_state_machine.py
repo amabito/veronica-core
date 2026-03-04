@@ -252,7 +252,9 @@ class TestFromDictCorruptedStateHistory:
         assert len(sm.state_history) == 1
         assert sm.state_history[0].reason == "valid entry"
         # A warning should have been logged for the invalid entry
-        assert any("Skipping invalid state_history entry" in r.message for r in caplog.records)
+        assert any(
+            "Skipping invalid state_history entry" in r.message for r in caplog.records
+        )
 
     def test_corrupted_to_state_is_skipped(self, caplog):
         """Invalid to_state string causes entry to be skipped with a warning."""
@@ -272,7 +274,9 @@ class TestFromDictCorruptedStateHistory:
             sm = VeronicaStateMachine.from_dict(data)
 
         assert len(sm.state_history) == 0
-        assert any("Skipping invalid state_history entry" in r.message for r in caplog.records)
+        assert any(
+            "Skipping invalid state_history entry" in r.message for r in caplog.records
+        )
 
     def test_missing_key_in_entry_is_skipped(self, caplog):
         """Entry missing required key is skipped with a warning."""
@@ -438,10 +442,9 @@ class TestConcurrentStateMachine:
                     errors.append(exc)
 
         # 5 pass + 5 fail workers race on the same entity
-        threads = (
-            [threading.Thread(target=pass_worker) for _ in range(5)]
-            + [threading.Thread(target=fail_worker) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=pass_worker) for _ in range(5)] + [
+            threading.Thread(target=fail_worker) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -483,7 +486,9 @@ class TestConcurrentStateMachine:
                 with lock:
                     errors.append(exc)
 
-        threads = [threading.Thread(target=transition_worker, args=(i,)) for i in range(10)]
+        threads = [
+            threading.Thread(target=transition_worker, args=(i,)) for i in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -527,10 +532,9 @@ class TestConcurrentStateMachine:
         time.sleep(0.1)
 
         # 3 cleanup + 3 is_in_cooldown threads race
-        threads = (
-            [threading.Thread(target=cleanup_worker) for _ in range(3)]
-            + [threading.Thread(target=check_worker, args=(f"pair_{i}",)) for i in range(3)]
-        )
+        threads = [threading.Thread(target=cleanup_worker) for _ in range(3)] + [
+            threading.Thread(target=check_worker, args=(f"pair_{i}",)) for i in range(3)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -571,10 +575,9 @@ class TestConcurrentStateMachine:
                     errors.append(exc)
 
         future = time.time() + 9999.0
-        threads = (
-            [threading.Thread(target=setter_worker, args=(future,)) for _ in range(5)]
-            + [threading.Thread(target=checker_worker) for _ in range(5)]
-        )
+        threads = [
+            threading.Thread(target=setter_worker, args=(future,)) for _ in range(5)
+        ] + [threading.Thread(target=checker_worker) for _ in range(5)]
         for t in threads:
             t.start()
         for t in threads:

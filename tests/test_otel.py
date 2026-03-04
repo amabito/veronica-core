@@ -1,4 +1,5 @@
 """Tests for OpenTelemetry integration (P2-1)."""
+
 from __future__ import annotations
 
 import threading
@@ -30,7 +31,9 @@ def _setup_test_otel():
     """Create an in-memory OTel tracer for testing."""
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
 
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
@@ -143,7 +146,9 @@ def test_emit_containment_decision_with_tracer():
     exporter, tracer = _setup_test_otel()
 
     with tracer.start_as_current_span("containment-span"):
-        emit_containment_decision("HALT", "budget limit reached", cost_usd=9.99, chain_id="chain-1")
+        emit_containment_decision(
+            "HALT", "budget limit reached", cost_usd=9.99, chain_id="chain-1"
+        )
 
     finished = exporter.get_finished_spans()
     span = finished[0]
@@ -205,7 +210,9 @@ class TestEnableOTelWithProvider:
         """Events emitted through a shared provider appear on the trace."""
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -255,7 +262,9 @@ class TestOTelExecutionGraphObserver:
     def _make_otel_env(self):
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -344,6 +353,7 @@ class TestOTelExecutionGraphObserver:
     def test_observer_satisfies_protocol(self):
         """OTelExecutionGraphObserver must satisfy ExecutionGraphObserver protocol."""
         from veronica_core.protocols import ExecutionGraphObserver as Protocol
+
         observer = OTelExecutionGraphObserver()
         assert isinstance(observer, Protocol)
 
@@ -378,7 +388,9 @@ class TestAG2CapabilityOTel:
     def _make_otel_env(self):
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -467,6 +479,7 @@ class TestAdversarialProvider:
     def test_provider_get_tracer_returns_none(self):
         """Provider that returns None from get_tracer must not enable OTel
         in a half-broken state where is_otel_enabled() is True but emit is dead."""
+
         class NoneTracerProvider:
             def get_tracer(self, name):
                 return None
@@ -479,6 +492,7 @@ class TestAdversarialProvider:
 
     def test_provider_get_tracer_raises(self):
         """Provider whose get_tracer raises arbitrary exception."""
+
         class ExplodingProvider:
             def get_tracer(self, name):
                 raise RuntimeError("provider exploded")
@@ -493,6 +507,7 @@ class TestAdversarialProvider:
         KeyboardInterrupt should propagate (correct behavior).
         But SystemExit-class errors from buggy providers should not crash the app.
         """
+
         class WeirdProvider:
             def get_tracer(self, name):
                 raise ValueError("not a real provider")
@@ -556,7 +571,9 @@ class TestAdversarialObserverOTel:
     def _make_otel_env(self):
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -748,6 +765,7 @@ class TestAdversarialContainmentInvariant:
 
         # Enable OTel with a real provider so emit code runs
         from opentelemetry.sdk.trace import TracerProvider
+
         provider = TracerProvider()
         enable_otel_with_provider(provider)
 
@@ -775,6 +793,7 @@ class TestAdversarialContainmentInvariant:
         from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
 
         from opentelemetry.sdk.trace import TracerProvider
+
         provider = TracerProvider()
         enable_otel_with_provider(provider)
 
@@ -799,6 +818,7 @@ class TestAdversarialContainmentInvariant:
         from veronica_core.state import VeronicaState
 
         from opentelemetry.sdk.trace import TracerProvider
+
         provider = TracerProvider()
         enable_otel_with_provider(provider)
 
@@ -825,7 +845,9 @@ class TestAdversarialContainmentInvariant:
         """NaN cost_usd must not crash emit or corrupt span data."""
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -850,7 +872,9 @@ class TestAdversarialContainmentInvariant:
 
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()

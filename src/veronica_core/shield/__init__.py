@@ -1,4 +1,5 @@
 """VERONICA Execution Shield."""
+
 from veronica_core.shield.adaptive_budget import (
     AdaptiveBudgetHook,
     AdjustmentResult,
@@ -35,11 +36,22 @@ from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.types import Decision, ToolCallContext
 
 __all__ = [
-    "ShieldConfig", "ShieldPipeline", "ShieldBlockedError",
-    "Decision", "ToolCallContext",
-    "PreDispatchHook", "PostDispatchHook", "EgressBoundaryHook", "RetryBoundaryHook", "BudgetBoundaryHook",
+    "ShieldConfig",
+    "ShieldPipeline",
+    "ShieldBlockedError",
+    "Decision",
+    "ToolCallContext",
+    "PreDispatchHook",
+    "PostDispatchHook",
+    "EgressBoundaryHook",
+    "RetryBoundaryHook",
+    "BudgetBoundaryHook",
     "ToolDispatchHook",
-    "NoopPreDispatchHook", "NoopPostDispatchHook", "NoopEgressBoundaryHook", "NoopRetryBoundaryHook", "NoopBudgetBoundaryHook",
+    "NoopPreDispatchHook",
+    "NoopPostDispatchHook",
+    "NoopEgressBoundaryHook",
+    "NoopRetryBoundaryHook",
+    "NoopBudgetBoundaryHook",
     "NoopToolDispatchHook",
     "SafeModeHook",
     "BudgetWindowHook",

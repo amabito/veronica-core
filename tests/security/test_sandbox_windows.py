@@ -1,4 +1,5 @@
 """Tests for runner/sandbox_windows.py — Windows Sandbox hardening."""
+
 from __future__ import annotations
 
 import sys
@@ -57,7 +58,9 @@ class TestReadPathBlocked:
     def test_blocks_windows_users_backslash(self, runner: WindowsSandboxRunner) -> None:
         assert runner.read_path_blocked(r"C:\Users\testuser\secret.txt") is True
 
-    def test_blocks_windows_users_forward_slash(self, runner: WindowsSandboxRunner) -> None:
+    def test_blocks_windows_users_forward_slash(
+        self, runner: WindowsSandboxRunner
+    ) -> None:
         assert runner.read_path_blocked("C:/Users/testuser/.env") is True
 
     def test_blocks_system32_backslash(self, runner: WindowsSandboxRunner) -> None:
@@ -87,22 +90,25 @@ class TestReadPathBlocked:
         appdata = str(tmp_path / "AppData" / "Roaming")
         with patch.dict("os.environ", {"APPDATA": appdata, "USERPROFILE": ""}):
             from veronica_core.runner.sandbox_windows import create_windows_sandbox
+
             r = create_windows_sandbox(str(tmp_path), mock_executor)
             target = str(Path(appdata) / "secrets.json")
             assert r.read_path_blocked(target) is True
 
-    def test_blocks_env_userprofile(self, tmp_path: Path, mock_executor: MagicMock) -> None:
+    def test_blocks_env_userprofile(
+        self, tmp_path: Path, mock_executor: MagicMock
+    ) -> None:
         """USERPROFILE env var path should be blocked by default."""
         userprofile = str(tmp_path / "UserProfile")
         with patch.dict("os.environ", {"USERPROFILE": userprofile, "APPDATA": ""}):
             from veronica_core.runner.sandbox_windows import create_windows_sandbox
+
             r = create_windows_sandbox(str(tmp_path), mock_executor)
             target = str(Path(userprofile) / ".ssh" / "id_rsa")
             assert r.read_path_blocked(target) is True
 
     def test_allows_relative_path(self, runner: WindowsSandboxRunner) -> None:
         assert runner.read_path_blocked("src/main.py") is False
-
 
 
 # ---------------------------------------------------------------------------
@@ -125,9 +131,7 @@ class TestRunInSandboxPathValidation:
             with pytest.raises(PermissionError, match="blocked path"):
                 r.run_in_sandbox(["echo", "C:/Users/testuser/.env"])
 
-    def test_raises_when_not_in_context(
-        self, runner: WindowsSandboxRunner
-    ) -> None:
+    def test_raises_when_not_in_context(self, runner: WindowsSandboxRunner) -> None:
         with pytest.raises(RuntimeError, match="not active"):
             runner.run_in_sandbox(["echo", "hello"])
 
@@ -142,7 +146,6 @@ class TestRunInSandboxPathValidation:
             rc, out, err = r.run_in_sandbox(["echo", "hello"])
         assert rc == 0
         mock_executor.execute_shell.assert_called_once()
-
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +208,9 @@ class TestCreateWindowsSandbox:
         self, repo_root: str, mock_executor: MagicMock, tmp_path: Path
     ) -> None:
         extra = str(tmp_path / "extra_blocked")
-        runner = create_windows_sandbox(repo_root, mock_executor, extra_blocked_paths=[extra])
+        runner = create_windows_sandbox(
+            repo_root, mock_executor, extra_blocked_paths=[extra]
+        )
         target = str(Path(extra) / "file.txt")
         assert runner.read_path_blocked(target) is True
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-
 from veronica_core.shield.input_compression import (
     Compressor,
     InputCompressionHook,
@@ -19,6 +18,7 @@ CTX = ToolCallContext(request_id="test-runtime", tool_name="llm")
 # ---------------------------------------------------------------------------
 # TemplateCompressor
 # ---------------------------------------------------------------------------
+
 
 class TestTemplateCompressor:
     def test_compress_preserves_numbers(self):
@@ -56,6 +56,7 @@ class TestTemplateCompressor:
 # _extract_important_lines
 # ---------------------------------------------------------------------------
 
+
 class TestExtractImportantLines:
     def test_numbers_are_important(self):
         imp, oth = _extract_important_lines("budget is 5000\nhello world")
@@ -79,6 +80,7 @@ class TestExtractImportantLines:
 # compress_if_needed -- below threshold
 # ---------------------------------------------------------------------------
 
+
 class TestCompressIfNeededAllow:
     def test_short_input_passes_through(self):
         hook = InputCompressionHook(
@@ -93,6 +95,7 @@ class TestCompressIfNeededAllow:
 # ---------------------------------------------------------------------------
 # compress_if_needed -- compression succeeds
 # ---------------------------------------------------------------------------
+
 
 class TestCompressIfNeededSuccess:
     def test_compresses_above_threshold(self):
@@ -141,6 +144,7 @@ class TestCompressIfNeededSuccess:
 # compress_if_needed -- compression fails
 # ---------------------------------------------------------------------------
 
+
 class TestCompressIfNeededFailure:
     def test_failure_halts_by_default(self):
         class BrokenCompressor:
@@ -148,7 +152,8 @@ class TestCompressIfNeededFailure:
                 raise RuntimeError("boom")
 
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=200,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=200,
             compressor=BrokenCompressor(),
         )
         text = "a" * 200  # 50 tokens > 10
@@ -161,7 +166,8 @@ class TestCompressIfNeededFailure:
                 raise RuntimeError("boom")
 
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=200,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=200,
             compressor=BrokenCompressor(),
             fallback_to_original=True,
         )
@@ -176,7 +182,8 @@ class TestCompressIfNeededFailure:
                 raise RuntimeError("boom")
 
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=200,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=200,
             compressor=BrokenCompressor(),
         )
         hook.compress_if_needed("a" * 200, CTX)
@@ -191,11 +198,13 @@ class TestCompressIfNeededFailure:
 # Escape hatch
 # ---------------------------------------------------------------------------
 
+
 class TestEscapeHatch:
     def test_disabled_env_skips_compression(self, monkeypatch):
         monkeypatch.setenv("VERONICA_DISABLE_COMPRESSION", "1")
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=200,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=200,
         )
         text = "a" * 200  # 50 tokens > 10
         out, decision = hook.compress_if_needed(text, CTX)
@@ -207,7 +216,8 @@ class TestEscapeHatch:
     def test_enabled_env_allows_compression(self, monkeypatch):
         monkeypatch.delenv("VERONICA_DISABLE_COMPRESSION", raising=False)
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=500,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=500,
         )
         text = "a" * 200
         out, decision = hook.compress_if_needed(text, CTX)
@@ -219,14 +229,16 @@ class TestEscapeHatch:
 # Custom compressor
 # ---------------------------------------------------------------------------
 
+
 class TestCustomCompressor:
     def test_custom_compressor_used(self):
         class HalfCompressor:
             def compress(self, text: str, target_tokens: int) -> str:
-                return text[:len(text) // 2]
+                return text[: len(text) // 2]
 
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=500,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=500,
             compressor=HalfCompressor(),
         )
         text = "abcdef" * 100  # 600 chars -> 150 tokens
@@ -238,6 +250,7 @@ class TestCustomCompressor:
 # ---------------------------------------------------------------------------
 # Compressor Protocol
 # ---------------------------------------------------------------------------
+
 
 class TestCompressorProtocol:
     def test_template_compressor_is_compressor(self):
@@ -255,10 +268,12 @@ class TestCompressorProtocol:
 # clear_events
 # ---------------------------------------------------------------------------
 
+
 class TestClearEvents:
     def test_clear_events(self):
         hook = InputCompressionHook(
-            compression_threshold_tokens=10, halt_threshold_tokens=500,
+            compression_threshold_tokens=10,
+            halt_threshold_tokens=500,
         )
         hook.compress_if_needed("a" * 200, CTX)
         assert len(hook.get_events()) == 2
@@ -269,6 +284,7 @@ class TestClearEvents:
 # ---------------------------------------------------------------------------
 # Config round-trip with fallback_to_original
 # ---------------------------------------------------------------------------
+
 
 class TestConfigFallback:
     def test_config_round_trip(self):

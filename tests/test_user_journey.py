@@ -1,4 +1,5 @@
 """User journey tests: end-to-end agent lifecycle scenarios (M-3, S-7)."""
+
 from __future__ import annotations
 
 import sys
@@ -149,7 +150,9 @@ def test_journey_child_cost_propagation_halts_parent_on_third_call():
     child = parent.spawn_child(max_cost_usd=0.20)
 
     # Child spends $0.20 (exactly at ceiling)
-    d1 = child.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.20))
+    d1 = child.wrap_llm_call(
+        fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.20)
+    )
     assert d1 == Decision.ALLOW
 
     # Parent now has cost_usd_accumulated == 0.20 (propagated from child)
@@ -157,7 +160,9 @@ def test_journey_child_cost_propagation_halts_parent_on_third_call():
     assert snap.cost_usd_accumulated >= 0.20
 
     # Parent's next call is halted (cost already at ceiling)
-    d2 = parent.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01))
+    d2 = parent.wrap_llm_call(
+        fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.01)
+    )
     assert d2 == Decision.HALT
 
 
@@ -173,6 +178,7 @@ def test_journey_pipeline_hook_blocks_and_caller_handles_halt():
     When the agent makes an LLM call,
     Then the decision is HALT and the caller can handle it gracefully.
     """
+
     class BlockAllHook:
         def before_llm_call(self, ctx) -> Decision:
             return Decision.HALT

@@ -1,4 +1,5 @@
 """Risk Score accumulator and SAFE_MODE auto-transition for VERONICA Security."""
+
 from __future__ import annotations
 
 import threading

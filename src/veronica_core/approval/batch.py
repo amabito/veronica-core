@@ -3,6 +3,7 @@
 Groups repeated approval requests for the same operation so operators
 receive one prompt instead of many, reducing approval fatigue.
 """
+
 from __future__ import annotations
 
 import hashlib

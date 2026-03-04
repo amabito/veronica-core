@@ -43,6 +43,7 @@ def _sha256(text: str) -> str:
 # Compressor Protocol + Default Implementation
 # ---------------------------------------------------------------------------
 
+
 @runtime_checkable
 class Compressor(Protocol):
     """Protocol for text compression strategies."""
@@ -88,9 +89,11 @@ def _extract_important_lines(text: str) -> tuple[list[str], list[str]]:
         stripped = line.strip()
         if not stripped:
             continue
-        if (_NUMBER_RE.search(stripped)
-                or _DATE_RE.search(stripped)
-                or _CONSTRAINT_RE.search(stripped)):
+        if (
+            _NUMBER_RE.search(stripped)
+            or _DATE_RE.search(stripped)
+            or _CONSTRAINT_RE.search(stripped)
+        ):
             important.append(stripped)
         else:
             other.append(stripped)
@@ -107,14 +110,20 @@ class TemplateCompressor:
     def compress(self, text: str, target_tokens: int) -> str:
         important, other = _extract_important_lines(text)
 
-        constraints = "\n".join(f"- {line}" for line in important if _CONSTRAINT_RE.search(line))
-        key_data = "\n".join(f"- {line}" for line in important if not _CONSTRAINT_RE.search(line))
+        constraints = "\n".join(
+            f"- {line}" for line in important if _CONSTRAINT_RE.search(line)
+        )
+        key_data = "\n".join(
+            f"- {line}" for line in important if not _CONSTRAINT_RE.search(line)
+        )
 
         # Purpose: first non-empty line of original (truncated)
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         purpose_raw = lines[0] if lines else "(none)"
         max_purpose_chars = min(200, target_tokens)
-        purpose = purpose_raw[:max_purpose_chars] + ("..." if len(purpose_raw) > max_purpose_chars else "")
+        purpose = purpose_raw[:max_purpose_chars] + (
+            "..." if len(purpose_raw) > max_purpose_chars else ""
+        )
 
         # Truncate constraints / key_data to fit budget
         budget_chars = target_tokens * 4  # reverse of estimate_tokens
@@ -125,7 +134,9 @@ class TemplateCompressor:
             key_data = key_data[:max_section] + "\n  ..."
 
         # Fill remaining budget with other lines
-        used = len(purpose) + len(constraints) + len(key_data) + 200  # template overhead
+        used = (
+            len(purpose) + len(constraints) + len(key_data) + 200
+        )  # template overhead
         remaining_budget = max(0, budget_chars - used)
 
         uncertainties_lines: list[str] = []
@@ -140,7 +151,9 @@ class TemplateCompressor:
             purpose=purpose,
             constraints=constraints or "(none)",
             key_data=key_data or "(none)",
-            uncertainties="\n".join(uncertainties_lines) if uncertainties_lines else "(truncated)",
+            uncertainties="\n".join(uncertainties_lines)
+            if uncertainties_lines
+            else "(truncated)",
         )
         return result
 
@@ -148,6 +161,7 @@ class TemplateCompressor:
 # ---------------------------------------------------------------------------
 # InputCompressionHook
 # ---------------------------------------------------------------------------
+
 
 class InputCompressionHook:
     """Input compression with safety guarantees.
@@ -275,7 +289,11 @@ class InputCompressionHook:
 
         # Escape hatch
         if self._is_disabled():
-            decision = Decision.HALT if before_tokens >= self._halt_threshold else Decision.DEGRADE
+            decision = (
+                Decision.HALT
+                if before_tokens >= self._halt_threshold
+                else Decision.DEGRADE
+            )
             with self._lock:
                 self._last_evidence = {
                     "before_tokens": before_tokens,
@@ -294,15 +312,23 @@ class InputCompressionHook:
             if self._fallback_to_original:
                 decision = Decision.DEGRADE
                 self._record_events(
-                    ctx, before_tokens, before_tokens, input_sha,
-                    decision, compression_failed=True,
+                    ctx,
+                    before_tokens,
+                    before_tokens,
+                    input_sha,
+                    decision,
+                    compression_failed=True,
                 )
                 return text, decision
             else:
                 decision = Decision.HALT
                 self._record_events(
-                    ctx, before_tokens, before_tokens, input_sha,
-                    decision, compression_failed=True,
+                    ctx,
+                    before_tokens,
+                    before_tokens,
+                    input_sha,
+                    decision,
+                    compression_failed=True,
                 )
                 return text, decision
 
@@ -313,13 +339,21 @@ class InputCompressionHook:
             if self._fallback_to_original:
                 decision = Decision.DEGRADE
                 self._record_events(
-                    ctx, before_tokens, after_tokens, input_sha, decision,
+                    ctx,
+                    before_tokens,
+                    after_tokens,
+                    input_sha,
+                    decision,
                 )
                 return text, decision
             else:
                 decision = Decision.HALT
                 self._record_events(
-                    ctx, before_tokens, after_tokens, input_sha, decision,
+                    ctx,
+                    before_tokens,
+                    after_tokens,
+                    input_sha,
+                    decision,
                 )
                 return text, decision
 
@@ -353,27 +387,31 @@ class InputCompressionHook:
         with self._lock:
             self._last_evidence = evidence
 
-            self._safety_events.append(SafetyEvent(
-                event_type="INPUT_COMPRESSED",
-                decision=decision,
-                reason=f"before={before_tokens} after={after_tokens} ratio={ratio:.2%}",
-                hook="InputCompressionHook",
-                request_id=ctx.request_id,
-                metadata={
-                    "before_tokens": before_tokens,
-                    "after_tokens": after_tokens,
-                    "compression_ratio": round(ratio, 4),
-                    "input_sha256": input_sha,
-                },
-            ))
+            self._safety_events.append(
+                SafetyEvent(
+                    event_type="INPUT_COMPRESSED",
+                    decision=decision,
+                    reason=f"before={before_tokens} after={after_tokens} ratio={ratio:.2%}",
+                    hook="InputCompressionHook",
+                    request_id=ctx.request_id,
+                    metadata={
+                        "before_tokens": before_tokens,
+                        "after_tokens": after_tokens,
+                        "compression_ratio": round(ratio, 4),
+                        "input_sha256": input_sha,
+                    },
+                )
+            )
 
-            self._safety_events.append(SafetyEvent(
-                event_type="COMPRESSION_APPLIED",
-                decision=decision,
-                reason=f"compression {'failed' if compression_failed else 'applied'}",
-                hook="InputCompressionHook",
-                request_id=ctx.request_id,
-            ))
+            self._safety_events.append(
+                SafetyEvent(
+                    event_type="COMPRESSION_APPLIED",
+                    decision=decision,
+                    reason=f"compression {'failed' if compression_failed else 'applied'}",
+                    hook="InputCompressionHook",
+                    request_id=ctx.request_id,
+                )
+            )
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
         """PreDispatchHook protocol -- always ALLOW.

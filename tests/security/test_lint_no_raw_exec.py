@@ -1,4 +1,5 @@
 """Tests for tools/lint_no_raw_exec.py — AST-based forbidden exec linter."""
+
 from __future__ import annotations
 
 import sys
@@ -75,7 +76,9 @@ class TestOsDetection:
 
 class TestRequestsDetection:
     def test_requests_get(self, tmp_path: Path) -> None:
-        f = _write(tmp_path, "s.py", 'import requests\nrequests.get("http://evil.com")\n')
+        f = _write(
+            tmp_path, "s.py", 'import requests\nrequests.get("http://evil.com")\n'
+        )
         violations = check_file(f)
         assert len(violations) == 1
 
@@ -83,8 +86,9 @@ class TestRequestsDetection:
 class TestUrllibDetection:
     def test_urllib_urlopen(self, tmp_path: Path) -> None:
         f = _write(
-            tmp_path, "s.py",
-            "import urllib.request\nurllib.request.urlopen('http://evil.com')\n"
+            tmp_path,
+            "s.py",
+            "import urllib.request\nurllib.request.urlopen('http://evil.com')\n",
         )
         violations = check_file(f)
         assert len(violations) == 1
@@ -150,7 +154,9 @@ class TestAliasedImportDetection:
         violations = check_file(f)
         assert len(violations) >= 1
 
-    def test_socket_based_dns_exfiltration_pattern_is_flagged(self, tmp_path: Path) -> None:
+    def test_socket_based_dns_exfiltration_pattern_is_flagged(
+        self, tmp_path: Path
+    ) -> None:
         # socket with TXT query used for DNS exfiltration — exec call pattern
         f = _write(
             tmp_path,
@@ -184,7 +190,9 @@ class TestAllowlist:
 
     def test_linter_itself_not_flagged(self) -> None:
         """The linter file itself must not produce violations when scanned."""
-        linter_path = Path(__file__).resolve().parents[2] / "tools" / "lint_no_raw_exec.py"
+        linter_path = (
+            Path(__file__).resolve().parents[2] / "tools" / "lint_no_raw_exec.py"
+        )
         if linter_path.exists():
             violations = check_file(linter_path)
             assert violations == [], f"Linter flagged itself: {violations}"

@@ -4,6 +4,7 @@ Uses fake crewai stubs injected into sys.modules so crewai does not need to
 be installed in the test environment. The real adapter code is re-imported
 after the stubs are in place.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -24,6 +25,7 @@ def _build_fake_crewai() -> tuple[type, type, type, Any]:
     Returns (FakeLLMCallStartedEvent, FakeLLMCallCompletedEvent,
              FakeLLMCallFailedEvent) for use in test helpers.
     """
+
     # ---- base event ----
     class FakeBaseEvent:
         def __init__(self, **kwargs: Any) -> None:
@@ -34,7 +36,9 @@ def _build_fake_crewai() -> tuple[type, type, type, Any]:
     class FakeLLMCallStartedEvent(FakeBaseEvent):
         type = "llm_call_started"
 
-        def __init__(self, call_id: str = "", model: str | None = None, **kw: Any) -> None:
+        def __init__(
+            self, call_id: str = "", model: str | None = None, **kw: Any
+        ) -> None:
             self.call_id = call_id
             self.model = model
             super().__init__(**kw)
@@ -71,9 +75,11 @@ def _build_fake_crewai() -> tuple[type, type, type, Any]:
 
         def on(self, event_type: type):  # noqa: ANN001
             """Decorator that registers a handler for event_type."""
+
             def decorator(fn):  # noqa: ANN001
                 self._handlers.setdefault(event_type, []).append(fn)
                 return fn
+
             return decorator
 
         def emit(self, source: Any, event: FakeBaseEvent) -> None:
@@ -118,7 +124,12 @@ def _build_fake_crewai() -> tuple[type, type, type, Any]:
             "crewai.events.types.llm_events": crewai_events_llm_mod,
         }
     )
-    return FakeLLMCallStartedEvent, FakeLLMCallCompletedEvent, FakeLLMCallFailedEvent, fake_event_bus
+    return (
+        FakeLLMCallStartedEvent,
+        FakeLLMCallCompletedEvent,
+        FakeLLMCallFailedEvent,
+        fake_event_bus,
+    )
 
 
 (
@@ -181,7 +192,9 @@ def _started_event(model: str | None = None) -> FakeLLMCallStartedEvent:
     return FakeLLMCallStartedEvent(call_id=str(uuid.uuid4()), model=model)
 
 
-def _completed_event(response: Any = None, model: str | None = None) -> FakeLLMCallCompletedEvent:
+def _completed_event(
+    response: Any = None, model: str | None = None
+) -> FakeLLMCallCompletedEvent:
     return FakeLLMCallCompletedEvent(
         call_id=str(uuid.uuid4()),
         model=model,
@@ -255,7 +268,9 @@ class TestAllowPath:
           750 * 0.030/1000 + 250 * 0.060/1000 = 0.0225 + 0.0150 = 0.0375
         """
         listener = _make_listener(max_cost_usd=10.0)
-        _fake_event_bus.emit(None, _completed_event(response=_response_with_total(1000)))
+        _fake_event_bus.emit(
+            None, _completed_event(response=_response_with_total(1000))
+        )
         assert listener.container.budget.call_count == 1
         assert listener.container.budget.spent_usd == pytest.approx(0.0375)
 

@@ -33,6 +33,7 @@ def _ctx() -> PolicyContext:
 # Custom exception hierarchy for testing
 # ---------------------------------------------------------------------------
 
+
 class ProviderError(Exception):
     """Simulates a provider-side error (500, timeout)."""
 
@@ -47,6 +48,7 @@ class RateLimitError(Exception):
 
 class HttpError(Exception):
     """Simulates an HTTP error with status_code attribute."""
+
     def __init__(self, status_code: int, message: str = "") -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -54,6 +56,7 @@ class HttpError(Exception):
 
 class HttpErrorWithResponse(Exception):
     """Simulates an HTTP error with response.status_code attribute."""
+
     def __init__(self, status_code: int) -> None:
         super().__init__()
         self.response = MagicMock(status_code=status_code)
@@ -62,6 +65,7 @@ class HttpErrorWithResponse(Exception):
 # ===========================================================================
 # 1. Predicate factory unit tests (8)
 # ===========================================================================
+
 
 class TestIgnoreExceptionTypes:
     """ignore_exception_types(*types) returns False for matching types."""
@@ -128,6 +132,7 @@ class TestIgnoreStatusCodes:
 # 2. CircuitBreaker integration tests (8)
 # ===========================================================================
 
+
 class TestCircuitBreakerWithPredicate:
     """CircuitBreaker + failure_predicate integration."""
 
@@ -162,9 +167,9 @@ class TestCircuitBreakerWithPredicate:
             failure_predicate=ignore_exception_types(BadRequestError),
         )
         cb.record_failure(error=BadRequestError())  # ignored
-        cb.record_failure(error=ProviderError())     # counted: 1
+        cb.record_failure(error=ProviderError())  # counted: 1
         cb.record_failure(error=BadRequestError())  # ignored
-        cb.record_failure(error=ProviderError())     # counted: 2 -> OPEN
+        cb.record_failure(error=ProviderError())  # counted: 2 -> OPEN
         assert cb.state == CircuitState.OPEN
         assert cb.failure_count == 2
 
@@ -202,7 +207,7 @@ class TestCircuitBreakerWithPredicate:
             failure_predicate=count_exception_types(TimeoutError),
         )
         cb.record_failure(error=BadRequestError())  # ignored
-        cb.record_failure(error=ProviderError())     # ignored
+        cb.record_failure(error=ProviderError())  # ignored
         assert cb.state == CircuitState.CLOSED
         cb.record_failure(error=TimeoutError())
         cb.record_failure(error=TimeoutError())
@@ -226,6 +231,7 @@ class TestCircuitBreakerWithPredicate:
 # ===========================================================================
 # 3. DistributedCircuitBreaker tests (4)
 # ===========================================================================
+
 
 class TestDistributedCircuitBreakerPredicate:
     """DistributedCircuitBreaker + failure_predicate."""
@@ -278,6 +284,7 @@ class TestDistributedCircuitBreakerPredicate:
 # 4. Adapter tests (2)
 # ===========================================================================
 
+
 class TestExecutionContextAdapter:
     """ExecutionContext passes error= to circuit breaker."""
 
@@ -289,7 +296,9 @@ class TestExecutionContextAdapter:
             failure_threshold=5,
             failure_predicate=ignore_exception_types(BadRequestError),
         )
-        config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=100)
+        config = ExecutionConfig(
+            max_cost_usd=10.0, max_steps=100, max_retries_total=100
+        )
         with ExecutionContext(config=config, circuit_breaker=cb) as ctx:
             ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(BadRequestError("bad")))
         # BadRequestError is filtered -> failure_count should be 0
@@ -303,7 +312,9 @@ class TestExecutionContextAdapter:
             failure_threshold=5,
             failure_predicate=ignore_exception_types(BadRequestError),
         )
-        config = ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=100)
+        config = ExecutionConfig(
+            max_cost_usd=10.0, max_steps=100, max_retries_total=100
+        )
         with ExecutionContext(config=config, circuit_breaker=cb) as ctx:
             ctx.wrap_llm_call(fn=lambda: (_ for _ in ()).throw(ProviderError("500")))
         assert cb.failure_count == 1
@@ -312,6 +323,7 @@ class TestExecutionContextAdapter:
 # ===========================================================================
 # 5. Adversarial tests (2)
 # ===========================================================================
+
 
 class TestAdversarialPredicate:
     """Adversarial tests: try to break the predicate system."""
@@ -322,6 +334,7 @@ class TestAdversarialPredicate:
 
     def test_predicate_exception_counts_as_failure(self):
         """If the predicate itself raises, the failure should be counted (fail-safe)."""
+
         def broken_predicate(error: BaseException) -> bool:
             raise RuntimeError("predicate bug")
 
@@ -339,6 +352,7 @@ class TestAdversarialPredicate:
         Our fail-safe catches Exception, not BaseException. SystemExit from
         a predicate should propagate -- we don't want to swallow fatal signals.
         """
+
         def fatal_predicate(error: BaseException) -> bool:
             raise SystemExit(99)
 
@@ -351,6 +365,7 @@ class TestAdversarialPredicate:
 
     def test_predicate_raises_keyboard_interrupt(self):
         """KeyboardInterrupt from predicate should propagate."""
+
         def interrupt_predicate(error: BaseException) -> bool:
             raise KeyboardInterrupt()
 
@@ -432,6 +447,7 @@ class TestAdversarialPredicate:
 
         # Wait for HALF_OPEN
         import time
+
         time.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -452,6 +468,7 @@ class TestAdversarialPredicate:
         cb.record_failure(error=ProviderError())
 
         import time
+
         time.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -527,7 +544,7 @@ class TestAdversarialPredicate:
 
         assert len(errors) == 0
         assert results.count(False) == 10  # BadRequestError filtered
-        assert results.count(True) == 10   # ProviderError counted
+        assert results.count(True) == 10  # ProviderError counted
         assert cb.failure_count == 10
 
     def test_concurrent_filtered_in_half_open(self):
@@ -611,11 +628,13 @@ class TestAdversarialPredicate:
 # 6. Export tests (1)
 # ===========================================================================
 
+
 class TestExports:
     """Verify public API exports from veronica_core."""
 
     def test_failure_predicate_exported(self):
         import veronica_core
+
         assert hasattr(veronica_core, "FailurePredicate")
         assert hasattr(veronica_core, "ignore_exception_types")
         assert hasattr(veronica_core, "count_exception_types")

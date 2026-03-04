@@ -1,4 +1,5 @@
 """Tests for veronica_core.security.key_pin (J-2)."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -36,6 +37,7 @@ def reset_level():
 # compute_key_hash
 # ---------------------------------------------------------------------------
 
+
 class TestComputeKeyHash:
     def test_returns_64_char_hex(self):
         result = compute_key_hash(_TEST_PEM)
@@ -59,6 +61,7 @@ class TestComputeKeyHash:
 # load_expected_pin
 # ---------------------------------------------------------------------------
 
+
 class TestLoadExpectedPin:
     def test_reads_from_env_var(self, monkeypatch):
         monkeypatch.setenv("VERONICA_KEY_PIN", "dead" * 16)
@@ -69,6 +72,7 @@ class TestLoadExpectedPin:
         pin_file = tmp_path / "key_pin.txt"
         pin_file.write_text(_TEST_HASH + "\n", encoding="utf-8")
         import veronica_core.security.key_pin as kp
+
         orig = kp._DEFAULT_PIN_FILE
         kp._DEFAULT_PIN_FILE = pin_file
         try:
@@ -79,6 +83,7 @@ class TestLoadExpectedPin:
     def test_returns_none_when_no_source(self, monkeypatch, tmp_path):
         monkeypatch.delenv("VERONICA_KEY_PIN", raising=False)
         import veronica_core.security.key_pin as kp
+
         orig = kp._DEFAULT_PIN_FILE
         kp._DEFAULT_PIN_FILE = tmp_path / "nonexistent.txt"
         try:
@@ -91,11 +96,13 @@ class TestLoadExpectedPin:
 # KeyPinChecker.check
 # ---------------------------------------------------------------------------
 
+
 class TestKeyPinCheckerCheck:
     def _pin_checker(self, pin, monkeypatch, tmp_path):
         """Helper: build a checker with the given pin (None = no pin)."""
         monkeypatch.delenv("VERONICA_KEY_PIN", raising=False)
         import veronica_core.security.key_pin as kp
+
         if pin is None:
             kp._DEFAULT_PIN_FILE = tmp_path / "nofile.txt"
         else:
@@ -132,10 +139,12 @@ class TestKeyPinCheckerCheck:
 # KeyPinChecker.enforce
 # ---------------------------------------------------------------------------
 
+
 class TestKeyPinCheckerEnforce:
     def _wrong_pin_checker(self, monkeypatch, tmp_path):
         monkeypatch.delenv("VERONICA_KEY_PIN", raising=False)
         import veronica_core.security.key_pin as kp
+
         f = tmp_path / "key_pin.txt"
         f.write_text("0" * 64, encoding="utf-8")
         kp._DEFAULT_PIN_FILE = f
@@ -159,6 +168,7 @@ class TestKeyPinCheckerEnforce:
     def test_correct_pin_never_raises(self, monkeypatch, tmp_path):
         monkeypatch.delenv("VERONICA_KEY_PIN", raising=False)
         import veronica_core.security.key_pin as kp
+
         f = tmp_path / "key_pin.txt"
         f.write_text(_TEST_HASH, encoding="utf-8")
         kp._DEFAULT_PIN_FILE = f

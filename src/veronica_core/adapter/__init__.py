@@ -1,4 +1,5 @@
 """VERONICA Secure Adapter — policy-checked execution layer."""
+
 from veronica_core.adapter.exec import (
     AdapterConfig,
     ApprovalRequiredError,

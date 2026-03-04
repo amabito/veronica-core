@@ -1,4 +1,5 @@
 """Tests for SandboxRunner (Phase B)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -57,9 +58,7 @@ class TestSandboxIsolation:
         )
         with SandboxRunner(sandbox_cfg) as runner:
             # Write a file inside the sandbox (python writes to cwd)
-            rc, out, err = runner.run_in_sandbox(
-                ["python", str(write_script)]
-            )
+            rc, out, err = runner.run_in_sandbox(["python", str(write_script)])
             assert rc == 0, f"sandbox write failed: {err}"
             # Confirm the file exists in the sandbox
             sandbox_path = Path(runner.sandbox_dir) / "sandbox_output.txt"

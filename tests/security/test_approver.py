@@ -1,4 +1,5 @@
 """Tests for CLIApprover: sign/verify/approve round-trip and edge cases."""
+
 from __future__ import annotations
 
 import warnings
@@ -29,7 +30,9 @@ def _request(
     action: str = "file_write",
     args: list[str] | None = None,
 ) -> ApprovalRequest:
-    return approver.create_request(rule_id, action, args or [".github/workflows/ci.yml"])
+    return approver.create_request(
+        rule_id, action, args or [".github/workflows/ci.yml"]
+    )
 
 
 # ---------------------------------------------------------------------------

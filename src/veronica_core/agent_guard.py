@@ -28,7 +28,9 @@ class AgentStepGuard:
     max_steps: int = 25
     _current_step: int = field(default=0, init=False)
     _last_result: Optional[Any] = field(default=None, init=False, repr=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def step(self, result: Any = None) -> bool:
         """Record one agent step. Returns True if more steps allowed.

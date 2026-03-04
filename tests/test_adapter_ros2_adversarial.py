@@ -85,6 +85,7 @@ class TestCallbackExplosion:
 
     def test_callback_raises_inside_guard(self) -> None:
         """guard() must NOT suppress callback RuntimeError as a fault."""
+
         def exploding_callback(old, new):
             raise RuntimeError("boom")
 
@@ -366,9 +367,11 @@ class TestNonStandardErrors:
 
     def test_error_with_no_str(self) -> None:
         """Exception with broken __str__ must not crash guard logging."""
+
         class BrokenStr(Exception):
             def __str__(self):
                 raise RuntimeError("broken __str__")
+
             def __repr__(self):
                 raise RuntimeError("broken __repr__")
 
@@ -382,6 +385,7 @@ class TestNonStandardErrors:
 
     def test_exception_subclass_chain(self) -> None:
         """Deep inheritance chain: guard catches base, not leaf."""
+
         class L1(Exception):
             pass
 
@@ -398,6 +402,7 @@ class TestNonStandardErrors:
 
     def test_multiple_inheritance_exception(self) -> None:
         """Exception with multiple bases."""
+
         class A(Exception):
             pass
 

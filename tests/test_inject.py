@@ -1,4 +1,5 @@
 """Tests for veronica_core.inject — decorator-based execution boundary."""
+
 from __future__ import annotations
 
 
@@ -17,6 +18,7 @@ from veronica_core.runtime_policy import PolicyDecision
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _deny_decision(reason: str = "test denial") -> PolicyDecision:
     return PolicyDecision(allowed=False, policy_type="guard", reason=reason)
 
@@ -28,6 +30,7 @@ def _allow_decision() -> PolicyDecision:
 # ---------------------------------------------------------------------------
 # Test: basic allow path
 # ---------------------------------------------------------------------------
+
 
 class TestAllowPath:
     def test_function_executes_and_returns_value(self) -> None:
@@ -61,6 +64,7 @@ class TestAllowPath:
 # Test: deny path raises VeronicaHalt
 # ---------------------------------------------------------------------------
 
+
 class TestDenyRaises:
     def test_raises_veronica_halt_on_deny(self) -> None:
         # max_steps=0 causes immediate denial on every call (step 0 >= max 0).
@@ -88,6 +92,7 @@ class TestDenyRaises:
 # Test: return_decision path
 # ---------------------------------------------------------------------------
 
+
 class TestReturnDecision:
     def test_returns_policy_decision_on_deny(self) -> None:
         # max_steps=0 triggers immediate denial so return_decision path is exercised.
@@ -112,6 +117,7 @@ class TestReturnDecision:
 # ---------------------------------------------------------------------------
 # Test: nested decorated calls
 # ---------------------------------------------------------------------------
+
 
 class TestNestedGuard:
     def test_nested_calls_both_execute(self) -> None:
@@ -164,11 +170,13 @@ class TestNestedGuard:
 # Test: timeout_ms backward-compat deprecation shim
 # ---------------------------------------------------------------------------
 
+
 class TestTimeoutMsDeprecation:
     """timeout_ms is accepted but deprecated; no TypeError, DeprecationWarning emitted."""
 
     def test_veronica_guard_timeout_ms_warns(self) -> None:
         with pytest.warns(DeprecationWarning, match="timeout_ms"):
+
             @veronica_guard(timeout_ms=5000)
             def my_func() -> int:
                 return 1
@@ -179,6 +187,7 @@ class TestTimeoutMsDeprecation:
     def test_veronica_guard_timeout_ms_none_no_warning(self) -> None:
         # No warning when timeout_ms is omitted (default None).
         import warnings as _warnings
+
         with _warnings.catch_warnings():
             _warnings.simplefilter("error", DeprecationWarning)
 
@@ -196,6 +205,7 @@ class TestTimeoutMsDeprecation:
 
     def test_guard_config_timeout_ms_none_no_warning(self) -> None:
         import warnings as _warnings
+
         with _warnings.catch_warnings():
             _warnings.simplefilter("error", DeprecationWarning)
             cfg = GuardConfig()
@@ -213,8 +223,10 @@ class TestTimeoutMsDeprecation:
         keyword-only–style argument after it.
         """
         import warnings as _warnings
+
         with _warnings.catch_warnings():
             _warnings.simplefilter("always", DeprecationWarning)
+
             # Pass timeout_ms positionally (4th arg).  This must NOT make
             # veronica_guard behave as if return_decision=5000 (truthy),
             # which would cause it to return a PolicyDecision on denial

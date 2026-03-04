@@ -174,8 +174,7 @@ class WeightedAllocator:
             total_allocated = share * len(agent_names)
         else:
             allocations = {
-                name: (w / total_weight) * total_budget
-                for name, w in relevant.items()
+                name: (w / total_weight) * total_budget for name, w in relevant.items()
             }
             total_allocated = sum(allocations.values())
 
@@ -254,9 +253,7 @@ class DynamicAllocator:
             }
 
             # Add floor back.
-            allocations = {
-                name: min_floor + proportional[name] for name in agent_names
-            }
+            allocations = {name: min_floor + proportional[name] for name in agent_names}
 
         total_allocated = sum(allocations.values())
         return AllocationResult(

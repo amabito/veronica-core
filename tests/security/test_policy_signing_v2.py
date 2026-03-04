@@ -1,4 +1,5 @@
 """Tests for Policy Signing v2 — ed25519 asymmetric signing."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,7 +33,9 @@ def dev_keypair() -> tuple[bytes, bytes]:
 
 
 @pytest.fixture()
-def signer_v2(dev_keypair: tuple[bytes, bytes], tmp_path: Path) -> tuple[PolicySignerV2, bytes]:
+def signer_v2(
+    dev_keypair: tuple[bytes, bytes], tmp_path: Path
+) -> tuple[PolicySignerV2, bytes]:
     """Return (signer, priv_pem) with pub key written to tmp_path."""
     priv_pem, pub_pem = dev_keypair
     pub_path = tmp_path / "public_key.pem"
@@ -117,7 +120,10 @@ def test_tampered_sig_fails_verification(
 
     # Overwrite sig with garbage base64
     import base64
-    sig_path.write_text(base64.b64encode(b"\x00" * 64).decode() + "\n", encoding="utf-8")
+
+    sig_path.write_text(
+        base64.b64encode(b"\x00" * 64).decode() + "\n", encoding="utf-8"
+    )
 
     assert signer.verify(tmp_policy, sig_path) is False
 
@@ -179,7 +185,9 @@ def test_policy_engine_v2_valid_sig_ok(
 
     from veronica_core.security.policy_engine import PolicyEngine
 
-    engine = PolicyEngine(policy_path=tmp_policy, public_key_path=signer._public_key_path)
+    engine = PolicyEngine(
+        policy_path=tmp_policy, public_key_path=signer._public_key_path
+    )
     assert engine is not None
 
 
@@ -192,8 +200,11 @@ def test_policy_engine_v2_tampered_raises(
 
     # Tamper sig
     import base64
+
     sig_path = Path(str(tmp_policy) + ".sig.v2")
-    sig_path.write_text(base64.b64encode(b"\xff" * 64).decode() + "\n", encoding="utf-8")
+    sig_path.write_text(
+        base64.b64encode(b"\xff" * 64).decode() + "\n", encoding="utf-8"
+    )
 
     from veronica_core.security.policy_engine import PolicyEngine
 
@@ -216,7 +227,11 @@ def test_committed_public_key_and_sig_verify() -> None:
     pub_key_path = repo_root / "policies" / "public_key.pem"
     sig_v2_path = repo_root / "policies" / "default.yaml.sig.v2"
 
-    if not policy_path.exists() or not pub_key_path.exists() or not sig_v2_path.exists():
+    if (
+        not policy_path.exists()
+        or not pub_key_path.exists()
+        or not sig_v2_path.exists()
+    ):
         pytest.skip("Required files not found in policies/")
 
     signer = PolicySignerV2(public_key_path=pub_key_path)

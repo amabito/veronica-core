@@ -1,4 +1,5 @@
 """Tests for veronica_core.security.security_level (J-1)."""
+
 from __future__ import annotations
 
 import pytest
@@ -23,6 +24,7 @@ def reset_singleton():
 # ---------------------------------------------------------------------------
 # detect_security_level
 # ---------------------------------------------------------------------------
+
 
 class TestDetectSecurityLevel:
     def test_explicit_dev(self, monkeypatch):
@@ -54,8 +56,16 @@ class TestDetectSecurityLevel:
 
     def test_fallback_to_dev_when_no_ci_vars(self, monkeypatch):
         monkeypatch.delenv("VERONICA_SECURITY_LEVEL", raising=False)
-        for var in ("GITHUB_ACTIONS", "CI", "TRAVIS", "CIRCLECI", "GITLAB_CI",
-                    "JENKINS_URL", "BITBUCKET_BUILD_NUMBER", "TF_BUILD"):
+        for var in (
+            "GITHUB_ACTIONS",
+            "CI",
+            "TRAVIS",
+            "CIRCLECI",
+            "GITLAB_CI",
+            "JENKINS_URL",
+            "BITBUCKET_BUILD_NUMBER",
+            "TF_BUILD",
+        ):
             monkeypatch.delenv(var, raising=False)
         assert detect_security_level() == SecurityLevel.DEV
 
@@ -64,11 +74,20 @@ class TestDetectSecurityLevel:
 # get_security_level / set_security_level / reset_security_level
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_caches_result(self, monkeypatch):
         monkeypatch.delenv("VERONICA_SECURITY_LEVEL", raising=False)
-        for var in ("GITHUB_ACTIONS", "CI", "TRAVIS", "CIRCLECI", "GITLAB_CI",
-                    "JENKINS_URL", "BITBUCKET_BUILD_NUMBER", "TF_BUILD"):
+        for var in (
+            "GITHUB_ACTIONS",
+            "CI",
+            "TRAVIS",
+            "CIRCLECI",
+            "GITLAB_CI",
+            "JENKINS_URL",
+            "BITBUCKET_BUILD_NUMBER",
+            "TF_BUILD",
+        ):
             monkeypatch.delenv(var, raising=False)
         level1 = get_security_level()
         level2 = get_security_level()
@@ -82,7 +101,15 @@ class TestSingleton:
         set_security_level(SecurityLevel.PROD)
         reset_security_level()
         monkeypatch.delenv("VERONICA_SECURITY_LEVEL", raising=False)
-        for var in ("GITHUB_ACTIONS", "CI", "TRAVIS", "CIRCLECI", "GITLAB_CI",
-                    "JENKINS_URL", "BITBUCKET_BUILD_NUMBER", "TF_BUILD"):
+        for var in (
+            "GITHUB_ACTIONS",
+            "CI",
+            "TRAVIS",
+            "CIRCLECI",
+            "GITLAB_CI",
+            "JENKINS_URL",
+            "BITBUCKET_BUILD_NUMBER",
+            "TF_BUILD",
+        ):
             monkeypatch.delenv(var, raising=False)
         assert get_security_level() == SecurityLevel.DEV

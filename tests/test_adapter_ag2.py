@@ -3,6 +3,7 @@
 Uses fake ag2 stubs injected into sys.modules so ag2 does not need to
 be installed.
 """
+
 from __future__ import annotations
 
 import sys
@@ -47,6 +48,7 @@ def _ag2_installed() -> bool:
     """Return True if ag2/autogen is actually installed (not just our fake)."""
     try:
         import importlib.util
+
         return (
             importlib.util.find_spec("ag2") is not None
             or importlib.util.find_spec("autogen") is not None
@@ -248,7 +250,8 @@ class TestImportError:
         # Save and remove ALL ag2/autogen modules (including submodules)
         saved: dict[str, types.ModuleType] = {}
         keys_to_remove = [
-            k for k in sys.modules
+            k
+            for k in sys.modules
             if k in (adapter_key,) or k.startswith(("ag2", "autogen"))
         ]
         for k in keys_to_remove:
@@ -276,6 +279,7 @@ class TestEdgeCases:
                 decision = self._container.check(cost_usd=0.0)
                 if not decision.allowed:
                     from veronica_core.inject import VeronicaHalt
+
                     raise VeronicaHalt(decision.reason, decision)
                 raise RuntimeError("upstream failure")
 
@@ -303,9 +307,7 @@ class TestEdgeCases:
                     raise VeronicaHalt(decision.reason, decision)
                 return None
 
-        agent = NoneReplyAgent(
-            "assistant", config=GuardConfig(max_steps=10)
-        )
+        agent = NoneReplyAgent("assistant", config=GuardConfig(max_steps=10))
         result = agent.generate_reply(messages=[{"role": "user", "content": "x"}])
         assert result is None
         assert agent.container.step_guard.current_step == 0

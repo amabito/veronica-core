@@ -5,6 +5,7 @@ Covers:
 - shell credential sub-command deny rules (git credential, gh auth, npm token, pip config)
 - masking patterns for npm tokens, SSH private keys, pypi tokens
 """
+
 from __future__ import annotations
 
 import pytest
@@ -93,7 +94,9 @@ class TestShellCredentialSubcommands:
             pytest.param(["npm", "login"], id="npm_login"),
             pytest.param(["npm", "adduser"], id="npm_adduser"),
             pytest.param(["pip", "config", "set"], id="pip_config_set"),
-            pytest.param(["pip", "config", "get", "global.index-url"], id="pip_config_get"),
+            pytest.param(
+                ["pip", "config", "get", "global.index-url"], id="pip_config_get"
+            ),
         ],
     )
     def test_credential_subcmd_is_denied(self, args: list[str]) -> None:
@@ -158,7 +161,9 @@ class TestMaskingNewPatterns:
             pytest.param("-----BEGIN DSA PRIVATE KEY-----", id="dsa"),
         ],
     )
-    def test_ssh_private_key_header_masked(self, masker: SecretMasker, header: str) -> None:
+    def test_ssh_private_key_header_masked(
+        self, masker: SecretMasker, header: str
+    ) -> None:
         text = f"{header}\nMIIBvAIBAAKBgQC..."
         result = masker.mask(text)
         assert header not in result

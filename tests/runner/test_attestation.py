@@ -1,4 +1,5 @@
 """Tests for AttestationChecker and EnvironmentFingerprint (G-3)."""
+
 from __future__ import annotations
 
 import os
@@ -89,7 +90,9 @@ class TestAttestationCheckerAnomalyDetection:
         return checker
 
     def test_cwd_change_returns_false(self, tmp_path: Path) -> None:
-        checker = self._checker_with_forced_baseline({"cwd": "/nonexistent/original/dir"})
+        checker = self._checker_with_forced_baseline(
+            {"cwd": "/nonexistent/original/dir"}
+        )
         # current cwd differs from baseline
         assert checker.check() is False
 
@@ -98,7 +101,9 @@ class TestAttestationCheckerAnomalyDetection:
         assert checker.check() is False
 
     def test_python_path_change_returns_false(self) -> None:
-        checker = self._checker_with_forced_baseline({"python_path": "/usr/bin/fake_python"})
+        checker = self._checker_with_forced_baseline(
+            {"python_path": "/usr/bin/fake_python"}
+        )
         assert checker.check() is False
 
     def test_anomaly_writes_to_audit_log(self, tmp_path: Path) -> None:
@@ -117,7 +122,10 @@ class TestAttestationCheckerAnomalyDetection:
         # Verify the audit log was written
         assert log_path.exists()
         import json
-        entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+
+        entries = [
+            json.loads(line) for line in log_path.read_text().splitlines() if line
+        ]
         assert any(e["event_type"] == "ATTESTATION_ANOMALY" for e in entries)
 
     def test_no_audit_log_anomaly_still_returns_false(self) -> None:

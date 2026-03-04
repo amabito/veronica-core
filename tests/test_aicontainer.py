@@ -1,4 +1,5 @@
 """Unit tests for AIcontainer (veronica_core.container)."""
+
 from __future__ import annotations
 
 
@@ -167,6 +168,7 @@ class TestAIcontainerDeprecationWarning:
 
         # Force a fresh attribute access on the module (not a cached import).
         import veronica_core.container as container_mod
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always", DeprecationWarning)
             _ = container_mod.AIcontainer
@@ -199,4 +201,5 @@ class TestAIcontainerDeprecationWarning:
             warnings.simplefilter("ignore", DeprecationWarning)
             klass = veronica_core.AIcontainer
         from veronica_core.container.aicontainer import AIContainer
+
         assert klass is AIContainer

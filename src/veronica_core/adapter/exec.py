@@ -4,6 +4,7 @@ Provides policy-gated shell execution, file I/O, and HTTP fetch.
 All operations are checked against PolicyEngine before execution.
 Command injection is prevented by enforcing shell=False.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -42,7 +43,9 @@ class ApprovalRequiredError(RuntimeError):
         self.rule_id = rule_id
         self.reason = reason
         self.args_hash = args_hash
-        super().__init__(f"[REQUIRE_APPROVAL] {rule_id}: {reason} (args_hash={args_hash})")
+        super().__init__(
+            f"[REQUIRE_APPROVAL] {rule_id}: {reason} (args_hash={args_hash})"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -57,13 +60,15 @@ class AdapterConfig:
     repo_root: str
     policy_engine: PolicyEngine
     caps: CapabilitySet
-    net_allowlist: list[str] = field(default_factory=lambda: [
-        "pypi.org",
-        "files.pythonhosted.org",
-        "github.com",
-        "raw.githubusercontent.com",
-        "registry.npmjs.org",
-    ])
+    net_allowlist: list[str] = field(
+        default_factory=lambda: [
+            "pypi.org",
+            "files.pythonhosted.org",
+            "github.com",
+            "raw.githubusercontent.com",
+            "registry.npmjs.org",
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +275,4 @@ class SecureExecutor:
         try:
             resolved.relative_to(repo)
         except ValueError:
-            raise PermissionError(
-                f"Path '{resolved}' is outside repo_root '{repo}'"
-            )
+            raise PermissionError(f"Path '{resolved}' is outside repo_root '{repo}'")

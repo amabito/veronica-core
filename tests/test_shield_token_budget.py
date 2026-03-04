@@ -62,12 +62,16 @@ class TestTokenBudgetDegrade:
 class TestTokenBudgetTotal:
     """max_total_tokens tests."""
 
-    def test_service_halts_when_combined_input_and_output_tokens_exceed_total_limit(self):
+    def test_service_halts_when_combined_input_and_output_tokens_exceed_total_limit(
+        self,
+    ):
         hook = TokenBudgetHook(max_output_tokens=1000, max_total_tokens=200)
         hook.record_usage(output_tokens=50, input_tokens=150)
         assert hook.before_llm_call(CTX) is Decision.HALT
 
-    def test_service_degrades_when_combined_token_usage_reaches_total_degrade_threshold(self):
+    def test_service_degrades_when_combined_token_usage_reaches_total_degrade_threshold(
+        self,
+    ):
         hook = TokenBudgetHook(
             max_output_tokens=1000, max_total_tokens=200, degrade_threshold=0.8
         )
@@ -151,8 +155,10 @@ class TestTokenBudgetPendingReservation:
         hook.before_llm_call(ctx_estimated)  # reserves 80
         assert hook.pending_output == 80
 
-        hook.record_usage(output_tokens=50)  # actual=50, releases min(80,50)=50 from pending
-        assert hook.pending_output == 30     # 80-50=30 remaining pending
+        hook.record_usage(
+            output_tokens=50
+        )  # actual=50, releases min(80,50)=50 from pending
+        assert hook.pending_output == 30  # 80-50=30 remaining pending
         assert hook.output_total == 50
 
     def test_release_reservation_releases_pending(self):

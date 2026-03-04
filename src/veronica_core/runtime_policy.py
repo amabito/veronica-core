@@ -56,7 +56,9 @@ class PolicyDecision:
     reason: str = ""
     partial_result: Any = None
     # Degradation extensions (v0.10.0) -- all optional, default None/0
-    degradation_action: str | None = None  # "MODEL_DOWNGRADE" | "CONTEXT_TRIM" | "RATE_LIMIT"
+    degradation_action: str | None = (
+        None  # "MODEL_DOWNGRADE" | "CONTEXT_TRIM" | "RATE_LIMIT"
+    )
     fallback_model: str | None = None
     rate_limit_ms: int = 0
 

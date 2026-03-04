@@ -1,4 +1,5 @@
 """Tests for ApprovalBatcher (Task H)."""
+
 from __future__ import annotations
 
 import threading
