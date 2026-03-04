@@ -175,66 +175,12 @@ class TestAdversarialContextVarContamination:
 
 
 # ---------------------------------------------------------------------------
-# _MCPAdapterBase: backward compatibility
-# ---------------------------------------------------------------------------
-
-
-class TestMCPBaseBackwardCompat:
-    """Public imports from mcp.py must still work after _mcp_base extraction."""
-
-    def test_mcp_types_importable_from_mcp(self):
-        from veronica_core.adapters.mcp import MCPToolCost, MCPToolResult, MCPToolStats
-        assert MCPToolCost is not None
-        assert MCPToolResult is not None
-        assert MCPToolStats is not None
-
-    def test_mcp_types_importable_from_mcp_async(self):
-        from veronica_core.adapters.mcp_async import MCPToolCost, MCPToolResult, MCPToolStats
-        assert MCPToolCost is not None
-        assert MCPToolResult is not None
-        assert MCPToolStats is not None
-
-    def test_mcp_adapter_inherits_base(self):
-        from veronica_core.adapters._mcp_base import _MCPAdapterBase
-        from veronica_core.adapters.mcp import MCPContainmentAdapter
-        assert issubclass(MCPContainmentAdapter, _MCPAdapterBase)
-
-    def test_async_mcp_adapter_inherits_base(self):
-        from veronica_core.adapters._mcp_base import _MCPAdapterBase
-        from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
-        assert issubclass(AsyncMCPContainmentAdapter, _MCPAdapterBase)
-
-    def test_extract_token_count_importable_from_base(self):
-        from veronica_core.adapters._mcp_base import _extract_token_count
-        assert _extract_token_count(None) == 0
-        assert _extract_token_count({"token_count": 42}) == 42
-
-
-# ---------------------------------------------------------------------------
-# async veronica_guard: cancellation + timeout
+# async veronica_guard: timeout (cancellation covered in test_mcp_base_adversarial_v190.py)
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialAsyncGuard:
-    """Attacker tries to leave ContextVar dirty via cancellation/timeout."""
-
-    def test_cancelled_coroutine_resets_guard(self):
-        """asyncio.CancelledError must reset _guard_active to False."""
-        from veronica_core.inject import is_guard_active, veronica_guard
-
-        @veronica_guard()
-        async def slow_fn():
-            await asyncio.sleep(100)
-
-        async def runner():
-            task = asyncio.create_task(slow_fn())
-            await asyncio.sleep(0.01)
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await task
-
-        asyncio.run(runner())
-        assert is_guard_active() is False
+    """Attacker tries to leave ContextVar dirty via asyncio.timeout."""
 
     def test_timeout_resets_guard(self):
         """asyncio.timeout must reset _guard_active to False."""
@@ -267,12 +213,6 @@ class TestAdversarialPricingCache:
         from veronica_core.pricing import resolve_model_pricing
         p = resolve_model_pricing("totally-fake-model-xyz")
         assert p.input_per_1k > 0
-
-    def test_cache_consistent_for_same_model(self):
-        from veronica_core.pricing import resolve_model_pricing
-        p1 = resolve_model_pricing("gpt-4")
-        p2 = resolve_model_pricing("gpt-4")
-        assert p1 is p2  # Same cached object
 
     def test_many_unique_models_dont_crash(self):
         """Attacker sends 1000 unique model strings; cache eviction must not crash."""

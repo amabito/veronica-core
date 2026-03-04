@@ -9,7 +9,6 @@ Covers three fixes:
 from __future__ import annotations
 
 import atexit
-import threading
 from typing import Optional
 from unittest.mock import MagicMock
 

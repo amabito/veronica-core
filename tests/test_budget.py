@@ -12,9 +12,7 @@ Covers code paths NOT already tested in test_runtime_policy.py:
 
 from __future__ import annotations
 
-import math
 import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 

@@ -49,13 +49,11 @@ except ImportError:
 
 import logging
 from typing import Any, Dict, List, Optional, Union
-from uuid import uuid4
 
 from veronica_core.adapters._shared import build_container
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
 from veronica_core.inject import GuardConfig, VeronicaHalt
-from veronica_core.shield.types import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -123,13 +121,6 @@ class VeronicaConversableAgent(ConversableAgent):
             VeronicaHalt: If any active policy (budget / step / retry) denies.
         """
         agent_name = getattr(self, "name", "unknown")
-        llm_config = getattr(self, "llm_config", None)
-        model = llm_config.get("model") if isinstance(llm_config, dict) else None
-        ctx = ToolCallContext(
-            request_id=str(uuid4()),
-            tool_name="llm",
-            model=model,
-        )
 
         decision = self._container.check(cost_usd=0.0)
         if not decision.allowed:

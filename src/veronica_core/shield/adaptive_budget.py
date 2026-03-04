@@ -705,7 +705,11 @@ class AdaptiveBudgetHook:
                 min(self._max_multiplier, self._ceiling_multiplier),
             )
             self._last_adjustment_ts = state.get("last_adjustment_ts")
-            _valid_actions = frozenset({None, "tighten", "loosen", "hold"})
+            # Only "tighten" and "loosen" are ever written to _last_action
+            # (see adjust(): _last_action is updated only in the tighten/loosen branch).
+            # "hold" and "direction_locked" do not update _last_action, so they are
+            # invalid state values that must be sanitised on import.
+            _valid_actions = frozenset({None, "tighten", "loosen"})
             raw_action = state.get("last_action")
             if raw_action not in _valid_actions:
                 raw_action = None  # fail-safe: reset unknown action

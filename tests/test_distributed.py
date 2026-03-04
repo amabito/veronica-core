@@ -570,7 +570,6 @@ class TestAdversarialRedactExcInLogs:
     def test_reconcile_on_reconnect_failure_log_redacts_url(self) -> None:
         """RedisBudgetBackend._reconcile_on_reconnect error log must not leak credentials."""
         import logging
-        from unittest.mock import patch
 
         server = fakeredis.FakeServer()
         fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
@@ -957,9 +956,7 @@ class TestAdversarialDistributedCBConcurrentFallbackFlip:
         self,
     ) -> None:
         """10 concurrent record_failure() calls with Redis broken must activate fallback once."""
-        from unittest.mock import patch
 
-        from veronica_core.runtime_policy import PolicyContext
 
         server = fakeredis.FakeServer()
         fake_client = fakeredis.FakeRedis(server=server, decode_responses=True)
@@ -1491,7 +1488,6 @@ class TestAdversarialGetTOCTOU:
 
     def test_get_captures_client_under_lock(self) -> None:
         """get() with a client that fails mid-call must fall back gracefully."""
-        import threading
         from unittest.mock import MagicMock
 
         # Create a client that raises on .get() to simulate mid-call Redis failure

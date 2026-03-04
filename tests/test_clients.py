@@ -17,7 +17,7 @@ import threading
 
 import pytest
 
-from veronica_core.clients import DummyClient, LLMClient, NullClient
+from veronica_core.clients import DummyClient, NullClient
 
 
 class TestNullClientBehavior:

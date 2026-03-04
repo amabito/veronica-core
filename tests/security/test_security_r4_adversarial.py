@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 import textwrap
 from pathlib import Path
 from typing import Any

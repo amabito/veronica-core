@@ -369,7 +369,7 @@ def test_wsgi_429_returned_when_app_did_not_respond() -> None:
         config=_make_config(),
     )
     env: dict[str, Any] = {}
-    body = list(middleware(env, _start_response))
+    list(middleware(env, _start_response))
 
     assert len(start_response_calls) == 1
     assert "429" in start_response_calls[0]

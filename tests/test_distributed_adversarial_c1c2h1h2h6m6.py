@@ -229,9 +229,6 @@ class TestAdversarialH6LuaArgvNilGuard:
 
         # Valid args except half_open_slot_timeout is non-numeric → defaults to 0.
         # Should NOT raise (H6 fix: nil defaults to 0 for slot timeout specifically).
-        from veronica_core.runtime_policy import PolicyContext
-
-        ctx = PolicyContext()
         # This should succeed because the Lua script substitutes 0 for nil slot timeout.
         # We patch the internal call to pass a garbage 4th arg.
         # Since this is the internal Lua call, we test via a direct script invocation.

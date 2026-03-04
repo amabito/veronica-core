@@ -1999,7 +1999,6 @@ class TestAdversarialBudgetEpsilon:
         instead of 1.0.  Without epsilon, the limit check (>= 1.0) would pass
         where it should halt.  With epsilon, the accumulated total triggers halt.
         """
-        import threading
 
         backend = _make_redis_budget_backend(fake_client)
 

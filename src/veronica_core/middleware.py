@@ -110,10 +110,7 @@ class VeronicaASGIMiddleware:
             # Pre-flight: check if context is already at limits without
             # consuming a step count (unlike wrap_llm_call).
             snap = ctx.get_snapshot()
-            if snap.aborted or (
-                self._config.max_cost_usd is not None
-                and snap.cost_usd_accumulated >= self._config.max_cost_usd
-            ):
+            if snap.aborted or snap.cost_usd_accumulated >= self._config.max_cost_usd:
                 halted = True
             else:
                 try:
@@ -182,10 +179,7 @@ class VeronicaWSGIMiddleware:
             # Pre-flight: check if context is already at limits without
             # consuming a step count (unlike wrap_llm_call).
             snap = ctx.get_snapshot()
-            if snap.aborted or (
-                self._config.max_cost_usd is not None
-                and snap.cost_usd_accumulated >= self._config.max_cost_usd
-            ):
+            if snap.aborted or snap.cost_usd_accumulated >= self._config.max_cost_usd:
                 return _wsgi_429(start_response)
 
             # Wrap start_response so we know if the app already started a

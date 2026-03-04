@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import threading
 
-import pytest
 
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.runtime_policy import PolicyContext

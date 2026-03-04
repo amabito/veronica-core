@@ -152,3 +152,13 @@ class TestCircuitBreakerConstructorValidation:
     def test_recovery_timeout_zero_is_valid(self):
         cb = CircuitBreaker(recovery_timeout=0.0)
         assert cb.recovery_timeout == 0.0
+
+    def test_recovery_timeout_nan_raises(self):
+        import math
+        with pytest.raises(ValueError, match="recovery_timeout"):
+            CircuitBreaker(recovery_timeout=math.nan)
+
+    def test_recovery_timeout_inf_raises(self):
+        import math
+        with pytest.raises(ValueError, match="recovery_timeout"):
+            CircuitBreaker(recovery_timeout=math.inf)

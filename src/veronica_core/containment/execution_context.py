@@ -384,12 +384,26 @@ class ExecutionContext:
         self._graph = ExecutionGraph(chain_id=self._metadata.chain_id)
         self._root_node_id = self._graph.create_root("chain_root", {})
         # ContextVar-backed stack for nested parent tracking.
-        # ContextVar works correctly with both threading and asyncio; each
-        # coroutine or thread gets its own copy via contextvars.copy_context().
+        # Design: the ContextVar stores a list[str] that is lazily created per
+        # context on first use.  The _nesting_depth_var tracks how many _wrap()
+        # calls are currently in flight *in this context*; it starts at 0 for any
+        # context (including asyncio tasks that inherit a copy) and increments on
+        # entry / decrements on exit.  A depth of 0 means no wrap is active, so
+        # _begin_graph_node must create a fresh list even if a non-None list was
+        # inherited via context copy (K: asyncio task isolation fix).
         self._node_stack_var: contextvars.ContextVar[list[str] | None] = (
             contextvars.ContextVar(
                 f"veronica_node_stack_{self._metadata.chain_id[:8]}",
                 default=None,
+            )
+        )
+        # Tracks active nesting depth per context. Always starts at 0 for a new
+        # context, even if the list was inherited.  This is the invariant that
+        # distinguishes "first wrap in this context" from "nested wrap".
+        self._nesting_depth_var: contextvars.ContextVar[int] = (
+            contextvars.ContextVar(
+                f"veronica_nesting_depth_{self._metadata.chain_id[:8]}",
+                default=0,
             )
         )
 
@@ -615,9 +629,18 @@ class ExecutionContext:
             partial_buffer=opts.partial_buffer,
         )
 
-        stack, graph_node_id = self._begin_graph_node(kind, opts)
+        # _begin_graph_node increments _nesting_depth_var. Move into the try block
+        # so the finally clause always decrements depth, even if begin_node()
+        # raises after the increment (L: depth-leak guard).
+        # Initialise to safe defaults so the except/finally branches can reference
+        # these names unconditionally even if _begin_graph_node raises before
+        # returning.
+        stack: list[str] = []
+        graph_node_id: str = ""
 
         try:
+            stack, graph_node_id = self._begin_graph_node(kind, opts)
+
             # Pre-flight: chain-level limit check.
             halt_reason = self._check_limits()
             if halt_reason is not None:
@@ -673,7 +696,7 @@ class ExecutionContext:
             # Ensure the graph stack is popped and the node is closed even when an
             # unexpected exception escapes all sub-helpers (e.g. a hook that raises
             # after the stack was pushed but before the normal pop path is reached).
-            if stack and stack and graph_node_id in stack:
+            if stack and graph_node_id in stack:
                 try:
                     stack.remove(graph_node_id)
                 except ValueError:
@@ -686,6 +709,12 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 node.status = "error"
             raise
+        finally:
+            # Decrement nesting depth so the next outermost _wrap() call in this
+            # context sees depth==0 and creates a fresh stack if needed (K fix).
+            d = self._nesting_depth_var.get()
+            if d > 0:
+                self._nesting_depth_var.set(d - 1)
 
     # ------------------------------------------------------------------
     # _wrap sub-helpers
@@ -696,15 +725,30 @@ class ExecutionContext:
         kind: Literal["llm", "tool"],
         opts: WrapOptions,
     ) -> tuple[list[str], str]:
-        """Initialize the thread-local node stack and create a graph node.
+        """Initialize the ContextVar node stack and create a graph node.
+
+        Uses _nesting_depth_var to distinguish two cases:
+        - depth == 0: first wrap in this context (including asyncio tasks that
+          inherited a non-None list via copy_context). Always create a fresh list
+          to prevent cross-task stack contamination (K: async safety fix).
+        - depth > 0: nested wrap within the same active context. Reuse the list
+          that was created by the outermost wrap at depth==0.
+
+        The depth counter is incremented here and decremented in _wrap() via
+        a try/finally so that it is always restored on every exit path.
 
         Returns:
-            (stack, graph_node_id) where stack is the per-thread call stack.
+            (stack, graph_node_id) where stack is the per-context call stack.
         """
+        depth = self._nesting_depth_var.get()
         stack: list[str] | None = self._node_stack_var.get()
-        if stack is None:
+        if depth == 0 or stack is None:
+            # First wrap in this context — start with a fresh list regardless of
+            # any inherited non-None reference (fixes asyncio context-copy sharing).
             stack = []
             self._node_stack_var.set(stack)
+        # Depth incremented here; _wrap() decrements in its finally block.
+        self._nesting_depth_var.set(depth + 1)
         graph_parent_id = stack[-1] if stack else self._root_node_id
 
         graph_node_id = self._graph.begin_node(
@@ -1006,7 +1050,10 @@ class ExecutionContext:
                     hook="AutoPricing",
                 )
                 with self._lock:
-                    self._events.append(_ev)
+                    dk = (_ev.event_type, _ev.decision, _ev.reason, _ev.hook, _ev.request_id)
+                    if len(self._events) < _MAX_CHAIN_EVENTS and dk not in self._event_dedup_keys:
+                        self._events.append(_ev)
+                        self._event_dedup_keys.add(dk)
         return actual_cost
 
     def _check_before_charge(

@@ -1,7 +1,6 @@
 """Tests for pricing.py lru_cache behavior (Task #4)."""
 from __future__ import annotations
 
-import pytest
 
 from veronica_core.pricing import resolve_model_pricing
 

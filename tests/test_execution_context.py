@@ -1244,3 +1244,216 @@ class TestContextVarNodeStack:
         assert stack is None or len(stack) == 0, (
             f"Stack must be empty after wrap completes, got: {stack}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Bug fix tests: _compute_actual_cost COST_ESTIMATION_SKIPPED event cap
+# and _wrap BaseException cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestComputeActualCostEventCap:
+    """Bug fix: COST_ESTIMATION_SKIPPED events must be capped at _MAX_CHAIN_EVENTS."""
+
+    def test_cost_estimation_skipped_event_is_capped(self):
+        """Repeated auto-pricing skips (model known, no response_hint) must not
+        grow _events beyond _MAX_CHAIN_EVENTS.
+        """
+        from veronica_core.containment.execution_context import _MAX_CHAIN_EVENTS
+
+        # Use a step limit high enough to exceed _MAX_CHAIN_EVENTS
+        over = _MAX_CHAIN_EVENTS + 50
+        config = ExecutionConfig(
+            max_cost_usd=1_000_000.0,
+            max_steps=over,
+            max_retries_total=over,
+        )
+        from veronica_core.containment.execution_context import ChainMetadata
+        meta = ChainMetadata(
+            request_id="test-req",
+            chain_id="test-chain",
+            model="gpt-4o",  # known model triggers auto-pricing path
+        )
+        ctx = ExecutionContext(config=config, metadata=meta)
+
+        # Each call with no response_hint and no cost_estimate_hint emits
+        # COST_ESTIMATION_SKIPPED via _compute_actual_cost.
+        # The dedup key includes the reason string, but it's the same every call,
+        # so after the first event, subsequent ones are deduped.
+        for _ in range(over):
+            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        snap = ctx.get_snapshot()
+        assert len(snap.events) <= _MAX_CHAIN_EVENTS, (
+            f"Events list exceeded cap: {len(snap.events)} > {_MAX_CHAIN_EVENTS}"
+        )
+
+    def test_cost_estimation_skipped_event_deduped(self):
+        """Identical COST_ESTIMATION_SKIPPED events must appear at most once (dedup)."""
+        config = ExecutionConfig(max_cost_usd=1_000_000.0, max_steps=10, max_retries_total=10)
+        from veronica_core.containment.execution_context import ChainMetadata
+        meta = ChainMetadata(
+            request_id="test-req",
+            chain_id="test-chain",
+            model="gpt-4o",
+        )
+        ctx = ExecutionContext(config=config, metadata=meta)
+
+        for _ in range(5):
+            ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+
+        snap = ctx.get_snapshot()
+        skipped_events = [e for e in snap.events if e.event_type == "COST_ESTIMATION_SKIPPED"]
+        assert len(skipped_events) <= 1, (
+            f"COST_ESTIMATION_SKIPPED must be deduped; got {len(skipped_events)} events"
+        )
+
+
+class TestWrapBaseExceptionDoubleStackCheck:
+    """Bug fix: _wrap BaseException handler had redundant 'and stack' — verify cleanup."""
+
+    def test_base_exception_cleans_stack_after_begin_graph_node(self):
+        """When a hook raises after _begin_graph_node, the graph stack must be cleaned."""
+
+        class BombPreDispatch:
+            def before_llm_call(self, ctx):
+                raise MemoryError("OOM in hook")
+
+            def before_tool_call(self, ctx):
+                return None
+
+            def on_error(self, ctx, exc):
+                from veronica_core.shield.types import Decision
+                return Decision.RETRY
+
+            def get_events(self):
+                return []
+
+            def before_charge(self, ctx, cost_usd):
+                return None
+
+        from veronica_core.shield.pipeline import ShieldPipeline
+        pipeline = ShieldPipeline(pre_dispatch=BombPreDispatch())
+
+        config = ExecutionConfig(max_cost_usd=10.0, max_steps=5, max_retries_total=5)
+        ctx = ExecutionContext(config=config, pipeline=pipeline)
+
+        with pytest.raises(MemoryError):
+            ctx.wrap_llm_call(fn=lambda: None)
+
+        stack = ctx._node_stack_var.get()
+        assert stack is None or len(stack) == 0, (
+            f"Stack leaked after BaseException: {stack}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Bug fix K: asyncio task stack isolation
+# ContextVar list must NOT be shared between concurrently running asyncio tasks
+# ---------------------------------------------------------------------------
+
+
+class TestContextVarAsyncIsolation:
+    """Bug K: asyncio tasks must each get their own node stack, not share a list."""
+
+    def test_asyncio_tasks_have_isolated_stacks(self):
+        """Two asyncio.gather() tasks must not contaminate each other's node stack."""
+        import asyncio
+
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=20, max_retries_total=10)
+        ctx = ExecutionContext(config=config)
+        stacks_seen: dict[str, list] = {}
+        errors: list[str] = []
+
+        async def task_wrap(name: str) -> None:
+            try:
+                ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0))
+                s = ctx._node_stack_var.get()
+                stacks_seen[name] = list(s) if s else []
+                depth = ctx._nesting_depth_var.get()
+                if depth != 0:
+                    errors.append(f"{name}: nesting_depth={depth} after wrap (expected 0)")
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+
+        async def main() -> None:
+            await asyncio.gather(task_wrap("a"), task_wrap("b"))
+
+        asyncio.run(main())
+
+        assert not errors, f"Task errors: {errors}"
+        # Both stacks must be empty after wrap completes (popped on success)
+        for name, stack in stacks_seen.items():
+            assert stack == [], (
+                f"Task {name} stack not empty after wrap: {stack}"
+            )
+
+    def test_asyncio_nested_wraps_share_stack_within_same_task(self):
+        """Within a single asyncio task, nested wraps must build depth on the same stack."""
+        import asyncio
+
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=20, max_retries_total=10)
+        ctx = ExecutionContext(config=config)
+        depth_seen: list[int] = []
+        errors: list[str] = []
+
+        async def outer_task() -> None:
+            # Simulate nested wrap by capturing stack size inside fn()
+            def inner_fn():
+                s = ctx._node_stack_var.get()
+                depth_seen.append(len(s) if s else 0)
+
+            try:
+                ctx.wrap_llm_call(fn=inner_fn, options=WrapOptions(cost_estimate_hint=0.0))
+            except Exception as exc:
+                errors.append(str(exc))
+
+        asyncio.run(outer_task())
+
+        assert not errors, f"Errors: {errors}"
+        # fn() is called while node is on the stack, so depth must be >= 1
+        assert depth_seen and depth_seen[0] >= 1, (
+            f"Expected stack depth >= 1 inside fn(), got {depth_seen}"
+        )
+
+    def test_asyncio_task_owned_flag_prevents_inherited_stack_reuse(self):
+        """An asyncio task that inherits a non-None stack must create its own fresh list."""
+        import asyncio
+
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=20, max_retries_total=10)
+        ctx = ExecutionContext(config=config)
+        list_ids: dict[str, int] = {}
+
+        async def parent_task() -> None:
+            # Force stack creation in parent context
+            def capture_stack_id():
+                s = ctx._node_stack_var.get()
+                list_ids["parent"] = id(s) if s else 0
+
+            ctx.wrap_llm_call(
+                fn=capture_stack_id, options=WrapOptions(cost_estimate_hint=0.0)
+            )
+            # Now spawn child task AFTER parent has set the stack
+            await asyncio.create_task(child_task())
+
+        async def child_task() -> None:
+            # Child inherits copied context where owned=False
+            # _begin_graph_node must create a NEW list, not reuse parent's
+            def capture_stack_id():
+                s = ctx._node_stack_var.get()
+                list_ids["child"] = id(s) if s else 0
+
+            ctx.wrap_llm_call(
+                fn=capture_stack_id, options=WrapOptions(cost_estimate_hint=0.0)
+            )
+
+        asyncio.run(parent_task())
+
+        # Parent and child must have used different list objects
+        assert "parent" in list_ids and "child" in list_ids, (
+            f"Missing IDs: {list_ids}"
+        )
+        assert list_ids["parent"] != list_ids["child"], (
+            f"Parent and child shared the same stack list (id={list_ids['parent']}). "
+            "Bug K: asyncio task isolation broken."
+        )
