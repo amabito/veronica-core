@@ -6,6 +6,35 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.1.0] — 2026-03-05 — Declarative Policy, Adaptive Threshold, Multi-tenant Budget
+
+**Breaking changes:** none
+
+### Added
+
+- **Declarative Policy Layer** (`veronica_core.policy`):
+  - `PolicySchema` / `RuleSchema` dataclasses with validation and contradictory-rule detection.
+  - `PolicyRegistry` with 6 builtin rule types (`token_budget`, `cost_ceiling`, `rate_limit`, `circuit_breaker`, `step_limit`, `time_limit`). Thread-safe, singleton default instance.
+  - `PolicyLoader`: load from YAML/JSON files or strings, `validate()` without building, `watch()` for hot-reload with cancellable `WatchHandle`.
+  - `LoadedPolicy` wrapper delegating to `ShieldPipeline` with introspectable `hooks` list.
+  - Optional `pyyaml` dependency via `pip install veronica-core[yaml]`.
+
+- **Adaptive Budget Policy** (`veronica_core.adaptive`):
+  - `BurnRateEstimator`: sliding-window cost burn rate with EMA trend weighting. Atomic multi-window snapshot via `current_rates()`.
+  - `AdaptiveThresholdPolicy`: implements `RuntimePolicy` protocol. Escalates ALLOW / WARN / DEGRADE / HALT based on time-to-exhaustion. Spike detection via instantaneous vs baseline rate comparison.
+  - `AdaptiveConfig` dataclass with threshold ordering validation (`0 < halt <= degrade <= warn`).
+  - `AnomalyDetector`: per-metric Z-score anomaly detection using Welford's online algorithm. Per-metric locking, configurable warmup period.
+
+- **Multi-tenant Budget Management** (`veronica_core.tenant`):
+  - `Tenant` dataclass with optional `budget_pool` and `policy` fields.
+  - `TenantRegistry`: thread-safe hierarchy (Organisation / Project / Team / Agent) with O(1) child index. Ancestor-walk policy and budget resolution.
+  - `BudgetPool`: allocate / spend / release with optional `BudgetBackend` integration (reserve/commit/rollback for distributed safety). TOCTOU-safe rollback on backend failure.
+
+- 231 new tests (3224 -> 3455 total), including 107 adversarial tests covering concurrency, NaN/Inf/negative inputs, deep hierarchy, Unicode tenant IDs, and TOCTOU race conditions.
+- `docs/EVOLUTION_ROADMAP.md`: v2.0 -> v4.0 evolution plan.
+
+---
+
 ## [2.0.0] — 2026-03-04 — Reserve/Commit/Rollback, Async Budget, Adapter Unification
 
 **Breaking changes:** `BudgetBackend` protocol now requires `reserve(amount, ceiling)`, `commit(rid)`, `rollback(rid)` methods. Old `spend()`-based backends must migrate.
