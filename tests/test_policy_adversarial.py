@@ -503,6 +503,8 @@ class TestAdversarialPathTraversal:
                 encoding="utf-8",
             )
             # Build a path with ../ that resolves to the same file.
+            # subdir must exist on Linux for the OS to resolve "..".
+            (Path(tmpdir) / "subdir").mkdir()
             traversal_path = Path(tmpdir) / "subdir" / ".." / "policy.json"
             pipeline = loader.load(traversal_path)
             assert isinstance(pipeline, LoadedPolicy)
