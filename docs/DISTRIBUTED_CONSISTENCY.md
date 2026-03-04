@@ -144,12 +144,14 @@ returning `Decision.HALT`. The rollback is unconditional: if `fn` raises `Keyboa
 or any `BaseException`, the outer `except BaseException` block in `_wrap` calls
 `_try_rollback` before re-raising.
 
-### Partial commit interrupted
+### Estimated vs actual cost drift
 
-If the process dies after `HDEL` but before `INCRBYFLOAT` completes inside `lua_commit`,
-the committed total in Redis is understated by the reservation amount. The
-`ReconciliationCallback` protocol (`src/veronica_core/protocols.py`, line 342) provides a
-hook for callers to detect and compensate for this drift:
+Because `lua_commit` executes `HDEL` and `INCRBYFLOAT` atomically in a single Lua script,
+a partial commit (reservation deleted but total not incremented) cannot occur during normal
+operation. However, the *estimated* cost reserved before `fn()` may differ from the *actual*
+cost computed after `fn()` completes. Over many calls, these small differences accumulate.
+The `ReconciliationCallback` protocol (`src/veronica_core/protocols.py`, line 342) provides
+a hook for callers to detect and compensate for this drift:
 
 ```python
 class ReconciliationCallback(Protocol):
