@@ -48,8 +48,8 @@ class _StubLLM:
 
 
 def main() -> None:
-    # 1. Configure limits: $0.002 total, 3 LLM steps
-    config = GuardConfig(max_cost_usd=0.002, max_steps=3)
+    # 1. Configure limits: $0.10 total, 3 LLM steps
+    config = GuardConfig(max_cost_usd=0.10, max_steps=3)
     handler = VeronicaCallbackHandler(config)
 
     # 2. Attach handler to your LLM

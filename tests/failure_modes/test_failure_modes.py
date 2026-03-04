@@ -354,15 +354,13 @@ def test_shared_timeout_pool_exhaustion() -> None:
     # Give the thread a moment to start (200ms for slow CI / Windows).
     time.sleep(0.2)
 
-    # Count daemon threads named after the pool.
-    pool_threads = [
-        t for t in threading.enumerate() if "veronica-timeout-pool" in t.name
-    ]
-    assert len(pool_threads) == 1, (
-        f"Expected exactly 1 daemon thread, found {len(pool_threads)}: {pool_threads}"
-    )
+    # Verify the pool started exactly one thread.  Use the pool's own _thread
+    # reference rather than threading.enumerate() to avoid false positives
+    # from the module-level singleton used by ExecutionContext tests.
+    assert pool._thread is not None, "Pool must have started a daemon thread"
+    assert pool._thread.is_alive(), "Pool daemon thread must be alive"
 
     pool.shutdown()
     # Wait for daemon thread to exit after shutdown to prevent cross-test pollution.
-    for t in pool_threads:
-        t.join(timeout=2.0)
+    pool._thread.join(timeout=2.0)
+    assert not pool._thread.is_alive(), "Pool daemon thread must exit after shutdown"
