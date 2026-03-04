@@ -6,6 +6,40 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.0.0] — 2026-03-04 — Reserve/Commit/Rollback, Async Budget, Adapter Unification
+
+**Breaking changes:** `BudgetBackend` protocol now requires `reserve(amount, ceiling)`, `commit(rid)`, `rollback(rid)` methods. Old `spend()`-based backends must migrate.
+
+### Added
+
+- **Two-phase budget protocol**: `reserve(amount, ceiling)` / `commit(rid)` / `rollback(rid)` on `LocalBudgetBackend` and `RedisBudgetBackend`. Prevents double-spending via escrow-based accounting with 60-second reservation timeout.
+- **Async budget backends**: `AsyncLocalBudgetBackend` and `AsyncRedisBudgetBackend` with native `asyncio.Lock` coordination.
+- **WebSocket containment**: `VeronicaASGIMiddleware` enforces step limits on WebSocket connections with `close(1008)` on exhaustion.
+- **CancellationToken**: Parent/child propagation (upward only) with `_propagate_child_cost` for hierarchical cost enforcement.
+- **SharedTimeoutPool**: Module-level singleton daemon thread for timeout scheduling (replaces per-context threads).
+- **ReconciliationCallback protocol**: Hook for estimated vs actual cost drift detection.
+- **ContextVar migration**: `ExecutionContext` stored in `contextvars.ContextVar` for async-safe access.
+- **`_MCPAdapterBase`**: Shared base class for sync and async MCP adapters, eliminating code duplication.
+- **Quickstart examples**: `langchain_minimal.py`, `langgraph_minimal.py`, `ag2_minimal.py` with working stub LLMs.
+- **Failure mode tests**: 8 targeted failure scenarios (double commit, rollback after commit, Redis disconnect, Lua atomicity, reserve/rollback, WebSocket step limit, CancellationToken cascade, SharedTimeoutPool exhaustion).
+- **Distributed consistency documentation**: `docs/DISTRIBUTED_CONSISTENCY.md` covering protocol, atomicity guarantees, failure recovery, and consistency model.
+- 627 new tests (2563 -> 3190 total).
+
+### Fixed
+
+- **Constructor validation**: `ExecutionConfig` rejects negative `timeout_ms`, `max_cost_usd`, `max_steps`.
+- **Retry counter**: Off-by-one fix in retry tracking.
+- **Signal propagation**: Parent abort correctly propagates cost overflow from child contexts.
+- **NaN/Inf budget validation**: `LocalBudgetBackend.spend()` rejects NaN, Inf, and negative amounts.
+- **HALF_OPEN slot leak**: `DistributedCircuitBreaker` properly releases slots on timeout.
+
+### Changed
+
+- Adapter unification: LangChain, LangGraph, AG2 adapters share common `build_adapter_container` factory.
+- `_wrap()` cleanup path uses `finally` block for guaranteed rollback.
+
+---
+
 ## [1.8.11] — 2026-03-03 — Round 5 Deep Audit
 
 **Breaking changes:** none
