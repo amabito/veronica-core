@@ -101,7 +101,7 @@ def main() -> None:
         try:
             reply = agent.generate_reply(messages=messages)
             steps = agent.container.step_guard
-            used = steps.steps if steps else 0
+            used = steps.current_step if steps else 0
             print(f"  OK: {reply}  (steps={used}/{config.max_steps})")
         except VeronicaHalt as exc:
             print(f"  HALTED: {exc}")

@@ -67,13 +67,14 @@ def main() -> None:
     # Initial graph state
     state: dict = {"messages": []}
 
-    # Run the graph twice — second run should hit the step limit
+    # Run the graph multiple times — each node has its own container with
+    # max_steps=2, so each node can run twice before halting.
     for run in range(1, 4):
         print(f"Run {run}:")
         try:
             state = run_graph(state)
             steps = call_model.container.step_guard  # type: ignore[attr-defined]
-            used = steps.steps if steps else 0
+            used = steps.current_step if steps else 0
             print(f"  OK: summary={state.get('summary', '(none)')}")
             print(f"  steps={used}/{config.max_steps}")
         except VeronicaHalt as exc:

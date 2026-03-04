@@ -11,7 +11,7 @@ model.
 
 Each `wrap_llm_call` or `wrap_tool_call` invocation that carries a `cost_estimate_hint`
 follows a two-phase accounting flow in `ExecutionContext._wrap`
-(`src/veronica_core/containment/execution_context.py`, line ~660):
+(`src/veronica_core/containment/execution_context.py`, line ~605):
 
 ```
 1. reserve(amount, ceiling)  -- escrow the estimated cost

@@ -11,7 +11,6 @@ Install:
 from __future__ import annotations
 
 from typing import Any, List
-from unittest.mock import MagicMock
 
 from langchain_core.outputs import LLMResult
 
@@ -35,9 +34,11 @@ class _StubLLM:
         for cb in self._callbacks:
             cb.on_llm_start(serialized={}, prompts=[prompt])
 
-        # Simulate LLM response
-        result = MagicMock(spec=LLMResult)
-        result.llm_output = {"token_usage": {"total_tokens": tokens}}
+        # Simulate LLM response with real LLMResult so cost is extracted
+        result = LLMResult(
+            generations=[],
+            llm_output={"token_usage": {"total_tokens": tokens}},
+        )
 
         # Post-call: record token cost and increment step counter
         for cb in self._callbacks:
@@ -63,7 +64,7 @@ def main() -> None:
             budget = handler.container.budget
             steps = handler.container.step_guard
             spent = budget.spent_usd if budget else 0.0
-            used = steps.steps if steps else 0
+            used = steps.current_step if steps else 0
             print(f"  OK: {reply}")
             print(f"  budget=${spent:.4f}/{config.max_cost_usd}  steps={used}/{config.max_steps}")
         except VeronicaHalt as exc:
