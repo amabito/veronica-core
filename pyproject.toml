@@ -55,6 +55,9 @@ vault = [
 mcp = [
     "mcp>=1.0,<2",
 ]
+yaml = [
+    "pyyaml>=6.0",
+]
 dev = [
     "cryptography>=46.0.5",
     "fakeredis>=2.0",

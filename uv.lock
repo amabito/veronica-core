@@ -1365,6 +1365,9 @@ redis = [
 vault = [
     { name = "hvac" },
 ]
+yaml = [
+    { name = "pyyaml" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1396,10 +1399,11 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
     { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
 ]
-provides-extras = ["redis", "otel", "compliance", "vault", "mcp", "dev"]
+provides-extras = ["redis", "otel", "compliance", "vault", "mcp", "yaml", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
