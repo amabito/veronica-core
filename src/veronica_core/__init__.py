@@ -216,6 +216,14 @@ from veronica_core.protocols import (
 # Metrics implementations (v1.6.0)
 from veronica_core.metrics import LoggingContainmentMetrics
 
+# OTel Feedback Loop (v2.4)
+from veronica_core.otel_feedback import (
+    AgentMetrics,
+    OTelMetricsIngester,
+    MetricRule,
+    MetricsDrivenPolicy,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -370,6 +378,11 @@ __all__ = [
     "ContainmentMetricsProtocol",
     # Metrics implementations (v1.6.0)
     "LoggingContainmentMetrics",
+    # OTel Feedback Loop (v2.4)
+    "AgentMetrics",
+    "OTelMetricsIngester",
+    "MetricRule",
+    "MetricsDrivenPolicy",
 ]
 
 

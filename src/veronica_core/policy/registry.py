@@ -82,6 +82,32 @@ def _make_time_limit(params: dict[str, Any]) -> Any:
     )
 
 
+def _make_metric_rule(params: dict[str, Any]) -> Any:
+    from veronica_core.policy.metrics_policy import (
+        MetricRule,
+        MetricsDrivenPolicy,
+        get_default_ingester,
+    )
+
+    rules_raw = params.get("rules") or []
+    rules: list[MetricRule] = []
+    for r in rules_raw:
+        if isinstance(r, dict):
+            rules.append(
+                MetricRule(
+                    metric=str(r.get("metric", "total_cost_usd")),
+                    operator=str(r.get("operator", "gt")),
+                    threshold=float(r.get("threshold", 0.0)),
+                    action=str(r.get("action", "warn")),
+                    agent_id=r.get("agent_id") or None,
+                    label=str(r.get("label", "")),
+                )
+            )
+    ingester = get_default_ingester()
+    agent_id = params.get("agent_id") or None
+    return MetricsDrivenPolicy(rules=rules, ingester=ingester, agent_id=agent_id)
+
+
 _BUILTIN_FACTORIES: dict[str, _RuleFactory] = {
     "token_budget": _make_token_budget,
     "cost_ceiling": _make_cost_ceiling,
@@ -89,6 +115,7 @@ _BUILTIN_FACTORIES: dict[str, _RuleFactory] = {
     "circuit_breaker": _make_circuit_breaker,
     "step_limit": _make_step_limit,
     "time_limit": _make_time_limit,
+    "metric_rule": _make_metric_rule,
 }
 
 
