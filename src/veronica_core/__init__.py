@@ -221,6 +221,15 @@ from veronica_core.otel_feedback import (
     MetricsDrivenPolicy,
 )
 
+# Policy Simulation (v2.6.0)
+from veronica_core.simulation import (
+    ExecutionLog,
+    ExecutionLogEntry,
+    PolicySimulator,
+    SimulationEvent,
+    SimulationReport,
+)
+
 __all__ = [
     # Core
     "VeronicaState",
@@ -381,4 +390,10 @@ __all__ = [
     "OTelMetricsIngester",
     "MetricRule",
     "MetricsDrivenPolicy",
+    # Policy Simulation (v2.6.0)
+    "ExecutionLog",
+    "ExecutionLogEntry",
+    "PolicySimulator",
+    "SimulationEvent",
+    "SimulationReport",
 ]
