@@ -162,7 +162,8 @@ class _BudgetProxy:
         try:
             return self._ctx.get_snapshot().cost_usd_accumulated
         except Exception:
-            return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
+            val = getattr(self._ctx, "_cost_usd_accumulated", 0.0)
+            return float(val) if val is not None else 0.0
 
     @property
     def call_count(self) -> int:
