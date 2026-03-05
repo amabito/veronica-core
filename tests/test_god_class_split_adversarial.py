@@ -148,24 +148,15 @@ class TestDistributedCircularImport:
     def test_import_dcb_first_does_not_crash(self) -> None:
         """Import distributed_circuit_breaker.py first must not fail.
 
-        KNOWN BUG (circular import): When veronica_core.distributed is evicted from
-        sys.modules and distributed_circuit_breaker is imported first, Python starts
-        importing distributed.py to satisfy `from veronica_core.distributed import _redact_exc`.
-        At the end of distributed.py (line 702), it tries to re-import from
-        distributed_circuit_breaker, which is still mid-import.  At that moment, the
-        partial distributed module does NOT yet have _redact_exc defined, so
-        distributed_circuit_breaker gets an ImportError.
-
-        Fix: move _redact_exc (and any shared helpers) to a separate
-        veronica_core.distributed._utils module so neither file imports the other.
-
-        This test FAILS until the circular import is fixed.
+        The circular import was resolved by duplicating _redact_exc directly into
+        distributed_circuit_breaker.py (no import from distributed.py required).
+        distributed_circuit_breaker.py now only imports from circuit_breaker and
+        runtime_policy, which have no cross-dependency on distributed.py.
         """
         mods_to_drop = [k for k in sys.modules if "veronica_core.distributed" in k]
         for k in mods_to_drop:
             del sys.modules[k]
 
-        # This should succeed but currently raises ImportError due to the circular import.
         import veronica_core.distributed_circuit_breaker as dcb  # noqa: F401
 
         assert hasattr(dcb, "DistributedCircuitBreaker")

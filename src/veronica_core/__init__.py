@@ -236,7 +236,7 @@ from veronica_core.simulation import (
     SimulationReport,
 )
 
-# A2A Trust Boundary (v2.7)
+# A2A Trust Boundary (v2.7.0)
 from veronica_core.a2a import (
     TrustLevel,
     AgentIdentity,
@@ -417,7 +417,7 @@ __all__ = [
     "PolicySimulator",
     "SimulationEvent",
     "SimulationReport",
-    # A2A Trust Boundary (v2.7)
+    # A2A Trust Boundary (v2.7.0)
     "TrustLevel",
     "AgentIdentity",
     "TrustPolicy",

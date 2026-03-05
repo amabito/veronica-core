@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-3874%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-3995%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -16,7 +16,7 @@ pip install veronica-core
 
 ---
 
-## v2.x Release Series (2026-03-04 — 2026-03-05)
+## Release Series
 
 | Version | Milestone | Key additions |
 |---------|-----------|---------------|
@@ -28,8 +28,9 @@ pip install veronica-core
 | **2.5.0** | HALT Unification | Shared `check_and_halt()` across all 5 framework adapters, metrics emission on ALLOW/HALT/tokens, API docs rewrite |
 | **2.6.0** | Policy Simulation | Replay execution logs against policy configs, OTel span import, per-agent breakdown, NaN-safe accumulation |
 | **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
+| **3.0.0** | God Class Split + AdapterCapabilities + AuditChain | `distributed.py`/`policy_engine.py`/`execution_context.py` split, `AdapterCapabilities` frozen dataclass, `AuditChain` tamper-proof hash chain |
 
-3874 tests. Zero breaking changes from 2.1.0 onward.
+3995 tests. Zero breaking changes from 2.1.0 through 2.7.0. v3.0.0 requires `capabilities()` on custom `FrameworkAdapterProtocol` implementations.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -118,6 +119,9 @@ def run_agent(prompt: str) -> str:
 - **ExecutionGraph hooks** -- dynamic observer/subscriber registration, `NodeEvent` lifecycle events
 - **Policy simulation** -- replay execution logs against policy configs for what-if analysis, OTel span import
 - **Framework adapter metrics** -- `record_decision` and `record_tokens` emission across all 5 framework adapters
+- **Adapter capabilities** -- `AdapterCapabilities` frozen dataclass; each adapter declares its features at runtime via `capabilities()`
+- **Audit chain** -- `AuditChain` tamper-proof SHA-256 hash chain for safety events; append-only, thread-safe, exportable to JSON
+- **God class split** -- `distributed.py`, `security/policy_engine.py`, `containment/execution_context.py` split into focused modules; all original import paths preserved
 
 No required dependencies. Works with any LLM provider.
 
@@ -205,9 +209,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v2.7.0
+## Ship Readiness -- v3.0.0
 
-3874 tests, 92% coverage, zero required dependencies. Python 3.10+.
+3995 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -235,7 +239,7 @@ Supporting theory:
 
 ## Roadmap
 
-### Done (v2.0 — v2.6)
+### Done (v2.0 — v3.0)
 
 - ~~Two-phase budget, async backends, WebSocket containment~~ (v2.0.0)
 - ~~Declarative policy, adaptive budget, multi-tenant hierarchy~~ (v2.1.0)
@@ -244,10 +248,11 @@ Supporting theory:
 - ~~Code quality: `close()`, Decision enum, adapter hardening~~ (v2.3.1 — v2.4.0)
 - ~~HALT unification, metrics wiring, API docs rewrite~~ (v2.5.0)
 - ~~Policy simulation: replay logs for what-if analysis~~ (v2.6.0)
+- ~~A2A trust boundary: cross-agent identity verification and policy routing~~ (v2.7.0)
+- ~~God class split, `AdapterCapabilities`, `AuditChain`~~ (v3.0.0)
 
 ### Next
 
-- A2A trust boundary: cross-agent identity verification and policy federation (Phase E)
 - Federation: multi-process policy coordination (Phase G)
 
 
