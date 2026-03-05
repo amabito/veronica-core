@@ -6,9 +6,9 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## v2.0 — v2.6 Release Series Summary
+## v2.0 — v2.7 Release Series Summary
 
-Seven releases in two days. 1252 new tests (2563 to 3815). Zero breaking changes from v2.1.0 onward.
+Eight releases in three days. 1311 new tests (2563 to 3874). Zero breaking changes from v2.1.0 onward.
 
 **v2.0.0 — Reserve/Commit/Rollback.** Two-phase budget protocol (`reserve` / `commit` / `rollback`) on local and Redis backends. Async budget backends (`AsyncLocalBudgetBackend`, `AsyncRedisBudgetBackend`). WebSocket containment via ASGI middleware (`close(1008)` on step exhaustion). `CancellationToken` parent/child hierarchy with upward cost propagation. `SharedTimeoutPool` singleton for process-wide deadline scheduling. 627 new tests.
 
@@ -24,7 +24,24 @@ Seven releases in two days. 1252 new tests (2563 to 3815). Zero breaking changes
 
 **v2.6.0 — Policy Simulation.** `PolicySimulator` replays execution logs against `ShieldPipeline` configs. `ExecutionLog` with JSON file, string, and OTel span import. `SimulationReport` with per-agent breakdown, `savings_percentage`, `summary()`, `to_dict()`. NaN-safe cost accumulation via `math.isfinite()`. 51 new tests (22 adversarial).
 
+**v2.7.0 — A2A Trust Boundary.** Cross-agent trust classification with 4 tiers (`TrustLevel`: UNTRUSTED, PROVISIONAL, TRUSTED, PRIVILEGED). `AgentIdentity` frozen dataclass with origin validation. `TrustBasedPolicyRouter` maps trust levels to `ShieldPipeline` configs. `TrustEscalationTracker` with per-agent locking, cardinality cap (10K), O(1) index-based promotion, automatic demotion on failure. 59 new tests (31 adversarial).
+
 ---
+
+## [2.7.0] — 2026-03-05 — A2A Trust Boundary
+
+### Added
+
+- `TrustLevel(str, Enum)` with 4 tiers: UNTRUSTED, PROVISIONAL, TRUSTED, PRIVILEGED.
+- `AgentIdentity` frozen dataclass with origin validation (`local`, `a2a`, `mcp`).
+- `TrustPolicy` frozen dataclass: promotion threshold, ceiling, default trust.
+- `TrustBasedPolicyRouter`: maps `TrustLevel` to `ShieldPipeline`, read-only after init.
+- `TrustEscalationTracker`: per-agent locking, double-checked locking for creation, cardinality cap (10K), automatic promotion/demotion.
+- 59 tests: 28 happy-path + 31 adversarial (concurrent access, cardinality race, rapid promote/demote, string comparison regression).
+
+### Breaking changes
+
+none
 
 ## [2.6.0] — 2026-03-05 — Policy Simulation
 

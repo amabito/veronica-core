@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-3815%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-3874%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -27,8 +27,9 @@ pip install veronica-core
 | **2.4.0** | Code Quality | `ExecutionContext.close()`, Decision enum migration, CrewAI context wiring, adapter snapshot reuse |
 | **2.5.0** | HALT Unification | Shared `check_and_halt()` across all 5 framework adapters, metrics emission on ALLOW/HALT/tokens, API docs rewrite |
 | **2.6.0** | Policy Simulation | Replay execution logs against policy configs, OTel span import, per-agent breakdown, NaN-safe accumulation |
+| **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
 
-3815 tests. Zero breaking changes from 2.1.0 onward.
+3874 tests. Zero breaking changes from 2.1.0 onward.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -206,7 +207,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Ship Readiness -- v2.6.0
 
-3815 tests, 92% coverage, zero required dependencies. Python 3.10+.
+3874 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
