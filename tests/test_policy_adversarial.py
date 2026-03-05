@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import threading
-import time
 from pathlib import Path
 
 import pytest
 
 from veronica_core.policy.loader import LoadedPolicy, PolicyLoader
-from veronica_core.policy.schema import PolicySchema, PolicyValidationError, RuleSchema
+from veronica_core.policy.schema import PolicySchema, PolicyValidationError
 from veronica_core.shield.pipeline import ShieldPipeline
 
 
@@ -58,11 +56,15 @@ class TestAdversarialPolicyLoader:
         """A single rule with 10000 param keys must not hang."""
         loader = PolicyLoader()
         big_params = {f"key_{i}": i for i in range(10_000)}
-        data = json.dumps({
-            "version": "1.0",
-            "name": "BigParams",
-            "rules": [{"type": "token_budget", "params": big_params, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "BigParams",
+                "rules": [
+                    {"type": "token_budget", "params": big_params, "on_exceed": "halt"}
+                ],
+            }
+        )
         # Should not hang; may or may not raise depending on hook validation.
         try:
             loader.load_from_string(data, format="json")
@@ -72,11 +74,19 @@ class TestAdversarialPolicyLoader:
     def test_concurrent_load_thread_safe(self) -> None:
         """Concurrent load() calls from multiple threads must not corrupt results."""
         loader = PolicyLoader()
-        valid_json = json.dumps({
-            "version": "1.0",
-            "name": "Concurrent",
-            "rules": [{"type": "token_budget", "params": {"max_output_tokens": 1000}, "on_exceed": "halt"}],
-        })
+        valid_json = json.dumps(
+            {
+                "version": "1.0",
+                "name": "Concurrent",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {"max_output_tokens": 1000},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
 
         results: list[ShieldPipeline | Exception] = []
         errors: list[Exception] = []
@@ -136,11 +146,13 @@ class TestAdversarialPolicyLoader:
     def test_load_rule_with_unknown_type_raises_on_build(self) -> None:
         """Unknown rule type must raise PolicyValidationError during load."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "Unknown Type",
-            "rules": [{"type": "does_not_exist", "params": {}}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "Unknown Type",
+                "rules": [{"type": "does_not_exist", "params": {}}],
+            }
+        )
         with pytest.raises(PolicyValidationError) as exc_info:
             loader.load_from_string(data, format="json")
         assert "does_not_exist" in exc_info.value.errors[0]
@@ -148,11 +160,15 @@ class TestAdversarialPolicyLoader:
     def test_load_invalid_on_exceed_raises(self) -> None:
         """Invalid on_exceed value must raise PolicyValidationError."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "Bad exceed",
-            "rules": [{"type": "token_budget", "params": {}, "on_exceed": "explode"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "Bad exceed",
+                "rules": [
+                    {"type": "token_budget", "params": {}, "on_exceed": "explode"}
+                ],
+            }
+        )
         with pytest.raises(PolicyValidationError):
             loader.load_from_string(data, format="json")
 
@@ -160,11 +176,13 @@ class TestAdversarialPolicyLoader:
         """Unicode bomb-like values in name must be handled without crash."""
         loader = PolicyLoader()
         # Long unicode string (not a real bomb but tests unicode handling).
-        data = json.dumps({
-            "version": "1.0",
-            "name": "A" * 10_000,
-            "rules": [],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "A" * 10_000,
+                "rules": [],
+            }
+        )
         pipeline = loader.load_from_string(data, format="json")
         assert isinstance(pipeline, LoadedPolicy)
 
@@ -177,7 +195,9 @@ class TestAdversarialCorruptedInput:
         loader = PolicyLoader()
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             # Write raw bytes that are not valid UTF-8.
-            f.write(b'{"version": "1.0", "name": "\xff\xfe broken', )
+            f.write(
+                b'{"version": "1.0", "name": "\xff\xfe broken',
+            )
             tmp_path = Path(f.name)
         try:
             with pytest.raises(Exception):
@@ -201,7 +221,9 @@ class TestAdversarialCorruptedInput:
     def test_empty_file(self) -> None:
         """Empty file must raise a clear error, not an obscure AttributeError."""
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write("")
             tmp_path = Path(f.name)
         try:
@@ -259,13 +281,11 @@ rules: []
         # in a way that causes OOM — it builds the structure but limits depth.
         # The test verifies the loader does not hang or crash the process.
         # If it raises any exception that's also acceptable.
-        import signal
 
         def _timeout_handler(signum, frame):  # type: ignore[type-arg]
             raise TimeoutError("YAML bomb caused hang")
 
         # On Windows signal.SIGALRM is unavailable — use threading.Timer instead.
-        timed_out = threading.Event()
 
         def _bomb_thread() -> None:
             try:
@@ -303,10 +323,10 @@ rules: []
         pytest.importorskip("yaml", reason="pyyaml not installed")
         loader = PolicyLoader()
         # Build 100 levels of nesting.
-        lines = ['a0: &a0 {x: 1}']
+        lines = ["a0: &a0 {x: 1}"]
         for i in range(1, 100):
-            lines.append(f'a{i}: &a{i} {{x: *a{i-1}}}')
-        lines += ['version: "1.0"', 'name: Nested', 'rules: []']
+            lines.append(f"a{i}: &a{i} {{x: *a{i - 1}}}")
+        lines += ['version: "1.0"', "name: Nested", "rules: []"]
         yaml_content = "\n".join(lines)
         try:
             loader.load_from_string(yaml_content, format="yaml")
@@ -320,11 +340,19 @@ class TestAdversarialTypeConfusion:
     def test_string_where_int_expected_in_max_output_tokens(self) -> None:
         """String where int expected must raise gracefully (not silent corruption)."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "TypeConfusion",
-            "rules": [{"type": "token_budget", "params": {"max_output_tokens": "not_an_int"}, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "TypeConfusion",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {"max_output_tokens": "not_an_int"},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
         # Must not be an AttributeError or silent wrong value.
@@ -333,11 +361,19 @@ class TestAdversarialTypeConfusion:
     def test_float_where_int_expected_in_max_calls(self) -> None:
         """Float value for int field must be converted or raise cleanly."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "FloatInt",
-            "rules": [{"type": "rate_limit", "params": {"max_calls": 10.5}, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "FloatInt",
+                "rules": [
+                    {
+                        "type": "rate_limit",
+                        "params": {"max_calls": 10.5},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         # int(10.5) = 10, which is valid. Should succeed without crash.
         try:
             pipeline = loader.load_from_string(data, format="json")
@@ -348,11 +384,13 @@ class TestAdversarialTypeConfusion:
     def test_list_in_version_field(self) -> None:
         """List in version field must raise PolicyValidationError."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": [1, 0],
-            "name": "Bad",
-            "rules": [],
-        })
+        data = json.dumps(
+            {
+                "version": [1, 0],
+                "name": "Bad",
+                "rules": [],
+            }
+        )
         # PolicySchema.from_dict uses str(data.get("version")) so this converts
         # to "[1, 0]" which is a non-empty string — currently accepted.
         # Verify it does not crash silently in an unexpected way.
@@ -364,11 +402,13 @@ class TestAdversarialTypeConfusion:
     def test_integer_in_name_field(self) -> None:
         """Integer in name field must not crash (str() conversion expected)."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": 12345,
-            "rules": [],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": 12345,
+                "rules": [],
+            }
+        )
         # from_dict uses str() conversion — should produce "12345" name.
         try:
             pipeline = loader.load_from_string(data, format="json")
@@ -400,11 +440,19 @@ class TestAdversarialTypeConfusion:
     def test_boolean_in_params_values(self) -> None:
         """Boolean values in params must not crash the factory."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "BoolParams",
-            "rules": [{"type": "token_budget", "params": {"max_output_tokens": True}, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "BoolParams",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {"max_output_tokens": True},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         # bool is a subclass of int in Python; int(True) == 1. May succeed or raise.
         try:
             loader.load_from_string(data, format="json")
@@ -414,11 +462,19 @@ class TestAdversarialTypeConfusion:
     def test_negative_int_in_max_output_tokens(self) -> None:
         """Negative int in max_output_tokens must raise or produce invalid hook."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "NegTokens",
-            "rules": [{"type": "token_budget", "params": {"max_output_tokens": -1000}, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "NegTokens",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {"max_output_tokens": -1000},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         # The hook constructor may or may not validate; test that no hang occurs.
         try:
             loader.load_from_string(data, format="json")
@@ -428,11 +484,13 @@ class TestAdversarialTypeConfusion:
     def test_empty_string_rule_type(self) -> None:
         """Empty string rule type must raise PolicyValidationError."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "EmptyType",
-            "rules": [{"type": "", "params": {}}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "EmptyType",
+                "rules": [{"type": "", "params": {}}],
+            }
+        )
         with pytest.raises(PolicyValidationError):
             loader.load_from_string(data, format="json")
 
@@ -581,11 +639,13 @@ class TestAdversarialMissingParamsTypeConfusion:
         loader = PolicyLoader()
         # JSON encodes list; from_dict passes it to RuleSchema.from_dict which
         # calls str() on it — resulting in "[...]" which is an unknown type.
-        data = json.dumps({
-            "version": "1.0",
-            "name": "ListType",
-            "rules": [{"type": ["token_budget", "rate_limit"], "params": {}}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "ListType",
+                "rules": [{"type": ["token_budget", "rate_limit"], "params": {}}],
+            }
+        )
         with pytest.raises((PolicyValidationError, Exception)) as exc_info:
             loader.load_from_string(data, format="json")
         # Must not silently succeed with a corrupted type name.
@@ -594,22 +654,38 @@ class TestAdversarialMissingParamsTypeConfusion:
     def test_dict_where_str_expected_in_on_exceed(self) -> None:
         """Dict value in on_exceed must raise PolicyValidationError."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "DictExceed",
-            "rules": [{"type": "token_budget", "params": {}, "on_exceed": {"action": "halt"}}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "DictExceed",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {},
+                        "on_exceed": {"action": "halt"},
+                    }
+                ],
+            }
+        )
         with pytest.raises(PolicyValidationError):
             loader.load_from_string(data, format="json")
 
     def test_list_where_dict_expected_in_params(self) -> None:
         """List where dict expected in params must raise or be handled gracefully."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "ListParams",
-            "rules": [{"type": "token_budget", "params": ["a", "b", "c"], "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "ListParams",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": ["a", "b", "c"],
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         # RuleSchema.from_dict does dict(params or {}) — dict(list) raises TypeError.
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
@@ -618,11 +694,19 @@ class TestAdversarialMissingParamsTypeConfusion:
     def test_none_in_params_dict_values(self) -> None:
         """None values within params dict must not crash factory functions."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "NoneParamValues",
-            "rules": [{"type": "token_budget", "params": {"max_output_tokens": None}, "on_exceed": "halt"}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "NoneParamValues",
+                "rules": [
+                    {
+                        "type": "token_budget",
+                        "params": {"max_output_tokens": None},
+                        "on_exceed": "halt",
+                    }
+                ],
+            }
+        )
         # int(None) raises TypeError — factory should raise, not hang.
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
@@ -634,14 +718,12 @@ class TestAdversarialEmptyAndNullFields:
 
     def test_empty_string_version_raises(self) -> None:
         """Empty string version must raise PolicyValidationError."""
-        from veronica_core.policy.schema import PolicySchema
         with pytest.raises(PolicyValidationError) as exc_info:
             PolicySchema(version="", name="Test")
         assert any("version" in e.lower() for e in exc_info.value.errors)
 
     def test_empty_string_name_raises(self) -> None:
         """Empty string name must raise PolicyValidationError."""
-        from veronica_core.policy.schema import PolicySchema
         with pytest.raises(PolicyValidationError) as exc_info:
             PolicySchema(version="1.0", name="")
         assert any("name" in e.lower() for e in exc_info.value.errors)
@@ -703,11 +785,13 @@ class TestAdversarialEmptyAndNullFields:
     def test_null_rule_entry_in_rules_list(self) -> None:
         """None entry inside rules list must raise, not silently skip."""
         loader = PolicyLoader()
-        data = json.dumps({
-            "version": "1.0",
-            "name": "NullRule",
-            "rules": [None],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "NullRule",
+                "rules": [None],
+            }
+        )
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
         assert not isinstance(exc_info.value, AttributeError)

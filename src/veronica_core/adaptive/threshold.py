@@ -50,7 +50,8 @@ class AdaptiveConfig:
 
     def __post_init__(self) -> None:
         if not (
-            0 < self.halt_at_exhaustion_hours
+            0
+            < self.halt_at_exhaustion_hours
             <= self.degrade_at_exhaustion_hours
             <= self.warn_at_exhaustion_hours
         ):

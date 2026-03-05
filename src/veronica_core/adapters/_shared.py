@@ -17,6 +17,8 @@ from veronica_core.inject import GuardConfig
 from veronica_core.pricing import estimate_cost_usd
 from veronica_core.retry import RetryContainer
 
+logger = logging.getLogger(__name__)
+
 
 def build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:
     """Build an AIContainer from GuardConfig or ExecutionConfig.
@@ -183,7 +185,12 @@ class _BudgetProxy:
             )
             return self._ctx._cost_usd_accumulated <= self._limit_usd
         except Exception:
-            return True
+            logger.warning(
+                "[VERONICA] _BudgetProxy.spend() raised unexpectedly; "
+                "failing closed (returning False) to prevent budget bypass",
+                exc_info=True,
+            )
+            return False
 
 
 class _StepGuardProxy:
@@ -212,7 +219,12 @@ class _StepGuardProxy:
             self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1
             return self._ctx._step_count < self._max_steps
         except Exception:
-            return True
+            logger.warning(
+                "[VERONICA] _StepGuardProxy.step() raised unexpectedly; "
+                "failing closed (returning False) to prevent step limit bypass",
+                exc_info=True,
+            )
+            return False
 
 
 class ExecutionContextContainerAdapter:

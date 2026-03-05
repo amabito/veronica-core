@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 
-import pytest
 
 from veronica_core.adaptive.burn_rate import BurnRateEstimator
 
@@ -71,7 +70,7 @@ class TestBurnRateBasics:
         # Burst 5 minutes ago
         for _ in range(10):
             est.record(1.0, timestamp=now - 300)
-        rate_1h = est.current_rate(window_sec=3600.0)
+        est.current_rate(window_sec=3600.0)
         rate_10min = est.current_rate(window_sec=600.0)
         rate_1min = est.current_rate(window_sec=60.0)
         # Narrower windows exclude the old burst → lower rate

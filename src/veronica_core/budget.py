@@ -79,7 +79,16 @@ class BudgetEnforcer:
 
     @property
     def remaining_usd(self) -> float:
-        """Remaining budget in USD. Returns 0.0 if budget has been exceeded."""
+        """Remaining budget in USD.
+
+        Returns 0.0 when the budget has been exceeded (is_exceeded is True),
+        even if limit_usd - spent_usd would be negative. This means the return
+        value is always in the range [0.0, limit_usd] and can be used safely
+        for progress displays without sign checks.
+
+        Note: a return value of 0.0 does NOT distinguish between "exactly at
+        the limit" and "exceeded". Use is_exceeded for that distinction.
+        """
         with self._lock:
             if self._exceeded:
                 return 0.0

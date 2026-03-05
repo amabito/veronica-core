@@ -38,6 +38,7 @@ Example::
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import time
 from typing import Any, Awaitable, Callable, Optional
@@ -117,6 +118,38 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    async def get_tool_stats_async(self) -> dict[str, MCPToolStats]:
+        """Return an immutable snapshot of per-tool usage statistics (async-safe).
+
+        Async adapters use asyncio.Lock for _stats_lock, so get_tool_stats()
+        from the base class (which uses the synchronous ``with`` statement) would
+        deadlock.  Use this coroutine instead.
+
+        Returns:
+            Mapping of tool_name -> MCPToolStats snapshot.
+        """
+        async with self._stats_lock:
+            return {
+                name: dataclasses.replace(stats) for name, stats in self._stats.items()
+            }
+
+    def get_tool_stats(self) -> dict[str, MCPToolStats]:
+        """Synchronous snapshot — safe only when called from a non-async context.
+
+        Callers inside an asyncio event loop should use ``get_tool_stats_async()``
+        instead.  This override avoids attempting to acquire an asyncio.Lock from
+        synchronous code, which would raise RuntimeError.
+
+        Returns a best-effort snapshot: it captures the dict items at one point in
+        time without holding the lock.  Concurrent mutations cannot corrupt the dict
+        reference itself, but individual MCPToolStats copies may reflect a mix of
+        before- and after-mutation state.  Acceptable for monitoring/debug callers
+        that do not rely on exact atomicity.
+        """
+        # Take a stable list of items without holding an async lock from sync code.
+        items = list(self._stats.items())
+        return {name: dataclasses.replace(stats) for name, stats in items}
 
     async def wrap_tool_call(
         self,
@@ -271,13 +304,20 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Compute variable per-token cost.
         actual_cost = self._compute_actual_cost(tool_name, result_value)
 
-        # Phase 3: commit the reservation (or add directly for legacy backends).
+        # Phase 3: commit the reservation.
         if _reservation_id is not None:
             try:
                 budget_backend.commit(_reservation_id)
-            except Exception:  # noqa: BLE001
-                # Reservation expired or already committed; add directly.
-                budget_backend.add(actual_cost)
+            except Exception as _commit_exc:  # noqa: BLE001
+                # Commit failed (expired, already committed, or backend error).
+                # Do NOT call add() — that would double-charge the budget if the
+                # reservation was already flushed.  Accept the under-count and log.
+                logger.warning(
+                    "[ASYNC_MCP_ADAPTER] tool=%s commit(%s) failed: %s — cost may be untracked",
+                    tool_name,
+                    _reservation_id,
+                    _commit_exc,
+                )
         # (legacy path: cost already added via _budget_probe no-op in wrap_tool_call)
 
         # Record success in CB and stats.

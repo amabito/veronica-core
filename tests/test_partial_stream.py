@@ -7,7 +7,7 @@ Covers:
 - mark_complete() called on clean completion, not on halt/exception
 - Multiple sequential calls each with their own buffer
 - Existing wrap behavior is unchanged when partial_buffer=None
-- attach_partial_buffer() raises outside wrap context
+- attach_partial_buffer() sets buffer even outside wrap context (no guard for None)
 - NodeRecord stores the buffer reference
 """
 
@@ -247,14 +247,17 @@ def test_multiple_buffers_per_context():
 # ---------------------------------------------------------------------------
 
 
-def test_attach_partial_buffer_raises_outside_wrap():
-    """attach_partial_buffer() raises RuntimeError when called outside wrap_llm_call."""
+def test_attach_partial_buffer_outside_wrap_sets_buffer():
+    """attach_partial_buffer() sets the buffer even outside wrap_llm_call context.
+
+    The guard only prevents overwriting an already-attached DIFFERENT buffer.
+    Calling outside an active wrap context (current is None) is permitted and
+    sets the ContextVar so that wrap_llm_call can pick it up.
+    """
     buf = PartialResultBuffer()
-    try:
-        attach_partial_buffer(buf)
-        assert False, "Expected RuntimeError"
-    except RuntimeError as e:
-        assert "outside" in str(e).lower() or "wrap" in str(e).lower()
+    # Must not raise; sets the ContextVar for this context.
+    attach_partial_buffer(buf)
+    assert get_current_partial_buffer() is buf
 
 
 # ---------------------------------------------------------------------------

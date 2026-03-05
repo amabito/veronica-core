@@ -9,7 +9,9 @@ from veronica_core.policy.schema import PolicySchema, PolicyValidationError, Rul
 
 class TestRuleSchema:
     def test_valid_construction(self) -> None:
-        rule = RuleSchema(type="token_budget", params={"max_output_tokens": 5000}, on_exceed="halt")
+        rule = RuleSchema(
+            type="token_budget", params={"max_output_tokens": 5000}, on_exceed="halt"
+        )
         assert rule.type == "token_budget"
         assert rule.params == {"max_output_tokens": 5000}
         assert rule.on_exceed == "halt"
@@ -37,12 +39,14 @@ class TestRuleSchema:
         assert "on_exceed" in exc_info.value.errors[0].lower()
 
     def test_from_dict_ignores_unknown_fields(self) -> None:
-        rule = RuleSchema.from_dict({
-            "type": "token_budget",
-            "params": {},
-            "on_exceed": "degrade",
-            "unknown_future_field": "ignored",
-        })
+        rule = RuleSchema.from_dict(
+            {
+                "type": "token_budget",
+                "params": {},
+                "on_exceed": "degrade",
+                "unknown_future_field": "ignored",
+            }
+        )
         assert rule.type == "token_budget"
         assert rule.on_exceed == "degrade"
 
@@ -53,8 +57,16 @@ class TestPolicySchema:
             "version": "1.0",
             "name": "My Policy",
             "rules": [
-                {"type": "token_budget", "params": {"max_output_tokens": 1000}, "on_exceed": "halt"},
-                {"type": "rate_limit", "params": {"max_calls": 50}, "on_exceed": "degrade"},
+                {
+                    "type": "token_budget",
+                    "params": {"max_output_tokens": 1000},
+                    "on_exceed": "halt",
+                },
+                {
+                    "type": "rate_limit",
+                    "params": {"max_calls": 50},
+                    "on_exceed": "degrade",
+                },
             ],
         }
         schema = PolicySchema.from_dict(data)

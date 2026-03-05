@@ -9,6 +9,7 @@ Tests verify that:
 2. With veronica RetryContainer: total retries are bounded
 3. With ExecutionContext max_retries_total: chain-wide retry budget is enforced
 """
+
 from __future__ import annotations
 
 import sys
@@ -134,9 +135,7 @@ class TestRetryStormContained:
             raise ConnectionError("network error")
 
         # Allow 5 total retries across the whole chain
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=100, max_retries_total=5
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=100, max_retries_total=5)
         ctx = ExecutionContext(config=config)
 
         halt_count = 0
@@ -159,9 +158,7 @@ class TestRetryStormContained:
             success_count += 1
             return "ok"
 
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=10, max_retries_total=2
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=10, max_retries_total=2)
         ctx = ExecutionContext(config=config)
 
         for _ in range(5):
@@ -185,9 +182,7 @@ class TestRetryStormContained:
             call_count += 1
             return "success"
 
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=10, max_retries_total=0
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=10, max_retries_total=0)
         ctx = ExecutionContext(config=config)
 
         # All calls are halted when retry budget is 0
@@ -280,9 +275,7 @@ class TestConcurrentRetryStorm:
             with lock:
                 call_count += 1
 
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=10, max_retries_total=0
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=10, max_retries_total=0)
         ctx = ExecutionContext(config=config)
 
         allow_counts: list[int] = []

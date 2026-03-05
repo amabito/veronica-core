@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import threading
 
-import pytest
 
 from veronica_core.adaptive.anomaly import AnomalyDetector
 
@@ -123,10 +122,9 @@ class TestAnomalyDetectorThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = (
-            [threading.Thread(target=recorder) for _ in range(5)]
-            + [threading.Thread(target=checker) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=recorder) for _ in range(5)] + [
+            threading.Thread(target=checker) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:

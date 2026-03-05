@@ -197,15 +197,16 @@ class TestAIcontainerLock:
 
 
 class TestMarkSuccessDivergence:
-    """mark_success() must feed divergence detection, not only mark_running().
+    """Divergence detection fires via mark_running(), not mark_success().
 
-    The bug: repeated successful tool/llm calls in a loop could avoid
-    divergence detection if mark_running was skipped (already-running nodes)
-    or if the agent called mark_success without mark_running.
+    mark_success() no longer calls _update_sig_window (fix for double-count bug:
+    mark_running + mark_success both calling it fired divergence at ~60% of the
+    intended threshold). The correct path is begin_node -> mark_running ->
+    mark_success; divergence is detected at mark_running time.
     """
 
-    def test_mark_success_emits_divergence_for_repeated_tool(self) -> None:
-        """Repeated mark_success for the same tool signature must trigger
+    def test_mark_running_emits_divergence_for_repeated_tool(self) -> None:
+        """Repeated mark_running for the same tool signature must trigger
         divergence_suspected after hitting the threshold (3 for tools)."""
         graph = ExecutionGraph(chain_id="test-chain-3a")
         root_id = graph.create_root(name="agent_run")
@@ -217,24 +218,26 @@ class TestMarkSuccessDivergence:
             node_id = graph.begin_node(
                 parent_id=root_id, kind="tool", name="web_search"
             )
+            graph.mark_running(node_id)
             graph.mark_success(node_id, cost_usd=0.0)
             divergence_events.extend(graph.drain_divergence_events())
 
         assert any(
             e["event_type"] == "divergence_suspected" for e in divergence_events
         ), (
-            "mark_success must feed divergence detection; "
+            "mark_running must feed divergence detection; "
             f"no divergence_suspected event found after {threshold + 1} repeats. "
             f"Events seen: {divergence_events}"
         )
 
-    def test_mark_success_divergence_contains_expected_fields(self) -> None:
-        """Divergence event from mark_success must have all required fields."""
+    def test_mark_running_divergence_contains_expected_fields(self) -> None:
+        """Divergence event from mark_running must have all required fields."""
         graph = ExecutionGraph(chain_id="test-fields")
         root_id = graph.create_root(name="agent_run")
 
         for _ in range(4):  # tool threshold = 3
             node_id = graph.begin_node(parent_id=root_id, kind="tool", name="calc")
+            graph.mark_running(node_id)
             graph.mark_success(node_id, cost_usd=0.001)
 
         events = graph.drain_divergence_events()
@@ -247,8 +250,8 @@ class TestMarkSuccessDivergence:
         assert isinstance(div["repeat_count"], int)
         assert div["chain_id"] == "test-fields"
 
-    def test_mark_success_divergence_deduplication(self) -> None:
-        """Once emitted for a signature, further mark_success calls for the
+    def test_mark_running_divergence_deduplication(self) -> None:
+        """Once emitted for a signature, further mark_running calls for the
         same signature must NOT emit duplicate events."""
         graph = ExecutionGraph(chain_id="test-dedup")
         root_id = graph.create_root(name="agent_run")
@@ -256,12 +259,14 @@ class TestMarkSuccessDivergence:
         # Trigger divergence
         for _ in range(4):
             nid = graph.begin_node(parent_id=root_id, kind="tool", name="search")
+            graph.mark_running(nid)
             graph.mark_success(nid, cost_usd=0.0)
         first_batch = graph.drain_divergence_events()
 
         # Additional calls — must NOT produce more events for same signature
         for _ in range(4):
             nid = graph.begin_node(parent_id=root_id, kind="tool", name="search")
+            graph.mark_running(nid)
             graph.mark_success(nid, cost_usd=0.0)
         second_batch = graph.drain_divergence_events()
 
@@ -273,14 +278,33 @@ class TestMarkSuccessDivergence:
             e["event_type"] == "divergence_suspected" for e in second_batch
         ), "No duplicate divergence events expected after deduplication"
 
+    def test_mark_success_alone_does_not_trigger_divergence(self) -> None:
+        """mark_success without mark_running must NOT trigger divergence.
+
+        Divergence detection is exclusively in mark_running. Agents that call
+        mark_success directly (bypassing mark_running) do not feed the window.
+        """
+        graph = ExecutionGraph(chain_id="test-no-div")
+        root_id = graph.create_root(name="agent_run")
+
+        for _ in range(10):
+            nid = graph.begin_node(parent_id=root_id, kind="tool", name="calc")
+            graph.mark_success(nid, cost_usd=0.0)
+
+        events = graph.drain_divergence_events()
+        assert not any(e["event_type"] == "divergence_suspected" for e in events), (
+            "mark_success alone must not trigger divergence (only mark_running does)"
+        )
+
     def test_mark_success_does_not_trigger_for_system_nodes(self) -> None:
         """system-kind nodes have threshold=999 and must never trigger divergence
-        via mark_success for reasonable loop counts."""
+        via mark_running for reasonable loop counts."""
         graph = ExecutionGraph(chain_id="test-system")
         root_id = graph.create_root(name="agent_run")
 
         for _ in range(10):
             nid = graph.begin_node(parent_id=root_id, kind="system", name="checkpoint")
+            graph.mark_running(nid)
             graph.mark_success(nid, cost_usd=0.0)
 
         events = graph.drain_divergence_events()

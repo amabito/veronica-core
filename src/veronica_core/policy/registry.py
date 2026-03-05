@@ -97,9 +97,7 @@ def _make_metric_rule(params: dict[str, Any]) -> Any:
     rules: list[MetricRule] = []
     for r in rules_raw or []:
         if not isinstance(r, dict):
-            raise TypeError(
-                f"Each rule must be a dict, got {type(r).__name__}"
-            )
+            raise TypeError(f"Each rule must be a dict, got {type(r).__name__}")
         raw_metric = r.get("metric")
         if not raw_metric or not isinstance(raw_metric, str):
             raise TypeError(

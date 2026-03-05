@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Parse helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse_json(content: str) -> dict[str, Any]:
     """Parse JSON content string, raising a clear error on failure."""
     try:
@@ -93,6 +94,7 @@ def _parse_to_schema(path: str | Path) -> PolicySchema:
 # LoadedPolicy — wraps ShieldPipeline + schema + hooks (fix #3)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LoadedPolicy:
     """Result of loading a policy file.
@@ -123,6 +125,7 @@ class LoadedPolicy:
 # ---------------------------------------------------------------------------
 # Internal pipeline builder (fix #1 + #2 + #3)
 # ---------------------------------------------------------------------------
+
 
 def _build_pipeline(
     schema: PolicySchema,
@@ -155,6 +158,7 @@ def _build_pipeline(
 # ---------------------------------------------------------------------------
 # WatchHandle — cancellable hot-reload handle (fix #5)
 # ---------------------------------------------------------------------------
+
 
 class WatchHandle:
     """Cancellable handle returned by PolicyLoader.watch().
@@ -190,6 +194,7 @@ class WatchHandle:
 # ---------------------------------------------------------------------------
 # PolicyLoader
 # ---------------------------------------------------------------------------
+
 
 class PolicyLoader:
     """Loads policy files and builds LoadedPolicy (ShieldPipeline) instances.
@@ -295,10 +300,13 @@ class PolicyLoader:
             try:
                 mtime = file_path.stat().st_mtime
                 if mtime != last_mtime:
-                    last_mtime = mtime
                     try:
                         loaded = self.load(file_path)
                         callback(loaded)
+                        # Update mtime only on success so that a failed callback
+                        # is retried on the next poll cycle rather than silently
+                        # skipped forever.
+                        last_mtime = mtime
                     except Exception as exc:
                         logger.warning(
                             "PolicyLoader.watch: reload failed for %s: %s",

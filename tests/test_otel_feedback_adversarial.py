@@ -95,7 +95,9 @@ class SlowIngester:
 class TestAdversarialCorruptedMetrics:
     """Corrupted metric values must not crash the policy — fail-safe: allow."""
 
-    def _policy(self, ingester: Any, metric: str, op: str, threshold: float, action: str) -> Any:
+    def _policy(
+        self, ingester: Any, metric: str, op: str, threshold: float, action: str
+    ) -> Any:
         rule = MetricRule(metric, op, threshold, action, agent_id="bot")
         return MetricsDrivenPolicy(rules=[rule], ingester=ingester)
 
@@ -144,7 +146,9 @@ class TestAdversarialCorruptedMetrics:
         class NoAttrMetrics:
             pass  # has none of the expected fields
 
-        ingester = type("I", (), {"get_agent_metrics": lambda self, aid: NoAttrMetrics()})()
+        ingester = type(
+            "I", (), {"get_agent_metrics": lambda self, aid: NoAttrMetrics()}
+        )()
         rule = MetricRule("total_cost_usd", "gt", 0.0, "halt", agent_id="bot")
         policy = MetricsDrivenPolicy(rules=[rule], ingester=ingester)
         d = policy.check(_ctx(entity_id="bot"))
@@ -174,7 +178,9 @@ class TestAdversarialConcurrent:
         def _add() -> None:
             while not stop.is_set():
                 try:
-                    policy.add_rule(MetricRule("total_cost_usd", "gt", 1.0, "warn", agent_id="bot"))
+                    policy.add_rule(
+                        MetricRule("total_cost_usd", "gt", 1.0, "warn", agent_id="bot")
+                    )
                     policy.clear_rules()
                 except Exception as exc:
                     errors.append(exc)
@@ -418,40 +424,48 @@ class TestAdversarialOTelIngester:
 
     def test_negative_cost_is_ignored(self) -> None:
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": -5.0},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": -5.0},
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.total_cost == 0.0
 
     def test_nan_cost_is_ignored(self) -> None:
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": float("nan")},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": float("nan")},
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.total_cost == 0.0
 
     def test_malformed_timestamps_dont_crash(self) -> None:
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "start_time": "not_a_timestamp",
-            "end_time": "also_not",
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "start_time": "not_a_timestamp",
+                "end_time": "also_not",
+            }
+        )
         m = ing.get_agent_metrics("bot")
         # Span registered, duration_ms just missing (None)
         assert m.call_count == 1
 
     def test_negative_timestamps_dont_crash(self) -> None:
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "start_time": 100.0,
-            "end_time": 50.0,  # end < start → negative duration
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "start_time": 100.0,
+                "end_time": 50.0,  # end < start → negative duration
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.call_count == 1
         assert m.avg_latency_ms == 0.0  # negative duration rejected
@@ -463,10 +477,12 @@ class TestAdversarialOTelIngester:
         def _ingest(agent_id: str, cost: float) -> None:
             for _ in range(50):
                 try:
-                    ing.ingest_span({
-                        "agent_id": agent_id,
-                        "attributes": {"veronica.cost_usd": cost},
-                    })
+                    ing.ingest_span(
+                        {
+                            "agent_id": agent_id,
+                            "attributes": {"veronica.cost_usd": cost},
+                        }
+                    )
                 except Exception as exc:
                     errors.append(exc)
 
@@ -487,24 +503,30 @@ class TestAdversarialOTelIngester:
 
     def test_very_large_token_count(self) -> None:
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"llm.token.count.total": 10**12},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"llm.token.count.total": 10**12},
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.total_tokens == 10**12
 
     def test_error_span_increments_error_rate(self) -> None:
         ing = OTelMetricsIngester()
         # 1 error span
-        ing.ingest_span({
-            "agent_id": "bot",
-            "status": "ERROR",
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "status": "ERROR",
+            }
+        )
         # 1 success span
-        ing.ingest_span({
-            "agent_id": "bot",
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.call_count == 2
         assert m.error_rate == pytest.approx(0.5)
@@ -520,7 +542,9 @@ class TestAdversarialOTelIngester:
     def test_reset_all_agents(self) -> None:
         ing = OTelMetricsIngester()
         for i in range(5):
-            ing.ingest_span({"agent_id": f"bot-{i}", "attributes": {"veronica.cost_usd": 1.0}})
+            ing.ingest_span(
+                {"agent_id": f"bot-{i}", "attributes": {"veronica.cost_usd": 1.0}}
+            )
         ing.reset()
         for i in range(5):
             assert ing.get_agent_metrics(f"bot-{i}").call_count == 0
@@ -543,10 +567,12 @@ class TestAdversarialEndToEnd:
 
         # Ingest expensive spans
         for _ in range(3):
-            ing.ingest_span({
-                "agent_id": "bot",
-                "attributes": {"veronica.cost_usd": 0.3},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "bot",
+                    "attributes": {"veronica.cost_usd": 0.3},
+                }
+            )
 
         # After ingest → halt (total_cost=0.9 > 0.5)
         d2 = policy.check(_ctx(entity_id="bot"))
@@ -570,13 +596,17 @@ class TestAdversarialEndToEnd:
         set_default_ingester(None)
         try:
             ing = OTelMetricsIngester()
-            ing.ingest_span({
-                "agent_id": "global-bot",
-                "attributes": {"veronica.cost_usd": 2.0},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "global-bot",
+                    "attributes": {"veronica.cost_usd": 2.0},
+                }
+            )
             set_default_ingester(ing)
 
-            rule = MetricRule("total_cost_usd", "gt", 1.0, "halt", agent_id="global-bot")
+            rule = MetricRule(
+                "total_cost_usd", "gt", 1.0, "halt", agent_id="global-bot"
+            )
             policy = MetricsDrivenPolicy(rules=[rule])  # no explicit ingester
             d = policy.check(_ctx())
             assert d.allowed is False
@@ -589,16 +619,20 @@ class TestAdversarialEndToEnd:
         policy = MetricsDrivenPolicy(rules=[rule], ingester=ing)
 
         # Ingest spans with 200ms latency
-        ing.ingest_span({
-            "agent_id": "slow-bot",
-            "start_time": 0.0,
-            "end_time": 0.2,  # 200ms
-        })
-        ing.ingest_span({
-            "agent_id": "slow-bot",
-            "start_time": 0.0,
-            "end_time": 0.3,  # 300ms
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "slow-bot",
+                "start_time": 0.0,
+                "end_time": 0.2,  # 200ms
+            }
+        )
+        ing.ingest_span(
+            {
+                "agent_id": "slow-bot",
+                "start_time": 0.0,
+                "end_time": 0.3,  # 300ms
+            }
+        )
         # avg = 250ms > 100ms → warn
         d = policy.check(_ctx(entity_id="slow-bot"))
         assert d.allowed is True
@@ -614,10 +648,12 @@ class TestAdversarialEndToEnd:
         def _ingest() -> None:
             for _ in range(100):
                 try:
-                    ing.ingest_span({
-                        "agent_id": "stress-bot",
-                        "attributes": {"veronica.cost_usd": 0.1},
-                    })
+                    ing.ingest_span(
+                        {
+                            "agent_id": "stress-bot",
+                            "attributes": {"veronica.cost_usd": 0.1},
+                        }
+                    )
                 except Exception as exc:
                     errors.append(exc)
 
@@ -654,31 +690,37 @@ class TestAdversarialAgentIdEdgeCases:
     def test_unicode_japanese_agent_id(self) -> None:
         ing = OTelMetricsIngester()
         agent_id = "エージェント-1"
-        ing.ingest_span({
-            "agent_id": agent_id,
-            "attributes": {"veronica.cost_usd": 0.5},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": agent_id,
+                "attributes": {"veronica.cost_usd": 0.5},
+            }
+        )
         m = ing.get_agent_metrics(agent_id)
         assert m.call_count == 1
         assert m.total_cost == pytest.approx(0.5)
 
     def test_unicode_emoji_agent_id(self) -> None:
         ing = OTelMetricsIngester()
-        agent_id = "bot-\U0001F916"  # robot emoji
-        ing.ingest_span({
-            "agent_id": agent_id,
-            "attributes": {"veronica.cost_usd": 1.0},
-        })
+        agent_id = "bot-\U0001f916"  # robot emoji
+        ing.ingest_span(
+            {
+                "agent_id": agent_id,
+                "attributes": {"veronica.cost_usd": 1.0},
+            }
+        )
         m = ing.get_agent_metrics(agent_id)
         assert m.call_count == 1
 
     def test_empty_string_agent_id_tracked_as_unknown(self) -> None:
         """Empty agent_id in span → falls back to span name or 'unknown'."""
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "",
-            "name": "",
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "",
+                "name": "",
+            }
+        )
         # Falls back to "unknown"
         m = ing.get_agent_metrics("unknown")
         assert m.call_count == 1
@@ -686,20 +728,24 @@ class TestAdversarialAgentIdEdgeCases:
     def test_very_long_agent_id(self) -> None:
         ing = OTelMetricsIngester()
         agent_id = "a" * 10_000
-        ing.ingest_span({
-            "agent_id": agent_id,
-            "attributes": {"veronica.cost_usd": 0.1},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": agent_id,
+                "attributes": {"veronica.cost_usd": 0.1},
+            }
+        )
         m = ing.get_agent_metrics(agent_id)
         assert m.call_count == 1
 
     def test_whitespace_only_agent_id(self) -> None:
         """Whitespace-only agent_id is technically valid (str)."""
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "   ",
-            "attributes": {"veronica.cost_usd": 0.1},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "   ",
+                "attributes": {"veronica.cost_usd": 0.1},
+            }
+        )
         m = ing.get_agent_metrics("   ")
         assert m.call_count == 1
 
@@ -707,10 +753,12 @@ class TestAdversarialAgentIdEdgeCases:
         """Null bytes in agent_id — must not crash."""
         ing = OTelMetricsIngester()
         agent_id = "bot\x00null"
-        ing.ingest_span({
-            "agent_id": agent_id,
-            "attributes": {"veronica.cost_usd": 0.1},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": agent_id,
+                "attributes": {"veronica.cost_usd": 0.1},
+            }
+        )
         m = ing.get_agent_metrics(agent_id)
         assert m.call_count == 1
 
@@ -724,11 +772,13 @@ class TestAdversarialAgentIdEdgeCases:
 
         ing = OTelMetricsIngester()
         agent_id = "エージェント-1"
-        ing.ingest_span({
-            "agent_id": agent_id,
-            "attributes": {"veronica.cost_usd": 5.0},
-        })
-        rules = [MetricRule("total_cost_usd","gt", 1.0, "halt")]
+        ing.ingest_span(
+            {
+                "agent_id": agent_id,
+                "attributes": {"veronica.cost_usd": 5.0},
+            }
+        )
+        rules = [MetricRule("total_cost_usd", "gt", 1.0, "halt")]
         policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
         d = policy.check(PolicyContext(entity_id=agent_id))
         assert d.allowed is False
@@ -745,10 +795,12 @@ class TestAdversarialMemoryPressure:
         ing = OTelMetricsIngester()
         agent_count = 5_000
         for i in range(agent_count):
-            ing.ingest_span({
-                "agent_id": f"agent-{i}",
-                "attributes": {"veronica.cost_usd": 0.001},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": f"agent-{i}",
+                    "attributes": {"veronica.cost_usd": 0.001},
+                }
+            )
         all_agents = ing.get_all_agents()
         assert len(all_agents) == agent_count
         # Each agent has exactly 1 call
@@ -760,10 +812,12 @@ class TestAdversarialMemoryPressure:
         ing = OTelMetricsIngester()
         n = 10_000
         for i in range(n):
-            ing.ingest_span({
-                "agent_id": "rapid-bot",
-                "attributes": {"veronica.cost_usd": 0.0001},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "rapid-bot",
+                    "attributes": {"veronica.cost_usd": 0.0001},
+                }
+            )
         m = ing.get_agent_metrics("rapid-bot")
         assert m.call_count == n
         assert m.total_cost == pytest.approx(n * 0.0001)
@@ -772,10 +826,12 @@ class TestAdversarialMemoryPressure:
         """After reset(), all agents return zero metrics."""
         ing = OTelMetricsIngester()
         for i in range(100):
-            ing.ingest_span({
-                "agent_id": f"bot-{i}",
-                "attributes": {"veronica.cost_usd": float(i)},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": f"bot-{i}",
+                    "attributes": {"veronica.cost_usd": float(i)},
+                }
+            )
         ing.reset()
         for i in range(100):
             m = ing.get_agent_metrics(f"bot-{i}")
@@ -801,10 +857,12 @@ class TestAdversarialWindowEdgeCases:
     def test_very_small_window_sec(self) -> None:
         """window_sec=0.001 (1ms) — spans older than 1ms pruned from window."""
         ing = OTelMetricsIngester(window_sec=0.001)
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": 1.0},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": 1.0},
+            }
+        )
         m = ing.get_agent_metrics("bot")
         # call_count and total_cost are NOT windowed — they accumulate
         assert m.call_count == 1
@@ -814,10 +872,12 @@ class TestAdversarialWindowEdgeCases:
         """window_sec=1e9 — effectively infinite window."""
         ing = OTelMetricsIngester(window_sec=1e9)
         for _ in range(5):
-            ing.ingest_span({
-                "agent_id": "bot",
-                "attributes": {"veronica.cost_usd": 0.1},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "bot",
+                    "attributes": {"veronica.cost_usd": 0.1},
+                }
+            )
         m = ing.get_agent_metrics("bot")
         assert m.call_count == 5
 
@@ -831,20 +891,24 @@ class TestAdversarialExtremeValues:
     def test_extremely_large_cost(self) -> None:
         """1e308 cost ingested — must not crash."""
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "rich-bot",
-            "attributes": {"veronica.cost_usd": 1e308},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "rich-bot",
+                "attributes": {"veronica.cost_usd": 1e308},
+            }
+        )
         m = ing.get_agent_metrics("rich-bot")
         assert m.total_cost == pytest.approx(1e308)
 
     def test_inf_cost_is_rejected(self) -> None:
         """inf cost (not finite) — must be rejected (cost stays 0)."""
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": float("inf")},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": float("inf")},
+            }
+        )
         m = ing.get_agent_metrics("bot")
         assert m.total_cost == 0.0
 
@@ -852,10 +916,12 @@ class TestAdversarialExtremeValues:
         """Accumulate 10 spans with 1e9 tokens each."""
         ing = OTelMetricsIngester()
         for _ in range(10):
-            ing.ingest_span({
-                "agent_id": "token-bot",
-                "attributes": {"llm.token.count.total": 1_000_000_000},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "token-bot",
+                    "attributes": {"llm.token.count.total": 1_000_000_000},
+                }
+            )
         m = ing.get_agent_metrics("token-bot")
         assert m.total_tokens == 10 * 1_000_000_000
 
@@ -868,11 +934,13 @@ class TestAdversarialExtremeValues:
         from veronica_core.runtime_policy import PolicyContext
 
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": 1e300},
-        })
-        rules = [MetricRule("total_cost_usd","gt", 1e308, "halt")]
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": 1e300},
+            }
+        )
+        rules = [MetricRule("total_cost_usd", "gt", 1e308, "halt")]
         policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
         d = policy.check(PolicyContext(entity_id="bot"))
         assert d.allowed is True  # 1e300 not > 1e308
@@ -893,7 +961,7 @@ class TestAdversarialTOCTOU:
         from veronica_core.runtime_policy import PolicyContext
 
         ing = OTelMetricsIngester()
-        rules = [MetricRule("total_cost_usd","gt", 1.0, "halt")]
+        rules = [MetricRule("total_cost_usd", "gt", 1.0, "halt")]
         policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
 
         # Check 1: no cost yet → allow
@@ -901,10 +969,12 @@ class TestAdversarialTOCTOU:
         assert d1.allowed is True
 
         # Ingest while policy is "idle"
-        ing.ingest_span({
-            "agent_id": "bot",
-            "attributes": {"veronica.cost_usd": 2.0},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": 2.0},
+            }
+        )
 
         # Check 2: cost=2.0 > 1.0 → halt
         d2 = policy.check(PolicyContext(entity_id="bot"))
@@ -1079,7 +1149,9 @@ class TestAdversarialPropertyException:
         """ZeroDivisionError raised by a metric property must not propagate."""
         policy = self._policy_with_raising_property(ZeroDivisionError, "total_cost_usd")
         d = policy.check(_ctx(entity_id="bot"))
-        assert d.allowed is True, "ZeroDivisionError in property must fail-safe to allow"
+        assert d.allowed is True, (
+            "ZeroDivisionError in property must fail-safe to allow"
+        )
 
     def test_runtime_error_in_property_is_safe(self) -> None:
         """RuntimeError raised by a metric property must not propagate."""
@@ -1188,6 +1260,7 @@ class TestAdversarialFridayR4:
     def test_factory_rejects_non_list_rules(self) -> None:
         """rules must be a list; string/dict/int must raise TypeError."""
         from veronica_core.policy.registry import PolicyRegistry
+
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="list"):
@@ -1198,6 +1271,7 @@ class TestAdversarialFridayR4:
     def test_factory_rejects_non_dict_rule_entry(self) -> None:
         """Each rule entry must be a dict; string entries must raise TypeError."""
         from veronica_core.policy.registry import PolicyRegistry
+
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="dict"):
@@ -1206,17 +1280,22 @@ class TestAdversarialFridayR4:
     def test_factory_coerces_numeric_agent_id_to_str(self) -> None:
         """Numeric agent_id from YAML should be coerced to string."""
         from veronica_core.policy.registry import PolicyRegistry
+
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
-        policy = factory({
-            "rules": [{
-                "metric": "total_cost_usd",
-                "operator": "gt",
-                "threshold": 1.0,
-                "action": "halt",
-                "agent_id": 42,
-            }]
-        })
+        policy = factory(
+            {
+                "rules": [
+                    {
+                        "metric": "total_cost_usd",
+                        "operator": "gt",
+                        "threshold": 1.0,
+                        "action": "halt",
+                        "agent_id": 42,
+                    }
+                ]
+            }
+        )
         assert policy.rules[0].agent_id == "42"
 
     def test_ingester_max_agents_limit(self) -> None:
@@ -1249,8 +1328,12 @@ class TestAdversarialFridayR4:
             avg_latency_ms = float("nan")
             error_rate = float("-inf")
 
-        assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "total_cost_usd") is None
-        assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "avg_latency_ms") is None
+        assert (
+            MetricsDrivenPolicy._extract_metric(InfMetrics(), "total_cost_usd") is None
+        )
+        assert (
+            MetricsDrivenPolicy._extract_metric(InfMetrics(), "avg_latency_ms") is None
+        )
         assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "error_rate") is None
 
 
@@ -1275,10 +1358,12 @@ class TestR5AuditFixes:
         ing = OTelMetricsIngester(max_cost_window_size=max_size)
         # Each span has a cost so it appends to cost_window
         for i in range(200_000):
-            ing.ingest_span({
-                "agent_id": "bot",
-                "attributes": {"veronica.cost_usd": 0.001},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "bot",
+                    "attributes": {"veronica.cost_usd": 0.001},
+                }
+            )
         # Access internal state to verify bound
         with ing._global_lock:
             state = ing._agents.get("bot")
@@ -1293,10 +1378,12 @@ class TestR5AuditFixes:
         assert default_max > 0, "default maxlen must be positive"
         # Ingest default_max + 100 spans with cost
         for _ in range(default_max + 100):
-            ing.ingest_span({
-                "agent_id": "agent",
-                "attributes": {"veronica.cost_usd": 0.001},
-            })
+            ing.ingest_span(
+                {
+                    "agent_id": "agent",
+                    "attributes": {"veronica.cost_usd": 0.001},
+                }
+            )
         with ing._global_lock:
             state = ing._agents.get("agent")
         assert state is not None
@@ -1321,10 +1408,12 @@ class TestR5AuditFixes:
             try:
                 while time.monotonic() < deadline:
                     for i in range(5):
-                        ing.ingest_span({
-                            "agent_id": f"agent-{i}",
-                            "attributes": {"veronica.cost_usd": 0.001},
-                        })
+                        ing.ingest_span(
+                            {
+                                "agent_id": f"agent-{i}",
+                                "attributes": {"veronica.cost_usd": 0.001},
+                            }
+                        )
             except Exception as exc:
                 errors.append(exc)
 
@@ -1358,10 +1447,12 @@ class TestR5AuditFixes:
         def ingest() -> None:
             try:
                 while not stop.is_set():
-                    ing.ingest_span({
-                        "agent_id": "target",
-                        "attributes": {"veronica.cost_usd": 0.001},
-                    })
+                    ing.ingest_span(
+                        {
+                            "agent_id": "target",
+                            "attributes": {"veronica.cost_usd": 0.001},
+                        }
+                    )
             except Exception as exc:
                 errors.append(exc)
 
@@ -1398,7 +1489,9 @@ class TestR5AuditFixes:
             raise RuntimeError("injected failure")
 
         with patch.object(ing, "_ingest_span_internal", side_effect=_explode):
-            with caplog.at_level(logging.DEBUG, logger="veronica_core.otel_feedback.ingester"):
+            with caplog.at_level(
+                logging.DEBUG, logger="veronica_core.otel_feedback.ingester"
+            ):
                 ing.ingest_span({"name": "bad-span", "agent_id": "x"})
 
         # Must have logged a debug message (never re-raises)
@@ -1430,6 +1523,7 @@ class TestR5AuditFixes:
 
     def test_r5_get_metrics_fail_open_returns_none(self) -> None:
         """_get_metrics must return None (not raise) when ingester explodes."""
+
         class BrokenIngester:
             def get_agent_metrics(self, agent_id: str) -> Any:
                 raise RuntimeError("ingester down")
@@ -1445,15 +1539,20 @@ class TestR5AuditFixes:
             def get_agent_metrics(self, agent_id: str) -> Any:
                 raise RuntimeError("simulated ingester failure")
 
-        with caplog.at_level(logging.WARNING, logger="veronica_core.policy.metrics_policy"):
+        with caplog.at_level(
+            logging.WARNING, logger="veronica_core.policy.metrics_policy"
+        ):
             MetricsDrivenPolicy._get_metrics(BrokenIngester(), "agent-y")
 
         warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert warning_records, "expected logger.warning on _get_metrics failure"
-        assert "agent-y" in warning_records[0].message or "agent-y" in str(warning_records[0].args)
+        assert "agent-y" in warning_records[0].message or "agent-y" in str(
+            warning_records[0].args
+        )
 
     def test_r5_get_metrics_fail_open_policy_allows(self) -> None:
         """check() must allow (fail-open) when ingester raises on get_agent_metrics."""
+
         class BrokenIngester:
             def get_agent_metrics(self, agent_id: str) -> Any:
                 raise RuntimeError("ingester down")
@@ -1507,7 +1606,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="metric"):
-            factory({"rules": [{"metric": None, "operator": "gt", "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": None,
+                            "operator": "gt",
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_metric_empty_string_raises_type_error(self) -> None:
         """metric='' in rule dict must raise TypeError."""
@@ -1516,7 +1626,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="metric"):
-            factory({"rules": [{"metric": "", "operator": "gt", "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "",
+                            "operator": "gt",
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_metric_zero_raises_type_error(self) -> None:
         """metric=0 (falsy non-string) in rule dict must raise TypeError."""
@@ -1525,7 +1646,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="metric"):
-            factory({"rules": [{"metric": 0, "operator": "gt", "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": 0,
+                            "operator": "gt",
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_operator_null_raises_type_error(self) -> None:
         """operator=None in rule dict must raise TypeError."""
@@ -1534,7 +1666,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="operator"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": None, "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": None,
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_operator_empty_string_raises_type_error(self) -> None:
         """operator='' in rule dict must raise TypeError."""
@@ -1543,7 +1686,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="operator"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": "", "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": "",
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_operator_zero_raises_type_error(self) -> None:
         """operator=0 (falsy non-string) in rule dict must raise TypeError."""
@@ -1552,7 +1706,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="operator"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": 0, "action": "halt", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": 0,
+                            "action": "halt",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_action_null_raises_type_error(self) -> None:
         """action=None in rule dict must raise TypeError."""
@@ -1561,7 +1726,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="action"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": None, "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": "gt",
+                            "action": None,
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_action_empty_string_raises_type_error(self) -> None:
         """action='' in rule dict must raise TypeError."""
@@ -1570,7 +1746,18 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="action"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": "", "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": "gt",
+                            "action": "",
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )
 
     def test_r5_action_zero_raises_type_error(self) -> None:
         """action=0 (falsy non-string) in rule dict must raise TypeError."""
@@ -1579,4 +1766,15 @@ class TestR5AuditFixes:
         registry = PolicyRegistry()
         factory = registry.get_rule_type("metric_rule")
         with pytest.raises(TypeError, match="action"):
-            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": 0, "threshold": 1.0}]})
+            factory(
+                {
+                    "rules": [
+                        {
+                            "metric": "total_cost_usd",
+                            "operator": "gt",
+                            "action": 0,
+                            "threshold": 1.0,
+                        }
+                    ]
+                }
+            )

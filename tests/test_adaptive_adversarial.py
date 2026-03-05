@@ -53,9 +53,7 @@ class TestNaNInfHandling:
     def test_nan_cost_in_policy_check(self):
         """NaN in PolicyContext.cost_usd must not crash AdaptiveThresholdPolicy."""
         est = BurnRateEstimator()
-        policy = AdaptiveThresholdPolicy(
-            burn_rate=est, remaining_budget=100.0
-        )
+        policy = AdaptiveThresholdPolicy(burn_rate=est, remaining_budget=100.0)
         ctx = PolicyContext(cost_usd=float("nan"))
         decision = policy.check(ctx)
         # Should return a valid decision without crashing
@@ -145,18 +143,14 @@ class TestHysteresisNoOscillation:
         ctx = PolicyContext()
         # 10 consecutive checks should give consistent results
         results = [policy.check(ctx).allowed for _ in range(10)]
-        assert all(r == results[0] for r in results), (
-            f"Oscillation detected: {results}"
-        )
+        assert all(r == results[0] for r in results), f"Oscillation detected: {results}"
 
 
 class TestZeroRemainingBudgetImmediate:
     def test_zero_remaining_halts_immediately(self):
         """Zero remaining_budget → HALT even without burn rate data."""
         est = BurnRateEstimator()
-        policy = AdaptiveThresholdPolicy(
-            burn_rate=est, remaining_budget=0.0
-        )
+        policy = AdaptiveThresholdPolicy(burn_rate=est, remaining_budget=0.0)
         ctx = PolicyContext()
         decision = policy.check(ctx)
         assert decision.allowed is False
@@ -166,9 +160,7 @@ class TestZeroRemainingBudgetImmediate:
         """Negative remaining budget after context cost subtraction → HALT."""
         est = BurnRateEstimator()
         # remaining=0.5, context deducts 1.0 → remaining goes to 0
-        policy = AdaptiveThresholdPolicy(
-            burn_rate=est, remaining_budget=0.5
-        )
+        policy = AdaptiveThresholdPolicy(burn_rate=est, remaining_budget=0.5)
         ctx = PolicyContext(cost_usd=1.0)
         decision = policy.check(ctx)
         assert decision.allowed is False
@@ -176,9 +168,7 @@ class TestZeroRemainingBudgetImmediate:
     def test_update_remaining_to_zero_halts(self):
         """update_remaining_budget(0) → subsequent check returns HALT."""
         est = BurnRateEstimator()
-        policy = AdaptiveThresholdPolicy(
-            burn_rate=est, remaining_budget=100.0
-        )
+        policy = AdaptiveThresholdPolicy(burn_rate=est, remaining_budget=100.0)
         policy.update_remaining_budget(0.0)
         ctx = PolicyContext()
         decision = policy.check(ctx)
@@ -188,6 +178,7 @@ class TestZeroRemainingBudgetImmediate:
 # ---------------------------------------------------------------------------
 # Requirement 2: Concurrent record() + current_rate() from 10+ threads
 # ---------------------------------------------------------------------------
+
 
 class TestConcurrentRecordAndRate:
     def test_10_threads_record_and_rate_consistent(self):
@@ -216,10 +207,9 @@ class TestConcurrentRecordAndRate:
                 with lock:
                     errors.append(e)
 
-        threads = (
-            [threading.Thread(target=recorder, args=(i,)) for i in range(10)]
-            + [threading.Thread(target=reader) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=recorder, args=(i,)) for i in range(10)] + [
+            threading.Thread(target=reader) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -255,10 +245,9 @@ class TestConcurrentRecordAndRate:
             except Exception as e:
                 errors.append(e)
 
-        threads = (
-            [threading.Thread(target=recorder) for _ in range(5)]
-            + [threading.Thread(target=tte_reader) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=recorder) for _ in range(5)] + [
+            threading.Thread(target=tte_reader) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -270,6 +259,7 @@ class TestConcurrentRecordAndRate:
 # ---------------------------------------------------------------------------
 # Requirement 5: Extremely large window (1M records) → bounded memory
 # ---------------------------------------------------------------------------
+
 
 class TestLargeWindowMemoryBound:
     def test_1m_records_bounded_by_max_window_size(self):
@@ -306,6 +296,7 @@ class TestLargeWindowMemoryBound:
 # ---------------------------------------------------------------------------
 # Requirement 6: time.monotonic() going backwards (mocked) → handled
 # ---------------------------------------------------------------------------
+
 
 class TestMonotonicBackwards:
     def test_backwards_monotonic_in_record(self):
@@ -360,6 +351,7 @@ class TestMonotonicBackwards:
 # Requirements 7 & 8: AnomalyDetector edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestAnomalyDetectorEdgeCases:
     def test_zero_variance_no_division_by_zero(self):
         """All-identical values → std=0 → is_anomalous returns False, no ZeroDivisionError."""
@@ -377,6 +369,7 @@ class TestAnomalyDetectorEdgeCases:
         detector = AnomalyDetector(min_samples=30)
         # Build a stable distribution: mean=0, std≈1
         import random
+
         rng = random.Random(42)
         for _ in range(100):
             detector.record("signal", rng.gauss(0.0, 1.0))
@@ -417,6 +410,7 @@ class TestAnomalyDetectorEdgeCases:
 # (logic exercised above; these provide unambiguous named coverage)
 # ---------------------------------------------------------------------------
 
+
 class TestExplicitAdversarialRequirements:
     def test_concurrent_record_and_current_rate_no_crash(self):
         """10 threads doing record() + current_rate() simultaneously → no crash, consistent state."""
@@ -444,10 +438,9 @@ class TestExplicitAdversarialRequirements:
                 with lock:
                     errors.append(e)
 
-        threads = (
-            [threading.Thread(target=do_record, args=(i,)) for i in range(10)]
-            + [threading.Thread(target=do_rate) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=do_record, args=(i,)) for i in range(10)] + [
+            threading.Thread(target=do_rate) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:

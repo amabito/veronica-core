@@ -232,8 +232,8 @@ class DynamicAllocator:
         usage = {name: max(0.0, current_usage.get(name, 0.0)) for name in agent_names}
         total_usage = sum(usage.values())
 
-        if total_usage == 0.0:
-            # No usage signal — equal split.
+        if total_usage < 1e-12:
+            # No meaningful usage signal (zero or near-zero float noise) — equal split.
             share = total_budget / n
             allocations = {name: share for name in agent_names}
         else:

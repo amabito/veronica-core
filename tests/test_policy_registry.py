@@ -24,7 +24,14 @@ class TestPolicyRegistry:
 
     def test_builtin_types_at_import_time(self) -> None:
         registry = PolicyRegistry()
-        expected = {"token_budget", "cost_ceiling", "rate_limit", "circuit_breaker", "step_limit", "time_limit"}
+        expected = {
+            "token_budget",
+            "cost_ceiling",
+            "rate_limit",
+            "circuit_breaker",
+            "step_limit",
+            "time_limit",
+        }
         assert expected.issubset(set(registry.known_types()))
 
     def test_register_custom_rule_type(self) -> None:
@@ -85,6 +92,7 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("token_budget")
         hook = factory({"max_output_tokens": 500})
         from veronica_core.shield.token_budget import TokenBudgetHook
+
         assert isinstance(hook, TokenBudgetHook)
 
     def test_builtin_circuit_breaker_factory_creates_instance(self) -> None:
@@ -92,6 +100,7 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("circuit_breaker")
         cb = factory({"failure_threshold": 3})
         from veronica_core.circuit_breaker import CircuitBreaker
+
         assert isinstance(cb, CircuitBreaker)
 
     def test_builtin_rate_limit_factory_creates_hook(self) -> None:
@@ -99,6 +108,7 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("rate_limit")
         hook = factory({"max_calls": 10, "window_seconds": 30.0})
         from veronica_core.shield.budget_window import BudgetWindowHook
+
         assert isinstance(hook, BudgetWindowHook)
 
     def test_builtin_cost_ceiling_factory_creates_enforcer(self) -> None:
@@ -106,6 +116,7 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("cost_ceiling")
         enforcer = factory({"limit_usd": 5.0})
         from veronica_core.budget import BudgetEnforcer
+
         assert isinstance(enforcer, BudgetEnforcer)
 
     def test_builtin_step_limit_factory_creates_guard(self) -> None:
@@ -113,6 +124,7 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("step_limit")
         guard = factory({"max_steps": 10})
         from veronica_core.agent_guard import AgentStepGuard
+
         assert isinstance(guard, AgentStepGuard)
 
     def test_builtin_time_limit_factory_creates_policy(self) -> None:
@@ -120,4 +132,5 @@ class TestPolicyRegistry:
         factory = registry.get_rule_type("time_limit")
         policy = factory({})
         from veronica_core.shield.time_policy import TimeAwarePolicy
+
         assert isinstance(policy, TimeAwarePolicy)

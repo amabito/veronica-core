@@ -253,7 +253,9 @@ class TestMetricsDrivenPolicyBasic:
         ingester = FakeIngester({"agent-a": m_a, "agent-b": m_b})
         # Rule targets agent-b (below threshold) but policy default is agent-a
         rule = MetricRule("total_cost_usd", "gt", 1.0, "halt", agent_id="agent-b")
-        policy = MetricsDrivenPolicy(rules=[rule], ingester=ingester, agent_id="agent-a")
+        policy = MetricsDrivenPolicy(
+            rules=[rule], ingester=ingester, agent_id="agent-a"
+        )
         d = policy.check(_ctx())
         assert d.allowed is True
 
@@ -314,7 +316,9 @@ class TestSeverityOrdering:
 
 
 class TestMetricAttributeMapping:
-    def _policy(self, metric: str, op: str, threshold: float, action: str, m: FakeMetrics) -> PolicyDecision:
+    def _policy(
+        self, metric: str, op: str, threshold: float, action: str, m: FakeMetrics
+    ) -> PolicyDecision:
         ingester = FakeIngester({"bot": m})
         rule = MetricRule(metric, op, threshold, action, agent_id="bot")
         policy = MetricsDrivenPolicy(rules=[rule], ingester=ingester)
@@ -703,26 +707,28 @@ rules:
             set_default_ingester,
         )
 
-        json_content = json.dumps({
-            "version": "1.0",
-            "name": "test-json-metric-policy",
-            "rules": [
-                {
-                    "type": "metric_rule",
-                    "params": {
-                        "rules": [
-                            {
-                                "metric": "error_rate",
-                                "operator": "gt",
-                                "threshold": 0.3,
-                                "action": "degrade",
-                            }
-                        ]
-                    },
-                    "on_exceed": "degrade",
-                }
-            ],
-        })
+        json_content = json.dumps(
+            {
+                "version": "1.0",
+                "name": "test-json-metric-policy",
+                "rules": [
+                    {
+                        "type": "metric_rule",
+                        "params": {
+                            "rules": [
+                                {
+                                    "metric": "error_rate",
+                                    "operator": "gt",
+                                    "threshold": 0.3,
+                                    "action": "degrade",
+                                }
+                            ]
+                        },
+                        "on_exceed": "degrade",
+                    }
+                ],
+            }
+        )
         set_default_ingester(None)
         loader = PolicyLoader()
         loaded = loader.load_from_string(json_content, format="json")
@@ -755,10 +761,12 @@ rules:
     on_exceed: halt
 """
         ing = OTelMetricsIngester()
-        ing.ingest_span({
-            "agent_id": "live-agent",
-            "attributes": {"veronica.cost_usd": 1.0},
-        })
+        ing.ingest_span(
+            {
+                "agent_id": "live-agent",
+                "attributes": {"veronica.cost_usd": 1.0},
+            }
+        )
         set_default_ingester(ing)
         try:
             loader = PolicyLoader()
@@ -772,7 +780,10 @@ rules:
     def test_metric_rule_multiple_rules_yaml(self) -> None:
         """Multiple rules in a single metric_rule params block."""
         from veronica_core.policy.loader import PolicyLoader
-        from veronica_core.policy.metrics_policy import MetricsDrivenPolicy, set_default_ingester
+        from veronica_core.policy.metrics_policy import (
+            MetricsDrivenPolicy,
+            set_default_ingester,
+        )
 
         yaml_content = """
 version: "1.0"

@@ -10,6 +10,7 @@ Tests verify that:
 3. With ExecutionContext parent-child hierarchy: child costs bubble up to parent
    and are contained by the parent's budget ceiling
 """
+
 from __future__ import annotations
 
 import sys
@@ -169,9 +170,7 @@ class TestAgentAmplificationContained:
         registry: list[str] = []
         # Without containment: depth=3, branching=2 = 15 calls
         # With max_steps=5: only 5 calls allowed
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=5, max_retries_total=10
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=5, max_retries_total=10)
         ctx = ExecutionContext(config=config)
         agent = StubAgentWithContext(
             name="root",
@@ -190,9 +189,7 @@ class TestAgentAmplificationContained:
         """Cost ceiling stops multi-level spawning before budget is exhausted."""
         registry: list[str] = []
         # Each agent costs $0.01, budget = $0.05 => max 5 agents
-        config = ExecutionConfig(
-            max_cost_usd=0.05, max_steps=100, max_retries_total=10
-        )
+        config = ExecutionConfig(max_cost_usd=0.05, max_steps=100, max_retries_total=10)
         ctx = ExecutionContext(config=config)
         agent = StubAgentWithContext(
             name="root",
@@ -212,9 +209,7 @@ class TestAgentAmplificationContained:
     def test_snapshot_tracks_all_nodes(self) -> None:
         """ContextSnapshot nodes list captures every contained agent call."""
         registry: list[str] = []
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=7, max_retries_total=10
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=7, max_retries_total=10)
         ctx = ExecutionContext(config=config)
         agent = StubAgentWithContext(
             name="root",
@@ -293,9 +288,7 @@ class TestCancellationTokenPropagation:
 
     def test_context_abort_cancels_token(self) -> None:
         """ExecutionContext.abort() cancels the internal CancellationToken."""
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=100, max_retries_total=0
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=100, max_retries_total=0)
         ctx = ExecutionContext(config=config)
 
         # Confirm not aborted initially
@@ -372,9 +365,7 @@ class TestLeafAgentEdgeCases:
     def test_single_agent_with_context_allowed(self) -> None:
         """Leaf agent allowed by ExecutionContext with generous config."""
         registry: list[str] = []
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=10, max_retries_total=5
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=10, max_retries_total=5)
         ctx = ExecutionContext(config=config)
         agent = StubAgentWithContext(
             name="leaf",
@@ -391,9 +382,7 @@ class TestLeafAgentEdgeCases:
     def test_single_agent_halted_at_zero_steps(self) -> None:
         """Leaf agent blocked when max_steps=0."""
         registry: list[str] = []
-        config = ExecutionConfig(
-            max_cost_usd=100.0, max_steps=0, max_retries_total=5
-        )
+        config = ExecutionConfig(max_cost_usd=100.0, max_steps=0, max_retries_total=5)
         ctx = ExecutionContext(config=config)
         agent = StubAgentWithContext(
             name="leaf",

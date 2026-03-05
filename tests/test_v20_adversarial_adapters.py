@@ -691,17 +691,85 @@ class TestExecutionContextContainerAdapter:
         proxy.spend(4.0)
         assert proxy.spent_usd == pytest.approx(4.0)
 
-    def test_budget_proxy_spend_exception_returns_true_safe(self) -> None:
-        """If spend raises internally, it must return True (fail-open)."""
+    def test_budget_proxy_spend_exception_returns_false_fail_closed(self) -> None:
+        """If spend() raises internally, it must return False (fail-closed) to prevent budget bypass.
 
-        class _ExplodingCtx:
-            @property
-            def _lock(self) -> Any:
-                raise RuntimeError("lock exploded")
+        Arrange: A fake backend whose add() method raises, bypassing the lock path.
+        This ensures the exception propagates inside the try block in spend().
+        """
+        from unittest.mock import MagicMock
 
-        proxy = _BudgetProxy(_ExplodingCtx(), limit_usd=1.0)
+        ctx = MagicMock()
+        exploding_backend = MagicMock()
+        exploding_backend.get.return_value = 0.0
+        exploding_backend.add.side_effect = RuntimeError("backend exploded")
+        ctx._budget_backend = exploding_backend
+
+        proxy = _BudgetProxy(ctx, limit_usd=1.0)
         result = proxy.spend(0.5)
-        assert result is True
+        assert result is False
+
+    def test_step_guard_proxy_step_exception_returns_false_fail_closed(self) -> None:
+        """If step() raises internally, it must return False (fail-closed) to prevent step limit bypass.
+
+        Arrange: A context where _step_count attribute access raises AttributeError
+        inside the lock block, triggering the except branch.
+        """
+        import threading
+
+        class _ExplodingStepCtx:
+            _lock = threading.Lock()
+
+            @property
+            def _step_count(self) -> int:
+                raise AttributeError("_step_count exploded")
+
+            @_step_count.setter
+            def _step_count(self, v: int) -> None:
+                raise AttributeError("_step_count setter exploded")
+
+        proxy = _StepGuardProxy(_ExplodingStepCtx(), max_steps=5)
+        result = proxy.step()
+        assert result is False
+
+    def test_budget_proxy_spend_exception_logged(self, caplog: Any) -> None:
+        """Exception in spend() must emit a warning log."""
+        import logging
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        exploding_backend = MagicMock()
+        exploding_backend.get.return_value = 0.0
+        exploding_backend.add.side_effect = RuntimeError(
+            "backend exploded for log test"
+        )
+        ctx._budget_backend = exploding_backend
+
+        proxy = _BudgetProxy(ctx, limit_usd=1.0)
+        with caplog.at_level(logging.WARNING):
+            proxy.spend(0.1)
+        assert any("_BudgetProxy.spend" in r.message for r in caplog.records)
+
+    def test_step_guard_proxy_step_exception_logged(self, caplog: Any) -> None:
+        """Exception in step() must emit a warning log."""
+        import logging
+        import threading
+
+        class _ExplodingStepCtx:
+            _lock = threading.Lock()
+
+            @property
+            def _step_count(self) -> int:
+                raise AttributeError("_step_count exploded for log test")
+
+            @_step_count.setter
+            def _step_count(self, v: int) -> None:
+                raise AttributeError("_step_count setter exploded for log test")
+
+        proxy = _StepGuardProxy(_ExplodingStepCtx(), max_steps=5)
+        with caplog.at_level(logging.WARNING):
+            proxy.step()
+        assert any("_StepGuardProxy.step" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

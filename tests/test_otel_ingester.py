@@ -206,7 +206,10 @@ class TestIngestSpanGenericOTel:
         span = {
             "name": "llm",
             "agent_id": "gen2",
-            "attributes": {"gen_ai.usage.total_tokens": 700, "veronica.cost_usd": 0.007},
+            "attributes": {
+                "gen_ai.usage.total_tokens": 700,
+                "veronica.cost_usd": 0.007,
+            },
         }
         ingester.ingest_span(span)
         m = ingester.get_agent_metrics("gen2")
@@ -473,11 +476,15 @@ class TestThreadSafety:
         def worker(agent_id: str):
             try:
                 for _ in range(5):
-                    ingester.ingest_span(_make_llm_span(agent_id=agent_id, cost=0.01, tokens=100))
+                    ingester.ingest_span(
+                        _make_llm_span(agent_id=agent_id, cost=0.01, tokens=100)
+                    )
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [threading.Thread(target=worker, args=(f"agent_{i}",)) for i in range(50)]
+        threads = [
+            threading.Thread(target=worker, args=(f"agent_{i}",)) for i in range(50)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -487,7 +494,9 @@ class TestThreadSafety:
         all_agents = ingester.get_all_agents()
         assert len(all_agents) == 50
         for agent_id, m in all_agents.items():
-            assert m.call_count == 5, f"{agent_id}: expected 5 calls, got {m.call_count}"
+            assert m.call_count == 5, (
+                f"{agent_id}: expected 5 calls, got {m.call_count}"
+            )
             assert m.total_cost == pytest.approx(0.05, abs=1e-9)
 
     def test_concurrent_reset_and_ingest(self):
@@ -569,6 +578,7 @@ class TestEdgeCases:
     def test_nan_cost_is_ignored(self):
         ingester = OTelMetricsIngester()
         import math
+
         span = {
             "name": "nan_cost",
             "agent_id": "nan_agent",

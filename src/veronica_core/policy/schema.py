@@ -55,7 +55,10 @@ class RuleSchema:
         errors: list[str] = []
         if not self.type or not isinstance(self.type, str):
             errors.append("RuleSchema.type must be a non-empty string")
-        if not isinstance(self.on_exceed, str) or self.on_exceed not in _VALID_ON_EXCEED:
+        if (
+            not isinstance(self.on_exceed, str)
+            or self.on_exceed not in _VALID_ON_EXCEED
+        ):
             errors.append(
                 f"RuleSchema.on_exceed={self.on_exceed!r} is invalid; "
                 f"must be one of {sorted(_VALID_ON_EXCEED)}"

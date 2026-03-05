@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 # AG2 span types we recognise
 # ---------------------------------------------------------------------------
 
-_AG2_SPAN_TYPES = frozenset(
-    {"conversation", "agent", "llm", "tool", "code_execution"}
-)
+_AG2_SPAN_TYPES = frozenset({"conversation", "agent", "llm", "tool", "code_execution"})
 
 
 @dataclass
@@ -74,7 +72,9 @@ class _AgentState:
         self.lock = threading.Lock()
         self.window_sec = window_sec
         # Sliding window: (monotonic_ts, cost) pairs; bounded to prevent unbounded growth
-        self.cost_window: deque[tuple[float, float]] = deque(maxlen=max_cost_window_size)
+        self.cost_window: deque[tuple[float, float]] = deque(
+            maxlen=max_cost_window_size
+        )
 
         self.total_tokens: int = 0
         self.total_cost: float = 0.0
@@ -150,12 +150,20 @@ def _extract_tokens(attrs: dict) -> int:
     # Sum input + output
     input_tokens = 0
     output_tokens = 0
-    for key in ("llm.token.count.prompt", "gen_ai.usage.prompt_tokens", "llm.input_tokens"):
+    for key in (
+        "llm.token.count.prompt",
+        "gen_ai.usage.prompt_tokens",
+        "llm.input_tokens",
+    ):
         v = attrs.get(key)
         if isinstance(v, (int, float)) and math.isfinite(float(v)):
             input_tokens = int(v)
             break
-    for key in ("llm.token.count.completion", "gen_ai.usage.completion_tokens", "llm.output_tokens"):
+    for key in (
+        "llm.token.count.completion",
+        "gen_ai.usage.completion_tokens",
+        "llm.output_tokens",
+    ):
         v = attrs.get(key)
         if isinstance(v, (int, float)) and math.isfinite(float(v)):
             output_tokens = int(v)
@@ -177,7 +185,11 @@ def _is_error_span(span: dict, attrs: dict) -> bool:
     """Return True if the span represents an error or failure."""
     # OTel status
     status = span.get("status") or span.get("status_code") or ""
-    if isinstance(status, str) and status.upper() in ("ERROR", "STATUS_CODE_ERROR", "UNSET_ERROR"):
+    if isinstance(status, str) and status.upper() in (
+        "ERROR",
+        "STATUS_CODE_ERROR",
+        "UNSET_ERROR",
+    ):
         return True
 
     # veronica decision that indicates failure
@@ -259,7 +271,9 @@ class OTelMetricsIngester:
         if max_agents <= 0:
             raise ValueError(f"max_agents must be > 0, got {max_agents}")
         if max_cost_window_size <= 0:
-            raise ValueError(f"max_cost_window_size must be > 0, got {max_cost_window_size}")
+            raise ValueError(
+                f"max_cost_window_size must be > 0, got {max_cost_window_size}"
+            )
         self._window_sec = window_sec
         self._max_agents = max_agents
         self._max_cost_window_size = max_cost_window_size
@@ -407,7 +421,9 @@ class OTelMetricsIngester:
             if agent_id not in self._agents:
                 if len(self._agents) >= self._max_agents:
                     return None
-                self._agents[agent_id] = _AgentState(self._window_sec, self._max_cost_window_size)
+                self._agents[agent_id] = _AgentState(
+                    self._window_sec, self._max_cost_window_size
+                )
             return self._agents[agent_id]
 
     def _get_state_if_exists(self, agent_id: str) -> Optional[_AgentState]:

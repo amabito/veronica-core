@@ -13,6 +13,7 @@ Public types (re-exported from mcp.py and mcp_async.py):
 from __future__ import annotations
 
 import logging
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -150,15 +151,25 @@ class _MCPAdapterBase:
     # ------------------------------------------------------------------
 
     def get_tool_stats(self) -> dict[str, MCPToolStats]:
-        """Return a snapshot of per-tool usage statistics.
+        """Return an immutable snapshot of per-tool usage statistics.
 
-        The returned dict is a shallow copy; individual MCPToolStats instances
-        are the live objects (do not mutate them).
+        Each MCPToolStats value is a deep copy created via dataclasses.replace(),
+        so callers receive a stable view that is unaffected by concurrent writes.
+
+        Subclasses that use asyncio.Lock for _stats_lock must override this method
+        and provide an async variant (get_tool_stats_async).
 
         Returns:
-            Mapping of tool_name -> MCPToolStats.
+            Mapping of tool_name -> MCPToolStats snapshot.
         """
-        return dict(self._stats)
+        # Acquire the lock to prevent RuntimeError from concurrent dict mutation
+        # (new tool-name entry added by _ensure_stats while iterating).
+        # Sync subclasses set _stats_lock to threading.Lock(); async subclasses
+        # must override this method.
+        with self._stats_lock:
+            return {
+                name: dataclasses.replace(stats) for name, stats in self._stats.items()
+            }
 
     # ------------------------------------------------------------------
     # Internal helpers (shared)

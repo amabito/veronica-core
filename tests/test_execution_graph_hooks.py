@@ -30,7 +30,9 @@ class _RecordingObserver:
     def on_node_start(self, node_id: str, name: str, metadata: dict) -> None:
         self.starts.append((node_id, name, metadata))
 
-    def on_node_complete(self, node_id: str, cost_usd: float, duration_ms: float) -> None:
+    def on_node_complete(
+        self, node_id: str, cost_usd: float, duration_ms: float
+    ) -> None:
         self.completes.append((node_id, cost_usd, duration_ms))
 
     def on_node_failed(self, node_id: str, reason: str) -> None:

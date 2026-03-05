@@ -7,6 +7,7 @@ Tests verify that:
 1. Without containment: attack succeeds (unlimited loops possible)
 2. With veronica ExecutionContext + step limit: attack is contained
 """
+
 from __future__ import annotations
 
 import sys
@@ -136,9 +137,7 @@ class TestPromptLoopContained:
         """Budget ceiling halts loop even if step limit not reached."""
         llm = LoopingStubLLM()
         # 10 steps allowed but cost ceiling is $0.30 (3 calls @ $0.10 each)
-        config = ExecutionConfig(
-            max_cost_usd=0.30, max_steps=10, max_retries_total=5
-        )
+        config = ExecutionConfig(max_cost_usd=0.30, max_steps=10, max_retries_total=5)
         ctx = ExecutionContext(config=config)
 
         results = []

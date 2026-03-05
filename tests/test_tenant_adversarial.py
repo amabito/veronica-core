@@ -6,13 +6,11 @@ Attacker mindset: race conditions, edge values, abuse patterns.
 from __future__ import annotations
 
 import threading
-import time
 
 import pytest
 
 from veronica_core.tenant import (
     Tenant,
-    TenantNotFoundError,
     TenantRegistry,
     BudgetPool,
 )
@@ -47,11 +45,12 @@ def test_concurrent_allocate_no_overcommit() -> None:
 
     successes = sum(1 for r in results if r)
     # Remaining should be >= 0.
-    assert pool.remaining() >= -1e-9, f"Overcommit detected: remaining={pool.remaining()}"
+    assert pool.remaining() >= -1e-9, (
+        f"Overcommit detected: remaining={pool.remaining()}"
+    )
     # At most 5 can succeed.
     assert successes <= 5, f"Too many successful allocations: {successes}"
     # Sum of allocations <= total.
-    u = pool.usage()
     total_alloc = sum(pool._allocations.values())  # internal check
     assert total_alloc <= pool.total + 1e-9, (
         f"Internal allocations {total_alloc} exceed total {pool.total}"
@@ -335,9 +334,13 @@ def test_empty_string_tenant_id_handled() -> None:
 def test_unicode_child_id_in_budget_pool() -> None:
     """Unicode child IDs in BudgetPool must work without encoding errors."""
     pool = BudgetPool(total=100.0)
-    assert pool.allocate("\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8-1", 40.0) is True  # エージェント-1
+    assert (
+        pool.allocate("\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8-1", 40.0) is True
+    )  # エージェント-1
     assert pool.spend("\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8-1", 10.0) is True
-    assert pool.remaining_for("\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8-1") == pytest.approx(30.0)
+    assert pool.remaining_for(
+        "\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8-1"
+    ) == pytest.approx(30.0)
 
 
 def test_null_bytes_tenant_id_handled() -> None:

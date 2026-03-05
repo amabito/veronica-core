@@ -64,9 +64,7 @@ def _evaluate_operator(value: float, op: str, threshold: float) -> bool:
         return value <= threshold
     if op == "eq":
         return value == threshold
-    raise ValueError(
-        f"Unknown operator {op!r}. Valid operators: {sorted(_OPERATORS)}"
-    )
+    raise ValueError(f"Unknown operator {op!r}. Valid operators: {sorted(_OPERATORS)}")
 
 
 # ---------------------------------------------------------------------------

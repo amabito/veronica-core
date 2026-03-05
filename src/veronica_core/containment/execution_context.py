@@ -81,18 +81,14 @@ def get_current_partial_buffer() -> PartialResultBuffer | None:
 def attach_partial_buffer(buf: PartialResultBuffer) -> None:
     """Set *buf* as the partial buffer for the current wrap_llm_call context.
 
-    Raises RuntimeError if called outside an active wrap_llm_call (i.e., when
-    no ContextVar token is set).
+    Must be called from inside a fn() callback passed to wrap_llm_call().
+    Calling the same buffer again is idempotent.
 
     Raises RuntimeError if a different buffer is already attached to the current
     context (prevents silent overwrite of an in-progress partial capture).
     """
     current = _current_partial_buffer.get()
-    if current is None:
-        raise RuntimeError(
-            "attach_partial_buffer() called outside an active wrap_llm_call context."
-        )
-    if current is not buf:
+    if current is not None and current is not buf:
         raise RuntimeError(
             "attach_partial_buffer() called with a different buffer than the one "
             "already attached to the current wrap_llm_call context."
@@ -1302,6 +1298,19 @@ class ExecutionContext:
                 self._emit_chain_event("budget_exceeded", reason)
                 return "budget_exceeded"
 
+            if self._step_count >= self._config.max_steps:
+                reason = f"steps {self._step_count} >= limit {self._config.max_steps}"
+                self._emit_chain_event("step_limit_exceeded", reason)
+                return "step_limit_exceeded"
+
+            if self._retries_used >= self._config.max_retries_total:
+                reason = (
+                    f"retries {self._retries_used} >= "
+                    f"budget {self._config.max_retries_total}"
+                )
+                self._emit_chain_event("retry_budget_exceeded", reason)
+                return "retry_budget_exceeded"
+
         # H4: Cross-process budget check. When using a distributed backend
         # (e.g. RedisBudgetBackend), other processes may have accumulated spend
         # that is not reflected in _cost_usd_accumulated (which is local only).
@@ -1327,20 +1336,6 @@ class ExecutionContext:
                     "falling back to local limit",
                     exc_info=True,
                 )
-
-        with self._lock:
-            if self._step_count >= self._config.max_steps:
-                reason = f"steps {self._step_count} >= limit {self._config.max_steps}"
-                self._emit_chain_event("step_limit_exceeded", reason)
-                return "step_limit_exceeded"
-
-            if self._retries_used >= self._config.max_retries_total:
-                reason = (
-                    f"retries {self._retries_used} >= "
-                    f"budget {self._config.max_retries_total}"
-                )
-                self._emit_chain_event("retry_budget_exceeded", reason)
-                return "retry_budget_exceeded"
 
         if self._cancellation_token.is_cancelled:
             with self._lock:

@@ -14,13 +14,19 @@ from veronica_core.policy.schema import PolicyValidationError
 from veronica_core.shield.pipeline import ShieldPipeline
 
 
-_MINIMAL_JSON = json.dumps({
-    "version": "1.0",
-    "name": "Test Policy",
-    "rules": [
-        {"type": "token_budget", "params": {"max_output_tokens": 1000}, "on_exceed": "halt"},
-    ],
-})
+_MINIMAL_JSON = json.dumps(
+    {
+        "version": "1.0",
+        "name": "Test Policy",
+        "rules": [
+            {
+                "type": "token_budget",
+                "params": {"max_output_tokens": 1000},
+                "on_exceed": "halt",
+            },
+        ],
+    }
+)
 
 _MINIMAL_YAML = """\
 version: "1.0"
@@ -32,11 +38,13 @@ rules:
     on_exceed: halt
 """
 
-_EMPTY_RULES_JSON = json.dumps({
-    "version": "1.0",
-    "name": "Empty",
-    "rules": [],
-})
+_EMPTY_RULES_JSON = json.dumps(
+    {
+        "version": "1.0",
+        "name": "Empty",
+        "rules": [],
+    }
+)
 
 
 class TestPolicyLoaderJSON:
@@ -76,7 +84,9 @@ class TestPolicyLoaderJSON:
         def tracking_factory(params):  # noqa: ANN001
             nonlocal call_count
             call_count += 1
-            hook = TokenBudgetHook(max_output_tokens=int(params.get("max_output_tokens", 1000)))
+            hook = TokenBudgetHook(
+                max_output_tokens=int(params.get("max_output_tokens", 1000))
+            )
             instances.append(hook)
             return hook
 
@@ -101,7 +111,9 @@ class TestPolicyLoaderJSON:
 
     def test_load_from_json_file(self) -> None:
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write(_MINIMAL_JSON)
             tmp_path = Path(f.name)
         try:
@@ -144,11 +156,16 @@ class TestPolicyLoaderJSON:
         loader = PolicyLoader()
         with pytest.raises(PolicyValidationError) as exc_info:
             loader.load_from_string("{}", format="toml")  # type: ignore[arg-type]
-        assert "format" in exc_info.value.errors[0].lower() or "unsupported" in exc_info.value.errors[0].lower()
+        assert (
+            "format" in exc_info.value.errors[0].lower()
+            or "unsupported" in exc_info.value.errors[0].lower()
+        )
 
     def test_validate_valid_file_returns_empty_list(self) -> None:
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write(_MINIMAL_JSON)
             tmp_path = Path(f.name)
         try:
@@ -159,7 +176,9 @@ class TestPolicyLoaderJSON:
 
     def test_validate_invalid_file_returns_errors(self) -> None:
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write("{invalid}")
             tmp_path = Path(f.name)
         try:
@@ -170,13 +189,17 @@ class TestPolicyLoaderJSON:
             tmp_path.unlink(missing_ok=True)
 
     def test_validate_unknown_rule_type_returns_error(self) -> None:
-        data = json.dumps({
-            "version": "1.0",
-            "name": "Bad",
-            "rules": [{"type": "does_not_exist", "params": {}}],
-        })
+        data = json.dumps(
+            {
+                "version": "1.0",
+                "name": "Bad",
+                "rules": [{"type": "does_not_exist", "params": {}}],
+            }
+        )
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write(data)
             tmp_path = Path(f.name)
         try:
@@ -210,7 +233,9 @@ class TestPolicyLoaderYAML:
     def test_load_from_yaml_file(self) -> None:
         pytest.importorskip("yaml", reason="pyyaml not installed")
         loader = PolicyLoader()
-        with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".yaml", mode="w", delete=False, encoding="utf-8"
+        ) as f:
             f.write(_MINIMAL_YAML)
             tmp_path = Path(f.name)
         try:
@@ -266,11 +291,13 @@ class TestWatchHandle:
         handle = loader.watch(tmp_path, callback, poll_interval=0.1)
         try:
             time.sleep(0.15)
-            updated = json.dumps({
-                "version": "1.0",
-                "name": "Updated Policy",
-                "rules": [],
-            })
+            updated = json.dumps(
+                {
+                    "version": "1.0",
+                    "name": "Updated Policy",
+                    "rules": [],
+                }
+            )
             tmp_path.write_text(updated, encoding="utf-8")
             time.sleep(0.4)
             assert len(received) >= 1

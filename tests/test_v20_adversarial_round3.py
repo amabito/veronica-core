@@ -171,11 +171,11 @@ class TestCycleDetectionBypassAttempts:
 class TestAdapterProxyExceptionSwallowing:
     """Verify proxy exception-swallowing is safe and predictable."""
 
-    def test_budget_proxy_spend_on_broken_ctx_returns_true(self) -> None:
-        """_BudgetProxy.spend() swallows exceptions and returns True (fail-open).
+    def test_budget_proxy_spend_on_broken_ctx_returns_false(self) -> None:
+        """_BudgetProxy.spend() swallows exceptions and returns False (fail-closed).
 
-        This is intentional: adapter proxies must not crash the agent
-        if the context is in a broken state.
+        Fail-closed: when the context is broken and budget cannot be verified,
+        the proxy denies the spend to prevent silent budget bypass.
         """
         broken_ctx = MagicMock()
         broken_ctx._budget_backend = None
@@ -185,12 +185,12 @@ class TestAdapterProxyExceptionSwallowing:
         broken_ctx._cost_usd_accumulated = 0.0
 
         proxy = _BudgetProxy(broken_ctx, limit_usd=1.0)
-        # Must not raise; returns True (fail-open).
+        # Must not raise; returns False (fail-closed).
         result = proxy.spend(0.5)
-        assert result is True
+        assert result is False
 
-    def test_step_guard_proxy_step_on_broken_ctx_returns_true(self) -> None:
-        """_StepGuardProxy.step() swallows exceptions and returns True (fail-open)."""
+    def test_step_guard_proxy_step_on_broken_ctx_returns_false(self) -> None:
+        """_StepGuardProxy.step() swallows exceptions and returns False (fail-closed)."""
         broken_ctx = MagicMock()
         broken_ctx._lock = MagicMock()
         broken_ctx._lock.__enter__ = MagicMock(side_effect=RuntimeError("broken"))
@@ -198,7 +198,7 @@ class TestAdapterProxyExceptionSwallowing:
 
         proxy = _StepGuardProxy(broken_ctx, max_steps=10)
         result = proxy.step()
-        assert result is True
+        assert result is False
 
     def test_adapter_check_get_snapshot_raises_returns_denied(self) -> None:
         """ExecutionContextContainerAdapter.check() must deny if get_snapshot raises."""

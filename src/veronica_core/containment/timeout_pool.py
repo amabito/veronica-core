@@ -99,10 +99,13 @@ class SharedTimeoutPool:
     def shutdown(self) -> None:
         """Stop the daemon thread.  Primarily for testing.
 
-        Pending callbacks are discarded.
+        Pending callbacks are discarded. The heap and cancelled-handle set are
+        cleared to prevent unbounded memory growth across repeated test cycles.
         """
         with self._lock:
             self._shutdown = True
+            self._heap.clear()
+            self._cancelled.clear()
         self._wakeup.set()
 
     # ------------------------------------------------------------------

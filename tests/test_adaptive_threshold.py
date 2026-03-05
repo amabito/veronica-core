@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
 
 from veronica_core.adaptive.burn_rate import BurnRateEstimator
 from veronica_core.adaptive.threshold import AdaptiveConfig, AdaptiveThresholdPolicy
