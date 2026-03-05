@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.4.0] — 2026-03-05 — Code Quality & HALT Hardening
+
+**Breaking changes:** none. `MCPToolResult.decision` field type changed from `str` to `Decision` enum, but `Decision` inherits from `str` so `== "ALLOW"` / `== "HALT"` comparisons still work.
+
+### Added
+
+- **`ExecutionContext.close()`** — explicit resource cleanup extracted from `__exit__`. Idempotent, thread-safe (10-thread concurrent close calls exactly-once backend cleanup).
+- **CrewAI `execution_context=` kwarg** — chain-level `ExecutionContext` enforcement for CrewAI adapter via `build_adapter_container()`.
+- **`build_adapter_container()`** (`_shared.py`) — routes to `ExecutionContextContainerAdapter` when `execution_context` is provided, else standalone `AIContainer`.
+- **23 adversarial tests** (`test_v24_adversarial.py`) — 6 categories: corrupted input, concurrent access, state corruption, boundary abuse, Decision enum backward compat, wrap+close race.
+
+### Changed
+
+- **`MCPToolResult.decision`** default changed from `str "ALLOW"` to `Decision.ALLOW` enum. All internal string literals migrated to enum references.
+- **`_try_rollback()`** refactored from `@staticmethod(backend, reservation_id)` to instance method `(self, reservation_id)` using `self._budget_backend`. Eliminates 5 duplicated `self._budget_backend` arguments at call sites.
+- **`AsyncMCPContainmentAdapter._ensure_stats()`** — fast-path added: skips lock acquisition for existing tool names (matching sync adapter behavior).
+- **`AsyncMCPContainmentAdapter.__init__()`** — `_backend_supports_reserve` cached at init time instead of per-call `hasattr` check.
+- **`ExecutionContextContainerAdapter.check()`** — reuses already-fetched snapshot instead of triggering a second `get_snapshot()` call.
+
+### Fixed
+
+- **`_BudgetProxy.spent_usd`** — `float(None)` crash when `_cost_usd_accumulated` is `None`. Now returns `0.0` safely.
+
+---
+
 ## [2.3.1] — 2026-03-05 — Safety Hardening & Phase 3 Cleanup
 
 **Breaking changes:** deprecated aliases removed (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`). Callers must use `AIContainer`, `JSONBackend`/`MemoryBackend`, and `ExecutionContext` timeout respectively.
