@@ -246,8 +246,8 @@ Supporting theory:
 
 ### Next
 
-- A2A trust boundary: cross-agent identity verification and policy federation (Phase E, pending AG2 A2A stability)
-- Federation: multi-process policy coordination (Phase G, depends on Phase E)
+- A2A trust boundary: cross-agent identity verification and policy federation (Phase E)
+- Federation: multi-process policy coordination (Phase G)
 
 
 ---
