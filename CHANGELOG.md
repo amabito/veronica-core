@@ -6,6 +6,35 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.0.1] -- 2026-03-06 -- Full Codebase Security Audit Fix
+
+### Fixed
+
+- **CRITICAL**: Policy engine TOCTOU race -- verify and load now use the same bytes (no re-read from disk).
+- **CRITICAL**: Data exfiltration via URL path segments, query keys, userinfo, and fragments now detected by `_check_data_exfil()`.
+- **CRITICAL**: HMAC key minimum length enforced (32 bytes / 256-bit) in `PolicySigner._load_key()`.
+- **CRITICAL**: `FrameworkAdapterProtocol` narrowed to `capabilities()` only; new `ExtendedAdapterProtocol` for optional methods. `isinstance()` now returns True for all adapters.
+- **HIGH**: Git subcommand bypass via global options (`git -c key=val push`) closed with option-value-aware parsing.
+- **HIGH**: `PASSWORD_KV` masking pattern now detects quoted YAML values (`password: "secret"`).
+- **HIGH**: `SemanticLoopGuard` and `PolicyPipeline` now thread-safe (threading.Lock).
+- **HIGH**: `BudgetWindowHook` deque maxlen increased (max_calls * 10) to prevent burst undercount.
+- **HIGH**: `_BudgetProxy.spend()` returns False (fail-safe) when `_get_fn` is None.
+- **HIGH**: `audit_chain.py` hash comparison now constant-time (`hmac.compare_digest`).
+- **HIGH**: `sandbox_windows.py` blocks 2-char drive paths; `dirs_exist_ok=False`.
+- 46 medium/low fixes: documentation, validation, thread safety, API exports.
+
+### Added
+
+- `ExtendedAdapterProtocol` -- optional protocol for adapters supporting cost/token extraction and halt/degrade signals.
+- `Capability` and `enable_otel_with_tracer` now exported from `veronica_core.__init__`.
+- `_utils.py` -- shared `redact_exc()` (eliminates duplication between `distributed.py` and `distributed_circuit_breaker.py`).
+- `SafeModeHook.disable()` method and `enabled` setter.
+- `__all__` added to 9 core modules.
+
+**Breaking changes**: none. All fixes are backward-compatible.
+
+---
+
 ## [3.0.0] -- 2026-03-05 -- God Class Split, Adapter Capabilities, Audit Chain
 
 ### Added

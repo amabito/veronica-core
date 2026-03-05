@@ -29,8 +29,9 @@ pip install veronica-core
 | **2.6.0** | Policy Simulation | Replay execution logs against policy configs, OTel span import, per-agent breakdown, NaN-safe accumulation |
 | **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
 | **3.0.0** | God Class Split + AdapterCapabilities + AuditChain | `distributed.py`/`policy_engine.py`/`execution_context.py` split, `AdapterCapabilities` frozen dataclass, `AuditChain` tamper-proof hash chain |
+| **3.0.1** | Full Codebase Security Audit Fix | 68 findings (5 Critical, 17 High) resolved -- TOCTOU, data exfil, HMAC key length, thread safety, protocol compliance |
 
-3995 tests. Zero breaking changes from 2.1.0 through 2.7.0. v3.0.0 requires `capabilities()` on custom `FrameworkAdapterProtocol` implementations.
+3989 tests. Zero breaking changes from 2.1.0 through 3.0.1.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -209,7 +210,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.0.0
+## Ship Readiness -- v3.0.1
 
 3995 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
