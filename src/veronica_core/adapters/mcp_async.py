@@ -114,6 +114,11 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Lock required: stats updates occur after `await call_fn()`, so two
         # coroutines can interleave and produce torn reads/writes without locking.
         self._stats_lock = asyncio.Lock()
+        # Cache backend reserve capability once (doesn't change after init).
+        _backend = getattr(self._ctx, "_budget_backend", None)
+        self._backend_supports_reserve: bool = _backend is not None and hasattr(
+            _backend, "reserve"
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -195,11 +200,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Budget gate: use reserve/commit/rollback when available (two-phase
         # atomicity), otherwise fall back to the sync _budget_probe no-op.
         budget_backend = getattr(self._ctx, "_budget_backend", None)
-        _use_reserve = (
-            cost_estimate > 0.0
-            and budget_backend is not None
-            and hasattr(budget_backend, "reserve")
-        )
+        _use_reserve = cost_estimate > 0.0 and self._backend_supports_reserve
         _reservation_id: Optional[str] = None
 
         if _use_reserve:
@@ -348,6 +349,8 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
 
     async def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""
+        if tool_name in self._stats:  # fast path: skip lock for existing tools
+            return
         async with self._stats_lock:
             if tool_name not in self._stats:
                 if len(self._stats) >= _STATS_WARN_LIMIT:

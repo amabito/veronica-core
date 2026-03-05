@@ -257,7 +257,13 @@ class ExecutionContextContainerAdapter:
             return PolicyDecision(
                 allowed=False, reason="Context aborted", policy_type="containment"
             )
-        spent = self.budget.spent_usd
+        # Reuse snapshot cost when available to avoid a second backend call
+        # (budget.spent_usd would call get_snapshot() again internally).
+        spent = (
+            snap.cost_usd_accumulated
+            if snap is not None and hasattr(snap, "cost_usd_accumulated")
+            else self.budget.spent_usd
+        )
         if self._config.max_cost_usd > 0 and spent >= self._config.max_cost_usd:
             return PolicyDecision(
                 allowed=False,

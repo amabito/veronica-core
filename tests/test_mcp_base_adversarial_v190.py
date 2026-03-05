@@ -524,14 +524,14 @@ class TestLockTypeIsolation:
 
 
 class TestAsyncEnsureStatsLocking:
-    """_ensure_stats in async adapter always acquires the lock for safety."""
+    """_ensure_stats in async adapter uses fast-path for existing tools."""
 
-    def test_ensure_stats_always_locks_even_for_existing_tool(self) -> None:
-        """Async _ensure_stats does NOT have a fast-path read -- it always locks.
+    def test_ensure_stats_skips_lock_for_existing_tool(self) -> None:
+        """Async _ensure_stats has a fast-path: existing tool skips the lock.
 
-        This is by design: async coroutines interleave at await points, so a
-        GIL-based fast-path read is not safe. Test verifies the lock is acquired
-        even for a pre-existing tool.
+        The dict membership check (`tool_name in self._stats`) is safe without
+        the lock because dict reads under CPython's GIL are atomic, and the
+        fast-path only returns early — it never mutates.
         """
         adapter = _make_async()
 
@@ -547,10 +547,9 @@ class TestAsyncEnsureStatsLocking:
             await adapter._ensure_stats("tool")
             initial_count = lock_acquired_count[0]
 
-            # Second call: existing tool -- should still acquire lock
+            # Second call: existing tool -- fast-path skips lock
             await adapter._ensure_stats("tool")
-            # Lock must have been acquired again (no unsafe fast-path)
-            assert lock_acquired_count[0] > initial_count
+            assert lock_acquired_count[0] == initial_count
 
         # Use monkeypatching at the instance level for asyncio.Lock
         with patch.object(
