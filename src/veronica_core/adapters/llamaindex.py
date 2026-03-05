@@ -79,7 +79,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
 
     On each LLM invocation:
     - **Pre-call** (``on_event_start`` with ``CBEventType.LLM``): policy check
-      via AIcontainer.check(). Raises VeronicaHalt if any policy denies.
+      via AIContainer.check(). Raises VeronicaHalt if any policy denies.
     - **Post-call** (``on_event_end`` with ``CBEventType.LLM``): increments step
       counter; records token cost into BudgetEnforcer if usage is available.
 

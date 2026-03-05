@@ -1,9 +1,7 @@
-"""Tests for VeronicaExit backward compatibility shims.
+"""Tests for VeronicaExit and ShieldPipeline behavior.
 
 Covers:
-  - New PersistenceBackend (new API) accepted without warning.
-  - Legacy VeronicaPersistence (old API: save(state_machine)) accepted with
-    DeprecationWarning and still saves without error.
+  - PersistenceBackend (new API) accepted without warning.
   - ShieldPipeline.on_error_policy: default=HALT, explicit ALLOW opt-in.
 """
 
@@ -12,7 +10,6 @@ from __future__ import annotations
 import warnings
 from typing import Optional
 
-import pytest
 
 from veronica_core.backends import MemoryBackend
 from veronica_core.exit import VeronicaExit
@@ -64,57 +61,6 @@ class TestVeronicaExitNewBackend:
 
 
 # ---------------------------------------------------------------------------
-# Test: VeronicaExit with legacy VeronicaPersistence (warns + works)
-# ---------------------------------------------------------------------------
-
-
-class TestVeronicaExitLegacyBackend:
-    """Legacy VeronicaPersistence expects save(state_machine), not save(dict).
-
-    The adapter wraps the old object so VeronicaExit can call save(dict)
-    transparently.
-    """
-
-    def _make_legacy_persistence(self) -> object:
-        """Minimal VeronicaPersistence stand-in (old API)."""
-        from veronica_core.state import VeronicaStateMachine as _SM
-
-        class LegacyPersistence:
-            def __init__(self) -> None:
-                self.saved: Optional[dict] = None
-
-            def save(self, state_machine: _SM) -> bool:  # old signature
-                self.saved = state_machine.to_dict()
-                return True
-
-            def load(self) -> Optional[_SM]:
-                return None
-
-        return LegacyPersistence()
-
-    def test_legacy_backend_emits_deprecation_warning(self) -> None:
-        sm = _make_state_machine()
-        legacy = self._make_legacy_persistence()
-
-        with pytest.warns(DeprecationWarning, match="VeronicaPersistence"):
-            VeronicaExit(state_machine=sm, persistence=legacy)
-
-    def test_legacy_backend_save_succeeds(self) -> None:
-        sm = _make_state_machine()
-        legacy = self._make_legacy_persistence()
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            ve = VeronicaExit(state_machine=sm, persistence=legacy)
-
-        # Should not raise TypeError even though legacy.save() expects a state machine.
-        ve._graceful_exit()
-
-        assert legacy.saved is not None
-        assert isinstance(legacy.saved, dict)
-
-
-# ---------------------------------------------------------------------------
 # Test: ShieldPipeline.on_error default HALT and explicit ALLOW
 # ---------------------------------------------------------------------------
 
@@ -155,49 +101,6 @@ class TestShieldPipelineOnErrorPolicy:
         )
         result = pipe.on_error(CTX, RuntimeError("err"))
         assert result is Decision.ALLOW
-
-
-# ---------------------------------------------------------------------------
-# Test: VeronicaPersistence __getattr__ DeprecationWarning (Phase 0, item 0c)
-# ---------------------------------------------------------------------------
-
-
-class TestVeronicaPersistenceGetattr:
-    """Accessing veronica_core.VeronicaPersistence must emit DeprecationWarning."""
-
-    def test_module_getattr_emits_deprecation_warning(self) -> None:
-        import veronica_core
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always", DeprecationWarning)
-            _ = veronica_core.VeronicaPersistence
-        assert any(
-            issubclass(warning.category, DeprecationWarning)
-            and "VeronicaPersistence" in str(warning.message)
-            for warning in w
-        ), "Accessing VeronicaPersistence on veronica_core must emit DeprecationWarning"
-
-    def test_veronica_persistence_not_in_all(self) -> None:
-        import veronica_core
-
-        assert "VeronicaPersistence" not in veronica_core.__all__
-
-    def test_veronica_persistence_returns_correct_class(self) -> None:
-        import veronica_core
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            klass = veronica_core.VeronicaPersistence
-        from veronica_core.persist import VeronicaPersistence as _VP
-
-        assert klass is _VP
-
-    def test_unknown_module_getattr_raises_attribute_error(self) -> None:
-        """Accessing a non-existent name on veronica_core must raise AttributeError."""
-        import veronica_core
-
-        with pytest.raises(AttributeError, match="has no attribute"):
-            _ = veronica_core.TotallyBogusName123
 
 
 # ---------------------------------------------------------------------------
@@ -389,144 +292,6 @@ class TestVeronicaExitCoverage:
 
         ve = VeronicaExit(state_machine=sm, persistence=FalseReturnBackend())
         ve._emergency_exit()  # Must not raise
-
-    def test_legacy_adapter_load_with_state_machine_result(self) -> None:
-        """Legacy adapter load() must convert VeronicaStateMachine to dict."""
-        from veronica_core.state import VeronicaStateMachine as _SM
-
-        class LegacyWithLoad:
-            def save(self, state_machine: _SM) -> bool:
-                return True
-
-            def load(self) -> _SM:
-                return _SM()
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from veronica_core.exit import _wrap_legacy_persistence
-
-            adapted = _wrap_legacy_persistence(LegacyWithLoad())
-
-        result = adapted.load()
-        assert isinstance(result, dict)
-
-    def test_legacy_adapter_load_with_none_result(self) -> None:
-        """Legacy adapter load() returning None must pass through None."""
-        from veronica_core.state import VeronicaStateMachine as _SM
-
-        class LegacyWithNoneLoad:
-            def save(self, state_machine: _SM) -> bool:
-                return True
-
-            def load(self):
-                return None
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from veronica_core.exit import _wrap_legacy_persistence
-
-            adapted = _wrap_legacy_persistence(LegacyWithNoneLoad())
-
-        assert adapted.load() is None
-
-
-# ---------------------------------------------------------------------------
-# Test: VeronicaPersistence (deprecated) coverage
-# ---------------------------------------------------------------------------
-
-
-class TestVeronicaPersistenceCoverage:
-    """Cover persist.py paths: load success/fail, backup, str path coercion."""
-
-    def _make_persist(self, tmp_path) -> object:
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from veronica_core.persist import VeronicaPersistence
-
-            return VeronicaPersistence(path=tmp_path / "state.json")
-
-    def test_str_path_coercion(self, tmp_path) -> None:
-        """VeronicaPersistence must accept str path (coerced to Path)."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from veronica_core.persist import VeronicaPersistence
-
-            p = VeronicaPersistence(path=str(tmp_path / "state.json"))
-        from pathlib import Path
-
-        assert isinstance(p.path, Path)
-
-    def test_save_and_load_roundtrip(self, tmp_path) -> None:
-        """save() then load() must recover the same state."""
-        from veronica_core.state import VeronicaStateMachine
-
-        p = self._make_persist(tmp_path)
-        sm = VeronicaStateMachine()
-        assert p.save(sm) is True
-
-        loaded = p.load()
-        assert loaded is not None
-        assert isinstance(loaded, VeronicaStateMachine)
-
-    def test_load_missing_file_returns_none(self, tmp_path) -> None:
-        """load() when file doesn't exist must return None."""
-        p = self._make_persist(tmp_path)
-        # No save — file doesn't exist
-        result = p.load()
-        assert result is None
-
-    def test_load_invalid_json_returns_none(self, tmp_path) -> None:
-        """load() with corrupt JSON must return None without raising."""
-        p = self._make_persist(tmp_path)
-        # Write garbage JSON
-        p.path.write_text("NOT_VALID_JSON{{{")
-        result = p.load()
-        assert result is None
-
-    def test_save_failure_returns_false(self, tmp_path) -> None:
-        """save() when writing fails must return False."""
-        from veronica_core.state import VeronicaStateMachine
-
-        p = self._make_persist(tmp_path)
-        # Make path a directory so open() fails
-        p.path.mkdir(parents=True, exist_ok=True)
-        result = p.save(VeronicaStateMachine())
-        assert result is False
-
-    def test_backup_creates_file(self, tmp_path) -> None:
-        """backup() must create a timestamped copy of the state file."""
-        from veronica_core.state import VeronicaStateMachine
-
-        p = self._make_persist(tmp_path)
-        p.save(VeronicaStateMachine())
-
-        result = p.backup()
-        assert result is True
-        backup_files = list(tmp_path.glob("*_backup_*.json"))
-        assert len(backup_files) == 1
-
-    def test_backup_when_file_missing_returns_false(self, tmp_path) -> None:
-        """backup() when state file doesn't exist must return False."""
-        p = self._make_persist(tmp_path)
-        result = p.backup()
-        assert result is False
-
-    def test_backup_failure_returns_false(self, tmp_path) -> None:
-        """backup() must return False when shutil.copy2 raises."""
-        from unittest.mock import patch
-        from veronica_core.state import VeronicaStateMachine
-
-        p = self._make_persist(tmp_path)
-        p.save(VeronicaStateMachine())
-
-        with patch("shutil.copy2", side_effect=OSError("permission denied")):
-            result = p.backup()
-
-        assert result is False
 
 
 class TestVeronicaExitGracefulEdgePaths:

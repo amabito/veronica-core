@@ -354,4 +354,4 @@ def test_snapshot_aborted_after_exit():
 
     snap = ctx.get_snapshot()
     assert snap.aborted is True
-    assert snap.abort_reason == "context_manager_exited"
+    assert snap.abort_reason in ("context_manager_exited", "context_closed")

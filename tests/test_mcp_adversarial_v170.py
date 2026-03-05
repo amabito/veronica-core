@@ -22,10 +22,7 @@ from veronica_core.adapters.mcp import (
 )
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
-from veronica_core.containment.execution_context import (
-    ExecutionConfig,
-    ExecutionContext,
-)
+from veronica_core import ExecutionConfig, ExecutionContext
 
 
 # ---------------------------------------------------------------------------

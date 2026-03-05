@@ -856,6 +856,8 @@ class PolicyEngine:
             audit_log = AuditLog(audit_dir / "policy.jsonl")
             audit_log.write(event, payload)
         except Exception:
+            # Intentionally swallowed: audit emission is best-effort; a write
+            # failure must not disrupt policy enforcement in the calling path.
             pass
 
     @staticmethod

@@ -6,6 +6,34 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.3.1] — 2026-03-05 — Safety Hardening & Phase 3 Cleanup
+
+**Breaking changes:** deprecated aliases removed (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`). Callers must use `AIContainer`, `JSONBackend`/`MemoryBackend`, and `ExecutionContext` timeout respectively.
+
+### Removed (Phase 3 deprecated API cleanup)
+
+- **`AIcontainer` alias** (`veronica_core.container`, `veronica_core`): removed. Use `AIContainer`.
+- **`VeronicaPersistence`** (`veronica_core.persist`): removed. Use `JSONBackend` or `MemoryBackend`.
+- **`GuardConfig.timeout_ms`**: field removed. Use `ExecutionContext(config=ExecutionConfig(timeout_ms=...))`.
+- **`_wrap_legacy_persistence`** (`exit.py`): internal adapter removed with `VeronicaPersistence`.
+- **`VeronicaIntegration` legacy mode**: `backend=None` now defaults to `JSONBackend` instead of `VeronicaPersistence`.
+
+### Added
+
+- **`ExecutionContext.close()`**: explicit resource release method for deterministic cleanup.
+- **`ContainmentMetrics` wiring**: metrics emission connected to containment decision paths.
+
+### Fixed
+
+- **Silent `except` blocks** converted to `logger.warning` for improved observability.
+
+### Tests
+
+- 18+ adversarial tests added covering removed API boundaries and new methods.
+- Test imports migrated from internal paths to public API where applicable.
+
+---
+
 ## [2.3.0] — 2026-03-05 — ExecutionGraph Extensibility Hooks
 
 **Breaking changes:** none

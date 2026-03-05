@@ -11,11 +11,7 @@ from veronica_core.compliance.serializers import (
     serialize_safety_event,
     serialize_snapshot,
 )
-from veronica_core.containment.execution_context import (
-    ChainMetadata,
-    ContextSnapshot,
-    NodeRecord,
-)
+from veronica_core import ChainMetadata, ContextSnapshot, NodeRecord
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
 

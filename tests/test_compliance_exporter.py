@@ -15,11 +15,7 @@ from unittest.mock import MagicMock, patch
 
 
 from veronica_core.compliance.exporter import ComplianceExporter, _SHUTDOWN
-from veronica_core.containment.execution_context import (
-    ChainMetadata,
-    ContextSnapshot,
-    NodeRecord,
-)
+from veronica_core import ChainMetadata, ContextSnapshot, NodeRecord
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
 

@@ -921,6 +921,8 @@ class ExecutionGraph:
             try:
                 sub(event)
             except Exception:
+                # Intentionally swallowed: a misbehaving subscriber must not
+                # prevent the remaining subscribers from receiving the event.
                 pass
 
 

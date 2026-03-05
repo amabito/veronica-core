@@ -631,33 +631,26 @@ class TestReservationIdBackendIsolation:
 
 
 # ---------------------------------------------------------------------------
-# 11. Deprecated __getattr__ paths (veronica_core.__init__)
+# 11. Removed deprecated APIs (veronica_core.__init__)
 # ---------------------------------------------------------------------------
 
 
-class TestDeprecatedGetattr:
-    """veronica_core.__getattr__ must emit DeprecationWarning for old names."""
+class TestRemovedDeprecatedApis:
+    """Removed deprecated APIs must raise AttributeError (not DeprecationWarning)."""
 
-    def test_aicontainer_alias_from_package_emits_deprecation(self) -> None:
-        import warnings
+    def test_aicontainer_lowercase_raises(self) -> None:
+        """veronica_core.AIcontainer (old alias) must raise AttributeError."""
         import veronica_core
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            alias = veronica_core.AIcontainer  # noqa: F821
-            dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-            assert dep, "veronica_core.AIcontainer must emit DeprecationWarning"
-            assert alias is veronica_core.AIContainer
+        with pytest.raises(AttributeError):
+            _ = veronica_core.AIcontainer  # noqa: F821
 
-    def test_veronica_persistence_emits_deprecation(self) -> None:
-        import warnings
+    def test_veronica_persistence_raises(self) -> None:
+        """veronica_core.VeronicaPersistence must raise AttributeError (removed)."""
         import veronica_core
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
+        with pytest.raises(AttributeError):
             _ = veronica_core.VeronicaPersistence  # noqa: F821
-            dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-            assert dep, "veronica_core.VeronicaPersistence must emit DeprecationWarning"
 
     def test_unknown_attribute_raises_attribute_error(self) -> None:
         """Accessing a completely unknown attribute must raise AttributeError."""
@@ -666,16 +659,12 @@ class TestDeprecatedGetattr:
         with pytest.raises(AttributeError):
             _ = veronica_core.NonExistentAttribute12345  # noqa: F821
 
-    def test_container_module_aicontainer_alias_emits_deprecation(self) -> None:
-        """veronica_core.container.AIcontainer must emit DeprecationWarning."""
-        import warnings
+    def test_container_module_aicontainer_raises(self) -> None:
+        """veronica_core.container.AIcontainer (old alias) must raise AttributeError."""
+        import veronica_core.container as c
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            from veronica_core.container import AIcontainer  # noqa: F401
-
-            dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-            assert dep, "container.AIcontainer must emit DeprecationWarning"
+        with pytest.raises(AttributeError):
+            _ = c.AIcontainer  # noqa: F821
 
     def test_container_module_unknown_raises_attribute_error(self) -> None:
         """veronica_core.container.UnknownName must raise AttributeError."""

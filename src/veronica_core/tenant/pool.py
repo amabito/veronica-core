@@ -223,6 +223,9 @@ class BudgetPool:
                     try:
                         self._backend.rollback(rid)  # type: ignore[union-attr]
                     except Exception:
+                        # Intentionally swallowed: rollback is best-effort
+                        # cleanup after a commit failure; we still return False
+                        # to signal the spend() call did not succeed.
                         pass
                     return False
             except Exception:

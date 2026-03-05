@@ -5,47 +5,13 @@ import signal
 import atexit
 import logging
 import threading
-import warnings
 from enum import IntEnum
-from typing import Any, Optional
+from typing import Optional
 
 from veronica_core.state import VeronicaStateMachine, VeronicaState
 from veronica_core.backends import PersistenceBackend
 
 logger = logging.getLogger(__name__)
-
-
-def _wrap_legacy_persistence(backend: Any) -> PersistenceBackend:
-    """Adapt a legacy VeronicaPersistence object to the PersistenceBackend protocol.
-
-    VeronicaPersistence.save(state_machine) accepted a VeronicaStateMachine and
-    called to_dict() internally.  PersistenceBackend.save(data) accepts a plain
-    dict.  This adapter bridges the two so callers passing old objects receive a
-    DeprecationWarning rather than a silent TypeError at shutdown.
-    """
-    warnings.warn(
-        "Passing a VeronicaPersistence instance is deprecated and will be removed "
-        "in v2.0. Use a PersistenceBackend (e.g. JSONBackend) instead.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-    class _LegacyAdapter(PersistenceBackend):
-        def save(self, data: dict) -> bool:
-            # Legacy API expected a VeronicaStateMachine; create a thin proxy.
-            class _DictProxy:
-                def to_dict(self) -> dict:
-                    return data
-
-            return backend.save(_DictProxy())  # type: ignore[arg-type]
-
-        def load(self) -> Optional[dict]:
-            sm = backend.load()
-            if sm is None:
-                return None
-            return sm.to_dict() if hasattr(sm, "to_dict") else sm
-
-    return _LegacyAdapter()
 
 
 class ExitTier(IntEnum):
@@ -62,7 +28,7 @@ class VeronicaExit:
     def __init__(
         self,
         state_machine: VeronicaStateMachine,
-        persistence: Optional[Any] = None,
+        persistence: Optional[PersistenceBackend] = None,
     ):
         self.state_machine = state_machine
         if persistence is None:
@@ -71,11 +37,8 @@ class VeronicaExit:
             self.persistence: PersistenceBackend = JSONBackend(
                 "data/state/veronica_state.json"
             )
-        elif isinstance(persistence, PersistenceBackend):
-            self.persistence = persistence
         else:
-            # Legacy VeronicaPersistence or any object with save(state_machine).
-            self.persistence = _wrap_legacy_persistence(persistence)
+            self.persistence = persistence
         self.exit_requested = False
         self.exit_tier: Optional[ExitTier] = None
         self.exit_reason: str = ""

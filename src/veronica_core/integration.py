@@ -13,7 +13,6 @@ import atexit
 import weakref
 
 from veronica_core.state import VeronicaStateMachine, VeronicaState
-from veronica_core.persist import VeronicaPersistence
 from veronica_core.exit import VeronicaExit
 from veronica_core.backends import PersistenceBackend
 from veronica_core.guards import VeronicaGuard, PermissiveGuard
@@ -54,19 +53,20 @@ class VeronicaIntegration:
             cooldown_fails: Number of consecutive fails to trigger cooldown
             cooldown_seconds: Cooldown duration in seconds
             auto_save_interval: Save state every N operations (0 = manual only)
-            backend: Persistence backend (default: JSONBackend with VeronicaPersistence path)
+            backend: Persistence backend (default: JSONBackend at data/state/veronica_state.json)
             guard: Validation guard (default: PermissiveGuard)
             client: LLM client (optional, default: NullClient - no LLM features)
             shield: Shield configuration (optional, default: None - no shield)
         """
-        # Set up backend (backward compatible with VeronicaPersistence)
+        # Set up backend
         if backend is None:
-            # Default: Use VeronicaPersistence for backward compatibility
-            self.persistence = VeronicaPersistence()
-            self.backend = None  # Legacy mode
+            from veronica_core.backends import JSONBackend
+
+            self.backend: Optional[PersistenceBackend] = JSONBackend(
+                "data/state/veronica_state.json"
+            )
         else:
             self.backend = backend
-            self.persistence = None  # Modern mode
 
         # Set up guard
         self.guard = guard or PermissiveGuard()
@@ -121,12 +121,7 @@ class VeronicaIntegration:
             self._input_compression_hook = None
 
         # Load state
-        if self.backend:
-            state_data = self.backend.load()
-        else:
-            # Legacy VeronicaPersistence
-            loaded_state = self.persistence.load()
-            state_data = loaded_state.to_dict() if loaded_state else None
+        state_data = self.backend.load()
 
         loaded_from_disk = False
         if state_data:
@@ -174,14 +169,11 @@ class VeronicaIntegration:
         # Register exit handler (pass PersistenceBackend if available, else None for default)
         self.exit_handler = VeronicaExit(self.state, self.backend)
 
-        # When using modern backend mode, also register atexit to save via backend.
-        # Track all instances with backends for atexit save.
-        # Register a single class-level handler that saves ALL live instances.
-        if self.backend is not None:
-            VeronicaIntegration._live_instances.add(self)
-            if not VeronicaIntegration._atexit_registered:
-                atexit.register(VeronicaIntegration._save_all_instances)
-                VeronicaIntegration._atexit_registered = True
+        # Track all instances for atexit save.
+        VeronicaIntegration._live_instances.add(self)
+        if not VeronicaIntegration._atexit_registered:
+            atexit.register(VeronicaIntegration._save_all_instances)
+            VeronicaIntegration._atexit_registered = True
 
         # Auto-save tracking
         self.auto_save_interval = auto_save_interval
@@ -311,11 +303,7 @@ class VeronicaIntegration:
             )
             return False
 
-        # Save via backend or legacy persistence
-        if self.backend:
-            return self.backend.save(state_data)
-        else:
-            return self.persistence.save(self.state)
+        return self.backend.save(state_data)
 
     def _maybe_auto_save(self) -> None:
         """Auto-save if interval reached."""

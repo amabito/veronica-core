@@ -7,7 +7,6 @@ and PartialResultBuffer into a single check-and-reset boundary.
 from __future__ import annotations
 
 import threading
-import warnings
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -134,15 +133,3 @@ class AIContainer:
             Ordered list of policy_type strings, e.g. ['budget', 'circuit_breaker'].
         """
         return [p.policy_type for p in self._pipeline.policies]
-
-
-def __getattr__(name: str) -> object:
-    if name == "AIcontainer":
-        warnings.warn(
-            "AIcontainer is deprecated and will be removed in a future release. "
-            "Use AIContainer instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return AIContainer
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

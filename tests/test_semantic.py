@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from veronica_core import AIcontainer, SemanticLoopGuard
+from veronica_core import AIContainer, SemanticLoopGuard
 from veronica_core.runtime_policy import PolicyContext
 
 
@@ -116,11 +116,11 @@ class TestSemanticLoopGuard:
 
     def test_aicontainer_accepts_semantic_guard(self):
         guard = SemanticLoopGuard()
-        container = AIcontainer(semantic_guard=guard)
+        container = AIContainer(semantic_guard=guard)
         assert container.semantic_guard is guard
 
     def test_aicontainer_semantic_guard_in_active_policies(self):
         guard = SemanticLoopGuard()
-        container = AIcontainer(semantic_guard=guard)
+        container = AIContainer(semantic_guard=guard)
         policies = container.active_policies
         assert "semantic_loop" in policies

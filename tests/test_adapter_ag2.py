@@ -65,7 +65,7 @@ import pytest  # noqa: E402
 
 from veronica_core import GuardConfig  # noqa: E402
 from veronica_core.adapters.ag2 import VeronicaConversableAgent, register_veronica_hook  # noqa: E402
-from veronica_core.container import AIcontainer  # noqa: E402
+from veronica_core.container import AIContainer  # noqa: E402
 from veronica_core.containment import ExecutionConfig  # noqa: E402
 from veronica_core.inject import VeronicaHalt  # noqa: E402
 
@@ -106,12 +106,12 @@ class TestAllowPath:
         assert agent.container.step_guard.current_step == 2
 
     def test_container_property_returns_aicontainer(self) -> None:
-        """container property returns the underlying AIcontainer."""
+        """container property returns the underlying AIContainer."""
         agent = VeronicaConversableAgent(
             "assistant",
             config=GuardConfig(max_cost_usd=5.0),
         )
-        assert isinstance(agent.container, AIcontainer)
+        assert isinstance(agent.container, AIContainer)
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +183,10 @@ class TestConfigAcceptance:
 
 class TestHookPath:
     def test_register_veronica_hook_returns_container(self) -> None:
-        """register_veronica_hook returns an AIcontainer."""
+        """register_veronica_hook returns an AIContainer."""
         agent = FakeConversableAgent("hook-agent")
         container = register_veronica_hook(agent, GuardConfig(max_cost_usd=5.0))
-        assert isinstance(container, AIcontainer)
+        assert isinstance(container, AIContainer)
 
     def test_register_veronica_hook_registers_reply_func(self) -> None:
         """register_veronica_hook registers exactly one reply function."""

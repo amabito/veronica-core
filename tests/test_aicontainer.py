@@ -1,9 +1,9 @@
-"""Unit tests for AIcontainer (veronica_core.container)."""
+"""Unit tests for AIContainer (veronica_core.container)."""
 
 from __future__ import annotations
 
 
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
 from veronica_core import (
     AgentStepGuard,
     BudgetEnforcer,
@@ -13,9 +13,9 @@ from veronica_core import (
 )
 
 
-class TestAIcontainerInstantiation:
+class TestAIContainerInstantiation:
     def test_empty_instantiation(self) -> None:
-        container = AIcontainer()
+        container = AIContainer()
         assert container.budget is None
         assert container.circuit_breaker is None
         assert container.retry is None
@@ -25,7 +25,7 @@ class TestAIcontainerInstantiation:
     def test_with_budget_and_circuit_breaker(self) -> None:
         budget = BudgetEnforcer(limit_usd=10.0)
         breaker = CircuitBreaker(failure_threshold=3)
-        container = AIcontainer(budget=budget, circuit_breaker=breaker)
+        container = AIContainer(budget=budget, circuit_breaker=breaker)
         assert container.budget is budget
         assert container.circuit_breaker is breaker
 
@@ -33,18 +33,18 @@ class TestAIcontainerInstantiation:
         """Primitives must be accessible as named fields without modification."""
         budget = BudgetEnforcer(limit_usd=50.0)
         retry = RetryContainer(max_retries=5)
-        container = AIcontainer(budget=budget, retry=retry)
+        container = AIContainer(budget=budget, retry=retry)
         assert container.budget.limit_usd == 50.0
         assert container.retry.max_retries == 5
 
 
-class TestAIcontainerActivePolicies:
+class TestAIContainerActivePolicies:
     def test_empty_container_has_no_active_policies(self) -> None:
-        container = AIcontainer()
+        container = AIContainer()
         assert container.active_policies == []
 
     def test_active_policies_reflect_provided_primitives(self) -> None:
-        container = AIcontainer(
+        container = AIContainer(
             budget=BudgetEnforcer(),
             circuit_breaker=CircuitBreaker(),
             retry=RetryContainer(),
@@ -59,36 +59,36 @@ class TestAIcontainerActivePolicies:
 
     def test_partial_buffer_is_not_a_policy(self) -> None:
         """PartialResultBuffer does not implement RuntimePolicy; must not appear in active_policies."""
-        container = AIcontainer(partial_buffer=PartialResultBuffer())
+        container = AIContainer(partial_buffer=PartialResultBuffer())
         assert container.active_policies == []
 
 
-class TestAIcontainerCheck:
+class TestAIContainerCheck:
     def test_check_allows_within_budget(self) -> None:
-        container = AIcontainer(budget=BudgetEnforcer(limit_usd=10.0))
+        container = AIContainer(budget=BudgetEnforcer(limit_usd=10.0))
         decision = container.check(cost_usd=1.0)
         assert decision.allowed is True
 
     def test_check_denies_when_budget_exceeded(self) -> None:
-        container = AIcontainer(budget=BudgetEnforcer(limit_usd=1.0))
+        container = AIContainer(budget=BudgetEnforcer(limit_usd=1.0))
         decision = container.check(cost_usd=5.0)
         assert decision.allowed is False
         assert decision.policy_type == "budget"
 
     def test_check_on_empty_container_always_allows(self) -> None:
-        container = AIcontainer()
+        container = AIContainer()
         decision = container.check(cost_usd=99999.0)
         assert decision.allowed is True
 
     def test_check_passes_kwargs_to_pipeline(self) -> None:
-        container = AIcontainer(step_guard=AgentStepGuard(max_steps=5))
+        container = AIContainer(step_guard=AgentStepGuard(max_steps=5))
         # step_count is in PolicyContext but AgentStepGuard uses its own counter
         decision = container.check(cost_usd=0.0, step_count=1)
         assert decision.allowed is True
 
     def test_check_first_denial_wins(self) -> None:
         """Budget denial must short-circuit and not evaluate remaining policies."""
-        container = AIcontainer(
+        container = AIContainer(
             budget=BudgetEnforcer(limit_usd=0.01),
             step_guard=AgentStepGuard(max_steps=100),
         )
@@ -97,13 +97,13 @@ class TestAIcontainerCheck:
         assert decision.policy_type == "budget"
 
 
-class TestAIcontainerReset:
+class TestAIContainerReset:
     def test_reset_delegates_to_budget(self) -> None:
         budget = BudgetEnforcer(limit_usd=10.0)
         budget.spend(5.0)
         assert budget.spent_usd == 5.0
 
-        container = AIcontainer(budget=budget)
+        container = AIContainer(budget=budget)
         container.reset()
 
         assert budget.spent_usd == 0.0
@@ -114,7 +114,7 @@ class TestAIcontainerReset:
         breaker.record_failure()
         assert breaker.failure_count == 2
 
-        container = AIcontainer(circuit_breaker=breaker)
+        container = AIContainer(circuit_breaker=breaker)
         container.reset()
 
         assert breaker.failure_count == 0
@@ -124,14 +124,14 @@ class TestAIcontainerReset:
         buf.append("partial text")
         assert buf.chunk_count == 1
 
-        container = AIcontainer(partial_buffer=buf)
+        container = AIContainer(partial_buffer=buf)
         container.reset()
 
         assert buf.chunk_count == 0
 
     def test_reset_preserves_active_policies(self) -> None:
         """After reset, active_policies must remain the same set."""
-        container = AIcontainer(
+        container = AIContainer(
             budget=BudgetEnforcer(),
             step_guard=AgentStepGuard(),
         )
@@ -143,7 +143,7 @@ class TestAIcontainerReset:
         """After reset, a previously-denied container must allow again."""
         budget = BudgetEnforcer(limit_usd=1.0)
         budget.spend(2.0)  # Exceed budget manually
-        container = AIcontainer(budget=budget)
+        container = AIContainer(budget=budget)
 
         # Should deny before reset (projected 0.0 + spent 2.0 = 2.0 > limit 1.0)
         decision_before = container.check(cost_usd=0.0)
@@ -152,54 +152,3 @@ class TestAIcontainerReset:
         container.reset()
         decision_after = container.check(cost_usd=0.5)
         assert decision_after.allowed is True
-
-
-# ---------------------------------------------------------------------------
-# Deprecation warning: AIcontainer alias must warn via module __getattr__
-# ---------------------------------------------------------------------------
-
-
-class TestAIcontainerDeprecationWarning:
-    """Accessing AIcontainer via the deprecated AIcontainer name must warn."""
-
-    def test_container_module_getattr_emits_deprecation(self) -> None:
-        """Importing AIcontainer from veronica_core.container triggers DeprecationWarning."""
-        import warnings
-
-        # Force a fresh attribute access on the module (not a cached import).
-        import veronica_core.container as container_mod
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always", DeprecationWarning)
-            _ = container_mod.AIcontainer
-        assert any(
-            issubclass(warning.category, DeprecationWarning)
-            and "AIcontainer" in str(warning.message)
-            for warning in w
-        ), "Accessing AIcontainer on container module must emit DeprecationWarning"
-
-    def test_veronica_core_getattr_emits_deprecation(self) -> None:
-        """Accessing AIcontainer on veronica_core top-level module triggers DeprecationWarning."""
-        import warnings
-        import veronica_core
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always", DeprecationWarning)
-            _ = veronica_core.AIcontainer
-        assert any(
-            issubclass(warning.category, DeprecationWarning)
-            and "AIcontainer" in str(warning.message)
-            for warning in w
-        ), "Accessing AIcontainer on veronica_core must emit DeprecationWarning"
-
-    def test_aicontainer_still_returns_correct_class(self) -> None:
-        """AIcontainer alias must return the same class as AIContainer."""
-        import warnings
-        import veronica_core
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            klass = veronica_core.AIcontainer
-        from veronica_core.container.aicontainer import AIContainer
-
-        assert klass is AIContainer

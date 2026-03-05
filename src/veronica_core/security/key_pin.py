@@ -156,4 +156,7 @@ class KeyPinChecker:
                 {"expected": expected, "actual": actual},
             )
         except Exception:
-            pass
+            logger.warning(
+                "KeyPinEnforcer: audit_log.write() failed for key_pin_mismatch event",
+                exc_info=True,
+            )

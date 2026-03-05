@@ -59,7 +59,7 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
     and retry limits across framework-managed LLM calls.
 
     On each LLM invocation:
-    - **Pre-call** (``on_llm_start``): policy check via AIcontainer.check().
+    - **Pre-call** (``on_llm_start``): policy check via AIContainer.check().
       Raises VeronicaHalt if any policy denies.
     - **Post-call** (``on_llm_end``): increments step counter; records
       token cost from the response into BudgetEnforcer.

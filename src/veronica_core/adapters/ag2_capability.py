@@ -279,4 +279,7 @@ def _emit_ag2_otel_event(
             reason=f"[{check_type}] {agent_name}: {reason}",
         )
     except Exception:
+        # Intentionally swallowed: this helper is declared "Never raises";
+        # OTel emission is best-effort telemetry that must not disrupt agent
+        # containment logic.
         pass

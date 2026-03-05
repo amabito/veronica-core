@@ -22,10 +22,7 @@ from veronica_core.containment.budget_allocator import (
     FairShareAllocator,
     WeightedAllocator,
 )
-from veronica_core.containment.execution_context import (
-    ExecutionConfig,
-    ExecutionContext,
-)
+from veronica_core import ExecutionConfig, ExecutionContext
 
 
 # ---------------------------------------------------------------------------

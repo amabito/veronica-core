@@ -2,7 +2,7 @@
 
 Test matrix:
   - Fix 6-B: veronica_guard creates a fresh container per call (state isolation)
-  - Fix 4-G: AIcontainer.reset() and check() are protected by a threading.Lock
+  - Fix 4-G: AIContainer.reset() and check() are protected by a threading.Lock
   - Fix 3-A: mark_success() feeds divergence detection (not only mark_running)
 """
 
@@ -13,7 +13,7 @@ import threading
 import pytest
 
 from veronica_core import BudgetEnforcer, RetryContainer, AgentStepGuard
-from veronica_core.container import AIcontainer
+from veronica_core.container import AIContainer
 from veronica_core.containment.execution_graph import ExecutionGraph
 from veronica_core.inject import VeronicaHalt, get_active_container, veronica_guard
 
@@ -108,17 +108,17 @@ class TestVeronicaGuardPerCallContainer:
 
 
 # ---------------------------------------------------------------------------
-# Fix 4-G: AIcontainer lock
+# Fix 4-G: AIContainer lock
 # ---------------------------------------------------------------------------
 
 
-class TestAIcontainerLock:
-    """AIcontainer.reset() and check() must be protected by a threading.Lock
+class TestAIContainerLock:
+    """AIContainer.reset() and check() must be protected by a threading.Lock
     so that concurrent calls from different threads are race-free."""
 
     def test_concurrent_calls_succeed_without_deadlock(self) -> None:
         """Concurrent reset() and check() calls must complete without deadlock."""
-        container = AIcontainer(budget=BudgetEnforcer(limit_usd=1.0))
+        container = AIContainer(budget=BudgetEnforcer(limit_usd=1.0))
         errors: list[Exception] = []
 
         def mixed_calls() -> None:
@@ -139,7 +139,7 @@ class TestAIcontainerLock:
 
     def test_concurrent_reset_does_not_raise(self) -> None:
         """Concurrent reset() calls from multiple threads must not raise."""
-        container = AIcontainer(
+        container = AIContainer(
             budget=BudgetEnforcer(limit_usd=10.0),
             retry=RetryContainer(max_retries=5),
             step_guard=AgentStepGuard(max_steps=20),
@@ -163,7 +163,7 @@ class TestAIcontainerLock:
 
     def test_concurrent_check_does_not_raise(self) -> None:
         """Concurrent check() calls from multiple threads must not raise."""
-        container = AIcontainer(budget=BudgetEnforcer(limit_usd=100.0))
+        container = AIContainer(budget=BudgetEnforcer(limit_usd=100.0))
         errors: list[Exception] = []
 
         def check_many() -> None:
@@ -183,7 +183,7 @@ class TestAIcontainerLock:
 
     def test_reset_rebuilds_pipeline(self) -> None:
         """reset() must still rebuild the pipeline correctly under the lock."""
-        container = AIcontainer(budget=BudgetEnforcer(limit_usd=1.0))
+        container = AIContainer(budget=BudgetEnforcer(limit_usd=1.0))
         container.reset()
         after = container._pipeline
         # Pipeline is rebuilt — it may be a new object

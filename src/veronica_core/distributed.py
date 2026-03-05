@@ -676,6 +676,8 @@ return 1
             if self._client is not None:
                 self._client.close()
         except Exception:
+            # Intentionally swallowed: close() is best-effort cleanup; callers
+            # must not observe errors from a backend that is already shut down.
             pass
 
     @property
@@ -1540,6 +1542,8 @@ class DistributedCircuitBreaker:
             if self._owns_client and self._client is not None:
                 self._client.close()
         except Exception:
+            # Intentionally swallowed: close() is best-effort cleanup; the
+            # client may already be in a broken state when this is called.
             pass
 
     @property

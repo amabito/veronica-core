@@ -21,10 +21,7 @@ from typing import Any
 import fakeredis
 import pytest
 
-from veronica_core.containment.execution_context import (
-    ExecutionConfig,
-    ExecutionContext,
-)
+from veronica_core import ExecutionConfig, ExecutionContext
 from veronica_core.containment.timeout_pool import SharedTimeoutPool
 from veronica_core.distributed import LocalBudgetBackend, RedisBudgetBackend
 from veronica_core.middleware import VeronicaASGIMiddleware

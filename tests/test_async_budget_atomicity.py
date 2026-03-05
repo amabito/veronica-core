@@ -23,10 +23,7 @@ import pytest
 
 from veronica_core.adapters.mcp import MCPToolCost
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter
-from veronica_core.containment.execution_context import (
-    ExecutionConfig,
-    ExecutionContext,
-)
+from veronica_core import ExecutionConfig, ExecutionContext
 from veronica_core.distributed import LocalBudgetBackend
 from veronica_core.protocols import AsyncBudgetBackendProtocol
 from veronica_core.shield.types import Decision

@@ -99,8 +99,7 @@ from veronica_core.adapters.langgraph import (  # noqa: E402
     VeronicaLangGraphCallback,
     veronica_node_wrapper,
 )
-from veronica_core.containment import ExecutionConfig  # noqa: E402
-from veronica_core.containment.execution_context import ExecutionContext  # noqa: E402
+from veronica_core import ExecutionConfig, ExecutionContext  # noqa: E402
 from veronica_core.inject import VeronicaHalt  # noqa: E402
 
 

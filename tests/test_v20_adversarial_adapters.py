@@ -1,4 +1,4 @@
-"""Adversarial tests for v2.0 adapter unification, protocols, and deprecated API removal.
+"""Adversarial tests for v2.0 adapter unification, protocols, and removed API verification.
 
 Attack vectors covered:
 1.  Adapter unification: AIContainer passed where ExecutionContext expected (DeprecationWarning path)
@@ -6,10 +6,10 @@ Attack vectors covered:
 3.  Protocol compliance: minimal mock satisfying MCPAdapterProtocol
 4.  Protocol compliance: object missing required methods
 5.  AsyncBudgetBackendProtocol: sync backend passed where async expected
-6.  Removed APIs: VeronicaPersistence import via veronica_core module (should warn, not error)
+6.  Removed APIs: VeronicaPersistence no longer accessible via veronica_core module
 7.  Removed APIs: CLIApprover.sign() v1 (should AttributeError)
-8.  Removed APIs: GuardConfig.timeout_ms (should AttributeError)
-9.  Container __init__: AIcontainer deprecated alias via module __getattr__
+8.  GuardConfig fields: timeout_ms removed, core fields still work
+9.  Container __init__: AIContainer accessible; AIcontainer alias removed
 10. _shared.py edge cases: cost_from_total_tokens, extract_llm_result_cost, record_budget_spend
 11. ExecutionContextContainerAdapter: budget + step proxy behavior
 12. build_adapter_container: routing logic
@@ -284,26 +284,12 @@ class TestAsyncBudgetBackendProtocol:
 
 
 # ---------------------------------------------------------------------------
-# 6. Deprecated APIs: VeronicaPersistence via veronica_core module __getattr__
+# 6. Removed APIs: VeronicaPersistence no longer accessible via veronica_core
 # ---------------------------------------------------------------------------
 
 
-class TestVeronicaPersistenceDeprecation:
-    """VeronicaPersistence access via veronica_core must emit DeprecationWarning."""
-
-    def test_import_via_module_emits_deprecation_warning(self) -> None:
-        """veronica_core.VeronicaPersistence must emit DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _ = veronica_core.VeronicaPersistence  # type: ignore[attr-defined]
-        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
-
-    def test_import_via_module_returns_class(self) -> None:
-        """veronica_core.VeronicaPersistence must return the actual class."""
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            cls = veronica_core.VeronicaPersistence  # type: ignore[attr-defined]
-        assert callable(cls)
+class TestVeronicaPersistenceRemoved:
+    """VeronicaPersistence has been removed; access via veronica_core must raise AttributeError."""
 
     def test_not_in_all(self) -> None:
         """VeronicaPersistence must not be in veronica_core.__all__."""
@@ -313,12 +299,6 @@ class TestVeronicaPersistenceDeprecation:
         """Unknown attribute on veronica_core must raise AttributeError."""
         with pytest.raises(AttributeError):
             _ = veronica_core.NonExistentSymbolXYZ  # type: ignore[attr-defined]
-
-    def test_import_directly_from_persist_still_works(self) -> None:
-        """Direct import from veronica_core.persist must still work."""
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            from veronica_core.persist import VeronicaPersistence  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -377,18 +357,17 @@ class TestCLIApproverV1Deprecated:
 
 
 # ---------------------------------------------------------------------------
-# 8. GuardConfig.timeout_ms field behavior
+# 8. GuardConfig fields (timeout_ms removed)
 # ---------------------------------------------------------------------------
 
 
-class TestGuardConfigTimeoutMs:
-    """GuardConfig.timeout_ms exists as an optional field (None by default)."""
+class TestGuardConfigFields:
+    """GuardConfig core fields are accessible. timeout_ms has been removed."""
 
-    def test_timeout_ms_defaults_to_none(self) -> None:
-        """GuardConfig().timeout_ms must default to None."""
+    def test_timeout_ms_removed(self) -> None:
+        """GuardConfig.timeout_ms must raise AttributeError (field removed)."""
         config = GuardConfig()
-        # timeout_ms is present but optional (None = no timeout)
-        assert getattr(config, "timeout_ms", None) is None
+        assert not hasattr(config, "timeout_ms")
 
     def test_guard_config_valid_fields_work(self) -> None:
         """GuardConfig core fields must be accessible."""
@@ -405,39 +384,26 @@ class TestGuardConfigTimeoutMs:
 
 
 # ---------------------------------------------------------------------------
-# 9. Container __init__: AIcontainer deprecated alias emits DeprecationWarning
+# 9. Container __init__: AIContainer accessible; AIcontainer alias removed
 # ---------------------------------------------------------------------------
 
 
-class TestAIContainerDeprecatedAlias:
-    """AIcontainer (lowercase c) is deprecated; must emit DeprecationWarning."""
+class TestAIContainerAlias:
+    """AIContainer (uppercase C) must be accessible. AIcontainer alias removed."""
 
-    def test_container_module_warns(self) -> None:
-        """veronica_core.container.AIcontainer must emit DeprecationWarning."""
-        from veronica_core import container as _container_mod
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            cls = _container_mod.AIcontainer  # type: ignore[attr-defined]
-        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
-        assert cls is AIContainer
-
-    def test_veronica_core_module_warns(self) -> None:
-        """veronica_core.AIcontainer must emit DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _ = veronica_core.AIcontainer  # type: ignore[attr-defined]
-        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
-
-    def test_aicontainer_uppercase_still_works(self) -> None:
-        """AIContainer (correct case) must still be accessible without warning."""
+    def test_aicontainer_uppercase_works(self) -> None:
+        """AIContainer (correct case) must be accessible without warning."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             cls = veronica_core.AIContainer
         assert cls is AIContainer
-        # Must not emit DeprecationWarning for correct casing
         dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert not dep_warnings
+
+    def test_aicontainer_lowercase_raises(self) -> None:
+        """AIcontainer (old alias) must raise AttributeError (removed)."""
+        with pytest.raises(AttributeError):
+            _ = veronica_core.AIcontainer  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------

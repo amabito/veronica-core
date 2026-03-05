@@ -157,6 +157,8 @@ class _BudgetProxy:
             try:
                 return float(self._get_fn())
             except Exception:
+                # Intentionally swallowed: _get_fn is an optional user-supplied
+                # callable; on failure fall through to the built-in accumulator.
                 pass
         return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
 
@@ -245,7 +247,9 @@ class ExecutionContextContainerAdapter:
         try:
             snap = self._ctx.get_snapshot()
         except Exception:
-            pass
+            # Intentionally swallowed: snapshot is used only for aborted-flag
+            # inspection; on failure the check continues using spent_usd below.
+            logger.debug("VeronicaBudget.check(): get_snapshot() failed", exc_info=True)
         if snap is not None and getattr(snap, "aborted", False):
             return PolicyDecision(
                 allowed=False, reason="Context aborted", policy_type="containment"

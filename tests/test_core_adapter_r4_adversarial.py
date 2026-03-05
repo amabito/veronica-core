@@ -182,16 +182,16 @@ class TestAdversarialC6AtexitDeduplication:
         VeronicaIntegration(backend=_NullBackend())
         assert VeronicaIntegration._atexit_registered is True
 
-    def test_no_backend_does_not_register(
+    def test_default_backend_registers_atexit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Instance without a backend must not register save via atexit and must not set flag."""
+        """Instance without explicit backend uses JSONBackend and registers atexit."""
         save_calls = self._track_save_registrations(monkeypatch)
         assert VeronicaIntegration._atexit_registered is False
-        VeronicaIntegration()  # legacy mode, no backend
-        assert VeronicaIntegration._atexit_registered is False
-        assert len(save_calls) == 0, (
-            f"Expected 0 save registrations for no-backend instance, got {len(save_calls)}"
+        VeronicaIntegration()  # uses JSONBackend by default
+        assert VeronicaIntegration._atexit_registered is True
+        assert len(save_calls) == 1, (
+            f"Expected 1 save registration for default-backend instance, got {len(save_calls)}"
         )
 
     def test_flag_prevents_third_instance_from_registering(

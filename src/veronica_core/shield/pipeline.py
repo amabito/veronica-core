@@ -189,6 +189,9 @@ class ShieldPipeline:
 
                 emit_safety_event(event)
             except Exception:
+                # Intentionally swallowed: OTel emission is best-effort
+                # telemetry; a failure here must not affect the error policy
+                # decision returned to the caller.
                 pass
         return self._on_error_policy
 

@@ -64,11 +64,11 @@ __all__ = ["VeronicaConversableAgent", "register_veronica_hook"]
 class VeronicaConversableAgent(ConversableAgent):
     """AG2 ConversableAgent subclass that enforces VERONICA policies.
 
-    Wraps ``generate_reply()`` with a pre-call policy check via AIcontainer.
+    Wraps ``generate_reply()`` with a pre-call policy check via AIContainer.
     Raises VeronicaHalt before the LLM is invoked if any policy denies.
 
     On each ``generate_reply()`` call:
-    - **Pre-call**: policy check via AIcontainer.check().
+    - **Pre-call**: policy check via AIContainer.check().
       Raises VeronicaHalt if any policy (budget / step / retry) denies.
     - **Post-call**: increments the step counter on success.
 
@@ -241,4 +241,7 @@ def _emit_ag2_otel_event(
             reason=f"[{check_type}] {agent_name}: {reason}",
         )
     except Exception:
+        # Intentionally swallowed: this helper is declared "Never raises";
+        # OTel emission is best-effort telemetry that must not disrupt agent
+        # containment logic.
         pass

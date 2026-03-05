@@ -374,6 +374,7 @@ class ExecutionContext:
         self._cost_usd_accumulated: float = 0.0
         self._retries_used: int = 0
         self._aborted: bool = False
+        self._closed: bool = False
         self._abort_reason: str | None = None
         self._nodes: list[NodeRecord] = []
         self._events: list[SafetyEvent] = []
@@ -430,28 +431,76 @@ class ExecutionContext:
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
-        # Mark the context as aborted so that subsequent wrap_llm_call /
-        # wrap_tool_call invocations return HALT immediately.  Without this,
-        # callers could accidentally execute new LLM calls after the context
-        # manager has exited and cleaned up resources.
+        self.close()
+
+    def close(self) -> None:
+        """Release resources held by this context.
+
+        Cancels any pending timeout, clears partial buffers, and marks the
+        context as closed.  Subsequent calls to wrap_llm_call / wrap_tool_call
+        return Decision.HALT immediately after close() is called.
+
+        Idempotent: calling close() more than once is safe and produces no
+        additional side-effects beyond the first call.
+
+        Emits a warning when called while graph nodes are still in a
+        non-terminal state (running wrap calls that have not yet finished).
+        """
         with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+
+            # Mark aborted so subsequent wrap calls return HALT immediately.
             self._aborted = True
             if self._abort_reason is None:
-                self._abort_reason = "context_manager_exited"
+                self._abort_reason = "context_closed"
 
-        # Signal the timeout watcher thread to stop and wait for it to exit.
-        # cancel() unblocks the thread's wait() call; join() ensures the thread
-        # has actually finished before the context exits, preventing thread leaks
-        # in test suites and short-lived programs.
+            # Warn when non-terminal graph nodes exist (in-flight wrap calls).
+            try:
+                _non_terminal = [
+                    nid
+                    for nid, node in self._graph._nodes.items()
+                    if node.status not in ("success", "fail", "halt")
+                    and nid != self._root_node_id
+                ]
+                if _non_terminal:
+                    logger.warning(
+                        "ExecutionContext.close() called while %d graph node(s) are "
+                        "still in non-terminal state: %s",
+                        len(_non_terminal),
+                        _non_terminal[:5],
+                    )
+            except Exception:
+                # Intentionally swallowed: the non-terminal node check is
+                # diagnostic only; a failure here must not prevent close() from
+                # completing its cleanup work.
+                pass
+
+            # Clear partial buffers to release references.
+            self._partial_buffers.clear()
+
+        # Signal and cancel timeout watcher (outside lock to avoid deadlock
+        # if the timeout callback tries to acquire _lock while we hold it).
         self._cancellation_token.cancel()
         if self._timeout_pool_handle is not None:
             try:
                 _shared_timeout_pool.cancel(self._timeout_pool_handle)
             except Exception:
+                # Intentionally swallowed: cancel is best-effort; if the pool
+                # handle is already expired the callback fires harmlessly since
+                # the context is already marked aborted.
                 pass
             self._timeout_pool_handle = None
+
         if hasattr(self, "_budget_backend"):
-            self._budget_backend.close()
+            try:
+                self._budget_backend.close()
+            except Exception:
+                logger.debug(
+                    "ExecutionContext.close(): budget_backend.close() failed",
+                    exc_info=True,
+                )
         if hasattr(self, "_circuit_breaker") and hasattr(
             self._circuit_breaker, "close"
         ):
@@ -459,7 +508,7 @@ class ExecutionContext:
                 self._circuit_breaker.close()
             except Exception:
                 logger.debug(
-                    "ExecutionContext: circuit_breaker.close() failed during __exit__",
+                    "ExecutionContext.close(): circuit_breaker.close() failed",
                     exc_info=True,
                 )
 
@@ -743,6 +792,8 @@ class ExecutionContext:
                         graph_node_id, error_class="UnexpectedException"
                     )
                 except Exception:
+                    # Intentionally swallowed: graph bookkeeping failure must
+                    # not mask the original exception being re-raised.
                     pass
             if node.end_ts is None:
                 node.end_ts = datetime.now(timezone.utc)
@@ -944,6 +995,17 @@ class ExecutionContext:
                     self._nodes.append(node)
             stack.pop()
             self._graph.mark_halt(graph_node_id, stop_reason="circuit_open")
+            if self._metrics is not None:
+                try:
+                    self._metrics.record_circuit_state(
+                        self._metadata.chain_id,
+                        self._circuit_breaker.state.value,  # type: ignore[union-attr]
+                    )
+                except Exception:
+                    logger.debug(
+                        "ExecutionContext: metrics.record_circuit_state failed",
+                        exc_info=True,
+                    )
             return Decision.HALT
         return None
 
@@ -1057,6 +1119,17 @@ class ExecutionContext:
 
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_failure(error=exc)
+            if self._metrics is not None:
+                try:
+                    self._metrics.record_circuit_state(
+                        self._metadata.chain_id,
+                        self._circuit_breaker.state.value,
+                    )
+                except Exception:
+                    logger.debug(
+                        "ExecutionContext: metrics.record_circuit_state failed",
+                        exc_info=True,
+                    )
 
         node.status = "error"
         node.end_ts = datetime.now(timezone.utc)
@@ -1179,6 +1252,17 @@ class ExecutionContext:
         """Record successful completion: update counters, propagate cost, mark graph."""
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_success()
+            if self._metrics is not None:
+                try:
+                    self._metrics.record_circuit_state(
+                        self._metadata.chain_id,
+                        self._circuit_breaker.state.value,
+                    )
+                except Exception:
+                    logger.debug(
+                        "ExecutionContext: metrics.record_circuit_state failed",
+                        exc_info=True,
+                    )
 
         # H3: Move backend.add()/commit() outside lock — backend has its own internal
         # locking and may perform blocking Redis IO. Holding _lock during that

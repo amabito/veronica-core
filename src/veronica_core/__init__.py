@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "2.3.0"
+__version__ = "2.3.1"
 
 # Core state machine
 from veronica_core.state import (
@@ -15,7 +15,6 @@ from veronica_core.backends import (
     JSONBackend,
     MemoryBackend,
 )
-# VeronicaPersistence is deprecated -- accessed via __getattr__ with DeprecationWarning
 
 # Exit handling
 from veronica_core.exit import (
@@ -112,9 +111,6 @@ from veronica_core.containment import (
 
 # Execution boundary (v0.9.1)
 from veronica_core.container import AIContainer
-
-# Backward-compat alias: AIcontainer renamed to AIContainer in v1.0.0.
-# DeprecationWarning is emitted via module __getattr__ (defined at bottom of file).
 
 # Decorator-based injection (v0.9.3)
 from veronica_core.inject import (
@@ -386,30 +382,3 @@ __all__ = [
     "MetricRule",
     "MetricsDrivenPolicy",
 ]
-
-
-def __getattr__(name: str):  # type: ignore[return]
-    """Emit DeprecationWarning for deprecated names on attribute access."""
-    if name == "AIcontainer":
-        import warnings
-
-        warnings.warn(
-            "AIcontainer is deprecated and will be removed in a future release. "
-            "Use AIContainer instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return AIContainer
-    if name == "VeronicaPersistence":
-        import warnings
-
-        warnings.warn(
-            "VeronicaPersistence is deprecated and will be removed in v2.0. "
-            "Use JSONBackend or MemoryBackend instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from veronica_core.persist import VeronicaPersistence as _VP
-
-        return _VP
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
