@@ -6,6 +6,23 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.6.0] — 2026-03-05 — Policy Simulation
+
+**Breaking changes:** none.
+
+### Added
+
+- **`veronica_core.simulation` package** — replay historical execution logs against policy configurations for what-if analysis.
+- **`ExecutionLogEntry`** — frozen dataclass recording a single action (llm_call, tool_call, reply) with cost, tokens, latency, and success status.
+- **`ExecutionLog`** — collection with factory methods: `from_file()` (JSON), `from_string()`, `from_otel_export()` (OTel span dicts).
+- **`PolicySimulator`** — replays log entries against a `ShieldPipeline`, evaluating `before_llm_call`, `before_tool_call`, `before_charge`, and `on_error` hooks per entry.
+- **`SimulationReport`** — aggregate statistics (allowed/halted/degraded/warned counts, cost_saved_estimate, savings_percentage, per-agent breakdown) with `summary()` and `to_dict()`.
+- **`SimulationEvent`** — frozen dataclass recording each policy decision during replay.
+- **NaN-safe cost accumulation** — `math.isfinite()` guards prevent NaN/Inf costs from corrupting report totals.
+- **51 new tests** — 29 happy-path + 22 adversarial (corrupted input, concurrent access, state accumulation, boundary conditions, pipeline edge cases).
+
+---
+
 ## [2.5.0] — 2026-03-05 — HALT Unification & Metrics Wiring
 
 **Breaking changes:** none.
