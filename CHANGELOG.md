@@ -6,6 +6,24 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.5.0] — 2026-03-05 — HALT Unification & Metrics Wiring
+
+**Breaking changes:** none.
+
+### Added
+
+- **`check_and_halt()`** (`_shared.py`) — shared helper centralizing `container.check() -> VeronicaHalt` pattern. All 5 framework adapters now use it.
+- **`emit_metrics_decision()`**, **`emit_metrics_tokens()`**, **`safe_emit()`** (`_shared.py`) — ContainmentMetricsProtocol emission helpers with exception swallowing.
+- **`metrics=` and `agent_id=` kwargs** on all framework adapters (ag2, crewai, langchain, langgraph, llamaindex). Emits `record_decision` on ALLOW/HALT and `record_tokens` on LLM completion.
+- **37 new tests** — 12 for HALT unification (including adversarial: empty reason, exception propagation), 25 for metrics wiring.
+
+### Changed
+
+- **All framework adapters** migrated from inline `check() -> VeronicaHalt` to shared `check_and_halt()`. Reduces per-adapter HALT logic from 3 lines to 1 call.
+- **docs/API.md** rewritten from v1.0.0 to v2.5.0 (739 lines). Covers ExecutionContext, Decision enum, MCP adapters, middleware, metrics, protocols.
+
+---
+
 ## [2.4.0] — 2026-03-05 — Code Quality & HALT Hardening
 
 **Breaking changes:** none. `MCPToolResult.decision` field type changed from `str` to `Decision` enum, but `Decision` inherits from `str` so `== "ALLOW"` / `== "HALT"` comparisons still work.

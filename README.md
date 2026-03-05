@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-3734%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-3771%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -179,9 +179,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v2.4.0
+## Ship Readiness -- v2.5.0
 
-3734 tests, 92% coverage, zero required dependencies. Python 3.10+.
+3771 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -212,6 +212,7 @@ Supporting theory:
 - ~~OTel Feedback Loop: metrics-driven runtime policy~~ (v2.2.0)
 - ~~`ExecutionGraph` extensibility hooks for external integrations~~ (v2.3.0)
 - ~~Code quality hardening: `close()`, Decision enum, CrewAI context wiring~~ (v2.4.0)
+- ~~HALT unification, metrics wiring, API docs rewrite~~ (v2.5.0)
 - `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
 
 
