@@ -12,6 +12,7 @@ Dataclasses only for configuration.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -140,6 +141,14 @@ class MetricRule:
         if not isinstance(self.threshold, (int, float)):
             errors.append(
                 f"MetricRule.threshold must be numeric, got {type(self.threshold).__name__}"
+            )
+        elif not math.isfinite(float(self.threshold)):
+            # NaN threshold silently disables the rule (NaN comparisons always return False).
+            # ±inf thresholds cause always-trigger or never-trigger behaviour for some
+            # operators (e.g. value < inf → always True → always halt).
+            # Both are almost certainly configuration mistakes, so we reject them eagerly.
+            errors.append(
+                f"MetricRule.threshold must be finite, got {self.threshold!r}"
             )
         if errors:
             raise ValueError("; ".join(errors))
@@ -443,8 +452,11 @@ class MetricsDrivenPolicy:
 
             if value is None:
                 return None
-            return float(value)
-        except (TypeError, ValueError, AttributeError) as exc:
+            result = float(value)
+            if not math.isfinite(result):
+                return None
+            return result
+        except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "MetricsDrivenPolicy: cannot extract metric %r (attr=%r): %s",
                 metric_name,

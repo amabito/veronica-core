@@ -89,22 +89,39 @@ def _make_metric_rule(params: dict[str, Any]) -> Any:
         get_default_ingester,
     )
 
-    rules_raw = params.get("rules") or []
+    rules_raw = params.get("rules")
+    if rules_raw is not None and not isinstance(rules_raw, list):
+        raise TypeError(
+            f"metric_rule 'rules' must be a list, got {type(rules_raw).__name__}"
+        )
     rules: list[MetricRule] = []
-    for r in rules_raw:
-        if isinstance(r, dict):
-            rules.append(
-                MetricRule(
-                    metric=str(r.get("metric", "total_cost_usd")),
-                    operator=str(r.get("operator", "gt")),
-                    threshold=float(r.get("threshold", 0.0)),
-                    action=str(r.get("action", "warn")),
-                    agent_id=r.get("agent_id") or None,
-                    label=str(r.get("label", "")),
-                )
+    for r in rules_raw or []:
+        if not isinstance(r, dict):
+            raise TypeError(
+                f"Each rule must be a dict, got {type(r).__name__}"
             )
+        # Explicit None-guards: YAML/JSON null maps to Python None even when
+        # the key is present. Fall back to intended defaults rather than
+        # propagating TypeError from float(None).
+        raw_threshold = r.get("threshold")
+        threshold_val = float(raw_threshold) if raw_threshold is not None else 0.0
+        raw_label = r.get("label")
+        label_val = str(raw_label) if raw_label is not None else ""
+        raw_agent_id = r.get("agent_id")
+        agent_id_val = str(raw_agent_id) if raw_agent_id is not None else None
+        rules.append(
+            MetricRule(
+                metric=str(r.get("metric") or "total_cost_usd"),
+                operator=str(r.get("operator") or "gt"),
+                threshold=threshold_val,
+                action=str(r.get("action") or "warn"),
+                agent_id=agent_id_val,
+                label=label_val,
+            )
+        )
     ingester = get_default_ingester()
-    agent_id = params.get("agent_id") or None
+    agent_id = params.get("agent_id")
+    agent_id = str(agent_id) if agent_id is not None else None
     return MetricsDrivenPolicy(rules=rules, ingester=ingester, agent_id=agent_id)
 
 

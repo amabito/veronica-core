@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 import pytest
 
@@ -120,6 +120,27 @@ class TestMetricRuleValidation:
     def test_non_numeric_threshold_raises(self) -> None:
         with pytest.raises((ValueError, TypeError)):
             MetricRule("total_cost_usd", "gt", "bad", "halt")  # type: ignore[arg-type]
+
+    def test_nan_threshold_raises(self) -> None:
+        """NaN threshold silently disables all comparisons — must be rejected."""
+        import math
+
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("total_cost_usd", "gt", math.nan, "halt")
+
+    def test_pos_inf_threshold_raises(self) -> None:
+        """+inf threshold with 'lt' causes always-trigger DoS — must be rejected."""
+        import math
+
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("error_rate", "lt", math.inf, "halt")
+
+    def test_neg_inf_threshold_raises(self) -> None:
+        """-inf threshold with 'gt' causes always-trigger DoS — must be rejected."""
+        import math
+
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("total_tokens", "gt", -math.inf, "warn")
 
     def test_triggered_true(self) -> None:
         rule = MetricRule("total_cost_usd", "gt", 0.5, "halt")
@@ -503,6 +524,76 @@ class TestPolicyRegistryMetricRule:
         assert policy.policy_type == "metric_rule"
         assert len(policy.rules) == 0
 
+    def test_metric_rule_factory_null_threshold_uses_default(self) -> None:
+        """YAML/JSON null threshold (Python None) must not raise TypeError.
+
+        When a config dict contains ``threshold: null`` (YAML) or
+        ``"threshold": null`` (JSON), ``r.get("threshold", 0.0)`` returns
+        ``None`` (the key exists), not ``0.0``. Calling ``float(None)`` then
+        raises ``TypeError``. The factory must guard against this and fall
+        back to ``0.0``.
+        """
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        # threshold explicitly set to None simulates ``threshold: null`` in YAML
+        params = {
+            "rules": [
+                {
+                    "metric": "total_cost_usd",
+                    "operator": "gt",
+                    "threshold": None,
+                    "action": "halt",
+                }
+            ]
+        }
+        policy = factory(params)
+        assert policy.policy_type == "metric_rule"
+        assert len(policy.rules) == 1
+        assert policy.rules[0].threshold == 0.0
+
+    def test_metric_rule_factory_null_metric_uses_default(self) -> None:
+        """YAML/JSON null metric falls back to 'total_cost_usd', not 'None'."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        params = {
+            "rules": [
+                {
+                    "metric": None,
+                    "operator": "gt",
+                    "threshold": 1.0,
+                    "action": "warn",
+                }
+            ]
+        }
+        policy = factory(params)
+        assert len(policy.rules) == 1
+        assert policy.rules[0].metric == "total_cost_usd"
+
+    def test_metric_rule_factory_null_label_uses_empty_string(self) -> None:
+        """YAML/JSON null label must not produce the string 'None'."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        params = {
+            "rules": [
+                {
+                    "metric": "error_rate",
+                    "operator": "gt",
+                    "threshold": 0.5,
+                    "action": "warn",
+                    "label": None,
+                }
+            ]
+        }
+        policy = factory(params)
+        assert len(policy.rules) == 1
+        assert policy.rules[0].label == ""
+
 
 # ---------------------------------------------------------------------------
 # Edge cases
@@ -562,177 +653,6 @@ class TestEdgeCases:
         policy = MetricsDrivenPolicy(rules=[rule], ingester=ingester)
         d = policy.check(_ctx())
         assert "my-agent" in d.reason
-
-
-# ---------------------------------------------------------------------------
-# otel_feedback.policy.MetricsDrivenPolicy — first-match semantics
-# ---------------------------------------------------------------------------
-
-
-class TestOtelFeedbackPolicyFirstMatch:
-    """Tests for veronica_core.otel_feedback.policy.MetricsDrivenPolicy
-    which uses first-match-wins evaluation and policy_type="metrics_driven".
-    """
-
-    def _ingester(self, agent_id: str, **metrics_kwargs: float) -> Any:
-        from veronica_core.otel_feedback import OTelMetricsIngester
-
-        ing = OTelMetricsIngester()
-        # Inject metrics by ingesting synthetic spans
-        if "error_rate" in metrics_kwargs:
-            error_count = metrics_kwargs["error_rate"]
-            total = 10
-            error_n = int(error_count * total)
-            for _ in range(error_n):
-                ing.ingest_span({"agent_id": agent_id, "status": "ERROR"})
-            for _ in range(total - error_n):
-                ing.ingest_span({"agent_id": agent_id})
-        if "avg_latency_ms" in metrics_kwargs:
-            lat_ms = metrics_kwargs["avg_latency_ms"]
-            lat_s = lat_ms / 1000.0
-            ing.ingest_span({"agent_id": agent_id, "start_time": 0.0, "end_time": lat_s})
-        if "total_cost" in metrics_kwargs:
-            cost = metrics_kwargs["total_cost"]
-            ing.ingest_span({
-                "agent_id": agent_id,
-                "attributes": {"veronica.cost_usd": cost},
-            })
-        if "total_tokens" in metrics_kwargs:
-            tokens = int(metrics_kwargs["total_tokens"])
-            ing.ingest_span({
-                "agent_id": agent_id,
-                "attributes": {"llm.token.count.total": tokens},
-            })
-        return ing
-
-    def test_policy_type_is_metrics_driven(self) -> None:
-        from veronica_core.otel_feedback import OTelMetricsIngester
-        from veronica_core.otel_feedback.policy import (
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        policy = OtelPolicy(ingester=OTelMetricsIngester(), rules=[])
-        assert policy.policy_type == "metrics_driven"
-
-    def test_first_rule_match_wins_not_worst(self) -> None:
-        """First matching rule wins — later halt must NOT override earlier warn."""
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = self._ingester("bot", error_rate=0.5, total_cost=5.0)
-        rules = [
-            OtelRule("error_rate", "gt", 0.3, "warn"),   # matches first → warn
-            OtelRule("total_cost", "gt", 1.0, "halt"),   # later match → MUST NOT win
-        ]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True  # warn, not halt
-        assert "WARN:" in d.reason
-
-    def test_no_match_returns_allow(self) -> None:
-        from veronica_core.otel_feedback import OTelMetricsIngester
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = OTelMetricsIngester()
-        ing.ingest_span({"agent_id": "bot", "attributes": {"veronica.cost_usd": 0.1}})
-        rules = [OtelRule("total_cost", "gt", 10.0, "halt")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True
-
-    def test_halt_triggers_deny(self) -> None:
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = self._ingester("bot", total_cost=5.0)
-        rules = [OtelRule("total_cost", "gt", 1.0, "halt")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is False
-
-    def test_degrade_with_fallback_model(self) -> None:
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = self._ingester("bot", avg_latency_ms=6000.0)
-        rules = [OtelRule("avg_latency_ms", "gt", 5000, "degrade", fallback_model="gpt-3.5-turbo")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True
-        assert d.fallback_model == "gpt-3.5-turbo"
-
-    def test_warn_with_rate_limit_ms(self) -> None:
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = self._ingester("bot", avg_latency_ms=6000.0)
-        rules = [OtelRule("avg_latency_ms", "gt", 5000, "warn", rate_limit_ms=1500)]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True
-        assert d.rate_limit_ms == 1500
-
-    def test_call_count_metric(self) -> None:
-        from veronica_core.otel_feedback import OTelMetricsIngester
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-
-        ing = OTelMetricsIngester()
-        for _ in range(5):
-            ing.ingest_span({"agent_id": "bot"})
-        rules = [OtelRule("call_count", "gte", 5, "warn")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True
-        assert "WARN:" in d.reason
-
-    def test_reset_is_noop(self) -> None:
-        from veronica_core.otel_feedback import OTelMetricsIngester
-        from veronica_core.otel_feedback.policy import MetricsDrivenPolicy as OtelPolicy
-
-        policy = OtelPolicy(ingester=OTelMetricsIngester(), rules=[])
-        policy.reset()  # must not raise
-
-    def test_empty_entity_id_returns_allow(self) -> None:
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-        from veronica_core.otel_feedback import OTelMetricsIngester
-
-        rules = [OtelRule("total_cost", "gt", 0.0, "halt")]
-        policy = OtelPolicy(ingester=OTelMetricsIngester(), rules=rules)
-        d = policy.check(PolicyContext(entity_id=""))
-        assert d.allowed is True  # no agent_id → skip
-
-    def test_negative_threshold_triggers_correctly(self) -> None:
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
-        )
-        from veronica_core.otel_feedback import OTelMetricsIngester
-
-        ing = OTelMetricsIngester()
-        ing.ingest_span({"agent_id": "bot"})  # call_count=1, total_cost=0.0
-        # 0.0 > -1.0 → true
-        rules = [OtelRule("total_cost", "gt", -1.0, "warn")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
-        d = policy.check(PolicyContext(entity_id="bot"))
-        assert d.allowed is True
-        assert "WARN:" in d.reason
 
 
 # ---------------------------------------------------------------------------

@@ -107,13 +107,14 @@ class TestAdversarialCorruptedMetrics:
         # float("nan") > 100.0 is False → rule not triggered → allow
         assert d.allowed is True
 
-    def test_inf_metric_value_triggers_correctly(self) -> None:
+    def test_inf_metric_value_is_skipped(self) -> None:
+        """Non-finite observed values (inf) are filtered out — rule is skipped."""
         bad = BadMetrics(error_rate=float("inf"))
         ingester = type("I", (), {"get_agent_metrics": lambda self, aid: bad})()
         policy = self._policy(ingester, "error_rate", "gt", 0.0, "halt")
         d = policy.check(_ctx(entity_id="bot"))
-        # inf > 0.0 is True → halt
-        assert d.allowed is False
+        # inf is non-finite → _extract_metric returns None → rule skipped → allow
+        assert d.allowed is True
 
     def test_string_metric_value_is_safe(self) -> None:
         bad = BadMetrics(total_cost="oops")
@@ -373,7 +374,9 @@ class TestAdversarialBoundary:
         assert p.check(_ctx(entity_id="bot")).allowed is True
 
     def test_max_float_threshold_never_triggers(self) -> None:
-        p = self._policy(1e300, "gt", math.inf)
+        # Use the largest finite float (1e308) rather than inf — inf is now rejected
+        # by MetricRule validation (non-finite threshold is a configuration error).
+        p = self._policy(1e300, "gt", 1e308)
         assert p.check(_ctx(entity_id="bot")).allowed is True
 
     def test_negative_threshold_gt_always_triggered(self) -> None:
@@ -381,9 +384,10 @@ class TestAdversarialBoundary:
         p = self._policy(0.0, "gt", -1.0)
         assert p.check(_ctx(entity_id="bot")).allowed is False
 
-    def test_inf_value_triggers_gt(self) -> None:
+    def test_inf_observed_value_is_skipped(self) -> None:
+        """Non-finite observed values (inf) are filtered — rule skipped, allow."""
         p = self._policy(math.inf, "gt", 1000.0)
-        assert p.check(_ctx(entity_id="bot")).allowed is False
+        assert p.check(_ctx(entity_id="bot")).allowed is True
 
 
 # ---------------------------------------------------------------------------
@@ -712,9 +716,9 @@ class TestAdversarialAgentIdEdgeCases:
 
     def test_policy_with_unicode_agent_id_in_context(self) -> None:
         """MetricsDrivenPolicy resolves Unicode entity_id correctly."""
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
+        from veronica_core.policy.metrics_policy import (
+            MetricRule,
+            MetricsDrivenPolicy,
         )
         from veronica_core.runtime_policy import PolicyContext
 
@@ -724,8 +728,8 @@ class TestAdversarialAgentIdEdgeCases:
             "agent_id": agent_id,
             "attributes": {"veronica.cost_usd": 5.0},
         })
-        rules = [OtelRule("total_cost", "gt", 1.0, "halt")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
+        rules = [MetricRule("total_cost_usd","gt", 1.0, "halt")]
+        policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
         d = policy.check(PolicyContext(entity_id=agent_id))
         assert d.allowed is False
 
@@ -857,9 +861,9 @@ class TestAdversarialExtremeValues:
 
     def test_policy_handles_1e308_metric(self) -> None:
         """Policy with 1e308 threshold never triggers."""
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
+        from veronica_core.policy.metrics_policy import (
+            MetricRule,
+            MetricsDrivenPolicy,
         )
         from veronica_core.runtime_policy import PolicyContext
 
@@ -868,8 +872,8 @@ class TestAdversarialExtremeValues:
             "agent_id": "bot",
             "attributes": {"veronica.cost_usd": 1e300},
         })
-        rules = [OtelRule("total_cost", "gt", 1e308, "halt")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
+        rules = [MetricRule("total_cost_usd","gt", 1e308, "halt")]
+        policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
         d = policy.check(PolicyContext(entity_id="bot"))
         assert d.allowed is True  # 1e300 not > 1e308
 
@@ -882,15 +886,15 @@ class TestAdversarialExtremeValues:
 class TestAdversarialTOCTOU:
     def test_ingest_between_two_checks_reflects_correctly(self) -> None:
         """State change between check() calls must be reflected immediately."""
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
+        from veronica_core.policy.metrics_policy import (
+            MetricRule,
+            MetricsDrivenPolicy,
         )
         from veronica_core.runtime_policy import PolicyContext
 
         ing = OTelMetricsIngester()
-        rules = [OtelRule("total_cost", "gt", 1.0, "halt")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
+        rules = [MetricRule("total_cost_usd","gt", 1.0, "halt")]
+        policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
 
         # Check 1: no cost yet → allow
         d1 = policy.check(PolicyContext(entity_id="bot"))
@@ -908,15 +912,15 @@ class TestAdversarialTOCTOU:
 
     def test_concurrent_ingest_toctou_race(self) -> None:
         """10 threads ingesting while 10 threads checking — no state corruption."""
-        from veronica_core.otel_feedback.policy import (
-            MetricRule as OtelRule,
-            MetricsDrivenPolicy as OtelPolicy,
+        from veronica_core.policy.metrics_policy import (
+            MetricRule,
+            MetricsDrivenPolicy,
         )
         from veronica_core.runtime_policy import PolicyContext
 
         ing = OTelMetricsIngester()
-        rules = [OtelRule("call_count", "gte", 50, "warn")]
-        policy = OtelPolicy(ingester=ing, rules=rules)
+        rules = [MetricRule("error_rate", "gte", 0.5, "warn")]
+        policy = MetricsDrivenPolicy(ingester=ing, rules=rules)
         errors: list[Exception] = []
 
         def _ingest() -> None:
@@ -954,3 +958,297 @@ class TestAdversarialTOCTOU:
         assert m.total_tokens == 0
         assert m.error_rate == 0.0
         assert m.avg_latency_ms == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Category 13: error_count snapshot correctness (regression for BUG-2/4)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialErrorCountSnapshot:
+    """Verify AgentMetrics._error_count is populated from real ingester snapshot.
+
+    Regression tests for the bug where _AgentState.snapshot() did not copy
+    error_count into AgentMetrics._error_count, causing MetricsDrivenPolicy
+    error_count rules to always see 0.
+    """
+
+    def test_error_count_populated_in_snapshot(self) -> None:
+        """snapshot() must expose _error_count equal to the actual error count."""
+        ing = OTelMetricsIngester()
+        for _ in range(7):
+            ing.ingest_span({"agent_id": "bot", "status": "ERROR"})
+        for _ in range(3):
+            ing.ingest_span({"agent_id": "bot"})
+        m = ing.get_agent_metrics("bot")
+        assert m._error_count == 7, f"Expected 7 errors, got {m._error_count}"
+        assert m.call_count == 10
+        assert m.error_rate == pytest.approx(0.7)
+
+    def test_error_count_rule_triggers_with_real_ingester(self) -> None:
+        """error_count MetricRule must trigger when error count exceeds threshold."""
+        ing = OTelMetricsIngester()
+        for _ in range(10):
+            ing.ingest_span({"agent_id": "bot", "status": "ERROR"})
+        # 10 errors >= 5 → halt
+        rule = MetricRule("error_count", "gte", 5, "halt", agent_id="bot")
+        policy = MetricsDrivenPolicy(rules=[rule], ingester=ing)
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is False, (
+            "error_count rule must trigger: 10 errors >= threshold 5"
+        )
+
+    def test_error_count_rule_does_not_trigger_below_threshold(self) -> None:
+        """error_count MetricRule must not trigger when count is below threshold."""
+        ing = OTelMetricsIngester()
+        for _ in range(3):
+            ing.ingest_span({"agent_id": "bot", "status": "ERROR"})
+        rule = MetricRule("error_count", "gte", 5, "halt", agent_id="bot")
+        policy = MetricsDrivenPolicy(rules=[rule], ingester=ing)
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is True, "3 errors should not trigger threshold=5"
+
+    def test_error_count_snapshot_reset_to_zero(self) -> None:
+        """After reset(), _error_count in snapshot must be 0."""
+        ing = OTelMetricsIngester()
+        for _ in range(5):
+            ing.ingest_span({"agent_id": "bot", "status": "ERROR"})
+        ing.reset("bot")
+        m = ing.get_agent_metrics("bot")
+        assert m._error_count == 0
+
+    def test_error_count_concurrent_correctness(self) -> None:
+        """Concurrent error span ingestion — final _error_count must be exact."""
+        ing = OTelMetricsIngester()
+        errors: list[Exception] = []
+
+        def _ingest() -> None:
+            try:
+                for _ in range(20):
+                    ing.ingest_span({"agent_id": "shared", "status": "ERROR"})
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_ingest) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        m = ing.get_agent_metrics("shared")
+        assert m._error_count == 200  # 10 threads × 20 errors
+        assert m.error_rate == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Category 14: _extract_metric broad exception safety (regression for BUG-3)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialPropertyException:
+    """Properties that raise non-standard exceptions must not crash the policy.
+
+    Regression for the bug where _extract_metric only caught
+    (TypeError, ValueError, AttributeError) — allowing ZeroDivisionError,
+    RuntimeError, etc. to propagate out of policy.check().
+    """
+
+    def _policy_with_raising_property(self, exc_type: type, metric: str) -> Any:
+        class RaisingMetrics:
+            @property
+            def total_cost(self) -> float:
+                raise exc_type("injected error")
+
+            @property
+            def avg_latency_ms(self) -> float:
+                raise exc_type("injected error")
+
+            @property
+            def error_rate(self) -> float:
+                raise exc_type("injected error")
+
+        class BrokenIngester:
+            def get_agent_metrics(self, agent_id: str) -> RaisingMetrics:
+                return RaisingMetrics()
+
+        rule = MetricRule(metric, "gt", 0.0, "halt", agent_id="bot")
+        return MetricsDrivenPolicy(rules=[rule], ingester=BrokenIngester())
+
+    def test_zero_division_error_in_property_is_safe(self) -> None:
+        """ZeroDivisionError raised by a metric property must not propagate."""
+        policy = self._policy_with_raising_property(ZeroDivisionError, "total_cost_usd")
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is True, "ZeroDivisionError in property must fail-safe to allow"
+
+    def test_runtime_error_in_property_is_safe(self) -> None:
+        """RuntimeError raised by a metric property must not propagate."""
+        policy = self._policy_with_raising_property(RuntimeError, "total_cost_usd")
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is True
+
+    def test_os_error_in_property_is_safe(self) -> None:
+        """OSError raised by a metric property must not propagate."""
+        policy = self._policy_with_raising_property(OSError, "avg_latency_ms")
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is True
+
+    def test_key_error_in_property_is_safe(self) -> None:
+        """KeyError raised by a metric property must not propagate."""
+        policy = self._policy_with_raising_property(KeyError, "error_rate")
+        d = policy.check(_ctx(entity_id="bot"))
+        assert d.allowed is True
+
+
+# ---------------------------------------------------------------------------
+# Category 15: Non-finite threshold regression (BUG-R2-1)
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialNonFiniteThreshold:
+    """NaN / ±inf threshold must be rejected at MetricRule construction time.
+
+    Security impact of NaN threshold (pre-fix): NaN comparisons always return
+    False, so the rule would never trigger regardless of the observed value,
+    silently bypassing all cost/error/latency limits.
+
+    Impact of ±inf threshold: 'value < inf' is always True (constant halt),
+    and 'value > -inf' is always True (constant halt) — both cause unexpected
+    DoS-style policy behaviour that is almost certainly a configuration error.
+    """
+
+    def test_nan_threshold_rejected_at_construction(self) -> None:
+        """MetricRule must raise ValueError for NaN threshold."""
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("total_cost_usd", "gt", float("nan"), "halt")
+
+    def test_pos_inf_threshold_rejected_at_construction(self) -> None:
+        """+inf threshold silently disables 'gt' rules and DoS-triggers 'lt' rules."""
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("error_rate", "lt", float("inf"), "halt")
+
+    def test_neg_inf_threshold_rejected_at_construction(self) -> None:
+        """-inf threshold makes 'gt' rules always trigger (DoS)."""
+        with pytest.raises(ValueError, match="finite"):
+            MetricRule("avg_latency_ms", "gt", float("-inf"), "degrade")
+
+    def test_nan_threshold_via_yaml_like_dict_rejected(self) -> None:
+        """Simulates YAML '.nan' deserialization reaching MetricRule constructor."""
+        import math
+
+        # YAML safe_load converts '.nan' to float('nan')
+        params = {
+            "rules": [
+                {
+                    "metric": "total_cost_usd",
+                    "operator": "gt",
+                    "threshold": math.nan,  # as if from YAML '.nan'
+                    "action": "halt",
+                }
+            ]
+        }
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(ValueError, match="finite"):
+            factory(params)
+
+    def test_inf_threshold_via_yaml_like_dict_rejected(self) -> None:
+        """Simulates YAML '.inf' deserialization reaching MetricRule constructor."""
+        import math
+
+        params = {
+            "rules": [
+                {
+                    "metric": "error_rate",
+                    "operator": "lt",
+                    "threshold": math.inf,  # as if from YAML '.inf'
+                    "action": "halt",
+                }
+            ]
+        }
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(ValueError, match="finite"):
+            factory(params)
+
+
+# ---------------------------------------------------------------------------
+# Category 16: F.R.I.D.A.Y. R4 findings — factory validation, agent limit,
+#              non-finite observed values
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialFridayR4:
+    """Regression tests for F.R.I.D.A.Y. R4 audit findings."""
+
+    def test_factory_rejects_non_list_rules(self) -> None:
+        """rules must be a list; string/dict/int must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="list"):
+            factory({"rules": "not a list"})
+        with pytest.raises(TypeError, match="list"):
+            factory({"rules": {"metric": "error_rate"}})
+
+    def test_factory_rejects_non_dict_rule_entry(self) -> None:
+        """Each rule entry must be a dict; string entries must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="dict"):
+            factory({"rules": ["not a dict"]})
+
+    def test_factory_coerces_numeric_agent_id_to_str(self) -> None:
+        """Numeric agent_id from YAML should be coerced to string."""
+        from veronica_core.policy.registry import PolicyRegistry
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        policy = factory({
+            "rules": [{
+                "metric": "total_cost_usd",
+                "operator": "gt",
+                "threshold": 1.0,
+                "action": "halt",
+                "agent_id": 42,
+            }]
+        })
+        assert policy.rules[0].agent_id == "42"
+
+    def test_ingester_max_agents_limit(self) -> None:
+        """New agents beyond max_agents must be silently dropped."""
+        ing = OTelMetricsIngester(max_agents=5)
+        for i in range(10):
+            ing.ingest_span({"agent_id": f"agent-{i}"})
+        all_agents = ing.get_all_agents()
+        assert len(all_agents) == 5
+
+    def test_ingester_max_agents_existing_agent_still_works(self) -> None:
+        """Existing agents must still update after max_agents is reached."""
+        ing = OTelMetricsIngester(max_agents=2)
+        ing.ingest_span({"agent_id": "a"})
+        ing.ingest_span({"agent_id": "b"})
+        # Max reached; new agent dropped
+        ing.ingest_span({"agent_id": "c"})
+        # Existing agent still works
+        ing.ingest_span({"agent_id": "a"})
+        m = ing.get_agent_metrics("a")
+        assert m.call_count == 2
+        assert ing.get_agent_metrics("c").call_count == 0  # never created
+
+    def test_extract_metric_filters_non_finite_observed(self) -> None:
+        """NaN/inf observed values from metrics must be treated as None (skipped)."""
+        from veronica_core.policy.metrics_policy import MetricsDrivenPolicy
+
+        class InfMetrics:
+            total_cost = float("inf")
+            avg_latency_ms = float("nan")
+            error_rate = float("-inf")
+
+        assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "total_cost_usd") is None
+        assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "avg_latency_ms") is None
+        assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "error_rate") is None

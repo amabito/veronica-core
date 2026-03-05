@@ -369,6 +369,25 @@ class TestReset:
         ingester = OTelMetricsIngester()
         ingester.reset("nonexistent")  # Should not raise
 
+    def test_reset_preserves_agent_registry_entries(self):
+        """reset() zeroes counters but does NOT remove agents from get_all_agents().
+
+        This is documented behaviour: agent entries are kept in memory so that
+        subsequent ingest_span() calls continue to accumulate correctly without
+        re-creating state objects.  Create a new OTelMetricsIngester to fully
+        reclaim memory.
+        """
+        ingester = OTelMetricsIngester()
+        ingester.ingest_span(_make_llm_span(agent_id="a"))
+        ingester.ingest_span(_make_llm_span(agent_id="b"))
+        ingester.reset()
+        # Entries still present, but with zero metrics
+        all_agents = ingester.get_all_agents()
+        assert set(all_agents.keys()) == {"a", "b"}
+        for m in all_agents.values():
+            assert m.call_count == 0
+            assert m.total_cost == 0.0
+
     def test_get_after_reset_returns_zeros(self):
         ingester = OTelMetricsIngester()
         ingester.ingest_span(_make_llm_span(agent_id="z", cost=99.0))

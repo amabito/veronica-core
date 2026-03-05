@@ -86,6 +86,7 @@ class _AgentState:
             error_rate=err_rate,
             last_active=self.last_active,
             call_count=self.call_count,
+            _error_count=self.error_count,
         )
 
 
@@ -236,10 +237,17 @@ class OTelMetricsIngester:
         print(metrics.total_cost)  # 0.003
     """
 
-    def __init__(self, window_sec: float = 3600.0) -> None:
+    _DEFAULT_MAX_AGENTS = 10_000
+
+    def __init__(
+        self, window_sec: float = 3600.0, max_agents: int = _DEFAULT_MAX_AGENTS,
+    ) -> None:
         if window_sec <= 0:
             raise ValueError(f"window_sec must be > 0, got {window_sec}")
+        if max_agents <= 0:
+            raise ValueError(f"max_agents must be > 0, got {max_agents}")
         self._window_sec = window_sec
+        self._max_agents = max_agents
         self._global_lock = threading.Lock()
         self._agents: dict[str, _AgentState] = {}
 
@@ -305,6 +313,14 @@ class OTelMetricsIngester:
     def reset(self, agent_id: Optional[str] = None) -> None:
         """Clear accumulated metrics.
 
+        Note: agent entries are **not** removed from the internal registry; only
+        their counters are zeroed.  This means that after a full reset,
+        ``get_all_agents()`` still returns all previously-seen agent ids (each
+        with zeroed metrics), and subsequent ``ingest_span()`` calls continue to
+        accumulate against the same state objects.  If you need to reclaim
+        memory for agents that are no longer active, create a new
+        ``OTelMetricsIngester`` instance instead.
+
         Args:
             agent_id: If given, reset only that agent. If None, reset all agents.
         """
@@ -346,6 +362,8 @@ class OTelMetricsIngester:
         now = time.monotonic()
 
         state = self._get_or_create_state(agent_id)
+        if state is None:
+            return  # max_agents limit reached; silently drop
         with state.lock:
             state.call_count += 1
             state.total_tokens += max(0, tokens)
@@ -360,10 +378,15 @@ class OTelMetricsIngester:
                 state.error_count += 1
             state.last_active = now
 
-    def _get_or_create_state(self, agent_id: str) -> _AgentState:
-        """Return existing state or create a new one (global lock for creation only)."""
+    def _get_or_create_state(self, agent_id: str) -> Optional[_AgentState]:
+        """Return existing state or create a new one (global lock for creation only).
+
+        Returns None if max_agents limit is reached and agent_id is new.
+        """
         with self._global_lock:
             if agent_id not in self._agents:
+                if len(self._agents) >= self._max_agents:
+                    return None
                 self._agents[agent_id] = _AgentState(self._window_sec)
             return self._agents[agent_id]
 
