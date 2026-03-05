@@ -83,12 +83,14 @@ from typing import Any, Optional, Union
 
 from veronica_core.adapters._shared import (
     build_adapter_container,
+    check_and_halt,
     cost_from_total_tokens,
     record_budget_spend,
+    safe_emit,
 )
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
-from veronica_core.inject import GuardConfig, VeronicaHalt
+from veronica_core.inject import GuardConfig
 from veronica_core.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
@@ -139,11 +141,15 @@ class VeronicaCrewAIListener(BaseEventListener):
         config: Union[GuardConfig, ExecutionConfig],
         *,
         execution_context: Optional[Any] = None,
+        metrics: Optional[Any] = None,
+        agent_id: str = "crewai",
     ) -> None:
         # _container must be set BEFORE super().__init__() because
         # BaseEventListener.__init__() calls setup_listeners(), which
         # registers closures that capture self._container.
         self._container = build_adapter_container(config, execution_context)
+        self._metrics = metrics
+        self._agent_id = agent_id
         super().__init__()
 
     # ------------------------------------------------------------------
@@ -185,6 +191,10 @@ class VeronicaCrewAIListener(BaseEventListener):
             cost = _estimate_cost(event)
             record_budget_spend(self._container, cost, "[VERONICA_CREW]", logger)
 
+            # Emit token metrics when a backend is configured
+            if self._metrics is not None:
+                _emit_event_tokens(self._metrics, self._agent_id, event)
+
         @bus.on(LLMCallFailedEvent)
         def on_llm_call_failed(source: Any, event: LLMCallFailedEvent) -> None:
             """Error hook: log error without charging budget."""
@@ -212,9 +222,13 @@ class VeronicaCrewAIListener(BaseEventListener):
                 step_callback=listener.check_or_raise,
             )
         """
-        decision = self._container.check(cost_usd=0.0)
-        if not decision.allowed:
-            raise VeronicaHalt(decision.reason, decision)
+        check_and_halt(
+            self._container,
+            tag="[VERONICA_CREW]",
+            _logger=logger,
+            metrics=self._metrics,
+            agent_id=self._agent_id,
+        )
 
     # ------------------------------------------------------------------
     # Introspection
@@ -284,3 +298,26 @@ def _get_field(obj: Any, *keys: str) -> Any:
         if val is not None:
             return val
     return None
+
+
+def _emit_event_tokens(metrics: Any, agent_id: str, event: Any) -> None:
+    """Extract token counts from a LLMCallCompletedEvent and emit via metrics."""
+    try:
+        response = getattr(event, "response", None)
+        if response is None:
+            return
+        usage = None
+        if hasattr(response, "usage"):
+            usage = response.usage
+        elif hasattr(response, "usage_metadata"):
+            usage = response.usage_metadata
+        elif isinstance(response, dict):
+            usage = response.get("usage") or response.get("usage_metadata")
+        if usage is None:
+            return
+        prompt = _get_field(usage, "prompt_tokens", "input_tokens")
+        completion = _get_field(usage, "completion_tokens", "output_tokens")
+        if prompt is not None and completion is not None:
+            safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
+    except Exception:
+        pass

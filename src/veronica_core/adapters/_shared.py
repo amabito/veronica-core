@@ -13,11 +13,96 @@ from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.budget import BudgetEnforcer
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
-from veronica_core.inject import GuardConfig
+from veronica_core.inject import GuardConfig, VeronicaHalt
 from veronica_core.pricing import estimate_cost_usd
 from veronica_core.retry import RetryContainer
 
 logger = logging.getLogger(__name__)
+
+
+def check_and_halt(
+    container: Union[AIContainer, "ExecutionContextContainerAdapter"],
+    tag: str = "[VERONICA]",
+    _logger: Optional[logging.Logger] = None,
+    metrics: Optional[Any] = None,
+    agent_id: str = "agent",
+) -> None:
+    """Check container policies and raise VeronicaHalt if denied.
+
+    Centralizes the ``container.check() -> raise VeronicaHalt`` pattern used
+    by all framework adapters (ag2, crewai, langchain, langgraph, llamaindex).
+
+    Args:
+        container: AIContainer or ExecutionContextContainerAdapter to check.
+        tag: Log tag prefix used in debug messages, e.g. ``"[VERONICA_LC]"``.
+        _logger: Logger instance. Falls back to the module-level logger if None.
+        metrics: Optional ContainmentMetricsProtocol. If provided, emits
+            ``record_decision("HALT")`` or ``record_decision("ALLOW")``.
+        agent_id: Agent identifier forwarded to ``metrics.record_decision()``.
+
+    Raises:
+        VeronicaHalt: If any active policy (budget / step / retry) denies.
+    """
+    decision = container.check(cost_usd=0.0)
+    if not decision.allowed:
+        (_logger or logger).debug(
+            "%s policy denied: %s", tag, decision.reason
+        )
+        emit_metrics_decision(metrics, agent_id, "HALT")
+        raise VeronicaHalt(decision.reason, decision)
+    emit_metrics_decision(metrics, agent_id, "ALLOW")
+
+
+def emit_metrics_decision(
+    metrics: Optional[Any],
+    agent_id: str,
+    decision: str,
+) -> None:
+    """Emit a containment decision to a ContainmentMetricsProtocol, if present.
+
+    No-op when *metrics* is None. Never raises — metrics emission must not
+    disrupt the containment control flow.
+
+    Args:
+        metrics: ContainmentMetricsProtocol instance, or None.
+        agent_id: Agent identifier to pass to ``record_decision()``.
+        decision: Decision string (``"ALLOW"``, ``"HALT"``, etc.).
+    """
+    if metrics is None:
+        return
+    try:
+        metrics.record_decision(agent_id, decision)
+    except Exception:
+        logger.debug(
+            "[VERONICA] emit_metrics_decision raised; ignoring", exc_info=True
+        )
+
+
+def emit_metrics_tokens(
+    metrics: Optional[Any],
+    agent_id: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """Emit token counts to a ContainmentMetricsProtocol, if present.
+
+    No-op when *metrics* is None. Never raises — metrics emission must not
+    disrupt the containment control flow.
+
+    Args:
+        metrics: ContainmentMetricsProtocol instance, or None.
+        agent_id: Agent identifier to pass to ``record_tokens()``.
+        input_tokens: Number of prompt/input tokens.
+        output_tokens: Number of completion/output tokens.
+    """
+    if metrics is None:
+        return
+    try:
+        metrics.record_tokens(agent_id, input_tokens, output_tokens)
+    except Exception:
+        logger.debug(
+            "[VERONICA] emit_metrics_tokens raised; ignoring", exc_info=True
+        )
 
 
 def build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:
@@ -297,3 +382,28 @@ def build_adapter_container(
     if execution_context is not None:
         return ExecutionContextContainerAdapter(execution_context, config)
     return build_container(config)
+
+
+def safe_emit(metrics: Optional[Any], method: str, *args: Any) -> None:
+    """Call *method* on *metrics* with *args*, silently swallowing any error.
+
+    Convenience wrapper used by adapters to emit metrics without disrupting
+    the containment control flow. No-op when *metrics* is None.
+
+    Args:
+        metrics: ContainmentMetricsProtocol instance, or None.
+        method: Method name to call (``"record_decision"``, ``"record_tokens"``,
+            ``"record_cost"``, ``"record_latency"``).
+        *args: Positional arguments forwarded to the method.
+    """
+    if metrics is None:
+        return
+    fn = getattr(metrics, method, None)
+    if fn is None:
+        return
+    try:
+        fn(*args)
+    except Exception:
+        logger.debug(
+            "[VERONICA] safe_emit(%s) raised; ignoring", method, exc_info=True
+        )

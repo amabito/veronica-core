@@ -30,7 +30,12 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from veronica_core.adapters._shared import build_container, record_budget_spend
+from veronica_core.adapters._shared import (
+    build_container,
+    check_and_halt,
+    record_budget_spend,
+    safe_emit,
+)
 from veronica_core.circuit_breaker import CircuitBreaker
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
@@ -109,6 +114,9 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         config: Union[GuardConfig, ExecutionConfig],
         circuit_breaker: Optional[CircuitBreaker] = None,
         entity_id: str = "llm",
+        *,
+        metrics: Optional[Any] = None,
+        agent_id: str = "llamaindex",
     ) -> None:
         if not _LLAMA_INDEX_AVAILABLE:
             raise ImportError(
@@ -126,6 +134,8 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         self._container = build_container(config)
         self._circuit_breaker = circuit_breaker
         self._entity_id = entity_id
+        self._metrics = metrics
+        self._agent_id = agent_id
 
     # ------------------------------------------------------------------
     # LlamaIndex callback hooks
@@ -162,11 +172,16 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
                 cb_ctx = PolicyContext(entity_id=self._entity_id)
                 cb_decision = self._circuit_breaker.check(cb_ctx)
                 if not cb_decision.allowed:
+                    safe_emit(self._metrics, "record_decision", self._agent_id, "HALT")
                     raise VeronicaHalt(cb_decision.reason, cb_decision)
 
-            decision = self._container.check(cost_usd=0.0)
-            if not decision.allowed:
-                raise VeronicaHalt(decision.reason, decision)
+            check_and_halt(
+                self._container,
+                tag="[VERONICA_LI]",
+                _logger=logger,
+                metrics=self._metrics,
+                agent_id=self._agent_id,
+            )
 
         return event_id or str(uuid4())
 
@@ -198,6 +213,10 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         cost = _extract_cost_from_payload(payload)
         if cost > 0.0:
             record_budget_spend(self._container, cost, "[VERONICA_LI]", logger)
+
+        # Emit token metrics when a backend is configured
+        if self._metrics is not None and payload:
+            _emit_payload_tokens(self._metrics, self._agent_id, payload)
 
         # Record circuit breaker success
         if self._circuit_breaker is not None:
@@ -294,3 +313,17 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
         return 0.0
     except Exception:
         return 0.0
+
+
+def _emit_payload_tokens(metrics: Any, agent_id: str, payload: Dict[str, Any]) -> None:
+    """Extract token counts from a LlamaIndex payload and emit via metrics."""
+    try:
+        usage = payload.get("usage") or {}
+        if not isinstance(usage, dict):
+            return
+        prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
+        completion = usage.get("completion_tokens") or usage.get("output_tokens")
+        if prompt is not None and completion is not None:
+            safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
+    except Exception:
+        pass

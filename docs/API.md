@@ -1,489 +1,739 @@
 # VERONICA Core API Reference
 
-Version: 1.0.0
+Version: 2.5.0
 
-## Overview
+This document covers the public API. For internal implementation details, see the source files directly.
 
-VERONICA Core provides a failsafe state machine for mission-critical applications with pluggable persistence and validation.
+---
 
-## Core Modules
+## Table of Contents
 
-### veronica_core.state
+1. [Quickstart](#quickstart)
+2. [Execution Containment](#execution-containment)
+3. [Circuit Breaker](#circuit-breaker)
+4. [Distributed Budget](#distributed-budget)
+5. [MCP Adapters](#mcp-adapters)
+6. [Middleware](#middleware)
+7. [Metrics](#metrics)
+8. [Protocols](#protocols)
+9. [OTel Feedback Loop](#otel-feedback-loop)
+10. [Decorator Injection](#decorator-injection)
+11. [Breaking Changes (v2.0–v2.4)](#breaking-changes)
 
-#### VeronicaState (Enum)
+---
 
-Operational states for the state machine.
+## Quickstart
+
+`veronica_core.quickstart` — 2-line setup shortcut (v1.4.0+).
 
 ```python
-class VeronicaState(Enum):
-    IDLE = "IDLE"           # No active operations
-    SCREENING = "SCREENING" # Active processing
-    COOLDOWN = "COOLDOWN"   # Entity-specific cooldown active
-    SAFE_MODE = "SAFE_MODE" # Emergency safe mode (all ops halted)
-    ERROR = "ERROR"         # System error state
+import veronica_core
+
+ctx = veronica_core.init("$5.00")
+# ... LLM calls are now cost-bounded ...
+veronica_core.shutdown()
+
+# Or as a context manager:
+with veronica_core.init("$5.00"):
+    ...
 ```
 
-#### VeronicaStateMachine
+### `init`
 
-Core state machine with per-entity fail tracking and cooldown management.
-
-**Constructor:**
 ```python
-VeronicaStateMachine(
-    cooldown_fails: int = 3,
-    cooldown_seconds: int = 600
-)
+def init(
+    budget: str,
+    *,
+    max_steps: int = 1000,
+    max_retries_total: int = 50,
+    timeout_ms: int = 0,
+    on_halt: Literal["raise", "warn", "silent"] = "raise",
+    patch_openai: bool = False,
+    patch_anthropic: bool = False,
+) -> ExecutionContext
 ```
 
-**Parameters:**
-- `cooldown_fails`: Number of consecutive fails to trigger cooldown (default: 3)
-- `cooldown_seconds`: Cooldown duration in seconds (default: 600)
+Creates a global `ExecutionContext`. `budget` is a USD string (`"$5.00"` or `"5"`). Returns the context (also usable as a context manager).
+
+### `shutdown`
+
+```python
+def shutdown() -> None
+```
+
+Closes the global context. Called automatically at process exit.
+
+### `get_context`
+
+```python
+def get_context() -> ExecutionContext | None
+```
+
+Returns the active global context, or `None` if not initialized.
+
+---
+
+## Execution Containment
+
+`veronica_core.containment` — chain-level enforcement (v0.9.0+).
+
+### `ExecutionConfig`
+
+Frozen dataclass. All limits must be non-negative.
+
+```python
+@dataclass(frozen=True)
+class ExecutionConfig:
+    max_cost_usd: float
+    max_steps: int
+    max_retries_total: int
+    timeout_ms: int = 0
+    budget_backend: BudgetBackend | None = None  # cross-process backend
+    redis_url: str | None = None                 # convenience: auto-create RedisBudgetBackend
+```
+
+`redis_url` is a shorthand; set `budget_backend` directly for full control.
+
+### `ExecutionContext`
+
+Chain-level containment. Enforces cost, step, retry, and timeout limits.
+
+```python
+class ExecutionContext:
+    def __init__(
+        self,
+        config: ExecutionConfig,
+        pipeline: ShieldPipeline | None = None,
+        metadata: ChainMetadata | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        parent: ExecutionContext | None = None,
+        metrics: ContainmentMetricsProtocol | None = None,
+    ) -> None
+```
+
+**Context manager:** `__enter__` returns self; `__exit__` calls `close()`.
+
+**Key methods:**
+
+```python
+def wrap_llm_call(
+    self,
+    fn: Callable[[], Any],
+    options: WrapOptions | None = None,
+) -> Decision
+
+def wrap_tool_call(
+    self,
+    fn: Callable[[], Any],
+    options: WrapOptions | None = None,
+) -> Decision
+
+def get_snapshot(self) -> ContextSnapshot
+
+def abort(self, reason: str) -> None
+
+def close(self) -> None  # idempotent, thread-safe (v2.3.1+)
+```
+
+`close()` cancels any pending timeout, clears partial buffers, and marks the context closed. All subsequent wrap calls return `Decision.HALT`.
+
+### `ExecutionGraph` — observer/subscriber API (v2.3.0+)
+
+```python
+class ExecutionGraph:
+    def add_observer(self, observer: ExecutionGraphObserver) -> None
+    def remove_observer(self, observer: ExecutionGraphObserver) -> None
+    def add_subscriber(self, fn: Callable[[NodeEvent], None]) -> None
+    def remove_subscriber(self, fn: Callable[[NodeEvent], None]) -> None
+```
+
+Registration is identity-based (no duplicates). Callbacks are copy-on-write safe for lock-free iteration. Subscriber exceptions are swallowed and logged.
+
+### `NodeEvent`
+
+Frozen dataclass emitted on terminal node transitions.
+
+```python
+@dataclass(frozen=True)
+class NodeEvent:
+    node_id: str
+    status: str         # "success" | "fail" | "halt"
+    kind: str           # "llm" | "tool"
+    name: str
+    cost_usd: float
+    tokens_in: int
+    tokens_out: int
+    depth: int
+    elapsed_ms: float
+    chain_id: str
+    model: str | None
+    error_class: str | None
+    stop_reason: str | None
+```
+
+### `WrapOptions`
+
+Per-call options for `wrap_llm_call` / `wrap_tool_call`.
+
+```python
+@dataclass(frozen=True)
+class WrapOptions:
+    operation_name: str = ""
+    cost_estimate_hint: float = 0.0
+    timeout_ms: int | None = None
+    retry_policy_override: int | None = None
+    model: str | None = None
+    response_hint: Any = None
+    partial_buffer: PartialResultBuffer | None = None
+    reconciliation_callback: Any = None
+```
+
+### `ContextSnapshot`
+
+Immutable point-in-time view of chain state.
+
+```python
+@dataclass(frozen=True)
+class ContextSnapshot:
+    chain_id: str
+    request_id: str
+    step_count: int
+    cost_usd_accumulated: float
+    retries_used: int
+    aborted: bool
+    abort_reason: str | None
+    elapsed_ms: float
+    nodes: list[NodeRecord]
+    events: list[SafetyEvent]
+    graph_summary: dict[str, Any] | None
+    parent_chain_id: str | None
+```
+
+### `ChainMetadata`
+
+```python
+@dataclass(frozen=True)
+class ChainMetadata:
+    request_id: str
+    chain_id: str
+    org_id: str = ""
+    team: str = ""
+    service: str = ""
+    user_id: str | None = None
+    model: str | None = None
+    tags: dict[str, str] = field(default_factory=dict)
+```
+
+### `CancellationToken`
+
+```python
+class CancellationToken:
+    def cancel(self) -> None          # idempotent
+    @property
+    def is_cancelled(self) -> bool
+    def wait(self, timeout_s: float | None = None) -> bool
+```
+
+### Helper functions
+
+```python
+def get_current_partial_buffer() -> PartialResultBuffer | None
+def attach_partial_buffer(buf: PartialResultBuffer) -> None
+```
+
+---
+
+## Circuit Breaker
+
+`veronica_core.circuit_breaker`
+
+### `CircuitBreaker`
+
+```python
+@dataclass
+class CircuitBreaker:
+    failure_threshold: int = 5
+    recovery_timeout: float = 60.0
+    failure_predicate: FailurePredicate | None = None
+```
+
+`FailurePredicate = Callable[[BaseException], bool]`
 
 **Methods:**
 
-##### `is_in_cooldown(pair: str) -> bool`
-Check if entity is currently in cooldown.
-
-**Example:**
 ```python
-sm = VeronicaStateMachine()
-sm.record_fail("task_1")
-sm.record_fail("task_1")
-sm.record_fail("task_1")  # Activates cooldown
-
-if sm.is_in_cooldown("task_1"):
-    print("Task in cooldown")
+def check(self, ctx: PolicyContext) -> PolicyDecision
+def record_success(self) -> None
+def record_failure(self, exc: BaseException | None = None) -> None
+def bind_to_context(self, chain_id: str) -> None
 ```
 
-##### `record_fail(pair: str) -> bool`
-Record failure for entity. Returns True if cooldown was activated.
+### `CircuitState`
 
-##### `record_pass(pair: str) -> None`
-Record success for entity. Resets fail counter.
-
-##### `cleanup_expired() -> List[str]`
-Remove expired cooldowns. Returns list of cleaned entity IDs.
-
-##### `transition(to_state: VeronicaState, reason: str) -> None`
-Transition to new state with reason.
-
-##### `get_stats() -> Dict`
-Get current state statistics.
-
-**Returns:**
 ```python
-{
-    "current_state": str,
-    "active_cooldowns": Dict[str, float],  # {entity: remaining_seconds}
-    "fail_counts": Dict[str, int],
-    "total_transitions": int,
-    "last_transition": Optional[Dict],
-}
+class CircuitState(Enum):
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
 ```
 
-##### `to_dict() -> Dict`
-Serialize state for persistence.
+### Predicate helpers
 
-##### `from_dict(data: Dict) -> VeronicaStateMachine` (classmethod)
-Deserialize state from dict.
-
----
-
-### veronica_core.backends
-
-#### PersistenceBackend (ABC)
-
-Abstract interface for pluggable persistence.
-
-**Methods:**
-
-##### `save(data: Dict) -> bool`
-Save state data. Returns True on success.
-
-##### `load() -> Optional[Dict]`
-Load state data. Returns None if no state exists.
-
-##### `backup() -> bool`
-Create backup (optional). Returns True on success.
-
-#### JSONBackend
-
-File-based persistence with atomic writes.
-
-**Constructor:**
 ```python
-JSONBackend(path: str | Path)
-```
-
-**Example:**
-```python
-from veronica_core import JSONBackend
-
-backend = JSONBackend("data/state.json")
-data = {"test": "value"}
-backend.save(data)
-loaded = backend.load()
-backend.backup()  # Creates timestamped backup
-```
-
-#### MemoryBackend
-
-In-memory persistence for testing (does NOT persist across restarts).
-
-**Example:**
-```python
-from veronica_core import MemoryBackend
-
-backend = MemoryBackend()
-backend.save({"test": "data"})
-loaded = backend.load()
+def ignore_exception_types(*types: type[BaseException]) -> FailurePredicate
+def count_exception_types(*types: type[BaseException]) -> FailurePredicate
+def ignore_status_codes(*codes: int) -> FailurePredicate
 ```
 
 ---
 
-### veronica_core.guards
+## Distributed Budget
 
-#### VeronicaGuard (ABC)
+`veronica_core.distributed`
 
-Abstract interface for domain-specific validation.
+### `BudgetBackend` (Protocol)
 
-**Methods:**
-
-##### `should_cooldown(entity: str, context: Dict[str, Any]) -> bool`
-Determine if cooldown should activate immediately (overrides fail count).
-
-##### `validate_state(state_data: Dict[str, Any]) -> bool`
-Validate state before persistence.
-
-##### `on_cooldown_activated(entity: str, context: Dict[str, Any]) -> None`
-Hook called when cooldown activates (optional).
-
-##### `on_cooldown_expired(entity: str) -> None`
-Hook called when cooldown expires (optional).
-
-**Example Implementation:**
 ```python
-from veronica_core import VeronicaGuard
-
-class ApiGuard(VeronicaGuard):
-    def should_cooldown(self, endpoint: str, context: dict) -> bool:
-        # Activate cooldown if rate limit low
-        remaining = context.get("x-rate-limit-remaining", 100)
-        return remaining < 10
-
-    def validate_state(self, state_data: dict) -> bool:
-        # Only accept valid endpoints
-        valid_endpoints = {"/api/v1/users", "/api/v1/posts"}
-        fail_counts = state_data.get("fail_counts", {})
-        return all(e in valid_endpoints for e in fail_counts.keys())
+class BudgetBackend(Protocol):
+    def add(self, amount: float) -> float: ...
+    def get(self) -> float: ...
+    def reset(self) -> None: ...
+    def close(self) -> None: ...
 ```
 
-#### PermissiveGuard
+### `ReservableBudgetBackend` (Protocol)
 
-Default guard that allows all operations.
+Extends `BudgetBackend` with two-phase reserve/commit/rollback.
+
+```python
+class ReservableBudgetBackend(BudgetBackend, Protocol):
+    def reserve(self, amount: float, ceiling: float) -> str: ...  # returns reservation_id
+    def commit(self, reservation_id: str) -> float: ...
+    def rollback(self, reservation_id: str) -> None: ...
+    def get_reserved(self) -> float: ...
+```
+
+`reserve()` raises `OverflowError` if ceiling would be exceeded; `ValueError` for invalid amount. `commit()` / `rollback()` raise `KeyError` if reservation not found (expired or already processed). Reservations auto-expire after 60 seconds.
+
+### `LocalBudgetBackend`
+
+```python
+class LocalBudgetBackend:
+    def __init__(self) -> None
+```
+
+In-process, thread-safe. Supports reserve/commit/rollback.
+
+### `RedisBudgetBackend`
+
+```python
+class RedisBudgetBackend:
+    def __init__(
+        self,
+        redis_url: str,
+        chain_id: str,
+        ttl_seconds: int = 3600,
+        fallback_on_error: bool = True,
+    ) -> None
+```
+
+Cross-process via Redis `INCRBYFLOAT`. Falls back to `LocalBudgetBackend` on connection failure when `fallback_on_error=True`. Reconciles delta on reconnect.
+
+### `get_default_backend`
+
+```python
+def get_default_backend(
+    redis_url: str | None = None,
+    chain_id: str | None = None,
+) -> BudgetBackend
+```
+
+### `DistributedCircuitBreaker`
+
+```python
+class DistributedCircuitBreaker:
+    # Redis-backed circuit breaker for cross-process state
+```
+
+### `get_default_circuit_breaker`
+
+```python
+def get_default_circuit_breaker() -> DistributedCircuitBreaker
+```
+
+### `CircuitSnapshot`
+
+Immutable snapshot of distributed circuit breaker state.
 
 ---
 
-### veronica_core.clients
+## MCP Adapters
 
-#### LLMClient (Protocol)
+`veronica_core.adapters.mcp` and `veronica_core.adapters.mcp_async`
 
-Protocol for pluggable LLM client integration (optional).
+Does not require the MCP SDK. Wraps arbitrary sync/async callables.
 
-**VERONICA Core does NOT require LLM** - this is purely optional for AI-enhanced decision logic.
-
-**Methods:**
-
-##### `generate(prompt: str, *, context: Optional[Dict] = None, **kwargs) -> str`
-Generate text response from LLM.
-
-**Example Implementation:**
-```python
-from veronica_core import LLMClient
-
-class OllamaClient:
-    def __init__(self, model: str = "llama3.2:3b"):
-        self.model = model
-        self.base_url = "http://localhost:11434"
-
-    def generate(self, prompt: str, *, context=None, **kwargs) -> str:
-        import requests
-        response = requests.post(
-            f"{self.base_url}/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": False}
-        )
-        return response.json()["response"]
-```
-
-#### NullClient
-
-Default LLM client that raises error when invoked.
-
-Use this as default to ensure VERONICA Core works without LLM. Raises `RuntimeError` if LLM functionality is used without client injection.
+### `MCPToolCost`
 
 ```python
-from veronica_core import VeronicaIntegration
-
-# Default: NullClient (no LLM features)
-veronica = VeronicaIntegration()
-# veronica.client.generate("test") -> RuntimeError
+@dataclass(frozen=True)
+class MCPToolCost:
+    tool_name: str
+    cost_per_call: float = 0.0
+    cost_per_token: float = 0.0
 ```
 
-#### DummyClient
-
-Dummy LLM client for testing (returns fixed responses).
+### `MCPToolResult`
 
 ```python
-from veronica_core import DummyClient
-
-client = DummyClient(fixed_response="SAFE")
-response = client.generate("Is this safe?")
-# Returns: "SAFE"
-
-print(client.call_count)  # 1
-print(client.last_prompt)  # "Is this safe?"
+@dataclass(frozen=True)
+class MCPToolResult:
+    success: bool
+    result: Any = None
+    error: str | None = None
+    decision: Decision = Decision.ALLOW   # v2.4: changed from str to Decision enum
+    cost_usd: float = 0.0
 ```
 
-**Use cases:**
-- Unit tests that need LLM without external dependencies
-- Mocking AI responses for reproducible tests
-- Development without real LLM API
+**v2.4 note:** `decision` is now `Decision` (a `str` subclass). `result.decision == "ALLOW"` still works. Code passing `decision` to APIs requiring a plain `str` (not a subclass) must call `result.decision.value`.
+
+### `MCPToolStats`
+
+```python
+@dataclass
+class MCPToolStats:
+    tool_name: str
+    call_count: int = 0
+    total_cost_usd: float = 0.0
+    error_count: int = 0
+    avg_duration_ms: float = 0.0
+```
+
+### `MCPContainmentAdapter` (sync)
+
+```python
+class MCPContainmentAdapter:
+    def __init__(
+        self,
+        execution_context: ExecutionContext,
+        tool_costs: dict[str, MCPToolCost] | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        default_cost_per_call: float = 0.001,
+        timeout_seconds: float | None = None,
+        failure_predicate: FailurePredicate | None = None,
+    ) -> None
+
+    def wrap_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        call_fn: Callable[..., Any],
+    ) -> MCPToolResult
+
+    def get_tool_stats(self) -> dict[str, MCPToolStats]
+```
+
+### `AsyncMCPContainmentAdapter`
+
+```python
+class AsyncMCPContainmentAdapter:
+    def __init__(
+        self,
+        execution_context: ExecutionContext,
+        tool_costs: dict[str, MCPToolCost] | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        default_cost_per_call: float = 0.001,
+        timeout_seconds: float | None = None,
+        failure_predicate: FailurePredicate | None = None,
+    ) -> None
+
+    async def wrap_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        call_fn: AsyncCallFn,
+    ) -> MCPToolResult
+
+    async def get_tool_stats_async(self) -> dict[str, MCPToolStats]
+    def get_tool_stats(self) -> dict[str, MCPToolStats]  # best-effort, non-blocking
+```
+
+`_backend_supports_reserve` is cached at init time (v2.4). `_ensure_stats()` has a fast-path for existing tools (v2.4).
+
+### `wrap_mcp_server`
+
+```python
+def wrap_mcp_server(
+    server: Any,
+    execution_context: ExecutionContext,
+    **adapter_kwargs: Any,
+) -> AsyncMCPContainmentAdapter
+```
+
+Wraps an MCP server instance with an `AsyncMCPContainmentAdapter`.
 
 ---
 
-### veronica_core.integration
+## Middleware
 
-#### VeronicaIntegration
+`veronica_core.middleware`
 
-Main entry point for VERONICA functionality.
+### `VeronicaASGIMiddleware`
 
-**Constructor:**
+ASGI3 middleware. Creates one `ExecutionContext` per HTTP request. Returns HTTP 429 when the context is aborted pre-flight or post-call (before response start). WebSocket sessions receive `websocket.close` code 1008 on budget/step exhaustion.
+
 ```python
-VeronicaIntegration(
-    cooldown_fails: int = 3,
-    cooldown_seconds: int = 600,
-    auto_save_interval: int = 100,
-    backend: Optional[PersistenceBackend] = None,
-    guard: Optional[VeronicaGuard] = None,
-    client: Optional[LLMClient] = None,
-)
+class VeronicaASGIMiddleware:
+    def __init__(
+        self,
+        app: ASGIApp,
+        config: ExecutionConfig,
+        pipeline: ShieldPipeline | None = None,
+    ) -> None
 ```
 
-**Parameters:**
-- `cooldown_fails`: Fail threshold for cooldown
-- `cooldown_seconds`: Cooldown duration (seconds)
-- `auto_save_interval`: Auto-save every N operations (0 = disabled)
-- `backend`: Persistence backend (default: JSONBackend)
-- `guard`: Validation guard (default: PermissiveGuard)
-- `client`: LLM client (optional, default: NullClient - no LLM features)
+### `VeronicaWSGIMiddleware`
 
-**Methods:**
+WSGI equivalent with identical semantics.
 
-##### `is_in_cooldown(pair: str) -> bool`
-Check if entity is in cooldown.
-
-##### `record_fail(pair: str, context: Optional[Dict] = None) -> bool`
-Record failure with optional guard context. Returns True if cooldown activated.
-
-**Example:**
 ```python
-context = {"error_rate": 0.7, "latency_ms": 500}
-cooldown = veronica.record_fail("api_endpoint", context=context)
+class VeronicaWSGIMiddleware:
+    def __init__(
+        self,
+        app: WSGIApp,
+        config: ExecutionConfig,
+        pipeline: ShieldPipeline | None = None,
+    ) -> None
 ```
 
-##### `record_pass(pair: str) -> None`
-Record success. Resets fail counter.
+### `get_current_execution_context`
 
-##### `cleanup_expired() -> None`
-Remove expired cooldowns.
+```python
+def get_current_execution_context() -> ExecutionContext | None
+```
 
-##### `get_stats() -> Dict`
-Get current statistics.
-
-##### `get_fail_count(pair: str) -> int`
-Get current fail count for entity.
-
-##### `get_cooldown_remaining(pair: str) -> Optional[float]`
-Get remaining cooldown seconds. Returns None if not in cooldown.
-
-##### `save() -> bool`
-Manually save state. Returns True on success.
+Returns the `ExecutionContext` bound to the current request via `ContextVar`, or `None` outside a request.
 
 ---
 
-### veronica_core.exit
+## Metrics
 
-#### ExitTier (Enum)
+`veronica_core.metrics`
 
-Exit priority levels.
+### `ContainmentMetricsProtocol`
 
-```python
-class ExitTier(IntEnum):
-    GRACEFUL = 1   # Save state, cleanup, log
-    EMERGENCY = 2  # Save state, minimal cleanup
-    FORCE = 3      # Immediate exit (no save)
-```
+See [Protocols](#protocols). Pass a conforming object as `metrics=` to `ExecutionContext`.
 
-#### VeronicaExit
+### `LoggingContainmentMetrics`
 
-Exit handler with signal handling and 3-tier shutdown.
-
-**Constructor:**
-```python
-VeronicaExit(
-    state_machine: VeronicaStateMachine,
-    persistence: Optional[JSONBackend] = None
-)
-```
-
-**Automatically registers:**
-- SIGTERM handler (GRACEFUL exit)
-- SIGINT handler (EMERGENCY exit)
-- atexit fallback (EMERGENCY exit)
-
-**Methods:**
-
-##### `request_exit(tier: ExitTier, reason: str) -> None`
-Request exit at specified tier.
-
-**Example:**
-```python
-exit_handler.request_exit(ExitTier.GRACEFUL, "User shutdown request")
-```
-
-##### `is_exit_requested() -> bool`
-Check if exit has been requested.
-
----
-
-## Usage Examples
-
-### Basic Usage
+Reference implementation. Forwards telemetry to Python's logging module.
 
 ```python
-from veronica_core import VeronicaIntegration
+class LoggingContainmentMetrics:
+    def __init__(
+        self,
+        log_level: int = logging.DEBUG,
+        logger_name: str | None = None,
+    ) -> None
 
-# Initialize
-veronica = VeronicaIntegration()
-
-# Check cooldown
-if not veronica.is_in_cooldown("task_1"):
-    try:
-        execute_task()
-        veronica.record_pass("task_1")
-    except Exception as e:
-        cooldown = veronica.record_fail("task_1")
-        if cooldown:
-            print("Cooldown activated")
-```
-
-### Custom Backend
-
-```python
-from veronica_core import VeronicaIntegration, JSONBackend
-
-backend = JSONBackend("my_state.json")
-veronica = VeronicaIntegration(backend=backend)
-```
-
-### Custom Guard
-
-```python
-from veronica_core import VeronicaIntegration, VeronicaGuard
-
-class CustomGuard(VeronicaGuard):
-    def should_cooldown(self, entity: str, context: dict) -> bool:
-        return context.get("severity") == "critical"
-
-    def validate_state(self, state_data: dict) -> bool:
-        return True  # Accept all states
-
-guard = CustomGuard()
-veronica = VeronicaIntegration(guard=guard)
-```
-
-### LLM Client Injection (Optional)
-
-```python
-from veronica_core import VeronicaIntegration, DummyClient
-
-# Example 1: Testing with DummyClient
-client = DummyClient(fixed_response="SAFE")
-veronica = VeronicaIntegration(client=client)
-
-# Use LLM for decision
-response = veronica.client.generate("Is this operation safe?")
-if response == "SAFE":
-    execute_operation()
-
-# Example 2: Custom LLM client (Ollama)
-class OllamaClient:
-    def generate(self, prompt: str, *, context=None, **kwargs) -> str:
-        # Implement Ollama HTTP client
-        return ollama_api_call(prompt)
-
-veronica = VeronicaIntegration(client=OllamaClient())
-```
-
-**Note:** VERONICA Core has zero LLM dependencies. All LLM integration is optional and user-provided.
-
-### Persistence Roundtrip
-
-```python
-from veronica_core import VeronicaIntegration, JSONBackend
-
-# Session 1
-backend = JSONBackend("state.json")
-v1 = VeronicaIntegration(backend=backend)
-v1.record_fail("task_1")
-v1.save()
-
-# Session 2 (after restart)
-backend2 = JSONBackend("state.json")
-v2 = VeronicaIntegration(backend=backend2)
-print(v2.get_fail_count("task_1"))  # Output: 1
+    def record_cost(self, agent_id: str, cost_usd: float) -> None
+    def record_tokens(self, agent_id: str, tokens_in: int, tokens_out: int) -> None
+    def record_decision(self, agent_id: str, decision: str) -> None
+    def record_circuit_state(self, service_id: str, state: str) -> None
+    def record_latency(self, agent_id: str, latency_ms: float) -> None
 ```
 
 ---
 
-## Error Handling
+## Protocols
 
-All methods handle errors gracefully:
+`veronica_core.protocols` — all `@runtime_checkable`.
 
-- `save()`: Returns False on error, logs exception
-- `load()`: Returns None on error, creates fresh state
-- `record_fail()`: Never raises, always returns bool
-- `get_stats()`: Always returns valid dict
+### `ContainmentMetricsProtocol`
+
+```python
+class ContainmentMetricsProtocol(Protocol):
+    def record_cost(self, agent_id: str, cost_usd: float) -> None: ...
+    def record_tokens(self, agent_id: str, tokens_in: int, tokens_out: int) -> None: ...
+    def record_decision(self, agent_id: str, decision: str) -> None: ...
+    def record_circuit_state(self, service_id: str, state: str) -> None: ...
+    def record_latency(self, agent_id: str, latency_ms: float) -> None: ...
+```
+
+### `FrameworkAdapterProtocol`
+
+```python
+class FrameworkAdapterProtocol(Protocol):
+    def extract_cost(self, result: Any) -> float: ...
+    def extract_tokens(self, result: Any) -> tuple[int, int]: ...
+    def handle_halt(self, reason: str) -> Any: ...
+    def handle_degrade(self, reason: str, suggestion: str) -> Any: ...
+```
+
+### `PlannerProtocol`
+
+Stateless policy proposer. Proposes limits; does not enforce.
+
+```python
+class PlannerProtocol(Protocol):
+    def propose_policy(self, chain_metadata: Any, prior_events: list) -> dict: ...
+    def on_safety_event(self, event: Any) -> None: ...
+```
+
+### `ExecutionGraphObserver`
+
+```python
+class ExecutionGraphObserver(Protocol):
+    def on_node_start(self, node_id: str, kind: str, name: str) -> None: ...
+    def on_node_end(self, node_id: str, status: str, cost_usd: float) -> None: ...
+    def on_decision(self, node_id: str, decision: str, reason: str) -> None: ...
+```
+
+### `AsyncBudgetBackendProtocol`
+
+Async variant of `BudgetBackend` for use with asyncio-native backends.
+
+### `ReconciliationCallback`
+
+Callback type for post-failover budget reconciliation.
 
 ---
 
-## Thread Safety
+## OTel Feedback Loop
 
-Core primitives (VeronicaStateMachine, BudgetEnforcer, CircuitBreaker) are thread-safe.
-VeronicaIntegration provides thread-safe auto-save and operation counting.
+`veronica_core.otel_feedback` (v2.2.0+)
 
-Uses `threading.Lock` for shared state and `ContextVar` for per-request isolation (middleware).
+### `AgentMetrics`
 
-- `VeronicaStateMachine` — all state mutations are protected by `threading.Lock`
-- `VeronicaIntegration` — thread-safe auto-save and operation counting; delegates to state machine
-- `VeronicaASGIMiddleware` / `VeronicaWSGIMiddleware` — per-request `ExecutionContext`
-  via `ContextVar`; no shared mutable state between requests
+Accumulated per-agent metrics from ingested OTel spans.
 
-For legacy (pre-v0.9.7) deployments or custom subclasses that bypass the Lock,
-external synchronization may still be required.
+```python
+@dataclass
+class AgentMetrics:
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    avg_latency_ms: float = 0.0
+    error_rate: float = 0.0       # fraction 0.0–1.0
+    last_active: float = 0.0      # monotonic timestamp
+    call_count: int = 0
+
+    @property
+    def error_count(self) -> int: ...
+```
+
+### `OTelMetricsIngester`
+
+Thread-safe span parser. Supports AG2 native spans, generic OTel LLM spans, and veronica-core spans.
+
+```python
+class OTelMetricsIngester:
+    def __init__(
+        self,
+        window_sec: float = 60.0,
+        max_agents: int = 10_000,
+        max_cost_window_size: int = 100_000,
+    ) -> None
+
+    def ingest_span(self, span: dict[str, Any]) -> None
+    def get_metrics(self, agent_id: str) -> AgentMetrics | None
+    def reset(self) -> None
+```
+
+Agent cardinality is capped at `max_agents` to prevent unbounded state growth. Non-finite metric values are filtered via `math.isfinite()`.
+
+### `MetricRule`
+
+Declarative threshold rule.
+
+```python
+@dataclass
+class MetricRule:
+    metric: str              # AgentMetrics field name
+    operator: str            # "gt" | "lt" | "gte" | "lte" | "eq"
+    threshold: float         # must be finite (NaN/inf rejected)
+    action: str              # "halt" | "degrade" | "warn"
+    agent_id: str | None = None  # None = apply to all agents
+```
+
+`MetricRule.__post_init__` rejects NaN/inf thresholds and empty `metric`/`operator`/`action`.
+
+### `MetricsDrivenPolicy`
+
+Implements `RuntimePolicy`. Evaluates rules with severity ordering: halt > degrade > warn.
+
+```python
+class MetricsDrivenPolicy:
+    def __init__(
+        self,
+        rules: list[MetricRule],
+        ingester: OTelMetricsIngester | None = None,
+    ) -> None
+
+    def check(self, ctx: PolicyContext) -> PolicyDecision
+```
 
 ---
 
-## Performance
+## Decorator Injection
 
-- State machine operations: O(1)
-- Serialization: O(n) where n = number of entities
-- JSONBackend save: ~1ms for 1000 entities
-- MemoryBackend: ~0.01ms
-- Auto-save overhead: Negligible (< 0.1% with interval=100)
+`veronica_core.inject`
+
+### `veronica_guard`
+
+```python
+def veronica_guard(
+    max_cost_usd: float = 1.0,
+    max_steps: int = 25,
+    max_retries_total: int = 3,
+) -> Callable[[F], F]
+```
+
+Decorator wrapping a callable in a policy-enforced boundary. Raises `VeronicaHalt` when a policy denies execution (configurable via `on_halt` in `init()`).
+
+### `VeronicaHalt`
+
+```python
+class VeronicaHalt(RuntimeError):
+    reason: str
+    decision: PolicyDecision | None
+```
+
+### `GuardConfig`
+
+```python
+@dataclass
+class GuardConfig:
+    max_cost_usd: float = 1.0
+    max_steps: int = 25
+    max_retries_total: int = 3
+```
+
+Documentation/IDE helper — same fields as `veronica_guard` kwargs.
+
+### Helper functions
+
+```python
+def is_guard_active() -> bool
+def get_active_container() -> AIContainer | None
+```
 
 ---
 
-## License
+## Breaking Changes
 
-MIT License - See LICENSE file
+### v2.4.0
+
+- **`MCPToolResult.decision`** type changed from `str` to `Decision` enum. `Decision` inherits from `str`, so `== "ALLOW"` comparisons still work. Code passing `decision` to APIs requiring plain `str` must use `result.decision.value`.
+
+### v2.3.1
+
+- **`AIcontainer` alias** removed. Use `AIContainer`.
+- **`VeronicaPersistence`** removed. Use `JSONBackend` or `MemoryBackend`.
+- **`GuardConfig.timeout_ms`** removed. Use `ExecutionContext(config=ExecutionConfig(timeout_ms=...))`.
+
+### v2.0
+
+- **Two-phase budget**: `ReservableBudgetBackend` adds `reserve()` / `commit()` / `rollback()`. Existing `BudgetBackend` implementations remain compatible (reserve capability detected via `hasattr`).
+- **`AsyncBudgetBackendProtocol`** and **`ReconciliationCallback`** added to `veronica_core.protocols`.
+- **WebSocket containment**: `VeronicaASGIMiddleware` now enforces budget/step limits for WebSocket sessions. `websocket.close` code 1008 sent on exhaustion.
+- **`ExecutionContext(metrics=)`** parameter added. Pass a `ContainmentMetricsProtocol` object to enable telemetry emission from the containment kernel.
