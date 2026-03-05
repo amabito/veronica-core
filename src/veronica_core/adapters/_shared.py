@@ -138,14 +138,11 @@ class _BudgetProxy:
     def __init__(self, ctx: Any, limit_usd: float) -> None:
         self._ctx = ctx
         self._limit_usd = limit_usd
-        # Cache backend callables at construction time (they don't change).
+        # Cache backend callables at construction time for spend() hot-path.
         _backend = getattr(ctx, "_budget_backend", None)
         self._get_fn = getattr(_backend, "get", None) if _backend else None
         self._add_fn = getattr(_backend, "add", None) if _backend else None
-        try:
-            self._lock = getattr(ctx, "_lock", None)
-        except Exception:
-            self._lock = None
+        self._lock = getattr(ctx, "_lock", None)
 
     @property
     def limit_usd(self) -> float:
@@ -153,14 +150,19 @@ class _BudgetProxy:
 
     @property
     def spent_usd(self) -> float:
+        # When a backend.get callable is available, use it — the backend holds
+        # the authoritative cost total (e.g. LocalBudgetBackend, Redis).
+        # Otherwise fall back to get_snapshot() which reads _cost_usd_accumulated
+        # under a lock (the canonical public API for ExecutionContext).
         if self._get_fn is not None:
             try:
                 return float(self._get_fn())
             except Exception:
-                # Intentionally swallowed: _get_fn is an optional user-supplied
-                # callable; on failure fall through to the built-in accumulator.
                 pass
-        return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
+        try:
+            return self._ctx.get_snapshot().cost_usd_accumulated
+        except Exception:
+            return float(getattr(self._ctx, "_cost_usd_accumulated", 0.0))
 
     @property
     def call_count(self) -> int:

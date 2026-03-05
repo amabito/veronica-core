@@ -740,14 +740,14 @@ class ExecutionContext:
                     node_id, kind, opts, node, stack, graph_node_id
                 )
                 if pipeline_decision is not None:
-                    self._try_rollback(self._budget_backend, _reservation_id)
+                    self._try_rollback(_reservation_id)
                     return pipeline_decision
 
             # CircuitBreaker pre-dispatch check.
             if self._circuit_breaker is not None:
                 cb_decision = self._check_circuit_breaker(node, stack, graph_node_id)
                 if cb_decision is not None:
-                    self._try_rollback(self._budget_backend, _reservation_id)
+                    self._try_rollback(_reservation_id)
                     return cb_decision
 
             # Dispatch the callable.
@@ -757,7 +757,7 @@ class ExecutionContext:
             _fn_exc, _buf_token = self._invoke_fn(fn, opts, graph_node_id)
 
             if _fn_exc is not None:
-                self._try_rollback(self._budget_backend, _reservation_id)
+                self._try_rollback(_reservation_id)
                 return self._handle_fn_error(
                     _fn_exc, node_id, opts, node, stack, graph_node_id
                 )
@@ -771,7 +771,7 @@ class ExecutionContext:
                     node_id, opts, actual_cost, node, stack, graph_node_id
                 )
                 if charge_decision is not None:
-                    self._try_rollback(self._budget_backend, _reservation_id)
+                    self._try_rollback(_reservation_id)
                     return charge_decision
 
             return self._finalize_success(
@@ -799,7 +799,7 @@ class ExecutionContext:
                 node.end_ts = datetime.now(timezone.utc)
                 node.status = "error"
             # Roll back any pending reservation to prevent budget leak.
-            self._try_rollback(self._budget_backend, _reservation_id)
+            self._try_rollback(_reservation_id)
             raise
         finally:
             # Decrement nesting depth so the next outermost _wrap() call in this
@@ -808,13 +808,12 @@ class ExecutionContext:
             if d > 0:
                 self._nesting_depth_var.set(d - 1)
 
-    @staticmethod
-    def _try_rollback(backend: Any, reservation_id: str | None) -> None:
-        """Roll back a reservation, swallowing all exceptions."""
+    def _try_rollback(self, reservation_id: str | None) -> None:
+        """Roll back a reservation against the configured backend, swallowing all exceptions."""
         if reservation_id is None:
             return
         try:
-            backend.rollback(reservation_id)
+            self._budget_backend.rollback(reservation_id)
         except Exception:  # noqa: BLE001
             pass
 

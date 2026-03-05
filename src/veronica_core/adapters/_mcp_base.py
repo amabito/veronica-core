@@ -20,6 +20,7 @@ from typing import Any, Optional
 from veronica_core.circuit_breaker import CircuitBreaker, FailurePredicate
 from veronica_core.containment.execution_context import ExecutionContext, WrapOptions
 from veronica_core.runtime_policy import PolicyContext
+from veronica_core.shield.types import Decision
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +57,24 @@ class MCPToolResult:
         success: True when call_fn completed without raising.
         result: Value returned by call_fn, or None when blocked/errored.
         error: Human-readable error message, or None on success.
-        decision: "ALLOW" when the call was permitted and executed;
-            "HALT" when blocked by budget or circuit breaker;
-            "DEGRADE" reserved for future degradation-ladder support.
+        decision: Decision.ALLOW when the call was permitted and executed;
+            Decision.HALT when blocked by budget or circuit breaker;
+            Decision.DEGRADE reserved for future degradation-ladder support.
+
+            BREAKING CHANGE (v2.4.0): changed from ``str`` to ``Decision`` enum.
+            Because ``Decision`` inherits from ``str``, comparisons like
+            ``result.decision == "ALLOW"`` continue to work unchanged.
+            Code that type-checks ``isinstance(result.decision, str)`` will
+            still pass. Code that passes ``decision`` to APIs requiring a
+            plain ``str`` (not a ``str`` subclass) must call ``result.decision.value``.
+
         cost_usd: Actual USD cost charged for this call.
     """
 
     success: bool
     result: Any = None
     error: Optional[str] = None
-    decision: str = "ALLOW"
+    decision: Decision = Decision.ALLOW
     cost_usd: float = 0.0
 
 
@@ -218,7 +227,7 @@ class _MCPAdapterBase:
             return MCPToolResult(
                 success=False,
                 error=f"Circuit breaker open: {cb_decision.reason}",
-                decision="HALT",
+                decision=Decision.HALT,
                 cost_usd=0.0,
             )
         return None

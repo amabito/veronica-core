@@ -10,13 +10,37 @@ Public API:
         - Monitors LLM call events to increment step counters and record costs.
         - Exposes ``check_or_raise()`` for explicit pre-call policy enforcement
           in CrewAI ``step_callback`` / ``task_callback`` integrations.
+        - Accepts an optional ``execution_context`` kwarg to enforce chain-level
+          budget and step limits shared across multiple adapters or agents.
 
     Note: CrewAI's event bus swallows handler exceptions, so VeronicaHalt
     cannot be raised directly from LLMCallStartedEvent handlers. Instead, use
     ``step_callback=listener.check_or_raise`` on your Crew instance, or call
     ``listener.check_or_raise()`` explicitly before LLM invocations.
 
-Usage (step_callback)::
+    When ``execution_context`` is provided, the adapter enforces chain-level
+    limits. The event bus handler (``on_llm_call_started``) still cannot raise
+    due to CrewAI swallowing handler exceptions — use ``check_or_raise()`` as
+    the ``step_callback`` for HALT enforcement.
+
+Usage (step_callback with ExecutionContext)::
+
+    from crewai import Crew
+    from veronica_core.adapters.crewai import VeronicaCrewAIListener
+    from veronica_core import GuardConfig
+    from veronica_core.containment import ExecutionContext, ExecutionConfig
+
+    config = ExecutionConfig(max_cost_usd=1.0, max_steps=20)
+    ctx = ExecutionContext(config=config)
+    listener = VeronicaCrewAIListener(config, execution_context=ctx)
+    crew = Crew(
+        agents=[...],
+        tasks=[...],
+        step_callback=listener.check_or_raise,
+    )
+    crew.kickoff()
+
+Usage (step_callback, GuardConfig only)::
 
     from crewai import Crew
     from veronica_core.adapters.crewai import VeronicaCrewAIListener
@@ -55,10 +79,10 @@ except ImportError as _exc:
     ) from _exc
 
 import logging
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from veronica_core.adapters._shared import (
-    build_container,
+    build_adapter_container,
     cost_from_total_tokens,
     record_budget_spend,
 )
@@ -86,9 +110,17 @@ class VeronicaCrewAIListener(BaseEventListener):
     - **Post-call** (``LLMCallCompletedEvent``): increments step counter; records
       token cost from the response into BudgetEnforcer.
 
+    When ``execution_context`` is provided, chain-level limits from that context
+    are enforced in addition to (or instead of) the config-level limits.
+    ``check_or_raise()`` will block once the chain-level budget or step limit
+    is exceeded.
+
     Args:
         config: GuardConfig or ExecutionConfig specifying limits.
             Both expose max_cost_usd, max_steps, max_retries_total.
+        execution_context: Optional chain-level ExecutionContext. When provided,
+            the adapter wraps the context to enforce shared limits across
+            multiple agents or adapters within the same run.
 
     Raises:
         VeronicaHalt: When ``check_or_raise()`` is called and a policy denies.
@@ -102,11 +134,16 @@ class VeronicaCrewAIListener(BaseEventListener):
         crew = Crew(agents=[...], tasks=[...], step_callback=listener.check_or_raise)
     """
 
-    def __init__(self, config: Union[GuardConfig, ExecutionConfig]) -> None:
+    def __init__(
+        self,
+        config: Union[GuardConfig, ExecutionConfig],
+        *,
+        execution_context: Optional[Any] = None,
+    ) -> None:
         # _container must be set BEFORE super().__init__() because
         # BaseEventListener.__init__() calls setup_listeners(), which
         # registers closures that capture self._container.
-        self._container = build_container(config)
+        self._container = build_adapter_container(config, execution_context)
         super().__init__()
 
     # ------------------------------------------------------------------

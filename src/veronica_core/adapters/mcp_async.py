@@ -31,7 +31,7 @@ Example::
         return {"results": [...]}
 
     result = await adapter.wrap_tool_call("web_search", {"query": "hello"}, my_search)
-    if result.decision == "HALT":
+    if result.decision == Decision.HALT:
         handle_halt(result.error)
 """
 
@@ -218,7 +218,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 return MCPToolResult(
                     success=False,
                     error="Budget limit exceeded",
-                    decision="HALT",
+                    decision=Decision.HALT,
                     cost_usd=0.0,
                 )
         else:
@@ -238,7 +238,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 return MCPToolResult(
                     success=False,
                     error="Budget limit exceeded",
-                    decision="HALT",
+                    decision=Decision.HALT,
                     cost_usd=0.0,
                 )
 
@@ -278,7 +278,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             return MCPToolResult(
                 success=False,
                 error=f"{type(call_error).__name__}: {call_error}",
-                decision="ALLOW",
+                decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
 
@@ -297,7 +297,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 success=False,
                 result=result_value,
                 error="Tool returned isError=True",
-                decision="ALLOW",
+                decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
 
@@ -338,7 +338,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         return MCPToolResult(
             success=True,
             result=result_value,
-            decision="ALLOW",
+            decision=Decision.ALLOW,
             cost_usd=actual_cost,
         )
 

@@ -148,6 +148,7 @@ import pytest  # noqa: E402
 from veronica_core import GuardConfig  # noqa: E402
 from veronica_core.adapters.crewai import VeronicaCrewAIListener, _estimate_cost  # noqa: E402
 from veronica_core.containment import ExecutionConfig  # noqa: E402
+from veronica_core.containment.execution_context import ExecutionContext  # noqa: E402
 from veronica_core.inject import VeronicaHalt  # noqa: E402
 
 
@@ -348,6 +349,36 @@ class TestConfigAcceptance:
         listener = VeronicaCrewAIListener(cfg)
         assert listener.container.budget.limit_usd == 3.0
         assert listener.container.step_guard.max_steps == 15
+
+    def test_accepts_execution_context_kwarg(self) -> None:
+        """VeronicaCrewAIListener accepts execution_context= kwarg."""
+        cfg = ExecutionConfig(max_cost_usd=2.0, max_steps=10, max_retries_total=5)
+        ctx = ExecutionContext(config=cfg)
+        listener = VeronicaCrewAIListener(cfg, execution_context=ctx)
+        # Container should be backed by the ExecutionContext (adapter type)
+        from veronica_core.adapters._shared import ExecutionContextContainerAdapter
+
+        assert isinstance(listener.container, ExecutionContextContainerAdapter)
+
+    def test_execution_context_halt_raises_on_check_or_raise(self) -> None:
+        """check_or_raise() raises VeronicaHalt when ExecutionContext step limit is exceeded."""
+        cfg = ExecutionConfig(max_cost_usd=100.0, max_steps=2, max_retries_total=5)
+        ctx = ExecutionContext(config=cfg)
+        listener = VeronicaCrewAIListener(cfg, execution_context=ctx)
+        # Exhaust steps via step_guard proxy
+        listener.container.step_guard.step()
+        listener.container.step_guard.step()
+        # Now at limit — check_or_raise must raise
+        with pytest.raises(VeronicaHalt):
+            listener.check_or_raise()
+
+    def test_no_execution_context_uses_standalone_container(self) -> None:
+        """VeronicaCrewAIListener without execution_context uses AIContainer."""
+        from veronica_core.container import AIContainer
+
+        cfg = GuardConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
+        listener = VeronicaCrewAIListener(cfg)
+        assert isinstance(listener.container, AIContainer)
 
 
 # ---------------------------------------------------------------------------

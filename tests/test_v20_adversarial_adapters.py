@@ -557,13 +557,25 @@ class TestExecutionContextContainerAdapter:
         """Minimal stub that looks like an ExecutionContext."""
         import threading
 
+        class _Snapshot:
+            def __init__(self, ctx: Any) -> None:
+                self._ctx = ctx
+
+            @property
+            def cost_usd_accumulated(self) -> float:
+                return self._ctx._cost_usd_accumulated
+
+            @property
+            def aborted(self) -> bool:
+                return False
+
         class _CtxStub:
             _cost_usd_accumulated: float = 0.0
             _step_count: int = 0
             _lock = threading.Lock()
 
             def get_snapshot(self) -> Any:
-                return None  # not aborted
+                return _Snapshot(self)
 
         return _CtxStub()
 

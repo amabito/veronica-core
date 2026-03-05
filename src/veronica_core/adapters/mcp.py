@@ -26,7 +26,7 @@ Example::
         tool_costs={"web_search": MCPToolCost("web_search", cost_per_call=0.01)},
     )
     result = adapter.wrap_tool_call("web_search", {"query": "hello"}, search_fn)
-    if result.decision == "HALT":
+    if result.decision == Decision.HALT:
         # budget exceeded or circuit open
         handle_halt(result.error)
 """
@@ -200,7 +200,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
             return MCPToolResult(
                 success=False,
                 error="Budget limit exceeded",
-                decision="HALT",
+                decision=Decision.HALT,
                 cost_usd=0.0,
             )
 
@@ -221,7 +221,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
             return MCPToolResult(
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
-                decision="ALLOW",
+                decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
 
@@ -236,7 +236,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
                 success=False,
                 result=result_value,
                 error="MCP tool returned isError=True",
-                decision="ALLOW",
+                decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
 
@@ -261,7 +261,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         return MCPToolResult(
             success=True,
             result=result_value,
-            decision="ALLOW",
+            decision=Decision.ALLOW,
             cost_usd=actual_cost,
         )
 
