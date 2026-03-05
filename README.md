@@ -16,6 +16,24 @@ pip install veronica-core
 
 ---
 
+## v2.x Release Series (2026-03-04 — 2026-03-05)
+
+| Version | Milestone | Key additions |
+|---------|-----------|---------------|
+| **2.0.0** | Reserve/Commit/Rollback | Two-phase budget protocol, async budget backends, WebSocket containment, CancellationToken hierarchy, SharedTimeoutPool |
+| **2.1.0** | Declarative Policy | YAML/JSON policy loader with hot-reload, adaptive budget with burn-rate estimation, multi-tenant budget hierarchy, anomaly detection |
+| **2.2.0** | OTel Feedback Loop | Metrics-driven runtime policy, span ingestion (AG2/OpenLLMetry), per-agent sliding-window cost tracking |
+| **2.3.0** | ExecutionGraph Hooks | Dynamic observer/subscriber registration, `NodeEvent` frozen dataclass, copy-on-write lock-free iteration |
+| **2.4.0** | Code Quality | `ExecutionContext.close()`, Decision enum migration, CrewAI context wiring, adapter snapshot reuse |
+| **2.5.0** | HALT Unification | Shared `check_and_halt()` across all 5 framework adapters, metrics emission on ALLOW/HALT/tokens, API docs rewrite |
+| **2.6.0** | Policy Simulation | Replay execution logs against policy configs, OTel span import, per-agent breakdown, NaN-safe accumulation |
+
+3815 tests. Zero breaking changes from 2.1.0 onward.
+
+See [CHANGELOG.md](CHANGELOG.md) for full details per version.
+
+---
+
 ## Quickstart
 
 ```python
@@ -92,6 +110,13 @@ def run_agent(prompt: str) -> str:
 - **ASGI/WSGI middleware** -- per-request ExecutionContext via ContextVar, 429 on HALT
 - **MCP containment** -- sync and async MCP server adapters with per-tool budget enforcement
 - **Auto cost calculation** -- pricing table for OpenAI, Anthropic, Google models
+- **Declarative policy** -- YAML/JSON policy files with hot-reload watcher, 7 builtin rule types
+- **Adaptive budget** -- burn-rate estimation, time-to-exhaustion escalation, spike detection via Z-score anomaly
+- **Multi-tenant budget** -- hierarchical Organisation/Project/Team/Agent with ancestor-walk policy resolution
+- **OTel feedback loop** -- ingest AG2/OpenLLMetry spans, per-agent metrics, declarative `MetricRule` thresholds
+- **ExecutionGraph hooks** -- dynamic observer/subscriber registration, `NodeEvent` lifecycle events
+- **Policy simulation** -- replay execution logs against policy configs for what-if analysis, OTel span import
+- **Framework adapter metrics** -- `record_decision` and `record_tokens` emission across all 5 framework adapters
 
 No required dependencies. Works with any LLM provider.
 
@@ -209,11 +234,20 @@ Supporting theory:
 
 ## Roadmap
 
-- ~~OTel Feedback Loop: metrics-driven runtime policy~~ (v2.2.0)
-- ~~`ExecutionGraph` extensibility hooks for external integrations~~ (v2.3.0)
-- ~~Code quality hardening: `close()`, Decision enum, CrewAI context wiring~~ (v2.4.0)
+### Done (v2.0 — v2.6)
+
+- ~~Two-phase budget, async backends, WebSocket containment~~ (v2.0.0)
+- ~~Declarative policy, adaptive budget, multi-tenant hierarchy~~ (v2.1.0)
+- ~~OTel feedback loop, metrics-driven runtime policy~~ (v2.2.0)
+- ~~ExecutionGraph extensibility hooks~~ (v2.3.0)
+- ~~Code quality: `close()`, Decision enum, adapter hardening~~ (v2.3.1 — v2.4.0)
 - ~~HALT unification, metrics wiring, API docs rewrite~~ (v2.5.0)
-- `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
+- ~~Policy simulation: replay logs for what-if analysis~~ (v2.6.0)
+
+### Next
+
+- A2A trust boundary: cross-agent identity verification and policy federation (Phase E, pending AG2 A2A stability)
+- Federation: multi-process policy coordination (Phase G, depends on Phase E)
 
 
 ---

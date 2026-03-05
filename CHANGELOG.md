@@ -6,6 +6,26 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## v2.0 — v2.6 Release Series Summary
+
+Seven releases in two days. 1252 new tests (2563 to 3815). Zero breaking changes from v2.1.0 onward.
+
+**v2.0.0 — Reserve/Commit/Rollback.** Two-phase budget protocol (`reserve` / `commit` / `rollback`) on local and Redis backends. Async budget backends (`AsyncLocalBudgetBackend`, `AsyncRedisBudgetBackend`). WebSocket containment via ASGI middleware (`close(1008)` on step exhaustion). `CancellationToken` parent/child hierarchy with upward cost propagation. `SharedTimeoutPool` singleton for process-wide deadline scheduling. 627 new tests.
+
+**v2.1.0 — Declarative Policy, Adaptive Threshold, Multi-tenant Budget.** YAML/JSON policy loader with hot-reload watcher and 7 builtin rule types. `AdaptiveThresholdPolicy` with burn-rate estimation and spike detection. `AnomalyDetector` using Welford's online Z-score. `TenantRegistry` with Organisation/Project/Team/Agent hierarchy and ancestor-walk resolution. `BudgetPool` with distributed reserve/commit/rollback integration. 231 new tests (107 adversarial).
+
+**v2.2.0 — OTel Feedback Loop.** `OTelMetricsIngester` parses AG2, veronica-core, and OpenLLMetry spans into per-agent metrics. `MetricsDrivenPolicy` evaluates declarative `MetricRule` thresholds (gt/lt/gte/lte/eq) with severity ordering. Sliding-window cost tracking. Agent cardinality cap (10K). NaN/Inf threshold rejection. 229 new tests.
+
+**v2.3.x — ExecutionGraph Hooks + Safety Hardening.** Dynamic observer/subscriber registration on `ExecutionGraph`. `NodeEvent` frozen dataclass with 13 fields. Copy-on-write lock-free iteration. v2.3.1: deprecated API cleanup (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`), `ExecutionContext.close()`. 42 tests.
+
+**v2.4.0 — Code Quality.** `Decision` enum migration across MCP adapters. `build_adapter_container()` shared factory. CrewAI `execution_context=` kwarg. Snapshot reuse in `ExecutionContextContainerAdapter.check()`. 23 adversarial tests.
+
+**v2.5.0 — HALT Unification.** Shared `check_and_halt()` across all 5 framework adapters (AG2, CrewAI, LangChain, LangGraph, LlamaIndex). `emit_metrics_decision()` / `emit_metrics_tokens()` helpers. `metrics=` and `agent_id=` kwargs on all adapters. `docs/API.md` rewritten (739 lines). 37 new tests.
+
+**v2.6.0 — Policy Simulation.** `PolicySimulator` replays execution logs against `ShieldPipeline` configs. `ExecutionLog` with JSON file, string, and OTel span import. `SimulationReport` with per-agent breakdown, `savings_percentage`, `summary()`, `to_dict()`. NaN-safe cost accumulation via `math.isfinite()`. 51 new tests (22 adversarial).
+
+---
+
 ## [2.6.0] — 2026-03-05 — Policy Simulation
 
 **Breaking changes:** none.
