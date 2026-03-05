@@ -24,7 +24,6 @@ def _redact_exc(exc: BaseException) -> str:
 
     Duplicate of distributed._redact_exc kept here to break the
     distributed <-> distributed_circuit_breaker circular import.
-    See: https://github.com/veronica-core/veronica-core/issues/XXX
     """
     msg = str(exc)
     msg = re.sub(
