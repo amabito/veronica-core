@@ -79,7 +79,10 @@ except ImportError as _exc:
     ) from _exc
 
 import logging
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._shared import (
     build_adapter_container,
@@ -233,6 +236,16 @@ class VeronicaCrewAIListener(BaseEventListener):
     # ------------------------------------------------------------------
     # Introspection
     # ------------------------------------------------------------------
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="CrewAI",
+            supports_cost_extraction=True,
+            supports_token_extraction=True,
+        )
 
     @property
     def container(self) -> AIContainer:

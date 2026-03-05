@@ -14,6 +14,7 @@ Usage::
     exporter.close()            # graceful shutdown
 """
 
+from veronica_core.compliance.audit_chain import AuditChain, AuditEntry
 from veronica_core.compliance.exporter import ComplianceExporter
 from veronica_core.compliance.serializers import (
     serialize_node_record,
@@ -22,6 +23,8 @@ from veronica_core.compliance.serializers import (
 )
 
 __all__ = [
+    "AuditChain",
+    "AuditEntry",
     "ComplianceExporter",
     "serialize_node_record",
     "serialize_safety_event",

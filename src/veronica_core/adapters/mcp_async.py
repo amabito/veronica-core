@@ -41,7 +41,10 @@ import asyncio
 import dataclasses
 import logging
 import time
-from typing import Any, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._mcp_base import (
     MCPToolCost,
@@ -341,6 +344,16 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             result=result_value,
             decision=Decision.ALLOW,
             cost_usd=actual_cost,
+        )
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="MCP",
+            supports_async=True,
+            supports_reserve_commit=True,
         )
 
     # ------------------------------------------------------------------

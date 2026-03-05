@@ -1,6 +1,6 @@
 """VERONICA Core - Failsafe state machine for mission-critical applications."""
 
-__version__ = "2.7.0"
+__version__ = "3.0.0"
 
 # Core state machine
 from veronica_core.state import (
@@ -199,6 +199,9 @@ from veronica_core.middleware import (
 # Compliance Export (v1.4.0)
 from veronica_core.compliance import ComplianceExporter
 
+# Audit Chain (v3.0.0)
+from veronica_core.compliance.audit_chain import AuditChain, AuditEntry
+
 # Quickstart API (v1.4.0 -- 2-line setup shortcut)
 from veronica_core.quickstart import init, shutdown, get_context
 
@@ -209,6 +212,9 @@ from veronica_core.protocols import (
     ExecutionGraphObserver,
     ContainmentMetricsProtocol,
 )
+
+# Adapter capabilities (v3.0.0)
+from veronica_core.adapter_capabilities import AdapterCapabilities
 
 # Metrics implementations (v1.6.0)
 from veronica_core.metrics import LoggingContainmentMetrics
@@ -237,6 +243,7 @@ from veronica_core.a2a import (
     TrustPolicy,
     TrustBasedPolicyRouter,
     TrustEscalationTracker,
+    identity_from_a2a_card,
 )
 
 __all__ = [
@@ -383,6 +390,9 @@ __all__ = [
     "get_current_execution_context",
     # Compliance Export (v1.4.0)
     "ComplianceExporter",
+    # Audit Chain (v3.0.0)
+    "AuditChain",
+    "AuditEntry",
     # Quickstart API (v1.4.0)
     "init",
     "shutdown",
@@ -392,6 +402,8 @@ __all__ = [
     "PlannerProtocol",
     "ExecutionGraphObserver",
     "ContainmentMetricsProtocol",
+    # Adapter capabilities (v3.0.0)
+    "AdapterCapabilities",
     # Metrics implementations (v1.6.0)
     "LoggingContainmentMetrics",
     # OTel Feedback Loop (v2.4)
@@ -411,4 +423,5 @@ __all__ = [
     "TrustPolicy",
     "TrustBasedPolicyRouter",
     "TrustEscalationTracker",
+    "identity_from_a2a_card",
 ]

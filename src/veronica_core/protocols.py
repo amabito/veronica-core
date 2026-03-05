@@ -20,7 +20,10 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 
 __all__ = [
@@ -57,6 +60,14 @@ class FrameworkAdapterProtocol(Protocol):
             def handle_degrade(self, reason: str, suggestion: str) -> Any:
                 return {"warning": "degrade", "reason": reason, "suggestion": suggestion}
     """
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return a static descriptor of this adapter's capabilities.
+
+        Returns:
+            AdapterCapabilities instance declaring supported features.
+        """
+        ...
 
     def extract_cost(self, result: Any) -> float:
         """Return the USD cost for a completed LLM call.

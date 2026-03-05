@@ -40,6 +40,7 @@ from veronica_core.shield.types import Decision, ToolCallContext
 from veronica_core.state import VeronicaState
 
 if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
     from veronica_core.shield.token_budget import TokenBudgetHook
 
 logger = logging.getLogger(__name__)
@@ -257,6 +258,16 @@ class CircuitBreakerCapability:
     def breakers(self) -> Dict[str, CircuitBreaker]:
         """Snapshot of all agent-name → CircuitBreaker mappings."""
         return dict(self._breakers)
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="AG2",
+            supports_cost_extraction=True,
+            supports_token_extraction=True,
+        )
 
 
 # ---------------------------------------------------------------------------

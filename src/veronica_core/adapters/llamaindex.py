@@ -27,8 +27,11 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._shared import (
     build_container,
@@ -246,6 +249,16 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
     def container(self) -> AIContainer:
         """The underlying AIContainer (for testing and introspection)."""
         return self._container
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="LlamaIndex",
+            supports_cost_extraction=True,
+            supports_token_extraction=True,
+        )
 
     @property
     def circuit_breaker(self) -> Optional[CircuitBreaker]:

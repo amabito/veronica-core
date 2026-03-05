@@ -46,7 +46,10 @@ except ImportError as _exc:
 
 import functools
 import logging
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._shared import (
     build_adapter_container,
@@ -192,6 +195,16 @@ class VeronicaLangGraphCallback:
     # ------------------------------------------------------------------
     # Introspection
     # ------------------------------------------------------------------
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="LangGraph",
+            supports_cost_extraction=True,
+            supports_token_extraction=True,
+        )
 
     @property
     def container(self) -> AIContainer:

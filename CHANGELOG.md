@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.0.0] -- 2026-03-05 -- God Class Split, Adapter Capabilities, Audit Chain
+
+### Added
+
+- `AdapterCapabilities` frozen dataclass: static capability declaration for framework adapters (`supports_streaming`, `supports_cost_extraction`, `supports_token_extraction`, `supports_async`, `supports_reserve_commit`, `supports_agent_identity`, `framework_name`, `framework_version_constraint`, `extra`).
+- `FrameworkAdapterProtocol.capabilities()` method: adapters now declare their features at runtime.
+- All 9 adapters (LangChain, LangGraph, CrewAI, LlamaIndex, AG2, MCP sync/async, ROS2, AG2Capability) implement `capabilities()`.
+- `AuditChain`: tamper-proof hash chain for safety events using SHA-256. Append-only, thread-safe, with `verify()`, `export_json()`, `from_json()`.
+- `AuditEntry` frozen dataclass: sequence, timestamp, prev_hash, data, entry_hash.
+- 38 new tests (15 adapter capabilities + 23 audit chain, including adversarial: concurrent appends, replay attacks, forged entries, corrupted imports).
+
+### Changed
+
+- **God Class Split** (no API changes, backward-compatible re-exports):
+  - `distributed.py` (1596 lines) split into `distributed.py` (709) + `distributed_circuit_breaker.py` (914).
+  - `security/policy_engine.py` (1156 lines) split into `policy_engine.py` (435) + `policy_rules.py` (677).
+  - `containment/execution_context.py` (1704 lines) split into `execution_context.py` (1531) + `types.py` (204).
+- All original import paths preserved via re-exports.
+
+### Breaking changes
+
+- `FrameworkAdapterProtocol` now requires `capabilities()` method. Existing adapters that use `isinstance()` checks must add this method.
+
+---
+
 ## v2.0 — v2.7 Release Series Summary
 
 Eight releases in three days. 1311 new tests (2563 to 3874). Zero breaking changes from v2.1.0 onward.

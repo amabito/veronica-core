@@ -20,6 +20,7 @@ Usage::
     router = TrustBasedPolicyRouter()
 """
 
+from veronica_core.a2a.card import identity_from_a2a_card
 from veronica_core.a2a.escalation import TrustEscalationTracker
 from veronica_core.a2a.router import TrustBasedPolicyRouter
 from veronica_core.a2a.types import AgentIdentity, TrustLevel, TrustPolicy
@@ -30,4 +31,5 @@ __all__ = [
     "TrustPolicy",
     "TrustBasedPolicyRouter",
     "TrustEscalationTracker",
+    "identity_from_a2a_card",
 ]

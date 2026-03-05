@@ -833,7 +833,7 @@ def _make_dcb_for_adversarial(
     half_open_slot_timeout: float = 120.0,
 ):
     """Create DistributedCircuitBreaker with injected fakeredis client."""
-    import veronica_core.distributed as dist_mod
+    import veronica_core.distributed_circuit_breaker as dcb_mod
     from veronica_core.circuit_breaker import CircuitBreaker
     from veronica_core.distributed import DistributedCircuitBreaker
 
@@ -856,9 +856,9 @@ def _make_dcb_for_adversarial(
     dcb._owns_client = False
     dcb._lock = threading.Lock()
     dcb._last_reconnect_attempt = 0.0
-    dcb._script_failure = fake_client.register_script(dist_mod._LUA_RECORD_FAILURE)
-    dcb._script_success = fake_client.register_script(dist_mod._LUA_RECORD_SUCCESS)
-    dcb._script_check = fake_client.register_script(dist_mod._LUA_CHECK)
+    dcb._script_failure = fake_client.register_script(dcb_mod._LUA_RECORD_FAILURE)
+    dcb._script_success = fake_client.register_script(dcb_mod._LUA_RECORD_SUCCESS)
+    dcb._script_check = fake_client.register_script(dcb_mod._LUA_CHECK)
     return dcb
 
 

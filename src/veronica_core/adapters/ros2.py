@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, Generator, Optional
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
 
 if TYPE_CHECKING:
-    pass
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +194,14 @@ class SafetyMonitor:
         _logger = self.logger
         if hasattr(_logger, "info"):
             _logger.info(f"[VERONICA] {msg}")
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="ROS2",
+        )
 
     def _log_warn(self, msg: str) -> None:
         _logger = self.logger

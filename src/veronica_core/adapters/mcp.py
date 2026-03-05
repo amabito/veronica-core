@@ -37,7 +37,10 @@ import inspect
 import logging
 import threading
 import time
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._mcp_base import (
     MCPToolCost,
@@ -263,6 +266,15 @@ class MCPContainmentAdapter(_MCPAdapterBase):
             result=result_value,
             decision=Decision.ALLOW,
             cost_usd=actual_cost,
+        )
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return the capability descriptor for this adapter."""
+        from veronica_core.adapter_capabilities import AdapterCapabilities
+
+        return AdapterCapabilities(
+            framework_name="MCP",
+            supports_reserve_commit=True,
         )
 
     # ------------------------------------------------------------------

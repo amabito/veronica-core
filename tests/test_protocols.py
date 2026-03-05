@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
+from veronica_core.adapter_capabilities import AdapterCapabilities
 from veronica_core.containment.execution_graph import ExecutionGraph
 from veronica_core.protocols import (
     ContainmentMetricsProtocol,
@@ -20,6 +21,9 @@ from veronica_core.protocols import (
 
 
 class ConcreteFrameworkAdapter:
+    def capabilities(self) -> AdapterCapabilities:
+        return AdapterCapabilities(framework_name="test")
+
     def extract_cost(self, result: Any) -> float:
         return 0.0
 
