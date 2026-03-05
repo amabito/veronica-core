@@ -6,6 +6,39 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.2.0] — 2026-03-05 — OTel Feedback Loop
+
+**Breaking changes:** none
+
+### Added
+
+- **OTel Feedback Loop** (`veronica_core.otel_feedback`, `veronica_core.policy.metrics_policy`):
+  - `OTelMetricsIngester`: Thread-safe span parser accumulating per-agent metrics (tokens, cost, latency, errors). Supports AG2, veronica-core, and OpenLLMetry span formats.
+  - `AgentMetrics` dataclass with public `error_count` property and sliding-window cost tracking.
+  - `MetricsDrivenPolicy`: Implements `RuntimePolicy` protocol. Evaluates declarative `MetricRule` thresholds with severity ordering (halt > degrade > warn).
+  - `MetricRule` dataclass with operator evaluation (`gt`, `lt`, `gte`, `lte`, `eq`), per-agent filtering, and strict validation (rejects NaN/inf thresholds).
+  - `PolicyRegistry` integration: `metric_rule` builtin factory with explicit null/empty field rejection.
+  - Module-level default ingester via `set_default_ingester()` / `get_default_ingester()`.
+
+### Hardened (5 audit rounds — R1-R4 adversarial + R5 F.R.I.D.A.Y.)
+
+- NaN/inf threshold rejection in `MetricRule.__post_init__` (silent bypass / DoS prevention).
+- Agent cardinality cap (`max_agents=10,000`) to prevent unbounded state growth.
+- Cost window bounded via `deque(maxlen=100,000)` to prevent memory DoS.
+- `reset()` lock ordering fix: release global lock before per-agent locks (deadlock prevention).
+- `_get_metrics()` upgraded to `logger.warning` on failure (was silent `logger.debug`).
+- Non-finite observed metric values filtered via `math.isfinite()`.
+- Registry factory rejects null/empty `metric`, `operator`, `action` fields (was silent default).
+- `_error_count` exposed via public `AgentMetrics.error_count` property.
+- `ingest_span` failure logging added (was bare `except: pass`).
+
+### Tests
+
+- 229 Phase D tests (unit + adversarial Categories 13-17).
+- 3684 total tests passing.
+
+---
+
 ## [2.1.0] — 2026-03-05 — Declarative Policy, Adaptive Threshold, Multi-tenant Budget
 
 **Breaking changes:** none

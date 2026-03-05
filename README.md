@@ -179,9 +179,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v2.1.0
+## Ship Readiness -- v2.2.0
 
-3455 tests, 92% coverage, zero required dependencies. Python 3.10+.
+3684 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -209,6 +209,7 @@ Supporting theory:
 
 ## Roadmap
 
+- ~~OTel Feedback Loop: metrics-driven runtime policy~~ (v2.2.0)
 - `ExecutionGraph` extensibility hooks for external integrations
 - `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
 
