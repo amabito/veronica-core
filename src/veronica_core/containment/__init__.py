@@ -22,7 +22,7 @@ from veronica_core.containment.execution_context import (
     get_current_partial_buffer,
     attach_partial_buffer,
 )
-from veronica_core.containment.execution_graph import ExecutionGraph
+from veronica_core.containment.execution_graph import ExecutionGraph, NodeEvent
 from veronica_core.containment.budget_allocator import (
     AllocationResult,
     BudgetAllocator,
@@ -38,6 +38,7 @@ __all__ = [
     "ExecutionConfig",
     "ExecutionContext",
     "ExecutionGraph",
+    "NodeEvent",
     "NodeRecord",
     "WrapOptions",
     "get_current_partial_buffer",

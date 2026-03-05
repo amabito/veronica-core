@@ -42,13 +42,13 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, List, Literal, Optional
 
 if TYPE_CHECKING:
     from veronica_core.protocols import ExecutionGraphObserver
 
 
-__all__ = ["ExecutionGraph", "Node", "NodeSignature"]
+__all__ = ["ExecutionGraph", "Node", "NodeEvent", "NodeSignature"]
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -95,6 +95,30 @@ class Node:
     metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class NodeEvent:
+    """Immutable event emitted on node state transitions.
+
+    Designed for lightweight subscribers that only need a snapshot
+    of the node at transition time, without implementing the full
+    ExecutionGraphObserver protocol.
+    """
+
+    node_id: str
+    status: NodeStatus
+    kind: NodeKind
+    name: str
+    cost_usd: float
+    tokens_in: Optional[int]
+    tokens_out: Optional[int]
+    depth: int
+    elapsed_ms: Optional[float]
+    chain_id: str
+    model: Optional[str]
+    error_class: Optional[str]
+    stop_reason: Optional[str]
+
+
 # ---------------------------------------------------------------------------
 # ExecutionGraph
 # ---------------------------------------------------------------------------
@@ -127,10 +151,11 @@ class ExecutionGraph:
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()
         # Observers are called outside the lock to avoid deadlocks.
-        # Immutable after __init__: no lock needed for reads.
+        # Mutable: use add_observer/remove_observer for thread-safe changes.
         self._observers: List["ExecutionGraphObserver"] = (
             list(observers) if observers else []
         )
+        self._subscribers: list[Callable[["NodeEvent"], None]] = []
 
         # Node storage and ID counter.
         self._nodes: dict[str, Node] = {}
@@ -184,6 +209,41 @@ class ExecutionGraph:
         # Buffer of pending divergence event dicts.  Drained by
         # drain_divergence_events().
         self._pending_divergence_events: list[dict[str, Any]] = []
+
+    # ------------------------------------------------------------------
+    # Observer and subscriber management
+    # ------------------------------------------------------------------
+
+    def add_observer(self, observer: "ExecutionGraphObserver") -> None:
+        """Register an observer dynamically. Thread-safe.
+
+        Identity-based deduplication: re-adding the same observer is a no-op.
+        """
+        with self._lock:
+            if any(o is observer for o in self._observers):
+                return
+            self._observers = [*self._observers, observer]
+
+    def remove_observer(self, observer: "ExecutionGraphObserver") -> None:
+        """Remove an observer. No-op if not registered. Thread-safe."""
+        with self._lock:
+            self._observers = [o for o in self._observers if o is not observer]
+
+    def add_subscriber(self, callback: Callable[["NodeEvent"], None]) -> None:
+        """Register a subscriber for NodeEvent notifications. Thread-safe.
+
+        Identity-based deduplication: the same callback object is only
+        registered once. Re-adding a callback already registered is a no-op.
+        """
+        with self._lock:
+            if any(s is callback for s in self._subscribers):
+                return
+            self._subscribers = [*self._subscribers, callback]
+
+    def remove_subscriber(self, callback: Callable[["NodeEvent"], None]) -> None:
+        """Remove a subscriber by identity. No-op if not registered. Thread-safe."""
+        with self._lock:
+            self._subscribers = [s for s in self._subscribers if s is not callback]
 
     # ------------------------------------------------------------------
     # Public API
@@ -355,16 +415,16 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
-        notify_complete = False
         duration_ms: float = 0.0
+        sub_event: Optional["NodeEvent"] = None
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
                 return
             sig: NodeSignature = (node.kind, node.name)
-            event = self._update_sig_window(sig)
-            if event is not None:
-                self._pending_divergence_events.append(event)
+            div = self._update_sig_window(sig)
+            if div is not None:
+                self._pending_divergence_events.append(div)
             node.status = "success"
             node.end_ts_ms = _now_ms()
             node.cost_usd = cost_usd
@@ -374,11 +434,13 @@ class ExecutionGraph:
             elapsed_ms = max(node.end_ts_ms - node.start_ts_ms, 1)
             self._check_cost_rate_divergence(cost_usd, elapsed_ms, node_id)
             self._check_token_velocity_divergence(tokens_out, elapsed_ms, node_id)
-            notify_complete = True
             duration_ms = float(elapsed_ms)
+            if self._subscribers:
+                sub_event = self._build_node_event(node)
 
-        if notify_complete and self._observers:
-            self._notify_observers("on_node_complete", node_id, cost_usd, duration_ms)
+        self._notify_observers("on_node_complete", node_id, cost_usd, duration_ms)
+        if sub_event is not None:
+            self._fire_subscribers(sub_event)
 
     def _update_graph_metrics(self, node: "Node") -> None:
         """Accumulate aggregate counters from a completed node.
@@ -492,8 +554,7 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
-        notify_failed = False
-        error_label = ""
+        sub_event: Optional["NodeEvent"] = None
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
@@ -507,11 +568,12 @@ class ExecutionGraph:
                 self._total_llm_calls += 1
             elif node.kind == "tool":
                 self._total_tool_calls += 1
-            notify_failed = True
-            error_label = error_class
+            if self._subscribers:
+                sub_event = self._build_node_event(node)
 
-        if notify_failed and self._observers:
-            self._notify_observers("on_node_failed", node_id, error_label)
+        self._notify_observers("on_node_failed", node_id, error_class)
+        if sub_event is not None:
+            self._fire_subscribers(sub_event)
 
     def mark_halt(
         self,
@@ -537,24 +599,27 @@ class ExecutionGraph:
         Raises:
             KeyError: If *node_id* does not exist.
         """
-        notify_failed = False
         halt_reason = stop_reason or "halt"
+        sub_event: Optional["NodeEvent"] = None
         with self._lock:
             node = self._get_node(node_id)
             if node.status in _TERMINAL_STATUSES:
                 return
             node.status = "halt"
             node.end_ts_ms = _now_ms()
-            node.stop_reason = stop_reason
+            node.stop_reason = halt_reason
             self._total_retries += node.retries_used
             if node.kind == "llm":
                 self._total_llm_calls += 1
             elif node.kind == "tool":
                 self._total_tool_calls += 1
-            notify_failed = True
+            if self._subscribers:
+                sub_event = self._build_node_event(node)
 
-        if notify_failed and self._observers:
-            self._notify_observers("on_node_failed", node_id, halt_reason)
+        self._notify_observers("on_node_failed", node_id, halt_reason)
+        self._notify_observers("on_decision", node_id, "HALT", halt_reason)
+        if sub_event is not None:
+            self._fire_subscribers(sub_event)
 
     def increment_retries(self, node_id: str) -> None:
         """Increment the retry counter for *node_id* by one.
@@ -802,17 +867,65 @@ class ExecutionGraph:
         """Call *method* on all registered observers, swallowing exceptions.
 
         Must NOT be called with self._lock held (to avoid deadlocks when
-        observers call back into the graph).
+        observers call back into the graph).  Uses the copy-on-write observer
+        list reference (add/remove always create a new list).
 
         Args:
             method: Observer method name to call.
             *args: Positional arguments forwarded to the method.
         """
-        for observer in self._observers:
+        # Copy-on-write: self._observers is replaced (not mutated) by
+        # add/remove, so reading the reference under lock gives a stable list.
+        with self._lock:
+            observers = self._observers
+        if not observers:
+            return
+        for observer in observers:
             try:
                 getattr(observer, method)(*args)
             except Exception:
                 pass  # Observers must never crash the graph
+
+    def _build_node_event(self, node: "Node") -> "NodeEvent":
+        """Build an immutable NodeEvent from a node. Must be called with lock held.
+
+        Args:
+            node: The node to snapshot (should be in terminal state).
+
+        Returns:
+            Frozen NodeEvent capturing the node's current fields.
+        """
+        elapsed_ms: Optional[float] = None
+        if node.end_ts_ms is not None and node.start_ts_ms is not None:
+            elapsed_ms = float(node.end_ts_ms - node.start_ts_ms)
+        return NodeEvent(
+            node_id=node.node_id,
+            status=node.status,
+            kind=node.kind,
+            name=node.name,
+            cost_usd=node.cost_usd,
+            tokens_in=node.tokens_in,
+            tokens_out=node.tokens_out,
+            depth=self._depth.get(node.node_id, 0),
+            elapsed_ms=elapsed_ms,
+            chain_id=self._chain_id,
+            model=node.model,
+            error_class=node.error_class,
+            stop_reason=node.stop_reason,
+        )
+
+    def _fire_subscribers(self, event: "NodeEvent") -> None:
+        """Dispatch a pre-built NodeEvent to all subscribers.
+
+        Uses the copy-on-write subscriber list reference.
+        """
+        with self._lock:
+            subscribers = self._subscribers
+        for sub in subscribers:
+            try:
+                sub(event)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------

@@ -97,6 +97,7 @@ from veronica_core.containment import (
     ExecutionConfig,
     ExecutionContext,
     ExecutionGraph,
+    NodeEvent,
     NodeRecord,
     WrapOptions,
     get_current_partial_buffer,
@@ -295,6 +296,7 @@ __all__ = [
     "ExecutionConfig",
     "ExecutionContext",
     "ExecutionGraph",
+    "NodeEvent",
     "NodeRecord",
     "WrapOptions",
     # Partial buffer helpers (v0.11)
