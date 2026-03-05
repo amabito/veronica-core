@@ -6,6 +6,39 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [2.3.0] — 2026-03-05 — ExecutionGraph Extensibility Hooks
+
+**Breaking changes:** none
+
+### Added
+
+- **Dynamic observer registration** (`ExecutionGraph.add_observer` / `remove_observer`):
+  - Register `ExecutionGraphObserver` instances after construction.
+  - Identity-based dedup prevents duplicate registration.
+  - Copy-on-write list replacement for lock-free iteration during notification.
+  - `on_decision` callback fires on every `mark_halt` (unconditional, with default reason `"halt"`).
+- **`NodeEvent` frozen dataclass** (`veronica_core.containment.NodeEvent`):
+  - Lightweight immutable event emitted on terminal transitions (success / fail / halt).
+  - 13 fields: `node_id`, `status`, `kind`, `name`, `cost_usd`, `tokens_in`, `tokens_out`, `depth`, `elapsed_ms`, `chain_id`, `model`, `error_class`, `stop_reason`.
+  - Built under lock via `_build_node_event` factory (TOCTOU prevention).
+- **Subscriber API** (`ExecutionGraph.add_subscriber` / `remove_subscriber`):
+  - `Callable[[NodeEvent], None]` callbacks for lightweight event consumption.
+  - Identity-based dedup and `is not` removal semantics.
+  - Exception isolation: subscriber failures never propagate to the graph caller.
+
+### Hardened (5 audit rounds — R6-R8 fixes + R9-R10 clean)
+
+- TOCTOU in `NodeEvent` construction: fields now snapshot under lock.
+- `mark_halt` stores `halt_reason` (not raw `stop_reason`) for observer/subscriber/snapshot consistency.
+- Timestamp comparison uses `is not None` (not truthy check) to handle epoch-zero correctly.
+
+### Tests
+
+- 24 hook-specific tests (happy path + adversarial + concurrent).
+- 3697 total tests passing.
+
+---
+
 ## [2.2.0] — 2026-03-05 — OTel Feedback Loop
 
 **Breaking changes:** none

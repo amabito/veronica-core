@@ -179,7 +179,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v2.2.0
+## Ship Readiness -- v2.3.0
 
 3697 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
@@ -210,7 +210,7 @@ Supporting theory:
 ## Roadmap
 
 - ~~OTel Feedback Loop: metrics-driven runtime policy~~ (v2.2.0)
-- ~~`ExecutionGraph` extensibility hooks for external integrations~~ (v2.2.0)
+- ~~`ExecutionGraph` extensibility hooks for external integrations~~ (v2.3.0)
 - `PlannerProtocol`: minimal Python Protocol defining the Planner/Executor contract
 
 
