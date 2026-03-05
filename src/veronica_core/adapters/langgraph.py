@@ -46,16 +46,16 @@ except ImportError as _exc:
 
 import functools
 import logging
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union
 
 from veronica_core.adapters._shared import (
     build_adapter_container,
     build_container,
     check_and_halt,
     cost_from_total_tokens,
+    emit_llm_result_tokens,
     extract_llm_result_cost,
     record_budget_spend,
-    safe_emit,
 )
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
@@ -145,7 +145,7 @@ class VeronicaLangGraphCallback:
         config: Union[GuardConfig, ExecutionConfig],
         *,
         execution_context: Any = None,
-        metrics: Any = None,
+        metrics: Optional[Any] = None,
         agent_id: str = "langgraph",
     ) -> None:
         self._container = build_adapter_container(config, execution_context)
@@ -183,8 +183,7 @@ class VeronicaLangGraphCallback:
         cost = extract_llm_result_cost(response)
         record_budget_spend(self._container, cost, "[VERONICA_LG]", logger)
 
-        if self._metrics is not None:
-            _emit_llm_result_tokens(self._metrics, self._agent_id, response)
+        emit_llm_result_tokens(self._metrics, self._agent_id, response)
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         """Error hook: log error without charging budget."""
@@ -210,7 +209,7 @@ def veronica_node_wrapper(
     *,
     container: AIContainer | None = None,
     execution_context: Any = None,
-    metrics: Any = None,
+    metrics: Optional[Any] = None,
     agent_id: str = "langgraph",
 ) -> Callable[[F], F]:
     """Decorator that wraps a LangGraph node function with VERONICA policy enforcement.
@@ -296,17 +295,3 @@ def veronica_node_wrapper(
         return wrapper  # type: ignore[return-value]
 
     return decorator
-
-
-def _emit_llm_result_tokens(metrics: Any, agent_id: str, response: Any) -> None:
-    """Extract token counts from a LLMResult and emit via metrics, if available."""
-    try:
-        llm_output = getattr(response, "llm_output", None) or {}
-        if isinstance(llm_output, dict):
-            usage = llm_output.get("token_usage") or llm_output.get("usage") or {}
-            prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
-            completion = usage.get("completion_tokens") or usage.get("output_tokens")
-            if prompt is not None and completion is not None:
-                safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
-    except Exception:
-        pass

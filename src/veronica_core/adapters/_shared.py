@@ -48,61 +48,9 @@ def check_and_halt(
         (_logger or logger).debug(
             "%s policy denied: %s", tag, decision.reason
         )
-        emit_metrics_decision(metrics, agent_id, "HALT")
+        safe_emit(metrics, "record_decision", agent_id, "HALT")
         raise VeronicaHalt(decision.reason, decision)
-    emit_metrics_decision(metrics, agent_id, "ALLOW")
-
-
-def emit_metrics_decision(
-    metrics: Optional[Any],
-    agent_id: str,
-    decision: str,
-) -> None:
-    """Emit a containment decision to a ContainmentMetricsProtocol, if present.
-
-    No-op when *metrics* is None. Never raises — metrics emission must not
-    disrupt the containment control flow.
-
-    Args:
-        metrics: ContainmentMetricsProtocol instance, or None.
-        agent_id: Agent identifier to pass to ``record_decision()``.
-        decision: Decision string (``"ALLOW"``, ``"HALT"``, etc.).
-    """
-    if metrics is None:
-        return
-    try:
-        metrics.record_decision(agent_id, decision)
-    except Exception:
-        logger.debug(
-            "[VERONICA] emit_metrics_decision raised; ignoring", exc_info=True
-        )
-
-
-def emit_metrics_tokens(
-    metrics: Optional[Any],
-    agent_id: str,
-    input_tokens: int,
-    output_tokens: int,
-) -> None:
-    """Emit token counts to a ContainmentMetricsProtocol, if present.
-
-    No-op when *metrics* is None. Never raises — metrics emission must not
-    disrupt the containment control flow.
-
-    Args:
-        metrics: ContainmentMetricsProtocol instance, or None.
-        agent_id: Agent identifier to pass to ``record_tokens()``.
-        input_tokens: Number of prompt/input tokens.
-        output_tokens: Number of completion/output tokens.
-    """
-    if metrics is None:
-        return
-    try:
-        metrics.record_tokens(agent_id, input_tokens, output_tokens)
-    except Exception:
-        logger.debug(
-            "[VERONICA] emit_metrics_tokens raised; ignoring", exc_info=True
-        )
+    safe_emit(metrics, "record_decision", agent_id, "ALLOW")
 
 
 def build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:
@@ -382,6 +330,36 @@ def build_adapter_container(
     if execution_context is not None:
         return ExecutionContextContainerAdapter(execution_context, config)
     return build_container(config)
+
+
+def get_field(obj: Any, *keys: str) -> Any:
+    """Extract the first non-None value from obj by trying each key.
+
+    Supports both attribute access (objects) and dict access (mappings).
+    """
+    for key in keys:
+        val = getattr(obj, key, None) if not isinstance(obj, dict) else obj.get(key)
+        if val is not None:
+            return val
+    return None
+
+
+def emit_llm_result_tokens(metrics: Optional[Any], agent_id: str, response: Any) -> None:
+    """Extract token counts from a LangChain/LangGraph LLMResult and emit via metrics.
+
+    No-op when *metrics* is None or token counts cannot be extracted.
+    Never raises.
+    """
+    try:
+        llm_output = getattr(response, "llm_output", None) or {}
+        if isinstance(llm_output, dict):
+            usage = llm_output.get("token_usage") or llm_output.get("usage") or {}
+            prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
+            completion = usage.get("completion_tokens") or usage.get("output_tokens")
+            if prompt is not None and completion is not None:
+                safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
+    except Exception:
+        pass
 
 
 def safe_emit(metrics: Optional[Any], method: str, *args: Any) -> None:

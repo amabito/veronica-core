@@ -135,6 +135,8 @@ class VeronicaConversableAgent(ConversableAgent):
         """
         agent_name = getattr(self, "name", "unknown")
 
+        # Inline check instead of check_and_halt() because we need to emit
+        # OTel events between the check and the raise/allow path.
         decision = self._container.check(cost_usd=0.0)
         if not decision.allowed:
             _emit_ag2_otel_event(

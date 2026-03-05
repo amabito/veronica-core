@@ -15,11 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from veronica_core.adapters._shared import (
-    emit_metrics_decision,
-    emit_metrics_tokens,
-    safe_emit,
-)
+from veronica_core.adapters._shared import safe_emit
 from veronica_core.inject import GuardConfig, VeronicaHalt
 
 
@@ -48,41 +44,6 @@ def _exhausted_config() -> GuardConfig:
 # ---------------------------------------------------------------------------
 # Tests for _shared helpers
 # ---------------------------------------------------------------------------
-
-
-class TestEmitMetricsDecision:
-    def test_none_metrics_is_noop(self) -> None:
-        emit_metrics_decision(None, "agent", "ALLOW")  # must not raise
-
-    def test_emits_allow(self) -> None:
-        m = _make_metrics()
-        emit_metrics_decision(m, "agent-1", "ALLOW")
-        m.record_decision.assert_called_once_with("agent-1", "ALLOW")
-
-    def test_emits_halt(self) -> None:
-        m = _make_metrics()
-        emit_metrics_decision(m, "agent-1", "HALT")
-        m.record_decision.assert_called_once_with("agent-1", "HALT")
-
-    def test_exception_in_metrics_is_swallowed(self) -> None:
-        m = _make_metrics()
-        m.record_decision.side_effect = RuntimeError("backend down")
-        emit_metrics_decision(m, "a", "ALLOW")  # must not raise
-
-
-class TestEmitMetricsTokens:
-    def test_none_metrics_is_noop(self) -> None:
-        emit_metrics_tokens(None, "agent", 10, 20)  # must not raise
-
-    def test_emits_tokens(self) -> None:
-        m = _make_metrics()
-        emit_metrics_tokens(m, "agent-2", 100, 50)
-        m.record_tokens.assert_called_once_with("agent-2", 100, 50)
-
-    def test_exception_in_metrics_is_swallowed(self) -> None:
-        m = _make_metrics()
-        m.record_tokens.side_effect = RuntimeError("timeout")
-        emit_metrics_tokens(m, "a", 1, 2)  # must not raise
 
 
 class TestSafeEmit:

@@ -41,9 +41,9 @@ from typing import Any, Dict, List, Optional, Union
 from veronica_core.adapters._shared import (
     build_adapter_container,
     check_and_halt,
+    emit_llm_result_tokens,
     extract_llm_result_cost,
     record_budget_spend,
-    safe_emit,
 )
 from veronica_core.container import AIContainer
 from veronica_core.containment import ExecutionConfig
@@ -135,8 +135,7 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
         record_budget_spend(self._container, cost, "[VERONICA_LC]", logger)
 
         # Emit token metrics when a metrics backend is configured
-        if self._metrics is not None:
-            _emit_llm_result_tokens(self._metrics, self._agent_id, response)
+        emit_llm_result_tokens(self._metrics, self._agent_id, response)
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         """Error hook: log error without charging budget."""
@@ -150,17 +149,3 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
     def container(self) -> AIContainer:
         """The underlying AIContainer (for testing and introspection)."""
         return self._container
-
-
-def _emit_llm_result_tokens(metrics: Any, agent_id: str, response: Any) -> None:
-    """Extract token counts from a LLMResult and emit via metrics, if available."""
-    try:
-        llm_output = getattr(response, "llm_output", None) or {}
-        if isinstance(llm_output, dict):
-            usage = llm_output.get("token_usage") or llm_output.get("usage") or {}
-            prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
-            completion = usage.get("completion_tokens") or usage.get("output_tokens")
-            if prompt is not None and completion is not None:
-                safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
-    except Exception:
-        pass

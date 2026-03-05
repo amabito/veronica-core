@@ -215,7 +215,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             record_budget_spend(self._container, cost, "[VERONICA_LI]", logger)
 
         # Emit token metrics when a backend is configured
-        if self._metrics is not None and payload:
+        if payload:
             _emit_payload_tokens(self._metrics, self._agent_id, payload)
 
         # Record circuit breaker success

@@ -85,6 +85,7 @@ from veronica_core.adapters._shared import (
     build_adapter_container,
     check_and_halt,
     cost_from_total_tokens,
+    get_field,
     record_budget_spend,
     safe_emit,
 )
@@ -192,8 +193,7 @@ class VeronicaCrewAIListener(BaseEventListener):
             record_budget_spend(self._container, cost, "[VERONICA_CREW]", logger)
 
             # Emit token metrics when a backend is configured
-            if self._metrics is not None:
-                _emit_event_tokens(self._metrics, self._agent_id, event)
+            _emit_event_tokens(self._metrics, self._agent_id, event)
 
         @bus.on(LLMCallFailedEvent)
         def on_llm_call_failed(source: Any, event: LLMCallFailedEvent) -> None:
@@ -266,13 +266,13 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
             return 0.0
 
         # Extract token counts — support both attribute access and dict access
-        prompt_tokens = _get_field(usage, "prompt_tokens", "input_tokens")
-        completion_tokens = _get_field(usage, "completion_tokens", "output_tokens")
+        prompt_tokens = get_field(usage, "prompt_tokens", "input_tokens")
+        completion_tokens = get_field(usage, "completion_tokens", "output_tokens")
 
         if prompt_tokens is not None and completion_tokens is not None:
             return estimate_cost_usd(model, int(prompt_tokens), int(completion_tokens))
 
-        total_raw = _get_field(usage, "total_tokens")
+        total_raw = get_field(usage, "total_tokens")
         if total_raw is None:
             return 0.0
 
@@ -286,18 +286,6 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
         RuntimeError,
     ):
         return 0.0
-
-
-def _get_field(obj: Any, *keys: str) -> Any:
-    """Extract the first non-None value from obj by trying each key.
-
-    Supports both attribute access (objects) and dict access (mappings).
-    """
-    for key in keys:
-        val = getattr(obj, key, None) if not isinstance(obj, dict) else obj.get(key)
-        if val is not None:
-            return val
-    return None
 
 
 def _emit_event_tokens(metrics: Any, agent_id: str, event: Any) -> None:
@@ -315,8 +303,8 @@ def _emit_event_tokens(metrics: Any, agent_id: str, event: Any) -> None:
             usage = response.get("usage") or response.get("usage_metadata")
         if usage is None:
             return
-        prompt = _get_field(usage, "prompt_tokens", "input_tokens")
-        completion = _get_field(usage, "completion_tokens", "output_tokens")
+        prompt = get_field(usage, "prompt_tokens", "input_tokens")
+        completion = get_field(usage, "completion_tokens", "output_tokens")
         if prompt is not None and completion is not None:
             safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
     except Exception:
