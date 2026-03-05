@@ -14,12 +14,15 @@ Zero external dependencies (stdlib only).
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -58,15 +61,20 @@ class AgentMetrics:
     _error_count: int = field(default=0, repr=False, compare=False)
     _latency_sum_ms: float = field(default=0.0, repr=False, compare=False)
 
+    @property
+    def error_count(self) -> int:
+        """Public accessor for the error count accumulator."""
+        return self._error_count
+
 
 class _AgentState:
     """Internal mutable state for one agent, protected by its own lock."""
 
-    def __init__(self, window_sec: float) -> None:
+    def __init__(self, window_sec: float, max_cost_window_size: int) -> None:
         self.lock = threading.Lock()
         self.window_sec = window_sec
-        # Sliding window: (monotonic_ts, cost) pairs
-        self.cost_window: deque[tuple[float, float]] = deque()
+        # Sliding window: (monotonic_ts, cost) pairs; bounded to prevent unbounded growth
+        self.cost_window: deque[tuple[float, float]] = deque(maxlen=max_cost_window_size)
 
         self.total_tokens: int = 0
         self.total_cost: float = 0.0
@@ -238,16 +246,23 @@ class OTelMetricsIngester:
     """
 
     _DEFAULT_MAX_AGENTS = 10_000
+    _DEFAULT_MAX_COST_WINDOW_SIZE = 100_000
 
     def __init__(
-        self, window_sec: float = 3600.0, max_agents: int = _DEFAULT_MAX_AGENTS,
+        self,
+        window_sec: float = 3600.0,
+        max_agents: int = _DEFAULT_MAX_AGENTS,
+        max_cost_window_size: int = _DEFAULT_MAX_COST_WINDOW_SIZE,
     ) -> None:
         if window_sec <= 0:
             raise ValueError(f"window_sec must be > 0, got {window_sec}")
         if max_agents <= 0:
             raise ValueError(f"max_agents must be > 0, got {max_agents}")
+        if max_cost_window_size <= 0:
+            raise ValueError(f"max_cost_window_size must be > 0, got {max_cost_window_size}")
         self._window_sec = window_sec
         self._max_agents = max_agents
+        self._max_cost_window_size = max_cost_window_size
         self._global_lock = threading.Lock()
         self._agents: dict[str, _AgentState] = {}
 
@@ -274,7 +289,11 @@ class OTelMetricsIngester:
             self._ingest_span_internal(span)
         except Exception:
             # Never propagate — metrics collection must not crash the caller
-            pass
+            logger.debug(
+                "OTelMetricsIngester: ingest_span failed for span %r",
+                span.get("name", "?"),
+                exc_info=True,
+            )
 
     def get_agent_metrics(self, agent_id: str) -> AgentMetrics:
         """Return a snapshot of metrics for the given agent.
@@ -331,9 +350,10 @@ class OTelMetricsIngester:
                     self._reset_state(state)
         else:
             with self._global_lock:
-                for state in self._agents.values():
-                    with state.lock:
-                        self._reset_state(state)
+                states = list(self._agents.values())
+            for state in states:
+                with state.lock:
+                    self._reset_state(state)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -387,7 +407,7 @@ class OTelMetricsIngester:
             if agent_id not in self._agents:
                 if len(self._agents) >= self._max_agents:
                     return None
-                self._agents[agent_id] = _AgentState(self._window_sec)
+                self._agents[agent_id] = _AgentState(self._window_sec, self._max_cost_window_size)
             return self._agents[agent_id]
 
     def _get_state_if_exists(self, agent_id: str) -> Optional[_AgentState]:

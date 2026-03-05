@@ -412,8 +412,8 @@ class MetricsDrivenPolicy:
                 return ingester.get_agent_metrics(agent_id)
             return ingester.get_metrics(agent_id)
         except Exception as exc:  # noqa: BLE001
-            logger.debug(
-                "MetricsDrivenPolicy: ingester.get_agent_metrics(%r) raised %s",
+            logger.warning(
+                "MetricsDrivenPolicy: ingester.get_agent_metrics(%r) failed: %s — rules skipped for this agent",
                 agent_id,
                 exc,
             )
@@ -424,7 +424,7 @@ class MetricsDrivenPolicy:
         "total_cost_usd": "total_cost",
         "total_tokens": "total_tokens",
         "avg_latency_ms": "avg_latency_ms",
-        "error_count": "_error_count",
+        "error_count": "error_count",
         "error_rate": "error_rate",
     }
 
@@ -442,6 +442,9 @@ class MetricsDrivenPolicy:
         try:
             if hasattr(metrics, attr_name):
                 value = getattr(metrics, attr_name)
+            elif hasattr(metrics, f"_{attr_name}"):
+                # Fallback: duck-typed objects may expose only the private field
+                value = getattr(metrics, f"_{attr_name}")
             elif isinstance(metrics, dict):
                 # Try both the mapped name and the original name
                 value = metrics.get(attr_name)

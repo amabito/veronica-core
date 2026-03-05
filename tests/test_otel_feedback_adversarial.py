@@ -1252,3 +1252,331 @@ class TestAdversarialFridayR4:
         assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "total_cost_usd") is None
         assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "avg_latency_ms") is None
         assert MetricsDrivenPolicy._extract_metric(InfMetrics(), "error_rate") is None
+
+
+# ---------------------------------------------------------------------------
+# Category 17: F.R.I.D.A.Y. R5 Audit Fixes
+# ---------------------------------------------------------------------------
+
+
+class TestR5AuditFixes:
+    """Adversarial regression tests for R5 audit fixes.
+
+    Attacker mindset: verify each fix holds under adversarial conditions.
+    """
+
+    # ------------------------------------------------------------------
+    # Fix 1: cost_window maxlen — deque must not grow unbounded
+    # ------------------------------------------------------------------
+
+    def test_r5_cost_window_maxlen_not_exceeded(self) -> None:
+        """Ingest 200K+ cost spans; cost_window deque must stay within maxlen."""
+        max_size = 1000
+        ing = OTelMetricsIngester(max_cost_window_size=max_size)
+        # Each span has a cost so it appends to cost_window
+        for i in range(200_000):
+            ing.ingest_span({
+                "agent_id": "bot",
+                "attributes": {"veronica.cost_usd": 0.001},
+            })
+        # Access internal state to verify bound
+        with ing._global_lock:
+            state = ing._agents.get("bot")
+        assert state is not None
+        with state.lock:
+            assert len(state.cost_window) <= max_size
+
+    def test_r5_cost_window_default_maxlen_bounded(self) -> None:
+        """Default max_cost_window_size must cap the deque (not unlimited)."""
+        ing = OTelMetricsIngester()
+        default_max = ing._max_cost_window_size
+        assert default_max > 0, "default maxlen must be positive"
+        # Ingest default_max + 100 spans with cost
+        for _ in range(default_max + 100):
+            ing.ingest_span({
+                "agent_id": "agent",
+                "attributes": {"veronica.cost_usd": 0.001},
+            })
+        with ing._global_lock:
+            state = ing._agents.get("agent")
+        assert state is not None
+        with state.lock:
+            assert len(state.cost_window) <= default_max
+
+    # ------------------------------------------------------------------
+    # Fix 2: reset() lock ordering — no deadlock under concurrent access
+    # ------------------------------------------------------------------
+
+    def test_r5_reset_lock_ordering_no_deadlock(self) -> None:
+        """Concurrent reset() + ingest_span() on 10 threads must not deadlock."""
+        ing = OTelMetricsIngester()
+        # Seed some agents
+        for i in range(5):
+            ing.ingest_span({"agent_id": f"agent-{i}"})
+
+        errors: list[Exception] = []
+        deadline = time.monotonic() + 5.0  # 5-second timeout
+
+        def ingest_loop() -> None:
+            try:
+                while time.monotonic() < deadline:
+                    for i in range(5):
+                        ing.ingest_span({
+                            "agent_id": f"agent-{i}",
+                            "attributes": {"veronica.cost_usd": 0.001},
+                        })
+            except Exception as exc:
+                errors.append(exc)
+
+        def reset_loop() -> None:
+            try:
+                while time.monotonic() < deadline:
+                    ing.reset()
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=ingest_loop) for _ in range(8)]
+        threads += [threading.Thread(target=reset_loop) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=6.0)
+
+        # All threads must have finished (no deadlock)
+        for t in threads:
+            assert not t.is_alive(), "thread still alive — possible deadlock"
+        assert not errors, f"exceptions in threads: {errors}"
+
+    def test_r5_reset_single_agent_concurrent_ingest(self) -> None:
+        """reset(agent_id) concurrent with ingest_span must not deadlock."""
+        ing = OTelMetricsIngester()
+        ing.ingest_span({"agent_id": "target"})
+
+        stop = threading.Event()
+        errors: list[Exception] = []
+
+        def ingest() -> None:
+            try:
+                while not stop.is_set():
+                    ing.ingest_span({
+                        "agent_id": "target",
+                        "attributes": {"veronica.cost_usd": 0.001},
+                    })
+            except Exception as exc:
+                errors.append(exc)
+
+        def resetter() -> None:
+            try:
+                for _ in range(500):
+                    ing.reset("target")
+            except Exception as exc:
+                errors.append(exc)
+
+        t_ingest = threading.Thread(target=ingest, daemon=True)
+        t_reset = threading.Thread(target=resetter)
+        t_ingest.start()
+        t_reset.start()
+        t_reset.join(timeout=5.0)
+        stop.set()
+        t_ingest.join(timeout=2.0)
+
+        assert not t_reset.is_alive(), "reset thread deadlocked"
+        assert not errors, f"exceptions: {errors}"
+
+    # ------------------------------------------------------------------
+    # Fix 3: ingest_span logging — malformed span triggers logger.debug
+    # ------------------------------------------------------------------
+
+    def test_r5_ingest_span_logging_on_internal_exception(self, caplog: Any) -> None:
+        """When _ingest_span_internal raises, logger.debug must be called."""
+        import logging
+        from unittest.mock import patch
+
+        ing = OTelMetricsIngester()
+
+        def _explode(span: dict) -> None:
+            raise RuntimeError("injected failure")
+
+        with patch.object(ing, "_ingest_span_internal", side_effect=_explode):
+            with caplog.at_level(logging.DEBUG, logger="veronica_core.otel_feedback.ingester"):
+                ing.ingest_span({"name": "bad-span", "agent_id": "x"})
+
+        # Must have logged a debug message (never re-raises)
+        debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+        assert debug_records, "expected logger.debug call on ingest_span failure"
+
+    def test_r5_ingest_span_never_raises_on_malformed(self) -> None:
+        """ingest_span must silently absorb all exceptions — never propagate."""
+        ing = OTelMetricsIngester()
+        # Various malformed inputs
+        malformed_inputs = [
+            None,
+            42,
+            "string",
+            [],
+            {"attributes": "not-a-dict"},
+            {"start_time": "NaN", "end_time": "NaN"},
+            {"attributes": {"llm.token.count.total": float("nan")}},
+        ]
+        for bad in malformed_inputs:
+            try:
+                ing.ingest_span(bad)  # type: ignore[arg-type]
+            except Exception as exc:
+                pytest.fail(f"ingest_span raised for {bad!r}: {exc}")
+
+    # ------------------------------------------------------------------
+    # Fix 4: _get_metrics fail warning — fail-open with logger.warning
+    # ------------------------------------------------------------------
+
+    def test_r5_get_metrics_fail_open_returns_none(self) -> None:
+        """_get_metrics must return None (not raise) when ingester explodes."""
+        class BrokenIngester:
+            def get_agent_metrics(self, agent_id: str) -> Any:
+                raise RuntimeError("ingester down")
+
+        result = MetricsDrivenPolicy._get_metrics(BrokenIngester(), "agent-x")
+        assert result is None
+
+    def test_r5_get_metrics_fail_open_emits_warning(self, caplog: Any) -> None:
+        """_get_metrics failure must emit logger.warning."""
+        import logging
+
+        class BrokenIngester:
+            def get_agent_metrics(self, agent_id: str) -> Any:
+                raise RuntimeError("simulated ingester failure")
+
+        with caplog.at_level(logging.WARNING, logger="veronica_core.policy.metrics_policy"):
+            MetricsDrivenPolicy._get_metrics(BrokenIngester(), "agent-y")
+
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warning_records, "expected logger.warning on _get_metrics failure"
+        assert "agent-y" in warning_records[0].message or "agent-y" in str(warning_records[0].args)
+
+    def test_r5_get_metrics_fail_open_policy_allows(self) -> None:
+        """check() must allow (fail-open) when ingester raises on get_agent_metrics."""
+        class BrokenIngester:
+            def get_agent_metrics(self, agent_id: str) -> Any:
+                raise RuntimeError("ingester down")
+
+        policy = MetricsDrivenPolicy(
+            rules=[MetricRule("total_cost_usd", "gt", 0.0, "halt")],
+            ingester=BrokenIngester(),
+            agent_id="agent-z",
+        )
+        decision = policy.check(_ctx("agent-z"))
+        assert decision.allowed, "policy must fail-open when ingester raises"
+
+    # ------------------------------------------------------------------
+    # Fix 5: error_count public property on AgentMetrics
+    # ------------------------------------------------------------------
+
+    def test_r5_error_count_property_returns_internal_value(self) -> None:
+        """AgentMetrics.error_count property must return _error_count field."""
+        from veronica_core.otel_feedback.ingester import AgentMetrics
+
+        m = AgentMetrics(_error_count=5)
+        assert m.error_count == 5
+
+    def test_r5_error_count_property_zero_by_default(self) -> None:
+        """AgentMetrics.error_count must default to 0."""
+        from veronica_core.otel_feedback.ingester import AgentMetrics
+
+        m = AgentMetrics()
+        assert m.error_count == 0
+
+    def test_r5_error_count_tracks_error_spans(self) -> None:
+        """error_count on snapshot must reflect actual error spans ingested."""
+        ing = OTelMetricsIngester()
+        # 3 error spans, 2 normal
+        for _ in range(3):
+            ing.ingest_span({"agent_id": "bot", "status": "ERROR"})
+        for _ in range(2):
+            ing.ingest_span({"agent_id": "bot"})
+        m = ing.get_agent_metrics("bot")
+        assert m.error_count == 3
+        assert m.call_count == 5
+
+    # ------------------------------------------------------------------
+    # Fix 6-8: _make_metric_rule null/empty validation
+    # ------------------------------------------------------------------
+
+    def test_r5_metric_null_raises_type_error(self) -> None:
+        """metric=None in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="metric"):
+            factory({"rules": [{"metric": None, "operator": "gt", "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_metric_empty_string_raises_type_error(self) -> None:
+        """metric='' in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="metric"):
+            factory({"rules": [{"metric": "", "operator": "gt", "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_metric_zero_raises_type_error(self) -> None:
+        """metric=0 (falsy non-string) in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="metric"):
+            factory({"rules": [{"metric": 0, "operator": "gt", "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_operator_null_raises_type_error(self) -> None:
+        """operator=None in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="operator"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": None, "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_operator_empty_string_raises_type_error(self) -> None:
+        """operator='' in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="operator"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": "", "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_operator_zero_raises_type_error(self) -> None:
+        """operator=0 (falsy non-string) in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="operator"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": 0, "action": "halt", "threshold": 1.0}]})
+
+    def test_r5_action_null_raises_type_error(self) -> None:
+        """action=None in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="action"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": None, "threshold": 1.0}]})
+
+    def test_r5_action_empty_string_raises_type_error(self) -> None:
+        """action='' in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="action"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": "", "threshold": 1.0}]})
+
+    def test_r5_action_zero_raises_type_error(self) -> None:
+        """action=0 (falsy non-string) in rule dict must raise TypeError."""
+        from veronica_core.policy.registry import PolicyRegistry
+
+        registry = PolicyRegistry()
+        factory = registry.get_rule_type("metric_rule")
+        with pytest.raises(TypeError, match="action"):
+            factory({"rules": [{"metric": "total_cost_usd", "operator": "gt", "action": 0, "threshold": 1.0}]})

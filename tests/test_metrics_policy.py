@@ -553,8 +553,8 @@ class TestPolicyRegistryMetricRule:
         assert len(policy.rules) == 1
         assert policy.rules[0].threshold == 0.0
 
-    def test_metric_rule_factory_null_metric_uses_default(self) -> None:
-        """YAML/JSON null metric falls back to 'total_cost_usd', not 'None'."""
+    def test_metric_rule_factory_null_metric_raises(self) -> None:
+        """YAML/JSON null metric must raise TypeError, not silently default."""
         from veronica_core.policy.registry import PolicyRegistry
 
         registry = PolicyRegistry()
@@ -569,9 +569,8 @@ class TestPolicyRegistryMetricRule:
                 }
             ]
         }
-        policy = factory(params)
-        assert len(policy.rules) == 1
-        assert policy.rules[0].metric == "total_cost_usd"
+        with pytest.raises(TypeError, match="metric.*non-empty string"):
+            factory(params)
 
     def test_metric_rule_factory_null_label_uses_empty_string(self) -> None:
         """YAML/JSON null label must not produce the string 'None'."""

@@ -100,9 +100,21 @@ def _make_metric_rule(params: dict[str, Any]) -> Any:
             raise TypeError(
                 f"Each rule must be a dict, got {type(r).__name__}"
             )
-        # Explicit None-guards: YAML/JSON null maps to Python None even when
-        # the key is present. Fall back to intended defaults rather than
-        # propagating TypeError from float(None).
+        raw_metric = r.get("metric")
+        if not raw_metric or not isinstance(raw_metric, str):
+            raise TypeError(
+                f"Rule 'metric' must be a non-empty string, got {raw_metric!r}"
+            )
+        raw_operator = r.get("operator")
+        if not raw_operator or not isinstance(raw_operator, str):
+            raise TypeError(
+                f"Rule 'operator' must be a non-empty string, got {raw_operator!r}"
+            )
+        raw_action = r.get("action")
+        if not raw_action or not isinstance(raw_action, str):
+            raise TypeError(
+                f"Rule 'action' must be a non-empty string, got {raw_action!r}"
+            )
         raw_threshold = r.get("threshold")
         threshold_val = float(raw_threshold) if raw_threshold is not None else 0.0
         raw_label = r.get("label")
@@ -111,10 +123,10 @@ def _make_metric_rule(params: dict[str, Any]) -> Any:
         agent_id_val = str(raw_agent_id) if raw_agent_id is not None else None
         rules.append(
             MetricRule(
-                metric=str(r.get("metric") or "total_cost_usd"),
-                operator=str(r.get("operator") or "gt"),
+                metric=raw_metric,
+                operator=raw_operator,
                 threshold=threshold_val,
-                action=str(r.get("action") or "warn"),
+                action=raw_action,
                 agent_id=agent_id_val,
                 label=label_val,
             )
