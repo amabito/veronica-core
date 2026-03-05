@@ -1,6 +1,11 @@
 """VERONICA Exit Handler - Graceful shutdown with state preservation."""
 
 from __future__ import annotations
+
+__all__ = [
+    "ExitTier",
+    "VeronicaExit",
+]
 import signal
 import atexit
 import logging
@@ -61,7 +66,16 @@ class VeronicaExit:
         )
 
     def _signal_handler(self, signum: int, frame) -> None:
-        """Handle SIGTERM/SIGINT."""
+        """Handle SIGTERM/SIGINT.
+
+        M3 NOTE: This handler does NOT call sys.exit(). request_exit() saves
+        state and sets exit_requested=True, but does not terminate the process.
+        The main loop must poll is_exit_requested() and exit cleanly.
+        This design allows the main loop to finish in-progress operations before
+        terminating, rather than being interrupted at an arbitrary point.
+        If immediate termination is needed, use ExitTier.FORCE and call
+        sys.exit() in the main loop upon detecting is_exit_requested().
+        """
         signal_name = signal.Signals(signum).name
         logger.warning(f"[VERONICA_EXIT] Signal received: {signal_name}")
 
@@ -79,7 +93,16 @@ class VeronicaExit:
             self.request_exit(ExitTier.EMERGENCY, "atexit fallback")
 
     def request_exit(self, tier: ExitTier, reason: str) -> None:
-        """Request exit at specified tier. Thread-safe against duplicate signals."""
+        """Request exit at specified tier. Thread-safe against duplicate signals.
+
+        M3 NOTE: This method does NOT call sys.exit(). After saving state and
+        setting exit_requested=True, it returns control to the caller. The main
+        application loop is responsible for checking is_exit_requested() and
+        performing a clean shutdown. This is intentional: it allows the main loop
+        to complete in-flight operations before exiting. If the process must
+        terminate immediately (e.g. for FORCE tier), the caller should call
+        sys.exit() after this method returns.
+        """
         with self._exit_lock:
             if self.exit_requested:
                 logger.warning(

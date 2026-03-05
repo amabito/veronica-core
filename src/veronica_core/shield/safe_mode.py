@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from veronica_core.shield.types import Decision, ToolCallContext
 
+__all__ = ["SafeModeHook"]
+
 
 class SafeModeHook:
     """Emergency kill-switch that halts tool calls and retries."""
@@ -23,6 +25,18 @@ class SafeModeHook:
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    def disable(self) -> None:
+        """Disable safe mode programmatically.
+
+        L5: Provides a proper API for disabling safe mode without accessing
+        the private ``_enabled`` attribute directly.
+        """
+        self._enabled = False
+
+    def enable(self) -> None:
+        """Re-enable safe mode programmatically."""
+        self._enabled = True
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
         """Block tool dispatch when enabled and a tool_name is present."""

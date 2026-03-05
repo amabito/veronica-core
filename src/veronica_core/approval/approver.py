@@ -124,7 +124,14 @@ class NonceRegistry:
             return True
 
     def _evict_expired(self, now: float) -> None:
-        """Remove nonces older than the token TTL (caller must hold lock)."""
+        """Remove nonces older than the token TTL (caller must hold lock).
+
+        M-2: _order is always insertion-ordered (deque guarantees FIFO).
+        Timestamps are monotonically non-decreasing because nonces are only
+        ever appended in consume() which is called with the current time.
+        Therefore iterating from the left (oldest) and breaking on the first
+        non-expired entry is correct and safe.  Do NOT insert out of order.
+        """
         cutoff = now - _NONCE_TTL_SECONDS
         while self._order:
             oldest = self._order[0]

@@ -121,6 +121,12 @@ class VeronicaLangGraphCallback:
     mirrors the VeronicaCallbackHandler interface and can be passed directly
     to LangGraph's ``config`` parameter as a callback.
 
+    Note (L-1): This class does not inherit from ``BaseCallbackHandler`` to avoid
+    a hard dependency on langchain/langchain-core. Duck-typing works for most
+    LangGraph versions. If your LangGraph version requires
+    ``isinstance(cb, BaseCallbackHandler)``, install ``langchain-core`` and subclass
+    this handler: ``class MyCallback(VeronicaLangGraphCallback, BaseCallbackHandler): ...``.
+
     On each LLM invocation within a LangGraph node:
     - **Pre-call** (``on_llm_start``): policy check via AIContainer.check().
       Raises VeronicaHalt if any policy denies.

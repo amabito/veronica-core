@@ -1,8 +1,13 @@
-"""Tamper-evident audit log for VERONICA Security Containment Layer.
+"""Audit log for VERONICA Security Containment Layer.
 
 Each log entry is a JSON object with a SHA256 hash chained from the
-previous entry. Verifying the hash chain detects any modification,
-insertion, or deletion of log records.
+previous entry.
+
+Security note: The hash chain uses plain SHA-256 without an HMAC key.
+It proves *internal consistency* only: accidental corruption (disk errors,
+truncated writes) is detectable, but it does NOT prove authenticity.
+An adversary with write access to the log file can compute valid hashes for
+forged entries.  Do not rely on this chain to detect deliberate tampering.
 """
 
 from __future__ import annotations
@@ -299,22 +304,59 @@ class AuditLog:
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def _load_last_hash(self) -> str:
-        """Read the last hash from an existing log, or return the genesis hash."""
+        """Read the last hash from an existing log, or return the genesis hash.
+
+        Uses backward chunk scanning to avoid O(n) forward scan for large logs.
+        Reads at most a few chunks from the end of the file.
+        """
         if not self._path.exists():
             return _GENESIS_HASH
-        last_hash = _GENESIS_HASH
-        with self._path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    last_hash = entry.get("hash", last_hash)
-                except json.JSONDecodeError as exc:
-                    logger.warning(
-                        "audit_log: corrupted entry in %s — skipping line: %s",
-                        self._path,
-                        exc,
-                    )
-        return last_hash
+
+        _CHUNK = 8192  # bytes per read when scanning backward
+        try:
+            with open(self._path, "rb") as f:
+                f.seek(0, 2)
+                file_size = f.tell()
+                if file_size == 0:
+                    return _GENESIS_HASH
+                remainder = b""
+                pos = file_size
+
+                while pos > 0:
+                    read_size = min(_CHUNK, pos)
+                    pos -= read_size
+                    f.seek(pos)
+                    chunk = f.read(read_size) + remainder
+                    lines = chunk.split(b"\n")
+                    remainder = lines[0]
+                    # Scan from the end: find the last non-empty line with a "hash" key.
+                    for raw in reversed(lines[1:]):
+                        raw = raw.strip()
+                        if not raw:
+                            continue
+                        try:
+                            entry = json.loads(raw)
+                            h = entry.get("hash")
+                            if h:
+                                return str(h)
+                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                            logger.warning(
+                                "audit_log: corrupted entry in %s — skipping line: %s",
+                                self._path,
+                                exc,
+                            )
+
+                # Check leftover (very first line of the file).
+                if remainder.strip():
+                    try:
+                        entry = json.loads(remainder)
+                        h = entry.get("hash")
+                        if h:
+                            return str(h)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+
+        except FileNotFoundError:
+            pass
+
+        return _GENESIS_HASH

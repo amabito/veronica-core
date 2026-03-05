@@ -206,7 +206,12 @@ class CircuitBreakerCapability:
                 )
                 raise
 
-            # Record token usage after successful reply
+            # Record token usage after successful reply.
+            # Approximation: len(str(reply)) // 4 estimates token count using
+            # the ~4-chars-per-token heuristic.  This is known to underestimate
+            # for multi-byte content (CJK, emoji: 2-4x error) and to overestimate
+            # for structured JSON (str() overhead).  Acceptable for budget
+            # tracking but not for billing-grade accuracy.
             if reply is not None and cap._token_budget_hook is not None:
                 cap._token_budget_hook.record_usage(output_tokens=len(str(reply)) // 4)
 

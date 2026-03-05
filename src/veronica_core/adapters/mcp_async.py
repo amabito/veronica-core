@@ -308,7 +308,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Compute variable per-token cost.
         actual_cost = self._compute_actual_cost(tool_name, result_value)
 
-        # Phase 3: commit the reservation.
+        # Phase 3: commit the reservation or record cost on legacy path.
         if _reservation_id is not None:
             try:
                 budget_backend.commit(_reservation_id)
@@ -322,7 +322,18 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                     _reservation_id,
                     _commit_exc,
                 )
-        # (legacy path: cost already added via _budget_probe no-op in wrap_tool_call)
+        else:
+            # Legacy path: _budget_probe was a no-op, so actual cost was never
+            # recorded against the budget.  Charge it now via wrap_tool_call with
+            # the actual cost so that the ExecutionContext tracks the spend.
+            if actual_cost > 0.0:
+                _actual_cost_hint = actual_cost
+
+                def _record_actual_cost() -> None:
+                    pass
+
+                opts = self._build_wrap_options(tool_name, _actual_cost_hint)
+                self._ctx.wrap_tool_call(fn=_record_actual_cost, options=opts)
 
         # Record success in CB and stats.
         self._record_circuit_breaker_success()

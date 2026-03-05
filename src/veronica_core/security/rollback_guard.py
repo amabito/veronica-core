@@ -42,6 +42,7 @@ class RollbackGuard:
         self,
         policy_version: int,
         min_engine_version: str | None = None,
+        policy_path: str = "policies/default.yaml",
     ) -> None:
         """Validate *policy_version* against rollback and engine constraints.
 
@@ -83,6 +84,6 @@ class RollbackGuard:
         # Accept the policy version
         if self._audit_log is not None:
             self._audit_log.log_policy_version_accepted(
-                policy_version, "policies/default.yaml"
+                policy_version, policy_path  # M-6: use actual path, not hardcoded default
             )
             self._audit_log.write_policy_checkpoint(policy_version)

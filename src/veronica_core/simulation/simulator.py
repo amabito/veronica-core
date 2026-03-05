@@ -116,7 +116,11 @@ class PolicySimulator:
                 if result != Decision.ALLOW:
                     return result
 
-            # Budget check for all entries with cost
+            # Budget check for all entries with positive cost.
+            # Intentional: zero-cost entries (cached responses, no-cost tools)
+            # skip before_charge.  Pipeline hooks that track call counts rather
+            # than cost will not be invoked for these entries during simulation.
+            # NaN entries are safe: NaN > 0 evaluates to False, so they are skipped.
             if entry.cost_usd > 0:
                 result = self._pipeline.before_charge(ctx, entry.cost_usd)
                 if result != Decision.ALLOW:

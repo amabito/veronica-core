@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+# L-2: Safe pattern for agent_id values.  Allows letters, digits, and a small
+# set of separator/namespace characters.  Blocks control characters, newlines,
+# and other characters that could cause issues in log output.
+_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-@]{1,256}$")
 
 
 class TrustLevel(str, Enum):
@@ -40,6 +46,12 @@ class AgentIdentity:
             )
         if not self.agent_id:
             raise ValueError("AgentIdentity.agent_id must not be empty")
+        # L-2: reject control characters, newlines, and other unsafe chars.
+        if not _AGENT_ID_RE.match(self.agent_id):
+            raise ValueError(
+                f"AgentIdentity.agent_id={self.agent_id!r} contains invalid characters. "
+                "Allowed: A-Za-z0-9_.:-@ (1-256 chars)."
+            )
 
 
 @dataclass(frozen=True)

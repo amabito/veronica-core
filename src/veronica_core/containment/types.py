@@ -3,6 +3,12 @@
 Contains all dataclasses and simple types used by
 :class:`~veronica_core.containment.execution_context.ExecutionContext`.
 Extracted to keep `execution_context.py` focused on the context logic.
+
+Note: ``ExecutionContext`` itself is defined in
+``veronica_core.containment.execution_context``, not here.
+This module contains only the supporting data types (``CancellationToken``,
+``ChainMetadata``, ``ContextSnapshot``, ``ExecutionConfig``, ``NodeRecord``,
+``WrapOptions``).
 """
 
 from __future__ import annotations

@@ -13,9 +13,21 @@ into a unified evaluation pipeline.
 
 from __future__ import annotations
 
+__all__ = [
+    "PolicyContext",
+    "PolicyDecision",
+    "RuntimePolicy",
+    "PolicyPipeline",
+    "allow",
+    "deny",
+    "model_downgrade",
+    "rate_limit_decision",
+]
+
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Protocol, runtime_checkable
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -103,6 +115,10 @@ class PolicyPipeline:
 
     No override mechanism -- if any policy denies, the operation is denied.
 
+    Thread-safe: add() and evaluate() are protected by an internal lock.
+    evaluate() copies the policy list before iteration to avoid holding the
+    lock during policy execution (prevents deadlock if a policy calls add()).
+
     Example:
         pipeline = PolicyPipeline([
             BudgetEnforcer(limit_usd=10.0),
@@ -115,6 +131,8 @@ class PolicyPipeline:
 
     def __init__(self, policies: Optional[List[RuntimePolicy]] = None) -> None:
         self._policies: List[RuntimePolicy] = list(policies or [])
+        # H6: Lock protecting _policies list for thread-safe add() and evaluate().
+        self._lock = threading.Lock()
 
     def add(self, policy: RuntimePolicy) -> None:
         """Add a policy to the pipeline.
@@ -122,7 +140,8 @@ class PolicyPipeline:
         Args:
             policy: RuntimePolicy instance to append
         """
-        self._policies.append(policy)
+        with self._lock:
+            self._policies.append(policy)
 
     def evaluate(self, context: PolicyContext) -> PolicyDecision:
         """Evaluate all policies. First denial wins.
@@ -133,7 +152,12 @@ class PolicyPipeline:
         Returns:
             PolicyDecision -- denied by first failing policy, or allowed if all pass
         """
-        for policy in self._policies:
+        # H6: Copy the list under the lock to avoid RuntimeError if add() is called
+        # concurrently. Policy execution happens outside the lock to prevent deadlock
+        # in case a policy's check() method calls pipeline.add().
+        with self._lock:
+            policies = list(self._policies)
+        for policy in policies:
             decision = policy.check(context)
             if not decision.allowed:
                 logger.info(
@@ -151,7 +175,8 @@ class PolicyPipeline:
     @property
     def policies(self) -> List[RuntimePolicy]:
         """List of policies in evaluation order (copy)."""
-        return list(self._policies)
+        with self._lock:
+            return list(self._policies)
 
     def __len__(self) -> int:
         return len(self._policies)

@@ -17,6 +17,8 @@ from collections import deque
 
 from veronica_core.shield.types import Decision, ToolCallContext
 
+__all__ = ["BudgetWindowHook"]
+
 
 class BudgetWindowHook:
     """Rolling time-window call-count limiter with optional DEGRADE zone.
@@ -40,7 +42,14 @@ class BudgetWindowHook:
         self._max_calls = max_calls
         self._window_seconds = window_seconds
         self._degrade_threshold = degrade_threshold
-        self._timestamps: deque[float] = deque(maxlen=max_calls * 2)
+        # H3: Use a generous maxlen (max_calls * 10) instead of the old
+        # max_calls * 2, which was too small for burst traffic — deque eviction
+        # silently dropped timestamps and undercounted active calls.  We keep a
+        # finite cap to bound memory under sustained overload (e.g. long windows
+        # with very high call rates).  Timestamps are also pruned explicitly in
+        # before_llm_call() as entries age past the window cutoff.
+        self._max_deque_size = max(max_calls * 10, 1000)
+        self._timestamps: deque[float] = deque(maxlen=self._max_deque_size)
         self._lock = threading.Lock()
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
@@ -56,6 +65,9 @@ class BudgetWindowHook:
             count = len(self._timestamps)
 
             if count >= self._max_calls:
+                # L4: Timestamp is appended even on HALT to keep the window full
+                # during overload, ensuring subsequent calls also see the correct
+                # count without needing to re-prune. This is intentional behavior.
                 self._timestamps.append(now)
                 return Decision.HALT
 

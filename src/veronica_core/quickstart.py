@@ -236,7 +236,7 @@ def _install_on_halt_dispatch(
 
     def _dispatching_wrap(*args: Any, **kwargs: Any) -> Any:
         result = original_wrap(*args, **kwargs)
-        if isinstance(result, Decision) and result.name == "HALT":
+        if isinstance(result, Decision) and result == Decision.HALT:
             if mode == "raise":
                 raise VeronicaHalt(
                     f"HALT: {result.reason}" if hasattr(result, "reason") else "HALT"

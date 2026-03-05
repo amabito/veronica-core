@@ -144,4 +144,9 @@ class TrustEscalationTracker:
         if 0 <= next_idx < len(_PROMOTION_ORDER) and next_idx <= allow_idx:
             record.current_trust = _PROMOTION_ORDER[next_idx]
             record.success_count = 0
+            # M-1: failure_count is intentionally NOT reset on promotion.
+            # It accumulates over the agent's lifetime so that get_stats()
+            # reflects the total historical failure rate, not just the
+            # post-promotion period.  Reset it here if per-level accuracy
+            # is preferred.
             record.promoted_at = time.monotonic()

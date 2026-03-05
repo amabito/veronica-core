@@ -1,6 +1,8 @@
 """VERONICA Budget Enforcement - Chain-level cost ceiling for LLM calls."""
 
 from __future__ import annotations
+
+__all__ = ["BudgetEnforcer"]
 from dataclasses import dataclass, field
 from typing import Dict
 import logging
@@ -108,7 +110,13 @@ class BudgetEnforcer:
 
     @property
     def utilization(self) -> float:
-        """Budget utilization as a fraction (0.0 to 1.0+)."""
+        """Budget utilization as a fraction (0.0 to 1.0+).
+
+        L1: Returns ``float('inf')`` when ``limit_usd <= 0`` (zero or negative
+        limit means any spending is infinite utilization). Callers that perform
+        arithmetic on this value should guard with ``math.isfinite(utilization)``
+        before using the result in comparisons or displays.
+        """
         with self._lock:
             if self.limit_usd <= 0:
                 return float("inf")

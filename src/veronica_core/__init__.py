@@ -153,6 +153,7 @@ from veronica_core.otel import (
     disable_otel,
     is_otel_enabled,
     enable_otel_with_provider,
+    enable_otel_with_tracer,
     OTelExecutionGraphObserver,
 )
 
@@ -207,6 +208,7 @@ from veronica_core.quickstart import init, shutdown, get_context
 
 # Protocol definitions (v1.6.0 -- integration contracts for external frameworks)
 from veronica_core.protocols import (
+    ExtendedAdapterProtocol,
     FrameworkAdapterProtocol,
     PlannerProtocol,
     ExecutionGraphObserver,
@@ -246,7 +248,12 @@ from veronica_core.a2a import (
     identity_from_a2a_card,
 )
 
+# Security capability types (v3.0.0 re-export for backward compat)
+from veronica_core.security.capabilities import Capability
+
 __all__ = [
+    # Module metadata
+    "__version__",
     # Core
     "VeronicaState",
     "StateTransition",
@@ -363,6 +370,7 @@ __all__ = [
     "disable_otel",
     "is_otel_enabled",
     "enable_otel_with_provider",
+    "enable_otel_with_tracer",
     "OTelExecutionGraphObserver",
     # Degradation Ladder (v0.10.0)
     "DegradationLadder",
@@ -398,6 +406,7 @@ __all__ = [
     "shutdown",
     "get_context",
     # Protocol definitions (v1.6.0)
+    "ExtendedAdapterProtocol",
     "FrameworkAdapterProtocol",
     "PlannerProtocol",
     "ExecutionGraphObserver",
@@ -424,4 +433,6 @@ __all__ = [
     "TrustBasedPolicyRouter",
     "TrustEscalationTracker",
     "identity_from_a2a_card",
+    # Security capability types (v3.0.0)
+    "Capability",
 ]

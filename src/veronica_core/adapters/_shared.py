@@ -207,13 +207,24 @@ class _BudgetProxy:
         return self.spent_usd > self._limit_usd
 
     def spend(self, amount_usd: float) -> bool:
-        """Add cost to the ExecutionContext and return True if within budget."""
+        """Add cost to the ExecutionContext and return True if within budget.
+
+        Requires both _add_fn and _get_fn to be present to confirm budget limit.
+        If _add_fn is set but _get_fn is None (partial wiring), returns False
+        (fail-safe: deny rather than silently bypass the budget check).
+        """
         try:
             if self._add_fn is not None:
+                if self._get_fn is None:
+                    # Partial wiring: can add cost but cannot verify limit.
+                    # Fail closed to prevent silent budget bypass.
+                    logger.warning(
+                        "[VERONICA] _BudgetProxy.spend(): _add_fn present but _get_fn is None "
+                        "(partial ExecutionContext wiring); failing closed (returning False)",
+                    )
+                    return False
                 self._add_fn(amount_usd)
-                if self._get_fn is not None:
-                    return float(self._get_fn()) <= self._limit_usd
-                return True
+                return float(self._get_fn()) <= self._limit_usd
             if self._lock is not None:
                 with self._lock:
                     self._ctx._cost_usd_accumulated += amount_usd

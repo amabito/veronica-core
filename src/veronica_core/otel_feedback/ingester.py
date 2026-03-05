@@ -254,7 +254,7 @@ class OTelMetricsIngester:
             },
         })
         metrics = ingester.get_agent_metrics("assistant")
-        print(metrics.total_cost)  # 0.003
+        # metrics.total_cost == 0.003
     """
 
     _DEFAULT_MAX_AGENTS = 10_000

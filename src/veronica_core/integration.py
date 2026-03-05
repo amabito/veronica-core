@@ -352,4 +352,28 @@ def get_veronica_integration(
                     cooldown_seconds=cooldown_seconds,
                     auto_save_interval=auto_save_interval,
                 )
+    else:
+        # Singleton already exists — check for parameter drift and warn the caller
+        # so they know their config was silently ignored.
+        existing = _veronica_integration
+        existing_cf = existing.state.cooldown_fails
+        existing_cs = existing.state.cooldown_seconds
+        existing_asi = existing.auto_save_interval
+        if (
+            cooldown_fails != existing_cf
+            or cooldown_seconds != existing_cs
+            or auto_save_interval != existing_asi
+        ):
+            logger.warning(
+                "[VERONICA_INTEGRATION] get_veronica_integration() called with different "
+                "parameters than the existing singleton — ignoring new parameters. "
+                "Existing: cooldown_fails=%d, cooldown_seconds=%d, auto_save_interval=%d. "
+                "Requested: cooldown_fails=%d, cooldown_seconds=%d, auto_save_interval=%d.",
+                existing_cf,
+                existing_cs,
+                existing_asi,
+                cooldown_fails,
+                cooldown_seconds,
+                auto_save_interval,
+            )
     return _veronica_integration

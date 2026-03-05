@@ -7,6 +7,15 @@ is exceeded. After a recovery timeout, allows a single test request
 
 from __future__ import annotations
 
+__all__ = [
+    "CircuitState",
+    "CircuitBreaker",
+    "FailurePredicate",
+    "ignore_exception_types",
+    "count_exception_types",
+    "ignore_status_codes",
+]
+
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -174,6 +183,13 @@ class CircuitBreaker:
 
         When *error* is ``None``, the failure always counts regardless of the
         predicate (backward compatible with callers that have no exception).
+
+        M4 WARNING: ``failure_predicate`` is evaluated OUTSIDE ``self._lock``.
+        The predicate MUST NOT call any method on this CircuitBreaker instance
+        (e.g. ``check()``, ``record_success()``, ``state``) or access ``self._lock``
+        in any way — doing so will deadlock because ``record_failure()`` re-acquires
+        ``self._lock`` after predicate evaluation. The predicate should only inspect
+        the exception itself (its type, message, or attributes).
 
         Args:
             error: The exception that caused the failure.  When ``None``,

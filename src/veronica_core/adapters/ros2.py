@@ -149,6 +149,14 @@ class SafetyMonitor:
         an exception matching *error_type*, it is recorded as a fault
         and suppressed.  Other exceptions propagate normally.
 
+        Warning:
+            Do NOT pass ``error_type=BaseException`` unless you have a very specific
+            reason to suppress ``KeyboardInterrupt`` and ``SystemExit``.  Doing so
+            prevents the process from responding to Ctrl-C or system shutdown signals.
+            The default ``error_type=Exception`` is safe and appropriate for most
+            sensor/actuator faults.  If you pass ``error_type=BaseException``, a
+            warning is emitted to alert operators of the risky configuration.
+
         Example::
 
             with self.safety.guard(error_type=SensorFault) as mode:
@@ -156,6 +164,16 @@ class SafetyMonitor:
                     return
                 process(msg, speed_scale=mode.speed_scale)
         """
+        if error_type is BaseException:
+            # Log a prominent warning. We do not raise ValueError here because
+            # there are explicit ROS2 use cases where catching all BaseException
+            # is intentional (e.g., embedded shutdown hooks). Callers who choose
+            # BaseException accept the responsibility.
+            logger.warning(
+                "[VERONICA_ROS2] guard(error_type=BaseException) will suppress "
+                "KeyboardInterrupt and SystemExit -- this is dangerous. "
+                "Use error_type=Exception unless you have a specific reason."
+            )
         mode = self.current_mode
         try:
             yield mode

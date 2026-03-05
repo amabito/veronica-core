@@ -1,6 +1,12 @@
 """VERONICA Persistence Backend Interface - Pluggable storage."""
 
 from __future__ import annotations
+
+__all__ = [
+    "PersistenceBackend",
+    "JSONBackend",
+    "MemoryBackend",
+]
 from abc import ABC, abstractmethod
 from typing import Optional, Dict
 import json
@@ -80,7 +86,12 @@ class JSONBackend(PersistenceBackend):
             return False
 
     def load(self) -> Optional[Dict]:
-        """Load state from JSON file."""
+        """Load state from JSON file.
+
+        M2: Performs basic schema validation after loading to guard against
+        corrupted or tampered files. Returns None (and logs an error) if the
+        loaded data is not a dict or lacks the expected top-level keys.
+        """
         if not self.path.exists():
             logger.info(f"[JSONBackend] No state file at {self.path}")
             return None
@@ -88,12 +99,28 @@ class JSONBackend(PersistenceBackend):
         try:
             with open(self.path, "r") as f:
                 data = json.load(f)
-            logger.info(f"[JSONBackend] State loaded from {self.path}")
-            return data
-
         except Exception as e:
             logger.error(f"[JSONBackend] Load failed: {e}")
             return None
+
+        # M2: Basic schema check — data must be a dict with expected keys.
+        if not isinstance(data, dict):
+            logger.error(
+                "[JSONBackend] Load failed: expected a JSON object, got %s",
+                type(data).__name__,
+            )
+            return None
+        expected_keys = {"current_state", "fail_counts", "cooldowns"}
+        missing = expected_keys - data.keys()
+        if missing:
+            logger.warning(
+                "[JSONBackend] Loaded state missing expected keys: %s. "
+                "This may be an older format or a corrupted file.",
+                sorted(missing),
+            )
+
+        logger.info(f"[JSONBackend] State loaded from {self.path}")
+        return data
 
     def backup(self) -> bool:
         """Create timestamped backup of current state file."""

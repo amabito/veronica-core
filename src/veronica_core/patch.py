@@ -20,6 +20,7 @@ import threading
 from typing import Any, Callable, Dict
 
 from veronica_core.inject import get_active_container, is_guard_active
+from veronica_core.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
 
@@ -32,27 +33,47 @@ _patches_lock = threading.Lock()
 
 
 def _estimate_cost_openai(response: Any) -> float:
-    """Rough token-cost estimate from an OpenAI response. Returns 0.0 if unavailable."""
+    """Token-cost estimate from an OpenAI response using pricing.py. Returns 0.0 if unavailable."""
     try:
         usage = getattr(response, "usage", None)
         if usage is None:
             return 0.0
-        total = getattr(usage, "total_tokens", 0)
-        return total * 0.000002  # conservative $0.002 / 1K tokens
+        model = getattr(response, "model", "") or ""
+        inp = getattr(usage, "prompt_tokens", None)
+        out = getattr(usage, "completion_tokens", None)
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            cost = estimate_cost_usd(model, int(inp), int(out))
+            if cost > 0.0:
+                return cost
+        # Fallback: use total_tokens with conservative $0.002/1K rate
+        total = getattr(usage, "total_tokens", 0) or 0
+        if isinstance(total, (int, float)):
+            return int(total) * 0.000002
+        return 0.0
     except Exception as exc:
         logger.warning("Cost estimation failed (OpenAI): %s", exc)
         return 0.0
 
 
 def _estimate_cost_anthropic(response: Any) -> float:
-    """Rough token-cost estimate from an Anthropic response. Returns 0.0 if unavailable."""
+    """Token-cost estimate from an Anthropic response using pricing.py. Returns 0.0 if unavailable."""
     try:
         usage = getattr(response, "usage", None)
         if usage is None:
             return 0.0
-        inp = getattr(usage, "input_tokens", 0)
-        out = getattr(usage, "output_tokens", 0)
-        return (inp + out) * 0.000003  # conservative $0.003 / 1K tokens
+        model = getattr(response, "model", "") or ""
+        inp = getattr(usage, "input_tokens", None)
+        out = getattr(usage, "output_tokens", None)
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            cost = estimate_cost_usd(model, int(inp), int(out))
+            if cost > 0.0:
+                return cost
+        # Fallback: use sum with conservative $0.003/1K rate
+        raw_inp = getattr(usage, "input_tokens", 0) or 0
+        raw_out = getattr(usage, "output_tokens", 0) or 0
+        if isinstance(raw_inp, (int, float)) and isinstance(raw_out, (int, float)):
+            return (int(raw_inp) + int(raw_out)) * 0.000003
+        return 0.0
     except Exception as exc:
         logger.warning("Cost estimation failed (Anthropic): %s", exc)
         return 0.0

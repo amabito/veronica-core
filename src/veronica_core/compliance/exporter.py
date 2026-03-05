@@ -120,6 +120,15 @@ class ComplianceExporter:
         # Flush on interpreter exit
         atexit.register(self._atexit_flush)
 
+    def __repr__(self) -> str:
+        # M-3: Never expose the API key in repr/str to prevent accidental
+        # exposure in debug dumps, logs, or pickle output.
+        key_hint = f"{self._api_key[:4]}..." if len(self._api_key) > 4 else "[REDACTED]"
+        return (
+            f"ComplianceExporter(endpoint={self._endpoint!r}, "
+            f"api_key={key_hint!r}, batch_size={self._batch_size})"
+        )
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

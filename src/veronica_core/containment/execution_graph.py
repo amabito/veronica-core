@@ -473,7 +473,9 @@ class ExecutionGraph:
         if cost_usd <= 0:
             return
         cost_rate = cost_usd / elapsed_ms * 1000  # USD per second
-        cost_key = (("COST_RATE_EXCEEDED", "cost_rate"), "cost_rate")
+        # M5: Use a simple flat tuple as the dedup key, consistent with
+        # velocity_key below and node-divergence keys (sig, "consecutive").
+        cost_key = ("COST_RATE_EXCEEDED",)
         if cost_rate <= self._cost_rate_threshold_usd_per_sec:
             return
         if cost_key in self._emitted_divergences:
@@ -508,7 +510,8 @@ class ExecutionGraph:
         if tokens_out is None or elapsed_ms <= 0:
             return
         token_velocity = tokens_out / elapsed_ms * 1000  # tokens per second
-        velocity_key = (("TOKEN_VELOCITY_EXCEEDED", "token_velocity"), "token_velocity")
+        # M5: Flat tuple key consistent with cost_key above.
+        velocity_key = ("TOKEN_VELOCITY_EXCEEDED",)
         if token_velocity <= self._token_velocity_threshold:
             return
         if velocity_key in self._emitted_divergences:

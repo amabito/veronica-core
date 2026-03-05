@@ -1,8 +1,15 @@
-"""Tamper-proof audit chain for veronica-core safety events.
+"""Audit chain for veronica-core safety events.
 
 Each entry in the chain is hashed together with the previous entry's hash,
 forming a hash chain (similar to a blockchain).  Any modification to a past
-entry invalidates all subsequent hashes, making tampering detectable.
+entry invalidates all subsequent hashes.
+
+Security note: The hash chain uses plain SHA-256 without an HMAC key.
+It proves *internal consistency* (accidental corruption is detectable) but
+NOT *authenticity*.  An attacker with write access to the chain can forge
+valid hashes for new entries.  Do not rely on this chain to detect deliberate
+tampering by an adversary; it is suitable for audit trail consistency checks
+only.
 
 Usage::
 
@@ -23,6 +30,7 @@ the chain to/from a JSON-compatible format.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import threading
 import time
@@ -210,11 +218,11 @@ class AuditChain:
         expected_prev = (
             self._entries[index - 1].entry_hash if index > 0 else _GENESIS_HASH
         )
-        if entry.prev_hash != expected_prev:
+        if not hmac.compare_digest(entry.prev_hash, expected_prev):
             return False
 
-        # Recompute and compare hash
+        # Recompute and compare hash (constant-time to prevent timing side-channels)
         computed = _compute_hash(
             entry.sequence, entry.timestamp, entry.prev_hash, entry.data
         )
-        return entry.entry_hash == computed
+        return hmac.compare_digest(entry.entry_hash, computed)

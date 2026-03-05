@@ -141,12 +141,20 @@ class PolicyEngine:
                         f"Policy signature file missing in {level.name} environment: "
                         f"{policy_path}"
                     )
+            # Read policy bytes ONCE to prevent TOCTOU: verify and parse the
+            # same bytes so an attacker cannot swap the file between the two
+            # operations.
+            try:
+                policy_bytes = policy_path.read_bytes()
+            except FileNotFoundError:
+                policy_bytes = None
             self._verify_policy_signature(
                 policy_path,
                 public_key_path=public_key_path,
                 key_provider=key_provider,
+                policy_bytes=policy_bytes,
             )
-            self._policy = self._load_policy(policy_path)
+            self._policy = self._load_policy(policy_path, policy_bytes=policy_bytes)
             self._check_rollback()
 
     # ------------------------------------------------------------------
@@ -173,6 +181,7 @@ class PolicyEngine:
         sig_v2_path: Path,
         public_key_path: Path | None,
         key_provider: Any = None,
+        policy_bytes: bytes | None = None,
     ) -> None:
         """Verify ed25519 (v2) signature and enforce key pin.
 
@@ -187,7 +196,7 @@ class PolicyEngine:
             public_key_path=public_key_path, key_provider=key_provider
         )
 
-        if not signer_v2.verify(policy_path, sig_v2_path):
+        if not signer_v2.verify(policy_path, sig_v2_path, policy_bytes=policy_bytes):
             PolicyEngine._emit_policy_audit(
                 "policy_tamper", {"policy_path": str(policy_path), "version": "v2"}
             )
@@ -220,6 +229,7 @@ class PolicyEngine:
     def _verify_jws_signature(
         policy_path: Path,
         sig_v1_path: Path,
+        policy_bytes: bytes | None = None,
     ) -> None:
         """Verify HMAC-SHA256 (v1) signature.
 
@@ -232,7 +242,7 @@ class PolicyEngine:
         _log = _logging.getLogger(__name__)
         signer = PolicySigner()
 
-        if signer.verify(policy_path, sig_v1_path):
+        if signer.verify(policy_path, sig_v1_path, policy_bytes=policy_bytes):
             return
 
         PolicyEngine._emit_policy_audit(
@@ -251,12 +261,18 @@ class PolicyEngine:
         policy_path: Path,
         public_key_path: Path | None = None,
         key_provider: Any = None,
+        policy_bytes: bytes | None = None,
     ) -> None:
         """Verify policy signature for *policy_path*.
 
         Checks v2 (ed25519) first if a ``.sig.v2`` file exists, then falls back
         to v1 (HMAC-SHA256) via ``.sig``.  Raises RuntimeError on tamper;
         logs warning if no signature file is found.
+
+        Args:
+            policy_bytes: Pre-read policy bytes.  When provided these bytes are
+                          verified instead of re-reading from disk, preventing a
+                          TOCTOU race between verification and loading (C-1).
         """
         import logging as _logging
 
@@ -267,12 +283,15 @@ class PolicyEngine:
 
         if sig_v2_path.exists():
             PolicyEngine._validate_jwk_format(
-                policy_path, sig_v2_path, public_key_path, key_provider
+                policy_path, sig_v2_path, public_key_path, key_provider,
+                policy_bytes=policy_bytes,
             )
             return
 
         if sig_v1_path.exists():
-            PolicyEngine._verify_jws_signature(policy_path, sig_v1_path)
+            PolicyEngine._verify_jws_signature(
+                policy_path, sig_v1_path, policy_bytes=policy_bytes
+            )
             return
 
         PolicyEngine._emit_policy_audit(
@@ -281,19 +300,26 @@ class PolicyEngine:
         _log.warning("policy_sig_missing: no signature file found for %s", policy_path)
 
     @staticmethod
-    def _load_policy(policy_path: Path) -> dict[str, Any]:
+    def _load_policy(
+        policy_path: Path, policy_bytes: bytes | None = None
+    ) -> dict[str, Any]:
         """Load and parse a YAML policy file.
 
         Behaviour (v0.10.3 fail-closed change, R-5):
 
         * If the file **does not exist**: emit a warning and return ``{}``.
         * If the file **exists** but cannot be loaded: **raise RuntimeError**.
+
+        Args:
+            policy_bytes: Pre-read bytes to parse.  When provided the file is
+                          NOT re-read from disk, preventing a TOCTOU race with
+                          signature verification (C-1 fix).
         """
         import logging as _logging
 
         _log = _logging.getLogger(__name__)
 
-        if not policy_path.exists():
+        if policy_bytes is None and not policy_path.exists():
             _log.warning(
                 "policy_load_failed: policy file not found: %s",
                 policy_path,
@@ -309,6 +335,8 @@ class PolicyEngine:
             ) from exc
 
         try:
+            if policy_bytes is not None:
+                return yaml.safe_load(policy_bytes.decode("utf-8")) or {}
             with policy_path.open("r", encoding="utf-8") as fh:
                 return yaml.safe_load(fh) or {}
         except Exception as exc:
@@ -325,7 +353,13 @@ class PolicyEngine:
         min_engine = self._policy.get("min_engine_version")
         if policy_version is not None:
             guard = RollbackGuard(audit_log=self._audit_log)
-            guard.check(int(policy_version), min_engine)
+            # M-6: pass the actual policy path so the audit log records the
+            # real file location rather than a hardcoded default.
+            policy_path_str = (
+                str(self._policy_path) if self._policy_path is not None
+                else "policies/default.yaml"
+            )
+            guard.check(int(policy_version), min_engine, policy_path=policy_path_str)
 
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
         """Evaluate *ctx* and return a PolicyDecision.
@@ -369,7 +403,9 @@ class PolicyHook:
         env: str = "unknown",
     ) -> None:
         self._engine = engine or PolicyEngine()
-        self._caps = caps or CapabilitySet.dev()
+        # L-1: default to audit() (read-only) rather than dev() so that callers
+        # must explicitly opt into higher capabilities (EDIT_REPO, SHELL_BASIC).
+        self._caps = caps or CapabilitySet.audit()
         self._working_dir = working_dir
         self._repo_root = repo_root
         self._env = env

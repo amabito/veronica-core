@@ -1,3 +1,4 @@
+# TODO: Split into execution_context_core.py + execution_context_async.py (1531 lines, target 400)
 """ExecutionContext — chain-level containment for VERONICA agent runs.
 
 Provides a lifespan-scoped container that enforces chain-wide limits
@@ -652,7 +653,11 @@ class ExecutionContext:
         try:
             self._budget_backend.rollback(reservation_id)
         except Exception:  # noqa: BLE001
-            pass
+            logger.debug(
+                "ExecutionContext: budget_backend.rollback(%r) failed; reservation may leak",
+                reservation_id,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # _wrap sub-helpers

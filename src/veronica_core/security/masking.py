@@ -111,11 +111,20 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"(?i)(?:key|token|secret|password|apikey|api_key|access_key|auth)[=:\s]+([0-9a-fA-F]{40,})"
         ),
     ),
-    # password=value, passwd=value, secret=value patterns
+    # password=value, passwd=value, secret=value patterns (unquoted values)
     (
         "PASSWORD_KV",
         re.compile(
             r"(?i)(?:password|passwd|secret|token|api_key|apikey|access_key)\s*[=:]\s*([^\s,;\"'&]{4,})"
+        ),
+    ),
+    # Quoted YAML / JSON password values: password: "my_secret" or password: 'my_secret'
+    # H-4 fix: the base PASSWORD_KV pattern excludes quote chars from the capture group,
+    # so password: "my_api_key_12345" produces an empty capture and the secret leaks.
+    (
+        "PASSWORD_KV_QUOTED",
+        re.compile(
+            r"(?i)(?:password|passwd|secret|token|api_key|apikey|access_key)\s*[=:]\s*[\"']([^\"']{4,})[\"']"
         ),
     ),
 ]

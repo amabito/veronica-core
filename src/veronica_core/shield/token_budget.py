@@ -9,6 +9,8 @@ MVP: caller reports usage via record_usage(). No automatic counting.
 
 from __future__ import annotations
 
+__all__ = ["TokenBudgetHook"]
+
 import threading
 
 from veronica_core.shield.types import Decision, ToolCallContext
@@ -89,6 +91,16 @@ class TokenBudgetHook:
         Uses pending reservations to prevent TOCTOU races in concurrent callers.
         If ctx.tokens_out or ctx.tokens_in are provided, reserves them atomically
         after passing all checks.
+
+        H4 CONTRACT: When this method returns ``Decision.DEGRADE``, it has already
+        incremented ``_pending_output`` / ``_pending_input`` as a reservation.
+        Callers that receive DEGRADE but choose NOT to make the LLM call MUST
+        invoke ``release_reservation(estimated_out, estimated_in)`` to free the
+        pending reservation. Failure to do so will cause subsequent calls to see
+        inflated pending counts, leading to premature HALT decisions.
+
+        When this method returns ``Decision.HALT``, NO reservation is made and
+        ``release_reservation()`` must NOT be called.
         """
         estimated_out = max(0, ctx.tokens_out or 0)
         estimated_in = max(0, ctx.tokens_in or 0)
@@ -96,7 +108,8 @@ class TokenBudgetHook:
         with self._lock:
             projected_output = self._output_total + self._pending_output + estimated_out
 
-            # Check output budget against projected usage
+            # Check output budget against projected usage.
+            # H4: HALT path: no reservation made, caller must NOT call release_reservation().
             if projected_output >= self._max_output_tokens:
                 return Decision.HALT
 

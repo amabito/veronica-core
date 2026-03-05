@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "FrameworkAdapterProtocol",
+    "ExtendedAdapterProtocol",
     "PlannerProtocol",
     "ExecutionGraphObserver",
     "ContainmentMetricsProtocol",
@@ -38,15 +39,49 @@ __all__ = [
 
 @runtime_checkable
 class FrameworkAdapterProtocol(Protocol):
-    """Contract for integrating a new agent framework with veronica-core.
+    """Minimal contract for integrating a new agent framework with veronica-core.
+
+    All adapters (langchain, ag2, crewai, langgraph, llamaindex, ros2) implement
+    this protocol. ``isinstance(adapter, FrameworkAdapterProtocol)`` returns True
+    for any adapter that exposes ``capabilities()``.
+
+    For adapters that also support cost/token extraction and containment signalling,
+    see :class:`ExtendedAdapterProtocol`.
+
+    Example::
+
+        class MyFrameworkAdapter:
+            def capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(framework_name="MyFramework")
+    """
+
+    def capabilities(self) -> "AdapterCapabilities":
+        """Return a static descriptor of this adapter's capabilities.
+
+        Returns:
+            AdapterCapabilities instance declaring supported features.
+        """
+        ...
+
+
+@runtime_checkable
+class ExtendedAdapterProtocol(FrameworkAdapterProtocol, Protocol):
+    """Extended contract for adapters that support cost/token extraction and HALT signalling.
 
     Implement this protocol to teach veronica-core how to extract cost and
     token data from your framework's response objects, and how to signal
     containment decisions (HALT, DEGRADE) back to the framework.
 
+    ``isinstance(adapter, ExtendedAdapterProtocol)`` returns True only for
+    adapters that implement all five methods.
+
     Example::
 
         class MyFrameworkAdapter:
+            def capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(framework_name="MyFramework",
+                                           supports_cost_extraction=True)
+
             def extract_cost(self, result: Any) -> float:
                 return result.usage.get("cost_usd", 0.0)
 
@@ -60,14 +95,6 @@ class FrameworkAdapterProtocol(Protocol):
             def handle_degrade(self, reason: str, suggestion: str) -> Any:
                 return {"warning": "degrade", "reason": reason, "suggestion": suggestion}
     """
-
-    def capabilities(self) -> "AdapterCapabilities":
-        """Return a static descriptor of this adapter's capabilities.
-
-        Returns:
-            AdapterCapabilities instance declaring supported features.
-        """
-        ...
 
     def extract_cost(self, result: Any) -> float:
         """Return the USD cost for a completed LLM call.

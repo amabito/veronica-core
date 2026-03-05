@@ -42,6 +42,12 @@ def identity_from_a2a_card(card: dict[str, Any]) -> AgentIdentity:
         trust = TrustLevel(raw_trust) if raw_trust else TrustLevel.UNTRUSTED
     except ValueError:
         trust = TrustLevel.UNTRUSTED
+    # L-3: PRIVILEGED trust must never be granted via an external A2A card.
+    # Callers who genuinely need PRIVILEGED must set it programmatically after
+    # explicit admin review.  Silently downgrade rather than raising to avoid
+    # crashing on cards from future protocol versions.
+    if trust == TrustLevel.PRIVILEGED:
+        trust = TrustLevel.UNTRUSTED
 
     metadata: dict[str, Any] = {}
     url = card.get("url")

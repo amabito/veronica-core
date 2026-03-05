@@ -7,32 +7,23 @@ backward compatibility.
 
 from __future__ import annotations
 
+__all__ = [
+    "CircuitSnapshot",
+    "DistributedCircuitBreaker",
+    "get_default_circuit_breaker",
+    # Note: _LUA_CHECK, _LUA_RECORD_FAILURE, _LUA_RECORD_SUCCESS are intentionally
+    # private implementation details; they are not included in __all__.
+]
+
 import dataclasses
 import logging
 import threading
 import time
 from typing import Dict, Optional
 
-import re
-
+from veronica_core._utils import redact_exc as _redact_exc
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState, FailurePredicate
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
-
-
-def _redact_exc(exc: BaseException) -> str:
-    """Return exception type and message with Redis URLs redacted.
-
-    Duplicate of distributed._redact_exc kept here to break the
-    distributed <-> distributed_circuit_breaker circular import.
-    """
-    msg = str(exc)
-    msg = re.sub(
-        r"(rediss?(?:\+ssl)?://)\S+@(?=\S)",
-        r"\1***@",
-        msg,
-        flags=re.IGNORECASE,
-    )
-    return f"{type(exc).__name__}: {msg}"
 
 logger = logging.getLogger(__name__)
 
@@ -460,6 +451,16 @@ class DistributedCircuitBreaker:
 
         Rate-limited via _last_reconnect_attempt to avoid hot-loop log storms.
         Only clears _using_fallback after a successful reconciliation.
+
+        H2 NOTE: This method reads and writes ``_last_reconnect_attempt`` without
+        holding ``self._lock``. It is always called from either:
+          (a) ``_attempt_reconnect_if_on_fallback()``, which acquires ``self._lock``
+              before calling ``_try_reconnect()``; or
+          (b) the constructor (single-threaded context).
+        Therefore ``_last_reconnect_attempt`` accesses are serialised by the caller's
+        lock. The benign TOCTOU in ``_attempt_reconnect_if_on_fallback()``'s outer
+        ``if self._using_fallback`` check (before lock acquisition) only risks an
+        unnecessary lock acquisition — it is not a data race on ``_last_reconnect_attempt``.
         """
         now = time.monotonic()
         if now - self._last_reconnect_attempt < self._RECONNECT_INTERVAL:

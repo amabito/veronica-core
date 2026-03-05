@@ -165,8 +165,12 @@ class _MCPAdapterBase:
         Each MCPToolStats value is a deep copy created via dataclasses.replace(),
         so callers receive a stable view that is unaffected by concurrent writes.
 
-        Subclasses that use asyncio.Lock for _stats_lock must override this method
-        and provide an async variant (get_tool_stats_async).
+        WARNING: Subclasses that use asyncio.Lock for _stats_lock MUST override
+        this method. Calling this method with an asyncio.Lock set as _stats_lock
+        from a synchronous context (``with self._stats_lock``) will raise
+        RuntimeError. AsyncMCPContainmentAdapter overrides this method to provide
+        a best-effort sync snapshot and a separate async variant
+        (``get_tool_stats_async()``).
 
         Returns:
             Mapping of tool_name -> MCPToolStats snapshot.
@@ -174,7 +178,7 @@ class _MCPAdapterBase:
         # Acquire the lock to prevent RuntimeError from concurrent dict mutation
         # (new tool-name entry added by _ensure_stats while iterating).
         # Sync subclasses set _stats_lock to threading.Lock(); async subclasses
-        # must override this method.
+        # must override this method (see warning above).
         with self._stats_lock:
             return {
                 name: dataclasses.replace(stats) for name, stats in self._stats.items()

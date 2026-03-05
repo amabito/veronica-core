@@ -70,7 +70,14 @@ def _load_key() -> bytes:
     """
     hex_key = os.environ.get(_ENV_KEY_VAR)
     if hex_key:
-        return bytes.fromhex(hex_key)
+        key = bytes.fromhex(hex_key)
+        if len(key) < 32:
+            raise RuntimeError(
+                f"{_ENV_KEY_VAR} is too short ({len(key)} bytes). "
+                "A minimum of 32 bytes (64 hex chars) is required for HMAC-SHA256. "
+                "Generate a key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        return key
 
     from veronica_core.security.security_level import SecurityLevel, get_security_level
 
@@ -123,19 +130,27 @@ class PolicySigner:
         mac = hmac.new(self._key, content, hashlib.sha256)
         return mac.hexdigest()
 
-    def verify(self, policy_path: Path, sig_path: Path) -> bool:
+    def verify(
+        self,
+        policy_path: Path,
+        sig_path: Path,
+        policy_bytes: bytes | None = None,
+    ) -> bool:
         """Compare stored signature against freshly computed HMAC.
 
         Args:
             policy_path: Path to the YAML policy file.
             sig_path: Path to the ``.sig`` file containing the hex digest.
+            policy_bytes: Pre-read policy bytes.  When provided the file is NOT
+                          re-read from disk (TOCTOU prevention, C-1 fix).
 
         Returns:
             True if the signature matches, False otherwise.
             Returns False if either file cannot be read.
         """
         try:
-            content = self._normalize(policy_path.read_bytes())
+            raw = policy_bytes if policy_bytes is not None else policy_path.read_bytes()
+            content = self._normalize(raw)
             stored_sig = sig_path.read_text(encoding="utf-8").strip()
         except OSError:
             return False
@@ -269,12 +284,19 @@ class PolicySignerV2:
     # Verify
     # ------------------------------------------------------------------
 
-    def verify(self, policy_path: Path, sig_path: Path) -> bool:
+    def verify(
+        self,
+        policy_path: Path,
+        sig_path: Path,
+        policy_bytes: bytes | None = None,
+    ) -> bool:
         """Verify the ed25519 signature stored in *sig_path*.
 
         Args:
             policy_path: Path to the YAML policy file.
             sig_path: Path to the ``.sig.v2`` file (base64-encoded sig).
+            policy_bytes: Pre-read policy bytes.  When provided the file is NOT
+                          re-read from disk (TOCTOU prevention, C-1 fix).
 
         Returns:
             True if the signature is valid, False otherwise.
@@ -286,7 +308,8 @@ class PolicySignerV2:
             return False
 
         try:
-            content = self._normalize(policy_path.read_bytes())
+            raw = policy_bytes if policy_bytes is not None else policy_path.read_bytes()
+            content = self._normalize(raw)
             sig_b64 = sig_path.read_text(encoding="utf-8").strip()
             raw_sig = base64.b64decode(sig_b64)
             pub_pem = self._key_provider.get_public_key_pem()

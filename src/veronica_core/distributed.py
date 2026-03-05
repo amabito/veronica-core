@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "BudgetBackend",
+    "ReservableBudgetBackend",
+    "LocalBudgetBackend",
+    "RedisBudgetBackend",
+    "ReservationExpiredError",
+    "get_default_backend",
+    # Re-exports from distributed_circuit_breaker for backward compatibility:
+    "CircuitSnapshot",
+    "DistributedCircuitBreaker",
+    "get_default_circuit_breaker",
+    # Note: _LUA_CHECK, _LUA_RECORD_FAILURE, _LUA_RECORD_SUCCESS are intentionally
+    # excluded from __all__ as they are private implementation details.
+]
+
 import logging
-import re
 import threading
 import time
 import uuid
 from typing import Protocol, runtime_checkable
+
+from veronica_core._utils import redact_exc as _redact_exc
 
 logger = logging.getLogger(__name__)
 
@@ -23,30 +39,6 @@ _RESERVATION_TIMEOUT_S: float = 60.0
 
 class ReservationExpiredError(Exception):
     """Raised when a reservation ID has passed its deadline."""
-
-
-def _redact_exc(exc: BaseException) -> str:
-    """Return exception type and message with Redis URLs redacted.
-
-    Prevents credential leakage when ``redis://user:password@host/...``
-    appears in exception strings (e.g. ``ConnectionError``).
-
-    Handles ``redis://``, ``rediss://``, ``redis+ssl://``, ``rediss+ssl://``
-    (case-insensitive), and passwords containing literal ``@`` characters.
-    """
-    msg = str(exc)
-    # Redact user:password in Redis URLs.
-    # - ``rediss?`` matches redis:// and rediss://
-    # - ``(?:\\+ssl)?`` matches optional +ssl suffix
-    # - ``\\S+@`` greedy match handles passwords with literal '@' (backtracks to last @)
-    # - ``(?=\\S)`` ensures the @ is followed by a hostname, not trailing whitespace
-    msg = re.sub(
-        r"(rediss?(?:\+ssl)?://)\S+@(?=\S)",
-        r"\1***@",
-        msg,
-        flags=re.IGNORECASE,
-    )
-    return f"{type(exc).__name__}: {msg}"
 
 
 @runtime_checkable
@@ -136,6 +128,11 @@ class LocalBudgetBackend:
                     f"Reservation {reservation_id!r} not found (expired or already committed/rolled back)"
                 )
             amount, _ = self._reservations.pop(reservation_id)
+            # M6: _reserved_total can briefly go slightly negative due to IEEE-754
+            # float arithmetic (e.g. after many small reserve/commit cycles).
+            # This is benign: get_reserved() clamps to max(0.0, total), and
+            # _total_reserved_locked() resets to 0.0 when _reservations is empty.
+            # No special handling needed here.
             self._reserved_total -= amount
             self._cost += amount
             return self._cost
@@ -377,6 +374,15 @@ class RedisBudgetBackend:
                 self._try_reconnect()
             if self._using_fallback or self._client is None:
                 return self._fallback.add(amount)
+        # H1 NOTE: The lock is intentionally released before the Redis pipeline
+        # below to avoid holding a Python lock during network I/O. This means
+        # there is a brief TOCTOU window where _using_fallback can flip to True
+        # (failover) between the dispatch decision (above) and the actual Redis
+        # write (below). During this window, amounts may be written to both Redis
+        # and the local fallback by different threads, causing brief budget
+        # undercount. The window is bounded by the Redis round-trip latency and
+        # is acceptable given the comment in _try_reconnect(). The transition is
+        # detected in the except block below, which seeds the fallback and retries.
         try:
             pipe = self._client.pipeline()
             pipe.incrbyfloat(self._key, amount)

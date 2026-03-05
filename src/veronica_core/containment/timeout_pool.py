@@ -90,6 +90,17 @@ class SharedTimeoutPool:
         Idempotent — safe to call multiple times or after the callback
         has already fired (in which case cancel() is a no-op).
 
+        C2 NOTE: If ``cancel()`` is called for a handle that has ALREADY fired
+        (i.e. the callback was executed and the handle was discarded from the
+        heap), the handle ID is added to ``_cancelled`` but will never be
+        removed by ``_run()`` (because the handle is no longer in the heap).
+        This causes a bounded memory leak proportional to the number of
+        cancel()-after-fire calls. In practice, callers typically cancel
+        during teardown or as a timeout race (cancel before fire wins), so
+        this pattern is rare. If cancel()-after-fire becomes frequent in a
+        deployment, consider calling ``shutdown()`` and creating a new pool
+        to reclaim the memory.
+
         Args:
             handle: Value returned by schedule().
         """
@@ -101,6 +112,14 @@ class SharedTimeoutPool:
 
         Pending callbacks are discarded. The heap and cancelled-handle set are
         cleared to prevent unbounded memory growth across repeated test cycles.
+
+        M8 NOTE: There is a brief window between ``self._shutdown = True`` and
+        ``self._wakeup.set()`` during which the daemon thread may still be
+        running its loop body. The thread checks ``_shutdown`` at the top of
+        each iteration, so it will exit on the NEXT iteration after being woken.
+        This is safe because the thread is a daemon (it will not prevent process
+        exit) and the cleared heap/cancelled state means no callbacks will fire
+        after shutdown() returns.
         """
         with self._lock:
             self._shutdown = True

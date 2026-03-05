@@ -12,6 +12,7 @@ Public API:
 from __future__ import annotations
 
 import re
+import threading
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, FrozenSet, Tuple
@@ -50,9 +51,12 @@ class SemanticLoopGuard:
 
     # Buffer stores (normalized_str, frozenset_of_words) tuples
     _buffer: Deque[Tuple[str, FrozenSet[str]]] = field(init=False)
+    # H5: Lock protecting _buffer for thread-safe record() and check() access.
+    _lock: threading.Lock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._buffer = deque(maxlen=self.window)
+        self._lock = threading.Lock()
 
     @property
     def policy_type(self) -> str:
@@ -90,7 +94,8 @@ class SemanticLoopGuard:
         """Append *text* to the rolling buffer without checking."""
         norm = self._normalize(text)
         tokens = self._tokenize(norm)
-        self._buffer.append((norm, tokens))
+        with self._lock:
+            self._buffer.append((norm, tokens))
 
     def check(self, context: PolicyContext | None = None) -> PolicyDecision:
         """Check the current buffer for semantic loops.
@@ -102,7 +107,8 @@ class SemanticLoopGuard:
         if context is None:
             context = PolicyContext()
 
-        entries = list(self._buffer)
+        with self._lock:
+            entries = list(self._buffer)
         n = len(entries)
 
         for i in range(n):
@@ -151,4 +157,5 @@ class SemanticLoopGuard:
 
     def reset(self) -> None:
         """Clear the rolling buffer."""
-        self._buffer.clear()
+        with self._lock:
+            self._buffer.clear()

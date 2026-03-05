@@ -31,12 +31,10 @@ class TestCorruptedInput:
             AgentIdentity(agent_id="", origin="local")
 
     def test_whitespace_only_agent_id_rejected(self) -> None:
-        # Whitespace-only agent_id is effectively empty -- must be caught
-        # Note: current impl checks `not self.agent_id` -- whitespace truthy
-        # This test documents the current behavior (whitespace allowed).
-        # If stricter validation is needed, update the impl and this test.
-        agent = AgentIdentity(agent_id="   ", origin="local")
-        assert agent.agent_id == "   "  # documents current behavior
+        # L-2 fix: whitespace-only agent_id now rejected by _AGENT_ID_RE.
+        # Spaces are not in the allowed character set [A-Za-z0-9_.:-@].
+        with pytest.raises(ValueError, match="invalid characters"):
+            AgentIdentity(agent_id="   ", origin="local")
 
     def test_none_metadata_values(self) -> None:
         # None values inside metadata dict should not crash anything
@@ -44,14 +42,20 @@ class TestCorruptedInput:
         assert agent.metadata["key"] is None
 
     def test_very_long_agent_id(self) -> None:
+        # L-2 fix: agent_id is now capped at 256 chars by _AGENT_ID_RE.
         long_id = "x" * 10_000
-        agent = AgentIdentity(agent_id=long_id, origin="local")
-        assert len(agent.agent_id) == 10_000
+        with pytest.raises(ValueError, match="invalid characters"):
+            AgentIdentity(agent_id=long_id, origin="local")
+        # Exactly 256 chars of safe chars must succeed.
+        ok_id = "x" * 256
+        agent = AgentIdentity(agent_id=ok_id, origin="local")
+        assert len(agent.agent_id) == 256
 
     def test_agent_id_with_special_chars(self) -> None:
+        # L-2 fix: control characters and non-ASCII are now rejected.
         special_id = "agent\x00\xff\n\t"
-        agent = AgentIdentity(agent_id=special_id, origin="local")
-        assert agent.agent_id == special_id
+        with pytest.raises(ValueError, match="invalid characters"):
+            AgentIdentity(agent_id=special_id, origin="local")
 
     def test_invalid_origin_values(self) -> None:
         for bad_origin in ["LOCAL", "A2A", "MCP", "http", "", " ", "null"]:

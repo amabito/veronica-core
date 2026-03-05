@@ -37,6 +37,42 @@ _CI_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
 ]
 
 
+# M-7: Per-pattern severity for base SecretMasker patterns.
+# Patterns not listed here default to "HIGH".
+_BASE_PATTERN_SEVERITY: dict[str, str] = {
+    "AWS_KEY": "CRITICAL",
+    "AWS_SECRET": "CRITICAL",
+    "SSH_PRIVATE_KEY": "CRITICAL",
+    "PGP_PRIVATE_KEY": "CRITICAL",
+    "GITHUB_FINE_GRAINED": "CRITICAL",
+    "GITHUB_ACTIONS_TOKEN": "CRITICAL",  # also in _CI_PATTERNS (takes precedence)
+    "SERVICE_ROLE_JWT": "CRITICAL",
+    "ANTHROPIC_KEY": "HIGH",
+    "OPENAI_KEY": "HIGH",
+    "STRIPE_KEY": "HIGH",
+    "GITHUB_TOKEN": "HIGH",
+    "GITHUB_CLI_TOKEN": "HIGH",
+    "SLACK_TOKEN": "HIGH",
+    "SLACK_WEBHOOK": "HIGH",
+    "DISCORD_TOKEN": "HIGH",
+    "GOOGLE_API_KEY": "HIGH",
+    "GOOGLE_OAUTH": "HIGH",
+    "AZURE_SAS": "HIGH",
+    "BITBANK_KEY": "HIGH",
+    "POLYMARKET_KEY": "HIGH",
+    "NPM_TOKEN": "HIGH",
+    "PYPI_TOKEN": "HIGH",
+    "SENDGRID_KEY": "HIGH",
+    "TWILIO_SID": "HIGH",
+    "TWILIO_TOKEN": "HIGH",
+    "RESEND_KEY": "HIGH",
+    "HEX_SECRET": "MEDIUM",
+    "PASSWORD_KV": "MEDIUM",
+    "PASSWORD_KV_QUOTED": "MEDIUM",
+    "NETRC_PASSWORD": "MEDIUM",
+}
+
+
 class CIGuard:
     """CI-specific secret leak detection and protection.
 
@@ -87,7 +123,9 @@ class CIGuard:
                                 pattern_name=label,
                                 line_number=line_num,
                                 masked_snippet=masked,
-                                severity="HIGH",
+                                # M-7: use per-pattern severity instead of
+                                # blanket "HIGH" for all base patterns.
+                                severity=_BASE_PATTERN_SEVERITY.get(label, "HIGH"),
                             )
                         )
 

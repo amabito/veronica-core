@@ -164,7 +164,11 @@ class TestIdentityFromA2ACard:
         for level in TrustLevel:
             card = {"name": "agent", "trust_level": level.value}
             identity = identity_from_a2a_card(card)
-            assert identity.trust_level == level
+            # L-3: PRIVILEGED is silently downgraded to UNTRUSTED via A2A card
+            if level == TrustLevel.PRIVILEGED:
+                assert identity.trust_level == TrustLevel.UNTRUSTED
+            else:
+                assert identity.trust_level == level
 
 
 # ---------------------------------------------------------------------------
@@ -275,15 +279,16 @@ class TestAdversarialCardParsing:
         assert "password" not in identity.metadata
 
     def test_extremely_long_name(self) -> None:
-        """Long names must not cause errors (they are passed through)."""
+        """Long names (>256 chars) are rejected by agent_id validation (L-2)."""
         card = {"name": "a" * 100_000}
-        identity = identity_from_a2a_card(card)
-        assert len(identity.agent_id) == 100_000
+        with pytest.raises(ValueError, match="invalid characters"):
+            identity_from_a2a_card(card)
 
     def test_unicode_name(self) -> None:
+        """Control chars / zero-width chars rejected by agent_id validation (L-2)."""
         card = {"name": "agent-\u0000\u200b\uffff"}
-        identity = identity_from_a2a_card(card)
-        assert identity.agent_id == "agent-\u0000\u200b\uffff"
+        with pytest.raises(ValueError, match="invalid characters"):
+            identity_from_a2a_card(card)
 
 
 # ---------------------------------------------------------------------------

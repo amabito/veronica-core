@@ -79,6 +79,7 @@ except ImportError as _exc:
     ) from _exc
 
 import logging
+import threading
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
@@ -154,6 +155,13 @@ class VeronicaCrewAIListener(BaseEventListener):
         self._container = build_adapter_container(config, execution_context)
         self._metrics = metrics
         self._agent_id = agent_id
+        # Shared flag: set True when a HALT decision is observed inside the event
+        # bus handler (where raising VeronicaHalt would be swallowed by CrewAI).
+        # check_or_raise() reads this flag and raises VeronicaHalt on the next
+        # step_callback invocation.
+        self._halt_pending: bool = False
+        self._halt_reason: str = ""
+        self._halt_lock = threading.Lock()
         super().__init__()
 
     # ------------------------------------------------------------------
@@ -177,7 +185,12 @@ class VeronicaCrewAIListener(BaseEventListener):
 
         @bus.on(LLMCallStartedEvent)
         def on_llm_call_started(source: Any, event: LLMCallStartedEvent) -> None:
-            """Pre-call hook: log policy state before the LLM is invoked."""
+            """Pre-call hook: log policy state before the LLM is invoked.
+
+            Note: VeronicaHalt cannot be raised here because the CrewAI event
+            bus swallows handler exceptions. Instead, we set a _halt_pending flag
+            that check_or_raise() will detect on the next step_callback invocation.
+            """
             decision = self._container.check(cost_usd=0.0)
             if not decision.allowed:
                 logger.warning(
@@ -185,6 +198,9 @@ class VeronicaCrewAIListener(BaseEventListener):
                     "Call check_or_raise() in step_callback to enforce.",
                     decision.reason,
                 )
+                with self._halt_lock:
+                    self._halt_pending = True
+                    self._halt_reason = decision.reason
 
         @bus.on(LLMCallCompletedEvent)
         def on_llm_call_completed(source: Any, event: LLMCallCompletedEvent) -> None:
@@ -214,8 +230,13 @@ class VeronicaCrewAIListener(BaseEventListener):
         or for explicit pre-call checks. Accepts any positional/keyword args
         so it can be passed directly as a callback without signature mismatch.
 
+        Also checks the _halt_pending flag set by the event bus handler when
+        a HALT decision was observed but could not be raised there (because
+        the CrewAI event bus swallows handler exceptions).
+
         Raises:
-            VeronicaHalt: If any active policy (budget / step / retry) denies.
+            VeronicaHalt: If any active policy (budget / step / retry) denies,
+                or if a HALT was deferred from a previous event bus callback.
 
         Example::
 
@@ -225,6 +246,17 @@ class VeronicaCrewAIListener(BaseEventListener):
                 step_callback=listener.check_or_raise,
             )
         """
+        from veronica_core.inject import VeronicaHalt
+
+        # Check deferred HALT from event bus handler first.
+        with self._halt_lock:
+            if self._halt_pending:
+                reason = self._halt_reason
+                self._halt_pending = False
+                self._halt_reason = ""
+                safe_emit(self._metrics, "record_decision", self._agent_id, "HALT")
+                raise VeronicaHalt(reason)
+
         check_and_halt(
             self._container,
             tag="[VERONICA_CREW]",

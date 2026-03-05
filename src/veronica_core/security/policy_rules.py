@@ -299,8 +299,14 @@ def _url_path(url: str) -> str:
 
 
 def _check_shell_deny_commands(argv0: str) -> PolicyDecision | None:
-    """Return DENY if argv0 is a globally blocked command."""
-    if argv0 not in SHELL_DENY_COMMANDS:
+    """Return DENY if argv0 is a globally blocked command.
+
+    Normalises argv0 with os.path.basename() so that path-based invocations
+    like /usr/bin/rm or C:\\Windows\\System32\\cmd.exe are correctly matched
+    and receive the expected risk_score_delta=8 (H-1 fix).
+    """
+    basename = os.path.basename(argv0)
+    if basename not in SHELL_DENY_COMMANDS:
         return None
     return PolicyDecision(
         verdict="DENY",
@@ -588,34 +594,91 @@ def _check_protocol_rules(url: str, host: str) -> PolicyDecision | None:
 
 
 def _check_data_exfil(url: str) -> PolicyDecision | None:
-    """Return DENY if the query string contains base64, hex, or high-entropy data."""
+    """Return DENY if the URL contains base64, hex, or high-entropy data.
+
+    Checks query string values, query string keys, URL path segments, and
+    the userinfo field (user:password@host) to prevent exfiltration through
+    allowlisted domains (C-2 fix).
+    """
     parsed = urllib.parse.urlparse(url)
+
+    def _check_token(
+        token: str, location: str, base64_rule: str, hex_rule: str, entropy_rule: str
+    ) -> PolicyDecision | None:
+        if _RE_BASE64.match(token):
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id=base64_rule,
+                reason=f"URL {location} contains base64-encoded data (potential exfiltration)",
+                risk_score_delta=9,
+            )
+        if _RE_HEX.match(token):
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id=hex_rule,
+                reason=f"URL {location} contains hex-encoded data (potential exfiltration)",
+                risk_score_delta=9,
+            )
+        if len(token) > NET_ENTROPY_MIN_LEN:
+            entropy = _shannon_entropy(token)
+            if entropy > NET_ENTROPY_THRESHOLD:
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id=entropy_rule,
+                    reason=f"URL {location} has high entropy ({entropy:.2f} bits)",
+                    risk_score_delta=9,
+                )
+        return None
+
+    # Check query string values (use original rule IDs for backward compat)
     qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-    for values in qs.values():
+    for key, values in qs.items():
+        # Check query keys (new in C-2 fix)
+        if decision := _check_token(
+            key, "query key",
+            "net.base64_in_query_key", "net.hex_in_query_key", "net.high_entropy_query_key"
+        ):
+            return decision
         for value in values:
-            if _RE_BASE64.match(value):
-                return PolicyDecision(
-                    verdict="DENY",
-                    rule_id="net.base64_in_query",
-                    reason="Query string contains base64-encoded data (potential exfiltration)",
-                    risk_score_delta=9,
-                )
-            if _RE_HEX.match(value):
-                return PolicyDecision(
-                    verdict="DENY",
-                    rule_id="net.hex_in_query",
-                    reason="Query string contains hex-encoded data (potential exfiltration)",
-                    risk_score_delta=9,
-                )
-            if len(value) > NET_ENTROPY_MIN_LEN:
-                entropy = _shannon_entropy(value)
-                if entropy > NET_ENTROPY_THRESHOLD:
-                    return PolicyDecision(
-                        verdict="DENY",
-                        rule_id="net.high_entropy_query",
-                        reason=f"Query string value has high entropy ({entropy:.2f} bits)",
-                        risk_score_delta=9,
-                    )
+            # Original rule IDs preserved for backward compat
+            if decision := _check_token(
+                value, "query value",
+                "net.base64_in_query", "net.hex_in_query", "net.high_entropy_query"
+            ):
+                return decision
+
+    # Check URL path segments (new in C-2 fix)
+    for segment in parsed.path.split("/"):
+        if segment:
+            if decision := _check_token(
+                segment, "path segment",
+                "net.base64_in_path", "net.hex_in_path", "net.high_entropy_path"
+            ):
+                return decision
+
+    # Check userinfo (user:password@host) (new in C-2 fix)
+    if parsed.username:
+        if decision := _check_token(
+            parsed.username, "userinfo username",
+            "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
+        ):
+            return decision
+    if parsed.password:
+        if decision := _check_token(
+            parsed.password, "userinfo password",
+            "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
+        ):
+            return decision
+
+    # Check URL fragment (C-2 fix: fragments may be forwarded by internal
+    # code even though browsers don't send them to servers).
+    if parsed.fragment:
+        if decision := _check_token(
+            parsed.fragment, "fragment",
+            "net.base64_in_fragment", "net.hex_in_fragment", "net.high_entropy_fragment"
+        ):
+            return decision
+
     return None
 
 
@@ -645,7 +708,28 @@ def _eval_net(ctx: PolicyContext) -> PolicyDecision | None:
 
 def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     """Evaluate git action rules."""
-    subcmd = ctx.args[0].lower() if ctx.args else ""
+    # Skip leading global options to find the real subcommand.
+    # Git options that consume the next token as a value must be handled
+    # specially; otherwise ``git -c key=val push`` would treat ``key=val``
+    # as the subcommand and bypass the push deny rule (H-5 fix).
+    _GIT_OPTS_WITH_VALUE = frozenset({
+        "-c", "-C", "--git-dir", "--work-tree", "--namespace",
+        "--config-env", "--super-prefix",
+    })
+    subcmd = ""
+    skip_next = False
+    for token in ctx.args:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in _GIT_OPTS_WITH_VALUE:
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            # Handle --option=value (e.g. --git-dir=/tmp) — single token
+            continue
+        subcmd = token.lower()
+        break
 
     if subcmd in GIT_DENY_SUBCMDS:
         # DENY unless GIT_PUSH_APPROVAL capability is granted

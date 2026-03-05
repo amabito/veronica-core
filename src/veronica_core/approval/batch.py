@@ -21,11 +21,16 @@ from typing import Callable
 class BatchedRequest:
     """A group of approval requests sharing the same args_hash.
 
+    Note (L-4): ``count`` is intentionally mutable despite this being a
+    ``@dataclass``.  ``ApprovalBatcher`` increments it in-place as new
+    requests arrive, avoiding object churn.  Callers should treat all other
+    fields as effectively immutable after construction.
+
     Args:
         args_hash: SHA256 hex of ``"rule_id|action|arg0|arg1|..."``.
         rule_id: Policy rule that triggered the first request in the batch.
         action: Action type (e.g. "file_write").
-        count: Number of requests accumulated so far.
+        count: Number of requests accumulated so far.  Mutated by batcher.
     """
 
     args_hash: str

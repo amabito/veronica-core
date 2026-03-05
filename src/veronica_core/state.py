@@ -5,6 +5,13 @@ Replaces global variables with proper state management.
 """
 
 from __future__ import annotations
+
+__all__ = [
+    "VeronicaState",
+    "VeronicaStateMachine",
+    "StateTransition",
+    "VALID_TRANSITIONS",
+]
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Final, List
@@ -62,6 +69,10 @@ class VeronicaStateMachine:
     """VERONICA state machine with cooldown and fail tracking."""
 
     # Configuration
+    # L2: These are public mutable fields (dataclass default). They should be
+    # treated as immutable after construction: mutating them concurrently while
+    # record_fail() is running creates a race on the threshold comparison.
+    # To change configuration safely, create a new VeronicaStateMachine instance.
     cooldown_fails: int = 3
     cooldown_seconds: int = 600  # 10 minutes
 
@@ -244,6 +255,9 @@ class VeronicaStateMachine:
         instance.cooldowns = dict(data.get("cooldowns", {}))
         instance.current_state = VeronicaState(data.get("current_state", "IDLE"))
         raw_history = data.get("state_history", [])
+        # M1: Cap history at 100 entries to prevent DoS via malformed/large files.
+        # During normal operation, transition() enforces the same cap in-place.
+        raw_history = raw_history[-100:]
         instance.state_history = []
         for t in raw_history:
             try:

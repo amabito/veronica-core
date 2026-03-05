@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from veronica_core.adapter_capabilities import AdapterCapabilities
 
 from veronica_core.adapters._shared import (
-    build_container,
+    build_adapter_container,
     check_and_halt,
     record_budget_spend,
     safe_emit,
@@ -134,7 +134,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             event_ends_to_ignore=[],
         )
 
-        self._container = build_container(config)
+        self._container = build_adapter_container(config)
         self._circuit_breaker = circuit_breaker
         self._entity_id = entity_id
         self._metrics = metrics

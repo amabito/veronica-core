@@ -1,6 +1,8 @@
 """VERONICA Retry Containment - Budget-aware retry wrapper."""
 
 from __future__ import annotations
+
+__all__ = ["RetryContainer"]
 from dataclasses import dataclass, field
 from typing import Callable, TypeVar, Optional, Any
 import random
@@ -22,6 +24,13 @@ class RetryContainer:
     Unlike per-call retry limits, this enforces a total retry budget
     across the entire request chain. Prevents 3 retries x 5 nested
     calls = 15 LLM calls from one user action.
+
+    C1 CONCURRENCY WARNING: ``RetryContainer`` is NOT safe for concurrent
+    ``execute()`` calls on the same instance. ``_attempt_count`` and
+    ``_total_retries`` are instance-level state; concurrent callers will race
+    on these counters and produce incorrect values. Each call chain should use
+    its own ``RetryContainer`` instance. This is by design — the container
+    tracks per-chain retry budget, not per-thread.
 
     Example:
         retry = RetryContainer(max_retries=3, backoff_base=1.0)

@@ -214,6 +214,14 @@ class WindowsSandboxRunner:
         slashes that suggest a path, or backslashes.  Short tokens that are
         likely flags or values are not treated as paths.
         """
+        import re as _re
+
+        if not arg:
+            return False
+        # 2-char Windows relative drive reference: "C:" is a valid path root
+        # that would have been missed by the old len(arg) < 3 guard (H-6 fix).
+        if _re.match(r"^[A-Za-z]:$", arg):
+            return True
         if len(arg) < 3:
             return False
         # Windows drive letter (C:/, C:\\)
@@ -239,7 +247,7 @@ class WindowsSandboxRunner:
             shutil.copytree(
                 self._config.repo_root,
                 str(dest),
-                dirs_exist_ok=True,
+                dirs_exist_ok=False,  # H-6: must not merge with existing content
                 ignore=shutil.ignore_patterns(
                     # Build artifacts
                     "__pycache__",
