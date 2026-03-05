@@ -13,9 +13,27 @@ import threading
 import time
 from typing import Dict, Optional
 
+import re
+
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState, FailurePredicate
-from veronica_core.distributed import _redact_exc
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
+
+
+def _redact_exc(exc: BaseException) -> str:
+    """Return exception type and message with Redis URLs redacted.
+
+    Duplicate of distributed._redact_exc kept here to break the
+    distributed <-> distributed_circuit_breaker circular import.
+    See: https://github.com/veronica-core/veronica-core/issues/XXX
+    """
+    msg = str(exc)
+    msg = re.sub(
+        r"(rediss?(?:\+ssl)?://)\S+@(?=\S)",
+        r"\1***@",
+        msg,
+        flags=re.IGNORECASE,
+    )
+    return f"{type(exc).__name__}: {msg}"
 
 logger = logging.getLogger(__name__)
 
