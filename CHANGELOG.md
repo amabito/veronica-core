@@ -104,29 +104,29 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## v2.0 — v2.7 Release Series Summary
+## v2.0 -- v2.7 Release Series Summary
 
 Eight releases in three days. 1311 new tests (2563 to 3874). Zero breaking changes from v2.1.0 onward.
 
-**v2.0.0 — Reserve/Commit/Rollback.** Two-phase budget protocol (`reserve` / `commit` / `rollback`) on local and Redis backends. Async budget backends (`AsyncLocalBudgetBackend`, `AsyncRedisBudgetBackend`). WebSocket containment via ASGI middleware (`close(1008)` on step exhaustion). `CancellationToken` parent/child hierarchy with upward cost propagation. `SharedTimeoutPool` singleton for process-wide deadline scheduling. 627 new tests.
+**v2.0.0 -- Reserve/Commit/Rollback.** Two-phase budget protocol (`reserve` / `commit` / `rollback`) on local and Redis backends. Async budget backends (`AsyncLocalBudgetBackend`, `AsyncRedisBudgetBackend`). WebSocket containment via ASGI middleware (`close(1008)` on step exhaustion). `CancellationToken` parent/child hierarchy with upward cost propagation. `SharedTimeoutPool` singleton for process-wide deadline scheduling. 627 new tests.
 
-**v2.1.0 — Declarative Policy, Adaptive Threshold, Multi-tenant Budget.** YAML/JSON policy loader with hot-reload watcher and 7 builtin rule types. `AdaptiveThresholdPolicy` with burn-rate estimation and spike detection. `AnomalyDetector` using Welford's online Z-score. `TenantRegistry` with Organisation/Project/Team/Agent hierarchy and ancestor-walk resolution. `BudgetPool` with distributed reserve/commit/rollback integration. 231 new tests (107 adversarial).
+**v2.1.0 -- Declarative Policy, Adaptive Threshold, Multi-tenant Budget.** YAML/JSON policy loader with hot-reload watcher and 7 builtin rule types. `AdaptiveThresholdPolicy` with burn-rate estimation and spike detection. `AnomalyDetector` using Welford's online Z-score. `TenantRegistry` with Organisation/Project/Team/Agent hierarchy and ancestor-walk resolution. `BudgetPool` with distributed reserve/commit/rollback integration. 231 new tests (107 adversarial).
 
-**v2.2.0 — OTel Feedback Loop.** `OTelMetricsIngester` parses AG2, veronica-core, and OpenLLMetry spans into per-agent metrics. `MetricsDrivenPolicy` evaluates declarative `MetricRule` thresholds (gt/lt/gte/lte/eq) with severity ordering. Sliding-window cost tracking. Agent cardinality cap (10K). NaN/Inf threshold rejection. 229 new tests.
+**v2.2.0 -- OTel Feedback Loop.** `OTelMetricsIngester` parses AG2, veronica-core, and OpenLLMetry spans into per-agent metrics. `MetricsDrivenPolicy` evaluates declarative `MetricRule` thresholds (gt/lt/gte/lte/eq) with severity ordering. Sliding-window cost tracking. Agent cardinality cap (10K). NaN/Inf threshold rejection. 229 new tests.
 
-**v2.3.x — ExecutionGraph Hooks + Safety Hardening.** Dynamic observer/subscriber registration on `ExecutionGraph`. `NodeEvent` frozen dataclass with 13 fields. Copy-on-write lock-free iteration. v2.3.1: deprecated API cleanup (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`), `ExecutionContext.close()`. 42 tests.
+**v2.3.x -- ExecutionGraph Hooks + Safety Hardening.** Dynamic observer/subscriber registration on `ExecutionGraph`. `NodeEvent` frozen dataclass with 13 fields. Copy-on-write lock-free iteration. v2.3.1: deprecated API cleanup (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`), `ExecutionContext.close()`. 42 tests.
 
-**v2.4.0 — Code Quality.** `Decision` enum migration across MCP adapters. `build_adapter_container()` shared factory. CrewAI `execution_context=` kwarg. Snapshot reuse in `ExecutionContextContainerAdapter.check()`. 23 adversarial tests.
+**v2.4.0 -- Code Quality.** `Decision` enum migration across MCP adapters. `build_adapter_container()` shared factory. CrewAI `execution_context=` kwarg. Snapshot reuse in `ExecutionContextContainerAdapter.check()`. 23 adversarial tests.
 
-**v2.5.0 — HALT Unification.** Shared `check_and_halt()` across all 5 framework adapters (AG2, CrewAI, LangChain, LangGraph, LlamaIndex). `emit_metrics_decision()` / `emit_metrics_tokens()` helpers. `metrics=` and `agent_id=` kwargs on all adapters. `docs/API.md` rewritten (739 lines). 37 new tests.
+**v2.5.0 -- HALT Unification.** Shared `check_and_halt()` across all 5 framework adapters (AG2, CrewAI, LangChain, LangGraph, LlamaIndex). `emit_metrics_decision()` / `emit_metrics_tokens()` helpers. `metrics=` and `agent_id=` kwargs on all adapters. `docs/API.md` rewritten (739 lines). 37 new tests.
 
-**v2.6.0 — Policy Simulation.** `PolicySimulator` replays execution logs against `ShieldPipeline` configs. `ExecutionLog` with JSON file, string, and OTel span import. `SimulationReport` with per-agent breakdown, `savings_percentage`, `summary()`, `to_dict()`. NaN-safe cost accumulation via `math.isfinite()`. 51 new tests (22 adversarial).
+**v2.6.0 -- Policy Simulation.** `PolicySimulator` replays execution logs against `ShieldPipeline` configs. `ExecutionLog` with JSON file, string, and OTel span import. `SimulationReport` with per-agent breakdown, `savings_percentage`, `summary()`, `to_dict()`. NaN-safe cost accumulation via `math.isfinite()`. 51 new tests (22 adversarial).
 
-**v2.7.0 — A2A Trust Boundary.** Cross-agent trust classification with 4 tiers (`TrustLevel`: UNTRUSTED, PROVISIONAL, TRUSTED, PRIVILEGED). `AgentIdentity` frozen dataclass with origin validation. `TrustBasedPolicyRouter` maps trust levels to `ShieldPipeline` configs. `TrustEscalationTracker` with per-agent locking, cardinality cap (10K), O(1) index-based promotion, automatic demotion on failure. 59 new tests (31 adversarial).
+**v2.7.0 -- A2A Trust Boundary.** Cross-agent trust classification with 4 tiers (`TrustLevel`: UNTRUSTED, PROVISIONAL, TRUSTED, PRIVILEGED). `AgentIdentity` frozen dataclass with origin validation. `TrustBasedPolicyRouter` maps trust levels to `ShieldPipeline` configs. `TrustEscalationTracker` with per-agent locking, cardinality cap (10K), O(1) index-based promotion, automatic demotion on failure. 59 new tests (31 adversarial).
 
 ---
 
-## [2.7.0] — 2026-03-05 — A2A Trust Boundary
+## [2.7.0] -- 2026-03-05 -- A2A Trust Boundary
 
 ### Added
 
@@ -141,33 +141,33 @@ Eight releases in three days. 1311 new tests (2563 to 3874). Zero breaking chang
 
 none
 
-## [2.6.0] — 2026-03-05 — Policy Simulation
+## [2.6.0] -- 2026-03-05 -- Policy Simulation
 
 **Breaking changes:** none.
 
 ### Added
 
-- **`veronica_core.simulation` package** — replay historical execution logs against policy configurations for what-if analysis.
-- **`ExecutionLogEntry`** — frozen dataclass recording a single action (llm_call, tool_call, reply) with cost, tokens, latency, and success status.
-- **`ExecutionLog`** — collection with factory methods: `from_file()` (JSON), `from_string()`, `from_otel_export()` (OTel span dicts).
-- **`PolicySimulator`** — replays log entries against a `ShieldPipeline`, evaluating `before_llm_call`, `before_tool_call`, `before_charge`, and `on_error` hooks per entry.
-- **`SimulationReport`** — aggregate statistics (allowed/halted/degraded/warned counts, cost_saved_estimate, savings_percentage, per-agent breakdown) with `summary()` and `to_dict()`.
-- **`SimulationEvent`** — frozen dataclass recording each policy decision during replay.
-- **NaN-safe cost accumulation** — `math.isfinite()` guards prevent NaN/Inf costs from corrupting report totals.
-- **51 new tests** — 29 happy-path + 22 adversarial (corrupted input, concurrent access, state accumulation, boundary conditions, pipeline edge cases).
+- **`veronica_core.simulation` package** -- replay historical execution logs against policy configurations for what-if analysis.
+- **`ExecutionLogEntry`** -- frozen dataclass recording a single action (llm_call, tool_call, reply) with cost, tokens, latency, and success status.
+- **`ExecutionLog`** -- collection with factory methods: `from_file()` (JSON), `from_string()`, `from_otel_export()` (OTel span dicts).
+- **`PolicySimulator`** -- replays log entries against a `ShieldPipeline`, evaluating `before_llm_call`, `before_tool_call`, `before_charge`, and `on_error` hooks per entry.
+- **`SimulationReport`** -- aggregate statistics (allowed/halted/degraded/warned counts, cost_saved_estimate, savings_percentage, per-agent breakdown) with `summary()` and `to_dict()`.
+- **`SimulationEvent`** -- frozen dataclass recording each policy decision during replay.
+- **NaN-safe cost accumulation** -- `math.isfinite()` guards prevent NaN/Inf costs from corrupting report totals.
+- **51 new tests** -- 29 happy-path + 22 adversarial (corrupted input, concurrent access, state accumulation, boundary conditions, pipeline edge cases).
 
 ---
 
-## [2.5.0] — 2026-03-05 — HALT Unification & Metrics Wiring
+## [2.5.0] -- 2026-03-05 -- HALT Unification & Metrics Wiring
 
 **Breaking changes:** none.
 
 ### Added
 
-- **`check_and_halt()`** (`_shared.py`) — shared helper centralizing `container.check() -> VeronicaHalt` pattern. All 5 framework adapters now use it.
-- **`emit_metrics_decision()`**, **`emit_metrics_tokens()`**, **`safe_emit()`** (`_shared.py`) — ContainmentMetricsProtocol emission helpers with exception swallowing.
+- **`check_and_halt()`** (`_shared.py`) -- shared helper centralizing `container.check() -> VeronicaHalt` pattern. All 5 framework adapters now use it.
+- **`emit_metrics_decision()`**, **`emit_metrics_tokens()`**, **`safe_emit()`** (`_shared.py`) -- ContainmentMetricsProtocol emission helpers with exception swallowing.
 - **`metrics=` and `agent_id=` kwargs** on all framework adapters (ag2, crewai, langchain, langgraph, llamaindex). Emits `record_decision` on ALLOW/HALT and `record_tokens` on LLM completion.
-- **37 new tests** — 12 for HALT unification (including adversarial: empty reason, exception propagation), 25 for metrics wiring.
+- **37 new tests** -- 12 for HALT unification (including adversarial: empty reason, exception propagation), 25 for metrics wiring.
 
 ### Changed
 
@@ -176,32 +176,32 @@ none
 
 ---
 
-## [2.4.0] — 2026-03-05 — Code Quality & HALT Hardening
+## [2.4.0] -- 2026-03-05 -- Code Quality & HALT Hardening
 
 **Breaking changes:** none. `MCPToolResult.decision` field type changed from `str` to `Decision` enum, but `Decision` inherits from `str` so `== "ALLOW"` / `== "HALT"` comparisons still work.
 
 ### Added
 
-- **`ExecutionContext.close()`** — explicit resource cleanup extracted from `__exit__`. Idempotent, thread-safe (10-thread concurrent close calls exactly-once backend cleanup).
-- **CrewAI `execution_context=` kwarg** — chain-level `ExecutionContext` enforcement for CrewAI adapter via `build_adapter_container()`.
-- **`build_adapter_container()`** (`_shared.py`) — routes to `ExecutionContextContainerAdapter` when `execution_context` is provided, else standalone `AIContainer`.
-- **23 adversarial tests** (`test_v24_adversarial.py`) — 6 categories: corrupted input, concurrent access, state corruption, boundary abuse, Decision enum backward compat, wrap+close race.
+- **`ExecutionContext.close()`** -- explicit resource cleanup extracted from `__exit__`. Idempotent, thread-safe (10-thread concurrent close calls exactly-once backend cleanup).
+- **CrewAI `execution_context=` kwarg** -- chain-level `ExecutionContext` enforcement for CrewAI adapter via `build_adapter_container()`.
+- **`build_adapter_container()`** (`_shared.py`) -- routes to `ExecutionContextContainerAdapter` when `execution_context` is provided, else standalone `AIContainer`.
+- **23 adversarial tests** (`test_v24_adversarial.py`) -- 6 categories: corrupted input, concurrent access, state corruption, boundary abuse, Decision enum backward compat, wrap+close race.
 
 ### Changed
 
 - **`MCPToolResult.decision`** default changed from `str "ALLOW"` to `Decision.ALLOW` enum. All internal string literals migrated to enum references.
 - **`_try_rollback()`** refactored from `@staticmethod(backend, reservation_id)` to instance method `(self, reservation_id)` using `self._budget_backend`. Eliminates 5 duplicated `self._budget_backend` arguments at call sites.
-- **`AsyncMCPContainmentAdapter._ensure_stats()`** — fast-path added: skips lock acquisition for existing tool names (matching sync adapter behavior).
-- **`AsyncMCPContainmentAdapter.__init__()`** — `_backend_supports_reserve` cached at init time instead of per-call `hasattr` check.
-- **`ExecutionContextContainerAdapter.check()`** — reuses already-fetched snapshot instead of triggering a second `get_snapshot()` call.
+- **`AsyncMCPContainmentAdapter._ensure_stats()`** -- fast-path added: skips lock acquisition for existing tool names (matching sync adapter behavior).
+- **`AsyncMCPContainmentAdapter.__init__()`** -- `_backend_supports_reserve` cached at init time instead of per-call `hasattr` check.
+- **`ExecutionContextContainerAdapter.check()`** -- reuses already-fetched snapshot instead of triggering a second `get_snapshot()` call.
 
 ### Fixed
 
-- **`_BudgetProxy.spent_usd`** — `float(None)` crash when `_cost_usd_accumulated` is `None`. Now returns `0.0` safely.
+- **`_BudgetProxy.spent_usd`** -- `float(None)` crash when `_cost_usd_accumulated` is `None`. Now returns `0.0` safely.
 
 ---
 
-## [2.3.1] — 2026-03-05 — Safety Hardening & Phase 3 Cleanup
+## [2.3.1] -- 2026-03-05 -- Safety Hardening & Phase 3 Cleanup
 
 **Breaking changes:** deprecated aliases removed (`AIcontainer`, `VeronicaPersistence`, `GuardConfig.timeout_ms`). Callers must use `AIContainer`, `JSONBackend`/`MemoryBackend`, and `ExecutionContext` timeout respectively.
 
@@ -229,7 +229,7 @@ none
 
 ---
 
-## [2.3.0] — 2026-03-05 — ExecutionGraph Extensibility Hooks
+## [2.3.0] -- 2026-03-05 -- ExecutionGraph Extensibility Hooks
 
 **Breaking changes:** none
 
@@ -249,7 +249,7 @@ none
   - Identity-based dedup and `is not` removal semantics.
   - Exception isolation: subscriber failures never propagate to the graph caller.
 
-### Hardened (5 audit rounds — R6-R8 fixes + R9-R10 clean)
+### Hardened (5 audit rounds -- R6-R8 fixes + R9-R10 clean)
 
 - TOCTOU in `NodeEvent` construction: fields now snapshot under lock.
 - `mark_halt` stores `halt_reason` (not raw `stop_reason`) for observer/subscriber/snapshot consistency.
@@ -262,7 +262,7 @@ none
 
 ---
 
-## [2.2.0] — 2026-03-05 — OTel Feedback Loop
+## [2.2.0] -- 2026-03-05 -- OTel Feedback Loop
 
 **Breaking changes:** none
 
@@ -276,7 +276,7 @@ none
   - `PolicyRegistry` integration: `metric_rule` builtin factory with explicit null/empty field rejection.
   - Module-level default ingester via `set_default_ingester()` / `get_default_ingester()`.
 
-### Hardened (5 audit rounds — R1-R4 adversarial + R5 F.R.I.D.A.Y.)
+### Hardened (5 audit rounds -- R1-R4 adversarial + R5 F.R.I.D.A.Y.)
 
 - NaN/inf threshold rejection in `MetricRule.__post_init__` (silent bypass / DoS prevention).
 - Agent cardinality cap (`max_agents=10,000`) to prevent unbounded state growth.
@@ -295,7 +295,7 @@ none
 
 ---
 
-## [2.1.0] — 2026-03-05 — Declarative Policy, Adaptive Threshold, Multi-tenant Budget
+## [2.1.0] -- 2026-03-05 -- Declarative Policy, Adaptive Threshold, Multi-tenant Budget
 
 **Breaking changes:** none
 
@@ -324,7 +324,7 @@ none
 
 ---
 
-## [2.0.0] — 2026-03-04 — Reserve/Commit/Rollback, Async Budget, Adapter Unification
+## [2.0.0] -- 2026-03-04 -- Reserve/Commit/Rollback, Async Budget, Adapter Unification
 
 **Breaking changes:** `BudgetBackend` protocol now requires `reserve(amount, ceiling)`, `commit(rid)`, `rollback(rid)` methods. Old `spend()`-based backends must migrate.
 
@@ -358,7 +358,7 @@ none
 
 ---
 
-## [1.8.11] — 2026-03-03 — Round 5 Deep Audit
+## [1.8.11] -- 2026-03-03 -- Round 5 Deep Audit
 
 **Breaking changes:** none
 
@@ -376,7 +376,7 @@ none
 
 ---
 
-## [1.8.10] — 2026-03-03 — Round 4 Hardening
+## [1.8.10] -- 2026-03-03 -- Round 4 Hardening
 
 **Breaking changes:** `ExecutionConfig(timeout_ms=-1)` now raises `ValueError` (previously accepted silently).
 
@@ -393,7 +393,7 @@ none
 
 ---
 
-## [1.8.9] — 2026-03-03 — Round 3 Deep Audit
+## [1.8.9] -- 2026-03-03 -- Round 3 Deep Audit
 
 **Breaking changes:** `PartialResultBuffer.append()` now raises `ValueError` after `mark_complete()` (previously silent).
 
@@ -412,7 +412,7 @@ none
 
 ---
 
-## [1.8.8] — 2026-03-03 — Round 2 LOW Sweep
+## [1.8.8] -- 2026-03-03 -- Round 2 LOW Sweep
 
 **Breaking changes:** none
 
@@ -420,7 +420,7 @@ none
 
 - **ShieldPipeline**: `on_error()` no-hook fallback path now records SafetyEvent (was asymmetric with other pipeline methods).
 - **ExecutionContext**: Divergence event dedup now uses O(1) `_event_dedup_keys` (4th site missed in v1.8.7).
-- **MinimalResponsePolicy**: Fix grammar — "question" now pluralised correctly when `max_questions > 1`.
+- **MinimalResponsePolicy**: Fix grammar -- "question" now pluralised correctly when `max_questions > 1`.
 - **PolicyEngine**: `_check_python_inline_exec` `-m` index search now uses `args[1:]` slice consistently.
 - **DynamicAllocator**: Clamp `min_floor` when `min_share * n` exceeds total budget (was violating allocation invariant).
 - **patch.py**: Cost estimation failure log level upgraded from `debug` to `warning`.
@@ -431,7 +431,7 @@ none
 
 ---
 
-## [1.8.7] — 2026-03-03 — LOW Bug Sweep & CI Fix
+## [1.8.7] -- 2026-03-03 -- LOW Bug Sweep & CI Fix
 
 **Breaking changes:** none
 
@@ -450,7 +450,7 @@ none
 
 ---
 
-## [1.8.6] — 2026-03-03 — Shield & Security Hardening
+## [1.8.6] -- 2026-03-03 -- Shield & Security Hardening
 
 **Breaking changes:** none
 
@@ -483,7 +483,7 @@ none
 
 ---
 
-## [1.8.5] — 2026-03-03 — Simplify & Quality Hardening
+## [1.8.5] -- 2026-03-03 -- Simplify & Quality Hardening
 
 **Breaking changes:** none
 
@@ -517,7 +517,7 @@ none
 
 ---
 
-## [1.8.4] — 2026-03-03 — Distributed Safety & Coverage Hardening
+## [1.8.4] -- 2026-03-03 -- Distributed Safety & Coverage Hardening
 
 **Breaking changes:** none
 
@@ -556,7 +556,7 @@ none
 
 ---
 
-## [1.8.3] — 2026-03-03 — Thread Safety & Adversarial Hardening
+## [1.8.3] -- 2026-03-03 -- Thread Safety & Adversarial Hardening
 
 **Breaking changes:** none
 
@@ -591,7 +591,7 @@ none
 
 ---
 
-## [1.8.2] — 2026-03-03 — Phase 0 Hotfix
+## [1.8.2] -- 2026-03-03 -- Phase 0 Hotfix
 
 **Breaking changes:** none
 
@@ -618,7 +618,7 @@ none
 
 ---
 
-## [1.8.1] — 2026-03-03 — Full Audit Fixes
+## [1.8.1] -- 2026-03-03 -- Full Audit Fixes
 
 **Breaking changes:** none
 
@@ -668,7 +668,7 @@ none
 
 ---
 
-## [1.8.0] — 2026-03-02 — MCP Adapter Hardening
+## [1.8.0] -- 2026-03-02 -- MCP Adapter Hardening
 
 **Breaking changes:** none
 
@@ -701,7 +701,7 @@ none
 
 ---
 
-## [1.7.0] — 2026-03-02 — Async MCP Containment
+## [1.7.0] -- 2026-03-02 -- Async MCP Containment
 
 **Breaking changes:** none
 
@@ -729,7 +729,7 @@ none
 
 ---
 
-## [1.6.1] — 2026-03-02 — MCP Adapter Docs Fix
+## [1.6.1] -- 2026-03-02 -- MCP Adapter Docs Fix
 
 **Breaking changes:** none
 
@@ -741,7 +741,7 @@ none
 
 ---
 
-## [1.6.0] — 2026-03-02 — Protocols, Budget Allocator, OTel Bridge
+## [1.6.0] -- 2026-03-02 -- Protocols, Budget Allocator, OTel Bridge
 
 **Breaking changes:** none
 
@@ -776,7 +776,7 @@ none
 
 ---
 
-## [1.5.0] — 2026-03-01 — Enterprise Key Providers & CI Guard
+## [1.5.0] -- 2026-03-01 -- Enterprise Key Providers & CI Guard
 
 **Breaking changes:** none
 
@@ -812,7 +812,7 @@ none
 
 ---
 
-## [1.4.0] — 2026-02-28 — Adapter Consolidation & Hardening
+## [1.4.0] -- 2026-02-28 -- Adapter Consolidation & Hardening
 
 **Breaking changes:** none
 
@@ -859,7 +859,7 @@ none
 
 ---
 
-## [1.3.0] — 2026-02-28 — ROS2 Adapter
+## [1.3.0] -- 2026-02-28 -- ROS2 Adapter
 
 **Breaking changes:** none
 
@@ -884,20 +884,20 @@ none
 
 ---
 
-## [1.2.0] — 2026-02-28 — Failure Classification
+## [1.2.0] -- 2026-02-28 -- Failure Classification
 
 **Breaking changes:** none
 
 ### Added
 
-- **`FailurePredicate`** type alias: `Callable[[BaseException], bool]` — returns
+- **`FailurePredicate`** type alias: `Callable[[BaseException], bool]` -- returns
   `True` to count the failure, `False` to ignore it.
 - **`failure_predicate`** parameter on `CircuitBreaker`, `DistributedCircuitBreaker`,
   and `get_default_circuit_breaker()` factory.
 - **3 built-in predicate factories**:
-  - `ignore_exception_types(*types)` — ignore user-caused errors (e.g. 400s)
-  - `count_exception_types(*types)` — only count provider failures (e.g. 500s, timeouts)
-  - `ignore_status_codes(*codes)` — filter by HTTP `.status_code` or `.response.status_code`
+  - `ignore_exception_types(*types)` -- ignore user-caused errors (e.g. 400s)
+  - `count_exception_types(*types)` -- only count provider failures (e.g. 500s, timeouts)
+  - `ignore_status_codes(*codes)` -- filter by HTTP `.status_code` or `.response.status_code`
 - `record_failure(*, error=None) -> bool` on both `CircuitBreaker` and
   `DistributedCircuitBreaker`. Returns `True` if counted, `False` if filtered.
   `error=None` always counts (backward compatible with AG2 null-reply detection).
@@ -916,12 +916,12 @@ none
   Filtered failures skip Redis entirely (0.14us vs 121us).
 - **Fail-safe**: If predicate raises `Exception`, the failure is counted (deny > allow).
   `SystemExit`/`KeyboardInterrupt` propagate (not caught).
-- **Backward compatible**: `record_failure()` with no args still works — `error=None`
+- **Backward compatible**: `record_failure()` with no args still works -- `error=None`
   bypasses the predicate entirely.
 
 ---
 
-## [1.1.2] — 2026-02-27 — DCB Lua Bug Fix & Optimization
+## [1.1.2] -- 2026-02-27 -- DCB Lua Bug Fix & Optimization
 
 **Breaking changes:** none
 
@@ -934,7 +934,7 @@ none
   while state was CLOSED. Now gated on `state == 'HALF_OPEN'` only.
 - **Fail-safe design documented**: Any failure during HALF_OPEN reopens the
   circuit immediately (deny > allow). Per-process slot ownership is
-  intentionally not tracked — if any process reports a failure while testing,
+  intentionally not tracked -- if any process reports a failure while testing,
   the service is still unhealthy.
 
 ### Changed
@@ -971,7 +971,7 @@ none
 
 ---
 
-## [1.1.1] — 2026-02-27 — DCB Performance & Reliability Hardening
+## [1.1.1] -- 2026-02-27 -- DCB Performance & Reliability Hardening
 
 **Breaking changes:** none
 
@@ -1000,7 +1000,7 @@ none
 
 ---
 
-## [1.1.0] — 2026-02-27 — Distributed Circuit Breaker
+## [1.1.0] -- 2026-02-27 -- Distributed Circuit Breaker
 
 **Breaking changes:** none
 
@@ -1030,11 +1030,11 @@ none
 - **v1.2.0**: `CircuitBreakerCapability.conservative()` / `.aggressive()` factory
   presets; AG2 `GroupChatManager` per-agent label mapper.
 - **v1.3.0**: Native `ReplyInterceptor` and `LLMCallMiddleware` protocols (pending
-  AG2 upstream discussion — see [RFC issue](https://github.com/ag2ai/ag2/issues)).
+  AG2 upstream discussion -- see [RFC issue](https://github.com/ag2ai/ag2/issues)).
 
 ---
 
-## [1.0.2] — 2026-02-27 — Fix runtime import for autogen package
+## [1.0.2] -- 2026-02-27 -- Fix runtime import for autogen package
 
 **Breaking changes:** none
 
@@ -1053,7 +1053,7 @@ none
 
 ---
 
-## [1.0.1] — 2026-02-26 — AG2 Capability: remove_from_agent
+## [1.0.1] -- 2026-02-26 -- AG2 Capability: remove_from_agent
 
 **Breaking changes:** none
 
@@ -1062,7 +1062,7 @@ none
 - `CircuitBreakerCapability.remove_from_agent(agent)`: restores the original
   `generate_reply` method and removes the agent's `CircuitBreaker` from the
   capability. Calling on an unregistered agent logs a warning and returns
-  without raising. Enables clean teardown without side-effects — e.g., for
+  without raising. Enables clean teardown without side-effects -- e.g., for
   testing, hot-swapping capabilities, or graceful shutdown flows.
 
 ### Changed
@@ -1077,7 +1077,7 @@ none
   presets; AG2 `GroupChatManager` ↔ per-agent label mapper for isolated budget
   tracking across group chat participants.
 - **v1.2.0**: Native `ReplyInterceptor` and `LLMCallMiddleware` protocols (pending
-  AG2 upstream discussion — see [RFC issue](https://github.com/ag2ai/ag2/issues)).
+  AG2 upstream discussion -- see [RFC issue](https://github.com/ag2ai/ag2/issues)).
 
 ### Tests
 
@@ -1086,7 +1086,7 @@ none
 
 ---
 
-## [1.0.0] — 2026-02-26 — Production Release & Adversarial Hardening
+## [1.0.0] -- 2026-02-26 -- Production Release & Adversarial Hardening
 
 **Breaking changes:** `on_error()` default changed from ALLOW to HALT. `AIcontainer` renamed to `AIContainer`.
 
@@ -1173,7 +1173,7 @@ none
 
 ---
 
-## [0.12.0] — 2026-02-26 — Middleware, Time-Based Divergence, Streaming Buffers
+## [0.12.0] -- 2026-02-26 -- Middleware, Time-Based Divergence, Streaming Buffers
 
 **Breaking changes:** none
 
@@ -1184,19 +1184,19 @@ none
   context is stored in a `ContextVar` so any code within the same request can call
   `get_current_execution_context()` without passing the object manually. Non-HTTP
   scopes (lifespan, websocket) pass through to the inner app unchanged. Returns 429
-  on `Decision.HALT` — either pre-flight (limit already exceeded before the app is
+  on `Decision.HALT` -- either pre-flight (limit already exceeded before the app is
   called) or post-flight (context was aborted during the call). The 429 path skips
   the inner app entirely on pre-flight; on post-flight it is suppressed if the app
   has already started sending a response (ASGI protocol constraint).
 
 - **Time-based divergence heuristics** (`ExecutionGraph`): Two rate checks added to
   the existing consecutive-pattern detector:
-  - `COST_RATE_EXCEEDED` — fires once when cumulative chain cost / elapsed seconds
+  - `COST_RATE_EXCEEDED` -- fires once when cumulative chain cost / elapsed seconds
     exceeds `cost_rate_threshold_usd_per_sec` (constructor param, default 0.10 USD/s).
-  - `TOKEN_VELOCITY_EXCEEDED` — fires once when total output tokens / elapsed seconds
+  - `TOKEN_VELOCITY_EXCEEDED` -- fires once when total output tokens / elapsed seconds
     exceeds `token_velocity_threshold` (constructor param, default 500 tok/s).
   Both fire on `mark_success` (cost and token counts are unavailable before a node
-  completes). Both are deduped per chain — at most one event of each type per
+  completes). Both are deduped per chain -- at most one event of each type per
   `ExecutionGraph` instance. Event shape mirrors existing `divergence_suspected`
   events but carries `cost_rate` or `token_velocity` fields instead of `signature` /
   `repeat_count`. `snapshot()["aggregates"]` now includes `"total_tokens_out"`.
@@ -1227,46 +1227,46 @@ none
 
 ---
 
-## [0.11.1] — 2026-02-26 — Bug fixes and code quality improvements
+## [0.11.1] -- 2026-02-26 -- Bug fixes and code quality improvements
 
 **Breaking changes:** none
 
 ### Fixed
 
-- **AG2 adapter — TokenBudgetHook always zero**: `CircuitBreakerCapability._guarded_generate_reply()` and
+- **AG2 adapter -- TokenBudgetHook always zero**: `CircuitBreakerCapability._guarded_generate_reply()` and
   `VeronicaConversableAgent.generate_reply()` now call `token_budget_hook.before_llm_call()` before the
   call and `record_usage()` after, so token budgets are enforced correctly when used with AG2 agents.
-- **AG2 adapter — ToolCallContext not constructed**: `ag2.py` and `patch.py` now build a proper
+- **AG2 adapter -- ToolCallContext not constructed**: `ag2.py` and `patch.py` now build a proper
   `ToolCallContext` (with `request_id`, `model`, `tool_name`) instead of passing placeholder values.
-- **integration.py — from_dict contradictory state**: On deserialization failure, `loaded_from_disk`
+- **integration.py -- from_dict contradictory state**: On deserialization failure, `loaded_from_disk`
   is now always `False` when `state` is `None`, eliminating the contradictory state.
-- **inject.py — VeronicaHalt decision type**: `decision` field is now `Optional[PolicyDecision]`
+- **inject.py -- VeronicaHalt decision type**: `decision` field is now `Optional[PolicyDecision]`
   to allow `decision=None` callers without a type error.
-- **input_compression.py — ambiguous variable name**: Renamed `l` to `line` (E741).
-- **budget.py — to_dict() thread safety**: Wrapped internal state reads in `with self._lock:`.
-- **integration.py — manual lock management**: Replaced `acquire()/release()` with `with self._lock:`.
+- **input_compression.py -- ambiguous variable name**: Renamed `l` to `line` (E741).
+- **budget.py -- to_dict() thread safety**: Wrapped internal state reads in `with self._lock:`.
+- **integration.py -- manual lock management**: Replaced `acquire()/release()` with `with self._lock:`.
 
 ### New
 
 - **`PostDispatchHook` protocol** (`veronica_core.shield`): Companion to `PreDispatchHook`.
   Provides `after_llm_call(ctx, response)` for post-call observation and recording.
 - **`NoopPostDispatchHook`** (`veronica_core.shield`): No-op implementation of `PostDispatchHook`.
-- **`register_veronica_hook()` — AG2 limitation documented**: Docstring now explicitly notes that
+- **`register_veronica_hook()` -- AG2 limitation documented**: Docstring now explicitly notes that
   `register_reply()` provides no after-hook; `CircuitBreakerCapability` is recommended instead.
-- **`patch_openai()` / `patch_anthropic()` — AG2 caveat documented**: Docstring now notes that
+- **`patch_openai()` / `patch_anthropic()` -- AG2 caveat documented**: Docstring now notes that
   AG2's internal `ModelClient` abstraction may bypass the patch.
 
 ### Improved
 
-- **otel.py — thread safety**: `_otel_enabled` and `_tracer` globals are now protected by a
+- **otel.py -- thread safety**: `_otel_enabled` and `_tracer` globals are now protected by a
   `threading.Lock`.
 - **Token estimation unified**: All `record_usage()` calls use `len(str(reply)) // 4` consistently.
-- **pricing.py — unknown model warning**: Emits `logging.warning()` when falling back to the
+- **pricing.py -- unknown model warning**: Emits `logging.warning()` when falling back to the
   default price for an unrecognised model name.
 
 ---
 
-## [0.11.0] — 2026-02-25 — CircuitBreakerCapability for AG2
+## [0.11.0] -- 2026-02-25 -- CircuitBreakerCapability for AG2
 
 **Breaking changes:** none
 
@@ -1297,7 +1297,7 @@ none
 
 ---
 
-## [0.10.7] — 2026-02-25 — PyPI Metadata & Package Housekeeping
+## [0.10.7] -- 2026-02-25 -- PyPI Metadata & Package Housekeeping
 
 **Breaking changes:** none
 
@@ -1317,11 +1317,11 @@ none
 ### Housekeeping
 
 - Removed internal ops files from public repo (X posting scripts, marketing assets,
-  outreach templates) — moved to private `veronica-ops` repository.
+  outreach templates) -- moved to private `veronica-ops` repository.
 
 ---
 
-## [0.10.6] — 2026-02-25 — Test Suite Quality Overhaul
+## [0.10.6] -- 2026-02-25 -- Test Suite Quality Overhaul
 
 **Breaking changes:** none
 
@@ -1329,7 +1329,7 @@ none
 
 - **Classical Testing alignment**: Removed 6 HIGH-priority anti-pattern categories identified
   against [Classical vs London-style testing principles](https://zenn.dev/tko_kasai/articles/3f5863e3407891):
-  - **H-1** (`test_aicontainer.py`): Removed object-identity assertion (`is`-check) — implementation
+  - **H-1** (`test_aicontainer.py`): Removed object-identity assertion (`is`-check) -- implementation
     detail, not observable behavior.
   - **H-3** (`test_llm_client_injection.py`): Replaced London-style interaction-verification
     (call counts) with observable output assertions.
@@ -1348,15 +1348,15 @@ none
 
 - **New behavioral test files** (37 new tests, all passing):
   - `tests/test_requirements_driven.py` (7): EARS-style requirement-driven tests with
-    explicit `REQUIREMENT:` docstrings — first traceable requirement coverage in the suite.
+    explicit `REQUIREMENT:` docstrings -- first traceable requirement coverage in the suite.
   - `tests/test_user_journey.py` (6): Primary user journey end-to-end: budget exhaustion
     → reset → resume, and degradation → recovery flows.
-  - `tests/test_async_behavior.py` (5): Async observable behavior — async-wrapped functions
+  - `tests/test_async_behavior.py` (5): Async observable behavior -- async-wrapped functions
     return correct `Decision`, concurrent `asyncio.gather` calls respect shared budget.
-  - `tests/test_timeout_expiry.py` (6): `timeout_ms` watcher E2E verification — observable
+  - `tests/test_timeout_expiry.py` (6): `timeout_ms` watcher E2E verification -- observable
     `Decision.HALT` return before long-running `fn` completes, no private attribute access.
   - `tests/security/test_audit_log_thread_safety.py` (4): 10-thread concurrent AuditLog
-    append — hash chain integrity and zero lost writes under race conditions.
+    append -- hash chain integrity and zero lost writes under race conditions.
   - `tests/test_fault_injection.py` (9): JSONBackend corrupted-JSON graceful fallback;
     ShieldPipeline hook-exception behaviour (predictable halt, not silent swallow).
 
@@ -1372,11 +1372,11 @@ none
 ### Stats
 
 - Test count: 1262 → 1289 (+27 net; +37 new, -13 removed anti-patterns / deleted file)
-- All 1289 tests pass (4 xfailed — pre-existing SHA pin, unrelated to this release)
+- All 1289 tests pass (4 xfailed -- pre-existing SHA pin, unrelated to this release)
 
 ---
 
-## [0.10.5] — 2026-02-23 — Adversarial Security Hardening
+## [0.10.5] -- 2026-02-23 -- Adversarial Security Hardening
 
 **Breaking changes:** none
 
@@ -1402,7 +1402,7 @@ none
 
 - **HIGH** (`containment/execution_graph.py`): Frequency-based divergence detection added
   alongside the existing consecutive-signature check. When any single call signature appears
-  `>= freq_threshold` times within the `_K=8` sliding window — regardless of interleaving —
+  `>= freq_threshold` times within the `_K=8` sliding window -- regardless of interleaving --
   a `divergence_suspected` event fires with `detection_mode="frequency"`. Thresholds:
   tool=5, llm=7. This closes the alternating A,B,A,B... bypass confirmed by the adversarial
   review.
@@ -1438,7 +1438,7 @@ none
 
 ---
 
-## [0.10.4] — 2026-02-22 — Concurrency & Isolation Hotfix
+## [0.10.4] -- 2026-02-22 -- Concurrency & Isolation Hotfix
 
 **Breaking changes:** none
 
@@ -1584,7 +1584,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 - **Sandbox ignores credential files** (`runner/sandbox_windows.py`): `shutil.copytree`
   ignore patterns extended to cover `.env`, `.env.*`, `*.env`, `*.key`, `*.pem`, `*.pfx`,
-  `*.p12`, and `*.secret` — preventing private keys and credentials from being copied into
+  `*.p12`, and `*.secret` -- preventing private keys and credentials from being copied into
   the ephemeral sandbox directory.
 
 - **`NonceRegistry` TTL-based eviction** (`approval/approver.py`): replaced size-based
@@ -1597,7 +1597,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
   with `except ValueError` (malformed base64) and a dedicated `except Exception` that logs
   only `type(exc).__name__` to avoid leaking key material in error messages.
 
-- **`scheduler.py` — remove `__import__("time")` anti-pattern**: replaced dynamic import
+- **`scheduler.py` -- remove `__import__("time")` anti-pattern**: replaced dynamic import
   in hot event-emission paths with a standard top-level `import time`, removing an
   unintentional obfuscation of the module dependency.
 
@@ -1689,12 +1689,12 @@ or invocations breaks isolation regardless of per-call policy correctness.
 **Breaking changes:** none
 
 ### Added
-- `SemanticLoopGuard` — pure-Python semantic loop detection using word-level
+- `SemanticLoopGuard` -- pure-Python semantic loop detection using word-level
   Jaccard similarity; no heavy dependencies required
 - `AIcontainer` now accepts `semantic_guard: Optional[SemanticLoopGuard]`
   parameter for automatic loop enforcement
-- `SemanticLoopGuard.feed(text)` — convenience method combining `record()` + `check()`
-- `SemanticLoopGuard.reset()` — clears the rolling output buffer
+- `SemanticLoopGuard.feed(text)` -- convenience method combining `record()` + `check()`
+- `SemanticLoopGuard.reset()` -- clears the rolling output buffer
 
 ### Details
 - Rolling window of recent LLM outputs (default: 3)
@@ -1707,7 +1707,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ---
 
-## [0.9.5] — 2026-02-21
+## [0.9.5] -- 2026-02-21
 
 **Breaking changes:** none
 
@@ -1732,7 +1732,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ---
 
-## [0.9.4] — 2026-02-21
+## [0.9.4] -- 2026-02-21
 
 **Breaking changes:** none
 
@@ -1753,12 +1753,12 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ### Notes
 - No deprecations. All existing APIs unchanged.
-- Neither `openai` nor `anthropic` is added as a dependency — both remain optional.
+- Neither `openai` nor `anthropic` is added as a dependency -- both remain optional.
 - Patches are NOT applied on import. Explicit opt-in required (`patch_openai()` / `patch_anthropic()`).
 
 ---
 
-## [0.9.3] — 2026-02-21
+## [0.9.3] -- 2026-02-21
 
 **Breaking changes:** none
 
@@ -1780,7 +1780,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ---
 
-## [0.9.2] — 2026-02-21
+## [0.9.2] -- 2026-02-21
 
 **Breaking changes:** none
 
@@ -1795,7 +1795,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ---
 
-## [0.9.1] — 2026-02-21
+## [0.9.1] -- 2026-02-21
 
 **Breaking changes:** none
 
@@ -1845,7 +1845,7 @@ or invocations breaks isolation regardless of per-call policy correctness.
 
 ---
 
-## v0.9.0 — Runtime Containment Edition
+## v0.9.0 -- Runtime Containment Edition
 
 ### Architectural Shift
 
@@ -1874,7 +1874,7 @@ A containment layer prevents it from doing so.
   `cost_usd`, `tokens_in`, `tokens_out`, `stop_reason`, and `error_class`.
 
 - **Chain-level amplification metrics**: `llm_calls_per_root`, `tool_calls_per_root`,
-  `retries_per_root` — derived from graph counters. Exposes how many calls a single
+  `retries_per_root` -- derived from graph counters. Exposes how many calls a single
   root request generates. HALT and FAIL nodes are counted as attempted calls.
 
 - **Divergence heuristic**: repeated-signature detection using a ring buffer of the
@@ -1922,11 +1922,11 @@ A containment layer prevents it from doing so.
 
 Containment is defined as enforcement of bounded properties across five dimensions:
 
-1. **Cost** — total spend per chain is capped and verified at dispatch time
-2. **Retries** — retry budget is finite and tracked; runaway retry loops are bounded
-3. **Recursion** — step count limits prevent infinite agent loops
-4. **Wait states** — timeout enforcement prevents indefinite blocking
-5. **Failure domains** — circuit breakers isolate failure propagation across chains
+1. **Cost** -- total spend per chain is capped and verified at dispatch time
+2. **Retries** -- retry budget is finite and tracked; runaway retry loops are bounded
+3. **Recursion** -- step count limits prevent infinite agent loops
+4. **Wait states** -- timeout enforcement prevents indefinite blocking
+5. **Failure domains** -- circuit breakers isolate failure propagation across chains
 
 **Observability is not Containment.** This distinction is clarified explicitly in
 the revised README and in `docs/execution-graph.md`. Tracing and logging record what

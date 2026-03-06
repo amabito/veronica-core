@@ -10,12 +10,12 @@ patch_openai()   # wrap Completions.create once at startup
 
 @veronica_guard(max_cost_usd=1.0, max_steps=50)
 def my_agent():
-    # existing code — completely unchanged
+    # existing code -- completely unchanged
     client.chat.completions.create(model="gpt-4o-mini", messages=[...])
     #                          ^--- now guarded automatically
 ```
 
-The patch is a **no-op outside a `veronica_guard` boundary** — library code
+The patch is a **no-op outside a `veronica_guard` boundary** -- library code
 and one-off scripts remain unaffected.
 
 ## Quick start
@@ -71,13 +71,13 @@ def ask_claude(prompt: str) -> str:
 uv run python examples/integrations/openai_sdk/example.py
 ```
 
-No API key required — uses mock responses.
+No API key required -- uses mock responses.
 
 ## Demos included
 
-1. **Transparent enforcement** — patch + guard halts second call via budget
-2. **Outside-guard passthrough** — unguarded calls are never blocked
-3. **Idempotency** — multiple `patch_openai()` calls are safe
+1. **Transparent enforcement** -- patch + guard halts second call via budget
+2. **Outside-guard passthrough** -- unguarded calls are never blocked
+3. **Idempotency** -- multiple `patch_openai()` calls are safe
 
 ## Properties
 

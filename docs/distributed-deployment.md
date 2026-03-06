@@ -1,4 +1,4 @@
-# Distributed Circuit Breaker — Deployment Guide
+# Distributed Circuit Breaker -- Deployment Guide
 
 This document covers how to deploy `DistributedCircuitBreaker` in a multi-process
 environment, configure Redis, and understand how local and Redis state are
@@ -59,7 +59,7 @@ if decision.allowed:
     except Exception:
         breaker.record_failure()
 else:
-    # Circuit is OPEN — skip the call
+    # Circuit is OPEN -- skip the call
     handle_degraded_response()
 ```
 
@@ -102,7 +102,7 @@ The key is a Redis hash with the following fields:
 
 ---
 
-## Delta Reconciliation — How Local and Redis State Sync
+## Delta Reconciliation -- How Local and Redis State Sync
 
 When Redis becomes unreachable, `DistributedCircuitBreaker` falls back to a
 local `CircuitBreaker`. The local breaker accumulates failure/success history
@@ -247,7 +247,7 @@ appendfsync everysec
 ```
 
 Without persistence, a Redis restart resets all circuits to `CLOSED`. This is
-usually acceptable — the circuit re-opens quickly if the underlying service is
+usually acceptable -- the circuit re-opens quickly if the underlying service is
 still unhealthy.
 
 ### Connection pooling

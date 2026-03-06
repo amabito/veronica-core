@@ -10,7 +10,7 @@ from veronica_core.inject import VeronicaHalt
 
 @veronica_guard(max_cost_usd=1.0, max_steps=20)
 def run_agent(prompt: str) -> str:
-    # existing LLM call — unchanged
+    # existing LLM call -- unchanged
     return llm.complete(prompt)
 
 try:
@@ -81,7 +81,7 @@ No API key or external dependency required.
 
 ## Demos included
 
-1. **Basic guard** — 3-step cap; 4th call raises `VeronicaHalt`
-2. **Nested guards** — independent limits per function
-3. **Introspection** — read live metrics via `_container`
-4. **Graceful denial** — `return_decision=True` avoids exception-based flow
+1. **Basic guard** -- 3-step cap; 4th call raises `VeronicaHalt`
+2. **Nested guards** -- independent limits per function
+3. **Introspection** -- read live metrics via `_container`
+4. **Graceful denial** -- `return_decision=True` avoids exception-based flow

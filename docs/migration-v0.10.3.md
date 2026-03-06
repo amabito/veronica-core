@@ -53,7 +53,7 @@ visible to PolicyEngine.
 
 ## Option 2: Move build steps outside the policy boundary
 
-Build steps that are deterministic infrastructure tasks — not LLM-driven actions —
+Build steps that are deterministic infrastructure tasks -- not LLM-driven actions --
 do not belong inside the veronica-core policy boundary. Run them at the application
 or CI level:
 

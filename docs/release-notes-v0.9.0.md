@@ -1,4 +1,4 @@
-# VERONICA v0.9.0 — Runtime Containment Layer
+# VERONICA v0.9.0 -- Runtime Containment Layer
 
 This release repositions VERONICA as a Runtime Containment Layer for LLM Systems
 and introduces a structural execution model to support that definition.

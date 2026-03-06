@@ -24,7 +24,7 @@ This document covers the public API. For internal implementation details, see th
 
 ## Quickstart
 
-`veronica_core.quickstart` — 2-line setup shortcut (v1.4.0+).
+`veronica_core.quickstart` -- 2-line setup shortcut (v1.4.0+).
 
 ```python
 import veronica_core
@@ -75,7 +75,7 @@ Returns the active global context, or `None` if not initialized.
 
 ## Execution Containment
 
-`veronica_core.containment` — chain-level enforcement (v0.9.0+).
+`veronica_core.containment` -- chain-level enforcement (v0.9.0+).
 
 ### `ExecutionConfig`
 
@@ -137,7 +137,7 @@ def close(self) -> None  # idempotent, thread-safe (v2.3.1+)
 
 `close()` cancels any pending timeout, clears partial buffers, and marks the context closed. All subsequent wrap calls return `Decision.HALT`.
 
-### `ExecutionGraph` — observer/subscriber API (v2.3.0+)
+### `ExecutionGraph` -- observer/subscriber API (v2.3.0+)
 
 ```python
 class ExecutionGraph:
@@ -547,7 +547,7 @@ class LoggingContainmentMetrics:
 
 ## Protocols
 
-`veronica_core.protocols` — all `@runtime_checkable`.
+`veronica_core.protocols` -- all `@runtime_checkable`.
 
 ### `ContainmentMetricsProtocol`
 
@@ -708,7 +708,7 @@ class GuardConfig:
     max_retries_total: int = 3
 ```
 
-Documentation/IDE helper — same fields as `veronica_guard` kwargs.
+Documentation/IDE helper -- same fields as `veronica_guard` kwargs.
 
 ### Helper functions
 

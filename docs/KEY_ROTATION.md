@@ -20,7 +20,7 @@ so that the `KeyPinChecker` can detect unauthorized key substitutions.
 ### 1. Generate a new keypair
 
 Run this in a secure, offline environment.  Never store the private key on disk
-in production — use a secrets manager.
+in production -- use a secrets manager.
 
 ```python
 from veronica_core.security.policy_signing import PolicySignerV2
@@ -75,8 +75,8 @@ See `docs/SIGNING_GUIDE.md` for the full signing workflow.
 
 Update the following environment variables in all CI/CD environments:
 
-- `VERONICA_SIGNING_KEY` — new private key PEM (for re-signing in CI)
-- `VERONICA_KEY_PIN` — new SHA-256 hex pin (or rely on `policies/key_pin.txt`)
+- `VERONICA_SIGNING_KEY` -- new private key PEM (for re-signing in CI)
+- `VERONICA_KEY_PIN` -- new SHA-256 hex pin (or rely on `policies/key_pin.txt`)
 
 ### 5. Commit the updated files
 

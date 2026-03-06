@@ -1,7 +1,7 @@
 # VERONICA Core + LangChain
 
 Plug VERONICA policy enforcement into any LangChain pipeline via the standard
-`BaseCallbackHandler` interface — no call-site changes required.
+`BaseCallbackHandler` interface -- no call-site changes required.
 
 ## What it does
 
@@ -9,7 +9,7 @@ Plug VERONICA policy enforcement into any LangChain pipeline via the standard
 
 | Hook | Action |
 |------|--------|
-| `on_llm_start` | Policy check — raises `VeronicaHalt` if denied |
+| `on_llm_start` | Policy check -- raises `VeronicaHalt` if denied |
 | `on_llm_end` | Records token cost against `BudgetEnforcer` |
 | `on_llm_error` | Logs error without charging budget |
 
@@ -42,13 +42,13 @@ except VeronicaHalt as e:
 uv run python examples/integrations/langchain/example.py
 ```
 
-The demo uses a stub LLM — no API key required.
+The demo uses a stub LLM -- no API key required.
 
 ## Demos included
 
-1. **Step limit** — 3-call cap; 4th call raises `VeronicaHalt`
-2. **Budget limit** — $0.0015 cap; halts after budget is exhausted
-3. **Introspection** — read `handler.container` for live spend/step metrics
+1. **Step limit** -- 3-call cap; 4th call raises `VeronicaHalt`
+2. **Budget limit** -- $0.0015 cap; halts after budget is exhausted
+3. **Introspection** -- read `handler.container` for live spend/step metrics
 
 ## Requirements
 
@@ -56,4 +56,4 @@ The demo uses a stub LLM — no API key required.
 pip install langchain-core
 ```
 
-OpenAI/Anthropic are optional — swap `ChatOpenAI` for any `BaseLanguageModel`.
+OpenAI/Anthropic are optional -- swap `ChatOpenAI` for any `BaseLanguageModel`.

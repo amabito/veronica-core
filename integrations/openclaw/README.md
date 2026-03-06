@@ -547,7 +547,7 @@ executor = SafeOpenClawExecutor(strategy, backend=RedisBackend())
 
 This integration kit is part of VERONICA Core (MIT License).
 
-OpenClaw is licensed separately — respect their license terms.
+OpenClaw is licensed separately -- respect their license terms.
 
 ---
 

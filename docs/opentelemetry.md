@@ -1,6 +1,6 @@
 # OpenTelemetry Integration
 
-VERONICA emits containment events as OpenTelemetry span events. Prompt/response content is **never** exported — only structured metadata.
+VERONICA emits containment events as OpenTelemetry span events. Prompt/response content is **never** exported -- only structured metadata.
 
 ## Quick Start
 

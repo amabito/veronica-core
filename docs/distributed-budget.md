@@ -54,7 +54,7 @@ config = ExecutionConfig(max_cost_usd=1.0, max_steps=50, max_retries_total=10,
 
 - **On connection failure** (`fallback_on_error=True`, the default): logs a warning and
   falls back to `LocalBudgetBackend` automatically for all subsequent operations.
-- **On mid-run failure**: same — logs an error, switches to local state.
+- **On mid-run failure**: same -- logs an error, switches to local state.
 - **`is_using_fallback` property**: check whether a fallback is active.
 
 Set `fallback_on_error=False` if you'd rather have exceptions raised.

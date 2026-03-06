@@ -1,4 +1,4 @@
-# Middleware — Per-Request ExecutionContext for ASGI and WSGI
+# Middleware -- Per-Request ExecutionContext for ASGI and WSGI
 
 ## 1. Purpose
 
@@ -35,10 +35,10 @@ VeronicaASGIMiddleware(
 )
 ```
 
-- `app` — the ASGI application to wrap.
-- `config` — limits applied to every request (same config is reused; each request
+- `app` -- the ASGI application to wrap.
+- `config` -- limits applied to every request (same config is reused; each request
   gets a fresh `ExecutionContext` instance constructed from it).
-- `pipeline` — optional `ShieldPipeline`; forwarded to the `ExecutionContext`
+- `pipeline` -- optional `ShieldPipeline`; forwarded to the `ExecutionContext`
   constructor. Pass `None` to run limit enforcement only.
 
 ### Request lifecycle
@@ -56,7 +56,7 @@ VeronicaASGIMiddleware(
 6. The `ContextVar` is reset and `ctx.__exit__` is called in a `finally` block
    regardless of outcome.
 
-### Example — FastAPI
+### Example -- FastAPI
 
 ```python
 from fastapi import FastAPI
@@ -78,7 +78,7 @@ def generate():
     return {"steps_used": snap.step_count, "cost_so_far": snap.cost_usd_accumulated}
 ```
 
-### Example — Starlette
+### Example -- Starlette
 
 ```python
 from starlette.applications import Starlette
@@ -121,7 +121,7 @@ VeronicaWSGIMiddleware(
    response.
 5. `ContextVar` is reset and `ctx.__exit__` is called in a `finally` block.
 
-### Example — Flask
+### Example -- Flask
 
 ```python
 from flask import Flask, g
@@ -184,7 +184,7 @@ The 429 is sent when either:
   response has not yet started.
 
 The post-flight 429 is suppressed if `http.response.start` has already been
-forwarded to the client (ASGI) — sending two responses would violate the ASGI
+forwarded to the client (ASGI) -- sending two responses would violate the ASGI
 protocol.
 
 ---

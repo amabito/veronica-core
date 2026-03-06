@@ -81,7 +81,7 @@ WrapOptions(model="gpt-4o", response_hint=response)
 
 ## Accuracy
 
-Numbers are ballpark — typically within ±30%. Cached tokens, batch discounts, and regional pricing aren't factored in. Check your provider's dashboard for the real bill.
+Numbers are ballpark -- typically within ±30%. Cached tokens, batch discounts, and regional pricing aren't factored in. Check your provider's dashboard for the real bill.
 
 ## Direct API
 

@@ -106,7 +106,7 @@ This document defines the threat model for veronica-core's security containment 
 **Risk**: Attacker modifies default.yaml to weaken rules
 **Mitigations**:
 - Phase G-1: HMAC-SHA256 signature (v1)
-- Phase I-1: Ed25519 signature (v2, asymmetric — private key not present at runtime)
+- Phase I-1: Ed25519 signature (v2, asymmetric -- private key not present at runtime)
 - Phase J-1: CI/PROD: unsigned policy → RuntimeError
 - Phase J-3: Policy version → REQUIRE_APPROVAL
 
@@ -152,7 +152,7 @@ This document defines the threat model for veronica-core's security containment 
 
 | Risk | Level | Reason |
 |------|-------|---------|
-| Kernel exploit | HIGH | Out of scope — requires OS hardening |
+| Kernel exploit | HIGH | Out of scope -- requires OS hardening |
 | CI secrets compromise | MEDIUM | CI platform responsibility |
 | Developer OPSEC | MEDIUM | Policy + SIGNING_GUIDE mitigates |
 | Log volume (slow startup) | LOW | policy_checkpoint events mitigate |

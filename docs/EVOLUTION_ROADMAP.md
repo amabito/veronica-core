@@ -1,4 +1,4 @@
-# Veronica Evolution Roadmap — v2.0 → v4.0
+# Veronica Evolution Roadmap -- v2.0 → v4.0
 
 このドキュメントはveronica-coreの進化ロードマップである。v2.0完了を起点に、v3.0（基盤が賢い）、v4.0（基盤がエコシステム）へ向かう。各フェーズは独立してリリース可能な単位で区切られている。
 

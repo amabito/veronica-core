@@ -1,4 +1,4 @@
-# ExecutionContext — Chain-Level Containment for Agent Runs
+# ExecutionContext -- Chain-Level Containment for Agent Runs
 
 ## 1. Problem
 
@@ -24,7 +24,7 @@ In a 10-step agent loop this means:
 | Term | Meaning |
 |---|---|
 | **ExecutionContext** | Lifespan-scoped containment state for one request or agent run. Created once per chain, shared across all nodes within that chain. |
-| **Chain** | The logical request graph root — one user action, background job, or agent run. Identified by `chain_id`. |
+| **Chain** | The logical request graph root -- one user action, background job, or agent run. Identified by `chain_id`. |
 | **Node** | One LLM call or tool call within the chain. Each `wrap_llm_call` / `wrap_tool_call` invocation creates a `NodeRecord`. |
 | **BudgetWindow** | Sliding-window or fixed-ceiling call-count limit enforced by `BudgetWindowHook`. Operates at the per-call level; `ExecutionContext` adds a chain-level USD cost ceiling on top. |
 | **SafetyEvent** | Normalized incident record emitted by `ShieldPipeline` or by `ExecutionContext` on chain-level stops. Defined in `veronica_core.shield.event`. |
@@ -35,22 +35,22 @@ In a 10-step agent loop this means:
 
 These invariants hold for the lifetime of an `ExecutionContext` instance:
 
-1. **Chain-level retry budget** — `ExecutionConfig.max_retries_total` is a ceiling across
+1. **Chain-level retry budget** -- `ExecutionConfig.max_retries_total` is a ceiling across
    all nodes. Once `retries_used >= max_retries_total`, every subsequent wrap call returns
    `Decision.HALT` without executing the wrapped function.
 
-2. **Hard cost ceiling** — once `cost_usd_accumulated >= ExecutionConfig.max_cost_usd`,
+2. **Hard cost ceiling** -- once `cost_usd_accumulated >= ExecutionConfig.max_cost_usd`,
    every subsequent `wrap_llm_call` / `wrap_tool_call` returns `Decision.HALT` without
    executing the wrapped function and without consulting the pipeline.
 
-3. **Step limit** — once `step_count >= ExecutionConfig.max_steps`, every subsequent wrap
+3. **Step limit** -- once `step_count >= ExecutionConfig.max_steps`, every subsequent wrap
    call returns `Decision.HALT`. Prevents runaway agent loops.
 
-4. **Timeout cancellation** — when `timeout_ms` elapses, a cancellation signal propagates
+4. **Timeout cancellation** -- when `timeout_ms` elapses, a cancellation signal propagates
    to all operations currently executing under the context. New wrap calls return
    `Decision.HALT` immediately.
 
-5. **Partial-result preservation** — before any forced stop (step limit, cost ceiling,
+5. **Partial-result preservation** -- before any forced stop (step limit, cost ceiling,
    timeout, explicit abort), the context records a snapshot via `get_snapshot()` so callers
    can retrieve intermediate results.
 
@@ -243,10 +243,10 @@ The following stop-reason strings appear in `SafetyEvent.event_type` and
 
 | Stop reason | Source | `Decision` returned |
 |---|---|---|
-| `budget_exceeded` | `_check_limits()` — `cost_usd_accumulated >= max_cost_usd` | `HALT` |
-| `retry_budget_exceeded` | `_check_limits()` — `retries_used >= max_retries_total` | `HALT` |
+| `budget_exceeded` | `_check_limits()` -- `cost_usd_accumulated >= max_cost_usd` | `HALT` |
+| `retry_budget_exceeded` | `_check_limits()` -- `retries_used >= max_retries_total` | `HALT` |
 | `circuit_open` | `CircuitBreaker.state == OPEN` at pre-dispatch check | `HALT` |
-| `step_limit_exceeded` | `_check_limits()` — `step_count >= max_steps` | `HALT` |
+| `step_limit_exceeded` | `_check_limits()` -- `step_count >= max_steps` | `HALT` |
 | `timeout` | `timeout_ms` elapsed; `CancellationToken` signalled | `HALT` |
 | `aborted` | `ctx.abort()` called by application code | `HALT` |
 | `provider_rate_limit` | `BudgetWindowHook` returned `HALT` via pipeline | `HALT` |
@@ -307,7 +307,7 @@ buffer reference.
 
 ### 7.4 mark_complete Behaviour
 
-`buf.mark_complete()` is called only on **clean completion** — `fn()` ran without
+`buf.mark_complete()` is called only on **clean completion** -- `fn()` ran without
 raising and the chain returned `Decision.ALLOW`. It is not called when:
 
 - `fn()` raises an exception (buffer stays partial, exception is swallowed per
@@ -411,7 +411,7 @@ The combined log is returned by `get_snapshot().events`.
 
 ## 10. Examples
 
-### Example 1 — Single request chain
+### Example 1 -- Single request chain
 
 ```python
 from veronica_core.containment import (
@@ -455,7 +455,7 @@ snap = ctx.get_snapshot()
 print(f"Total cost: ${snap.cost_usd_accumulated:.4f}, steps: {snap.step_count}")
 ```
 
-### Example 2 — Agent loop with step limit
+### Example 2 -- Agent loop with step limit
 
 ```python
 from veronica_core.containment import ExecutionContext, ExecutionConfig, WrapOptions

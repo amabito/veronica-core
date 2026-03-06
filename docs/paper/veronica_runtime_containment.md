@@ -1,6 +1,6 @@
 # VERONICA: A Runtime Containment Layer for LLM Agent Systems
 
-**Draft — Technical Systems Paper**
+**Draft -- Technical Systems Paper**
 
 ---
 

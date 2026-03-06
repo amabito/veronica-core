@@ -1,4 +1,4 @@
-# VERONICA Core — Integration Showcases
+# VERONICA Core -- Integration Showcases
 
 Four minimal, self-contained examples showing how VERONICA plugs into
 real LLM infrastructure. Each runs without an API key.
@@ -32,4 +32,4 @@ Using AG2?                -> autogen/     (VeronicaIntegration circuit breaker)
 
 All three can be combined: patch once at startup, add `@veronica_guard` on
 agent entry points, and attach `VeronicaCallbackHandler` to LangChain chains
-— the limits are additive.
+-- the limits are additive.

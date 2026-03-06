@@ -1,4 +1,4 @@
-# VERONICA Security Containment Layer — Design & Audit Plan
+# VERONICA Security Containment Layer -- Design & Audit Plan
 
 ## 1. Problem Statement
 
@@ -24,8 +24,8 @@ Upper-layer controls (system prompts, rules files) tell the agent what it
 _should not do_.  They are advisory and can be overridden by a sufficiently
 adversarial prompt.
 
-The Security Containment Layer enforces what the agent **cannot do** —
-regardless of what instructions it receives — by intercepting every tool
+The Security Containment Layer enforces what the agent **cannot do** --
+regardless of what instructions it receives -- by intercepting every tool
 dispatch and egress request at the OS/process boundary.
 
 ### Defense in Depth
@@ -187,7 +187,7 @@ Each `PolicyDecision` carries a `risk_score_delta` (0–10).
 
 **Phase D** (risk accumulation) aggregates these deltas in a sliding window.
 When the cumulative score exceeds a configured threshold, the system
-automatically transitions to `SAFE_MODE` — blocking all further tool dispatch
+automatically transitions to `SAFE_MODE` -- blocking all further tool dispatch
 until an operator resets the state.
 
 ```
@@ -241,7 +241,7 @@ action is catastrophic.
 **Key principle:** Even if the upper environment (system prompt, agent rules)
 is fully bypassed by an adversarial prompt, the lower containment layer
 intercepts and blocks the action.  The agent literally cannot execute the
-operation — not merely should not.
+operation -- not merely should not.
 
 ---
 
@@ -291,7 +291,7 @@ The Security Containment Layer is designed so that:
 
 1. **PolicyEngine** enforces rules independently of agent instructions.
 2. **Adapter** (Phase A-3) always uses `shell=False`, never interpolating
-   arguments into a shell string — preventing injection via argv.
+   arguments into a shell string -- preventing injection via argv.
 3. **SecureExecutor** (Phase B) runs inside a sandboxed process with reduced
    OS-level privileges (seccomp, cgroups).
 4. **Tamper-evident log** (Phase C) records every decision with a chained
@@ -320,7 +320,7 @@ creating a direct bypass of the containment layer.
 
 **Solution:**
 
-- `tools/lint_no_raw_exec.py` — static AST scanner that rejects any Python
+- `tools/lint_no_raw_exec.py` -- static AST scanner that rejects any Python
   file containing raw exec/eval/os.system or `shell=True` usage.
 - Runs in CI (`.github/workflows/containment.yml`) as a required check.
 - Blocked patterns: `exec`, `eval`, `os.system`, `os.popen`,
@@ -450,7 +450,7 @@ the operator intended to approve only once.
 | Field    | Purpose                                           |
 |----------|---------------------------------------------------|
 | `nonce`  | UUID4 hex; consumed by `NonceRegistry` on use     |
-| `scope`  | `f"{action}:{args_hash}"` — binds to exact op     |
+| `scope`  | `f"{action}:{args_hash}"` -- binds to exact op     |
 | `expiry` | ISO8601; explicit expiry (timestamp + 5 min)      |
 
 `CLIApprover.approve()` now enforces:
@@ -541,14 +541,14 @@ signature is stored in `policies/default.yaml.sig` (committed to the repo).
 
 Key management:
 
-- **Default key**: SHA256(`b"veronica-dev-key"`) — used in tests and dev
+- **Default key**: SHA256(`b"veronica-dev-key"`) -- used in tests and dev
 - **Production key**: hex-encoded in `VERONICA_POLICY_KEY` env var
 - **Update path**: edit `policies/default.yaml` → REQUIRE_APPROVAL → re-sign
   with `PolicySigner().sign(path)` → commit updated `.sig` file
 
 Implementation details:
 
-- Zero external dependencies — stdlib `hmac`, `hashlib`
+- Zero external dependencies -- stdlib `hmac`, `hashlib`
 - Constant-time comparison via `hmac.compare_digest`
 - `PolicySigner` constructor accepts an explicit `key: bytes` parameter for
   testing without env var side effects
@@ -652,7 +652,7 @@ Tests: `tests/` (runner attestation test suite)
 
 **Problem:** A high-frequency agent could trigger hundreds of REQUIRE_APPROVAL
 decisions per minute, overwhelming operators with prompts and causing "approval
-fatigue" — operators click through without reading.
+fatigue" -- operators click through without reading.
 
 **Solution:** Two complementary mechanisms:
 
@@ -698,7 +698,7 @@ Thread-safe: all state protected by `threading.Lock`.
 ```python
 limiter = ApprovalRateLimiter(max_per_window=10, window_seconds=60.0)
 if not limiter.acquire():
-    # Rate limit exceeded — activate SAFE_MODE
+    # Rate limit exceeded -- activate SAFE_MODE
     ...
 ```
 
@@ -752,7 +752,7 @@ return `False` from `verify()`).  `PolicySignerV2.mode` returns `"ed25519"` or
 
 **Key management:**
 - Generate a dev keypair: `PolicySignerV2.generate_dev_keypair()` → `(priv_pem, pub_pem)`
-- Commit `policies/public_key.pem` (public key — safe to commit)
+- Commit `policies/public_key.pem` (public key -- safe to commit)
 - Commit `policies/default.yaml.sig.v2` (base64-encoded signature)
 - Store the private key in a secrets manager; pass as `private_key_pem: bytes` to `sign()`
 - CI: set `VERONICA_SIGNING_KEY` (PEM, from secret) and re-sign after any policy edit
@@ -761,11 +761,11 @@ return `False` from `verify()`).  `PolicySignerV2.mode` returns `"ed25519"` or
 
 ---
 
-### I-2: Runner Attestation v2 — Active Sandbox Probe
+### I-2: Runner Attestation v2 -- Active Sandbox Probe
 
 **Problem:** Phase G-3 `AttestationChecker` detected mid-session environment
 anomalies (user switching, interpreter change).  It did not verify that sandbox
-restrictions were **actually enforced** — only that the fingerprint was unchanged.
+restrictions were **actually enforced** -- only that the fingerprint was unchanged.
 A misconfigured sandbox could silently allow filesystem reads or outbound network
 calls that should be blocked.
 
@@ -801,7 +801,7 @@ from veronica_core.runner.attestation import SandboxProbe
 probe = SandboxProbe(audit_log=audit_log)
 results = probe.run_all(sandbox_mode=True)
 if any(not r.passed for r in results):
-    # Sandbox is not enforcing restrictions — activate SAFE_MODE
+    # Sandbox is not enforcing restrictions -- activate SAFE_MODE
     ...
 ```
 
@@ -811,11 +811,11 @@ if any(not r.passed for r in results):
 
 **Problem:** Phase G-2 generated an SBOM snapshot (`generate_sbom.py`) and
 required approval for package installs, but did not provide a programmatic way
-to detect **silent dependency drift** between two SBOM snapshots — i.e., packages
+to detect **silent dependency drift** between two SBOM snapshots -- i.e., packages
 that changed version, were added, or were removed without going through the
 approval gate.
 
-**Solution:** `tools/sbom_diff.py` — a zero-dependency CLI tool that compares
+**Solution:** `tools/sbom_diff.py` -- a zero-dependency CLI tool that compares
 two SBOM JSON files and gates CI on any detected change.
 
 **Diff logic:**
@@ -884,7 +884,7 @@ Tests: `tests/tools/test_sbom_diff.py`
 
 ---
 
-## 16. Phase J: Safety Floor — Fallback Prohibition, Key Pinning, Rollback Resistance
+## 16. Phase J: Safety Floor -- Fallback Prohibition, Key Pinning, Rollback Resistance
 
 Phase J closes four remaining gaps: environment-aware enforcement, public key
 substitution, policy version rollback, and silent safety gaps hidden in xfailed
@@ -938,7 +938,7 @@ compares it against a committed pin in `policies/key_pin.txt` (or the
 `KeyPinChecker.enforce()` after loading the public key.  In CI/PROD, a
 mismatch raises `RuntimeError` before the engine proceeds.
 
-**Audit event:** `key_pin_mismatch` — includes `expected` and `actual` hashes.
+**Audit event:** `key_pin_mismatch` -- includes `expected` and `actual` hashes.
 
 See [docs/KEY_ROTATION.md](KEY_ROTATION.md) for the key rotation workflow.
 
@@ -961,7 +961,7 @@ Engine version is checked against `min_engine_version` (semver).
 
 | Event | Condition |
 |-------|-----------|
-| `policy_checkpoint` | New highest policy version seen — stored in audit log |
+| `policy_checkpoint` | New highest policy version seen -- stored in audit log |
 | `policy_rollback_detected` | Submitted version < highest seen |
 | `engine_version_too_old` | Running engine < policy's `min_engine_version` |
 
@@ -980,13 +980,13 @@ Tests: `tests/security/test_rollback_guard.py`
 accepted without review.  There was no formal process for tracking xfails or
 assessing their safety impact.
 
-**Solution:** `docs/XFAILED_REGISTRY.md` — a mandatory registry for all
+**Solution:** `docs/XFAILED_REGISTRY.md` -- a mandatory registry for all
 `xfail`-marked tests.
 
 **Process:**
 1. Every new `xfail` must have a registry entry with a safety risk assessment.
 2. Risk levels: **None** / **Low** / **High**.
-3. Any **High**-risk xfail must be fixed immediately — it cannot remain as xfail.
+3. Any **High**-risk xfail must be fixed immediately -- it cannot remain as xfail.
 4. Registry reviewed in the PR that adds the `xfail`.
 
 **Current xfailed tests (4 total, all risk: None):**

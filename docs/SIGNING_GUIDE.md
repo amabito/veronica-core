@@ -16,7 +16,7 @@ If neither exists, a warning is logged and the engine continues (backward-compat
 
 ---
 
-## v2 Signing (ed25519) — Recommended
+## v2 Signing (ed25519) -- Recommended
 
 ### Requirements
 
@@ -66,14 +66,14 @@ print("OK" if ok else "TAMPER DETECTED")
 
 ### 4. Files to commit
 
-- `policies/public_key.pem` — public key (safe to commit)
-- `policies/default.yaml.sig.v2` — base64-encoded signature (safe to commit)
+- `policies/public_key.pem` -- public key (safe to commit)
+- `policies/default.yaml.sig.v2` -- base64-encoded signature (safe to commit)
 
 **Never commit the private key.**
 
 ---
 
-## v1 Signing (HMAC-SHA256) — Legacy
+## v1 Signing (HMAC-SHA256) -- Legacy
 
 Used when `cryptography` is not installed or v2 files are absent.
 

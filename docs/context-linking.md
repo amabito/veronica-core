@@ -32,7 +32,7 @@ If the propagated total hits A's ceiling, A marks itself `aborted=True` and all 
 
 ## API
 
-### `ExecutionContext.__init__` — `parent` parameter
+### `ExecutionContext.__init__` -- `parent` parameter
 
 Pass a parent context to link a child:
 
@@ -48,7 +48,7 @@ with ExecutionContext(parent_cfg) as parent_ctx:
         # costs propagate to parent_ctx automatically
 ```
 
-### `ExecutionContext.spawn_child()` — convenience factory
+### `ExecutionContext.spawn_child()` -- convenience factory
 
 ```python
 with ExecutionContext(parent_cfg) as parent_ctx:

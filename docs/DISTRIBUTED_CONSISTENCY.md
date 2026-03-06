@@ -29,8 +29,8 @@ and `_wrap` returns `Decision.HALT` without calling `fn`.
 The escrow entry is deleted and the amount is added to the committed total atomically.
 The new committed total is returned.
 
-**Rollback**: On any failure path — pipeline pre-check rejection, circuit-breaker denial,
-`fn` raising an exception, or an unexpected `BaseException` in the outer `except` clause —
+**Rollback**: On any failure path -- pipeline pre-check rejection, circuit-breaker denial,
+`fn` raising an exception, or an unexpected `BaseException` in the outer `except` clause --
 `_try_rollback` is called. It swallows all exceptions so no secondary failure can mask
 the original error.
 
@@ -90,7 +90,7 @@ The entire sweep-and-check-and-insert sequence runs in one Redis call.
 
 **Commit** (`lua_commit`, line ~576): Fetches the reservation with `HGET`, deletes it
 with `HDEL`, then calls `INCRBYFLOAT` to add the amount to the committed key. Both the
-deletion and the increment happen in the same Lua execution context — no other client can
+deletion and the increment happen in the same Lua execution context -- no other client can
 observe an intermediate state where the reservation is gone but the committed total has
 not yet been updated.
 
@@ -115,7 +115,7 @@ expire automatically and do not accumulate indefinitely.
 
 ## Failure Recovery
 
-### Network partition — Redis unreachable
+### Network partition -- Redis unreachable
 
 When `fallback_on_error=True` (the default), `RedisBudgetBackend` catches connection
 errors in `reserve`, `commit`, and `rollback`, logs the error with the Redis URL redacted

@@ -14,13 +14,13 @@ Concretely, these are hard to do today without monkey-patching:
 | Hard cost ceiling with automatic stop | `gather_usage_summary` (post-hoc) | No pre-call enforcement |
 | Graceful degradation (reduce model tier) | None | No decision-point middleware |
 
-`register_reply` covers the "before" side but has no "after" — you can't observe the result of `generate_reply` to drive state transitions (circuit breaker, cost tracking, retry counting).
+`register_reply` covers the "before" side but has no "after" -- you can't observe the result of `generate_reply` to drive state transitions (circuit breaker, cost tracking, retry counting).
 
 ## Proposed Extension Points
 
 Three protocols, each targeting a different layer of the agent lifecycle.
 
-### 1. ReplyInterceptor — agent reply lifecycle
+### 1. ReplyInterceptor -- agent reply lifecycle
 
 Wraps `generate_reply()` with before/after hooks. This is where circuit breakers, step counters, and retry limiters live.
 
@@ -54,9 +54,9 @@ class ReplyInterceptor(Protocol):
 - Retry limiter: `after_reply` tracks consecutive failures, `before_reply` enforces cooldown
 - OTel instrumentation: `after_reply` emits span events with cost/token metadata
 
-**Why not `register_reply`:** It only fires before the reply. Circuit breaker state transitions require the result — `record_success()` vs `record_failure()` depends on whether the reply was `None`.
+**Why not `register_reply`:** It only fires before the reply. Circuit breaker state transitions require the result -- `record_success()` vs `record_failure()` depends on whether the reply was `None`.
 
-### 2. LLMCallMiddleware — LLM client layer
+### 2. LLMCallMiddleware -- LLM client layer
 
 Intercepts the actual LLM API call (below `generate_reply`, above the HTTP request). This is where token budgets and cost enforcement live.
 
@@ -91,7 +91,7 @@ class LLMCallMiddleware(Protocol):
 
 **Where this hooks in:** Ideally inside the LLM client wrapper that AG2 uses to call OpenAI/Anthropic/etc. The middleware sees the actual model and message payload, not the agent-level abstraction.
 
-### 3. AgentEligibilityPolicy — speaker selection layer
+### 3. AgentEligibilityPolicy -- speaker selection layer
 
 Filters candidates before the GroupChatManager selects the next speaker. This is where health-aware orchestration lives.
 
@@ -113,7 +113,7 @@ class AgentEligibilityPolicy(Protocol):
         ...
 ```
 
-`SelectionContext` is intentionally minimal — round index, last speaker, participant names — rather than the full `GroupChat` object. Keeps the policy's surface area small.
+`SelectionContext` is intentionally minimal -- round index, last speaker, participant names -- rather than the full `GroupChat` object. Keeps the policy's surface area small.
 
 **Use cases:**
 - Circuit breaker: breaker OPEN → `is_eligible` returns `False`, agent drops out of candidate set
@@ -150,15 +150,15 @@ agent.generate_reply()
       (record success/failure, update counters)
 ```
 
-Each layer is independent and opt-in. An application can use any combination — just a circuit breaker, just a cost ceiling, or all three together.
+Each layer is independent and opt-in. An application can use any combination -- just a circuit breaker, just a cost ceiling, or all three together.
 
 ## Reference Implementation
 
 [veronica-core](https://github.com/amabito/veronica-core) (v1.8.3, MIT, 2346 tests, 92% coverage) implements all three patterns today via monkey-patching:
 
-- `CircuitBreakerCapability` — maps to ReplyInterceptor (wraps `generate_reply` with before/after)
-- `TokenBudgetHook` — maps to LLMCallMiddleware (pre-call budget check, post-call usage recording)
-- GroupChat eligibility — proposed, maps to AgentEligibilityPolicy
+- `CircuitBreakerCapability` -- maps to ReplyInterceptor (wraps `generate_reply` with before/after)
+- `TokenBudgetHook` -- maps to LLMCallMiddleware (pre-call budget check, post-call usage recording)
+- GroupChat eligibility -- proposed, maps to AgentEligibilityPolicy
 
 PR [#2430](https://github.com/ag2ai/ag2/pull/2430) demonstrates the circuit breaker integration as a notebook.
 
@@ -180,12 +180,12 @@ The monkey-patching works but is fragile across AG2 versions. Native hooks would
 
 ## Open Questions
 
-1. **Hook registration API** — should these be registered per-agent (like `register_reply`), per-GroupChat, or globally? Per-agent is most flexible but verbose for large groups.
+1. **Hook registration API** -- should these be registered per-agent (like `register_reply`), per-GroupChat, or globally? Per-agent is most flexible but verbose for large groups.
 
-2. **ReplyInterceptor vs extending `register_reply`** — would adding an `after_reply` callback to the existing `register_reply` mechanism be preferable to a new protocol? That's a smaller change but mixes two concerns (reply generation vs observation).
+2. **ReplyInterceptor vs extending `register_reply`** -- would adding an `after_reply` callback to the existing `register_reply` mechanism be preferable to a new protocol? That's a smaller change but mixes two concerns (reply generation vs observation).
 
-3. **LLMCallMiddleware placement** — AG2's LLM client layer is evolving. Where exactly should the middleware hook in — `OpenAIWrapper`, the new `LLMConfig`-based client, or a shared abstraction?
+3. **LLMCallMiddleware placement** -- AG2's LLM client layer is evolving. Where exactly should the middleware hook in -- `OpenAIWrapper`, the new `LLMConfig`-based client, or a shared abstraction?
 
-4. **AgentEligibilityPolicy scope** — should this live on `GroupChat`, `GroupChatManager`, or as a standalone filter passed to `run_group_chat`?
+4. **AgentEligibilityPolicy scope** -- should this live on `GroupChat`, `GroupChatManager`, or as a standalone filter passed to `run_group_chat`?
 
-5. **`None` reply handling in group chat** — should `on_agent_failure` be a GroupChat parameter, a pattern-level config, or handled differently?
+5. **`None` reply handling in group chat** -- should `on_agent_failure` be a GroupChat parameter, a pattern-level config, or handled differently?

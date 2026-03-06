@@ -1,4 +1,4 @@
-# VERONICA Core — 1 Minute Understand
+# VERONICA Core -- 1 Minute Understand
 
 Quick visual guide to VERONICA Core's purpose, guarantees, and usage.
 
@@ -305,7 +305,7 @@ A: ~1-5ms per operation (atomic file write). < 5% throughput impact in productio
 A: Target audience (LLM agents, strategy engines) is predominantly Python. Stdlib-only requirement favors Python. Zero runtime dependencies by design.
 
 **Q: Can I trust the proof tests?**
-A: Run them yourself (`python scripts/proof_runner.py`). Full reproduction steps in PROOF.md. If any test fails, file an issue — we'll fix immediately.
+A: Run them yourself (`python scripts/proof_runner.py`). Full reproduction steps in PROOF.md. If any test fails, file an issue -- we'll fix immediately.
 
 **Q: License?**
 A: MIT (no restrictions, commercial use allowed, no monetization plans).

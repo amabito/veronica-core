@@ -1,4 +1,4 @@
-# Divergence Heuristics — Repeated Pattern Detection
+# Divergence Heuristics -- Repeated Pattern Detection
 
 ## 1. Purpose
 
@@ -8,8 +8,8 @@ time.  These limits catch runaway chains that keep growing, but they fire only
 
 Divergence detection aims to fire *earlier*: it looks at the *pattern* of
 calls rather than aggregate totals and raises a warning when the same operation
-appears to be stuck in a loop.  The signal is advisory — the default action is
-`warn`, not `halt` — but it gives observers (dashboards, alerting systems,
+appears to be stuck in a loop.  The signal is advisory -- the default action is
+`warn`, not `halt` -- but it gives observers (dashboards, alerting systems,
 orchestrators) a chance to intervene before the cost or step limit is reached.
 
 A diverging chain typically looks like:
@@ -58,7 +58,7 @@ node's status does not change (idempotent call).
 ### 2.3 Consecutive-Repeat Check
 
 After appending the new signature, the heuristic counts how many entries at
-the **tail** of the buffer equal the new signature — i.e., how many consecutive
+the **tail** of the buffer equal the new signature -- i.e., how many consecutive
 trailing entries match.  This is strictly a suffix count, not a total-frequency
 count.
 
@@ -103,7 +103,7 @@ staged:
 }
 ```
 
-`severity` is `"warn"`.  The default action is **observation only** — no halt
+`severity` is `"warn"`.  The default action is **observation only** -- no halt
 is triggered automatically.  `ExecutionContext` (or the caller) decides whether
 to escalate.
 
@@ -191,8 +191,8 @@ detector.
 
 Two additional heuristics check *rate* rather than pattern:
 
-- `COST_RATE_EXCEEDED` — cost per second is too high.
-- `TOKEN_VELOCITY_EXCEEDED` — output tokens per second is too high.
+- `COST_RATE_EXCEEDED` -- cost per second is too high.
+- `TOKEN_VELOCITY_EXCEEDED` -- output tokens per second is too high.
 
 Both are advisory (`severity = "warn"`); neither halts the chain automatically.
 
@@ -201,7 +201,7 @@ Both are advisory (`severity = "warn"`); neither halts the chain automatically.
 **Trigger:** cumulative chain cost / elapsed seconds since `ExecutionGraph`
 creation exceeds `cost_rate_threshold_usd_per_sec`.
 
-**Check point:** `mark_success` — cost is recorded only on successful node
+**Check point:** `mark_success` -- cost is recorded only on successful node
 completion, so the first check happens after the first node that reports a
 non-zero `cost_usd`.
 
@@ -273,7 +273,7 @@ ExecutionGraph(
 Both thresholds are optional. Passing `0` or a negative value disables the
 respective check by making the threshold impossible to exceed (the check
 compares `rate > threshold` so zero or negative means never fires... actually
-a threshold of 0.0 means any nonzero rate triggers it immediately — set a
+a threshold of 0.0 means any nonzero rate triggers it immediately -- set a
 large value like `float("inf")` to disable).
 
 ### 6.7 `snapshot()` Aggregates
@@ -381,5 +381,5 @@ dashboards and snapshots.  Does **not** include events still pending in
 
 ### `NodeSignature`
 
-Type alias: `tuple[str, str]` — `(kind, name)`.  Exported from
+Type alias: `tuple[str, str]` -- `(kind, name)`.  Exported from
 `veronica_core.containment.execution_graph`.

@@ -3,7 +3,7 @@
 ## 1. Purpose
 
 Runtime Containment limits what an agent chain is *allowed* to do.
-Amplification metrics measure what a chain *actually did* — how many LLM calls,
+Amplification metrics measure what a chain *actually did* -- how many LLM calls,
 tool calls, and retries it generated relative to the single root invocation that
 started it.
 
@@ -84,8 +84,8 @@ LLM and tool nodes are descendants of this root.
 Because there is always exactly one root, `llm_calls_per_root` equals
 `total_llm_calls` in all current chains. The per-root naming is intentional:
 
-1. It communicates the *amplification semantics* — how much work was generated
-   from one entry point — rather than a raw total.
+1. It communicates the *amplification semantics* -- how much work was generated
+   from one entry point -- rather than a raw total.
 2. It prepares the API for future multi-root scenarios (e.g., a batch context
    that aggregates multiple independent sub-chains) without renaming the field.
 
@@ -107,7 +107,7 @@ entry point, not an LLM or tool invocation.
 
 A halted node represents a call that was dispatched (or was about to be)
 when the containment policy fired. The policy stopped the call *because*
-amplification was occurring — counting that node reflects the actual
+amplification was occurring -- counting that node reflects the actual
 amplification pressure that triggered containment. Excluding halted nodes
 would under-count amplification and make it harder to understand why a
 policy activated at a particular threshold.
@@ -215,7 +215,7 @@ dict even when no LLM or tool calls have been made yet (they default to `0.0`).
 
 ## 6. Related Documentation
 
-- [ExecutionGraph reference](execution-graph.md) — full API, node lifecycle, invariants
-- [ExecutionContext reference](execution-context.md) — chain-level budget enforcement
-- [Adaptive Control](adaptive-control.md) — how amplification feeds back into policy tuning
-- [Metrics](METRICS.md) — observability exports including amplification counters
+- [ExecutionGraph reference](execution-graph.md) -- full API, node lifecycle, invariants
+- [ExecutionContext reference](execution-context.md) -- chain-level budget enforcement
+- [Adaptive Control](adaptive-control.md) -- how amplification feeds back into policy tuning
+- [Metrics](METRICS.md) -- observability exports including amplification counters

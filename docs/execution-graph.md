@@ -1,4 +1,4 @@
-# ExecutionGraph — Call-Node Graph for Agent Chains
+# ExecutionGraph -- Call-Node Graph for Agent Chains
 
 ## 1. Motivation
 
@@ -37,15 +37,15 @@ that can be logged, sent to a dashboard, or stored by the caller.
 
 The following invariants hold for every `ExecutionGraph` instance:
 
-1. **Unique node_id** — No two nodes in the graph share a `node_id`. IDs are
+1. **Unique node_id** -- No two nodes in the graph share a `node_id`. IDs are
    generated from a monotonically increasing counter and are never reused.
 
-2. **parent_id discipline** — Every non-root node has a `parent_id` that refers
+2. **parent_id discipline** -- Every non-root node has a `parent_id` that refers
    to an existing node in the same graph. The root node has `parent_id=None`.
    Cycles are structurally impossible because a parent must exist before a child
    can reference it.
 
-3. **Lifecycle** — Status transitions follow a strict one-way path:
+3. **Lifecycle** -- Status transitions follow a strict one-way path:
    ```
    created -> running -> success | fail | halt
    created -> fail | halt        (pre-running terminal, e.g., budget exceeded)
@@ -53,10 +53,10 @@ The following invariants hold for every `ExecutionGraph` instance:
    Once a node reaches a terminal status (`success`, `fail`, `halt`), its status
    cannot change. All mark_* methods are idempotent on already-terminal nodes.
 
-4. **Monotonic costs** — `aggregates.total_cost_usd` never decreases. Cost is added
+4. **Monotonic costs** -- `aggregates.total_cost_usd` never decreases. Cost is added
    when a node transitions to `success` and is never removed.
 
-5. **Thread safety** — All mutations are protected by a single `threading.RLock`.
+5. **Thread safety** -- All mutations are protected by a single `threading.RLock`.
    Concurrent calls to `begin_node`, `mark_running`, `mark_success`, `mark_failure`,
    `mark_halt`, and `snapshot` are safe without external synchronization.
 
@@ -437,7 +437,7 @@ def get_snapshot(self):
   - All `mark_*` methods are idempotent on already-terminal nodes.
   - `mark_failure` and `mark_halt` callable before `mark_running`.
 
-- **New file**: `docs/execution-graph.md` — this document.
+- **New file**: `docs/execution-graph.md` -- this document.
 
 ### Why It Matters
 

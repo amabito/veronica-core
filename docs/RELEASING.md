@@ -31,14 +31,14 @@ Add a new section to `CHANGELOG.md` for the version being released.
 
 Sign the default policy file with the Ed25519 private key.
 
-**Option A — Environment variable (recommended for CI):**
+**Option A -- Environment variable (recommended for CI):**
 
 ```bash
 export VERONICA_PRIVATE_KEY_PEM="$(cat /secure/path/to/private_key.pem)"
 python tools/release_sign_policy.py
 ```
 
-**Option B — Key file (local only):**
+**Option B -- Key file (local only):**
 
 ```bash
 python tools/release_sign_policy.py --key-file /secure/path/to/private_key.pem
@@ -113,7 +113,7 @@ generation, and artifact upload.
 
 ### Generating a Development Keypair
 
-For local testing only — never use dev keys in production:
+For local testing only -- never use dev keys in production:
 
 ```python
 from veronica_core.security.policy_signing import PolicySignerV2
