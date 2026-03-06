@@ -22,30 +22,30 @@
                               |
           +-------------------+-------------------+
           |                   |                   |
-  +-------+-------+  +-------+-------+  +-------+-------+
-  | Framework     |  | Middleware    |  | Decorator     |
-  | Adapters (8)  |  | ASGI / WSGI  |  | @veronica_guard|
-  +-------+-------+  +-------+-------+  +-------+-------+
+  +-------+-------+  +-------+-------+  +-------+--------+
+  | Framework     |  | Middleware    |  | Decorator      |
+  | Adapters (8)  |  | ASGI / WSGI   |  | @veronica_guard|
+  +-------+-------+  +-------+-------+  +-------+--------+
           |                   |                   |
           +-------------------+-------------------+
                               |
                +--------------+--------------+
                |      ExecutionContext       |   Chain-level containment
-               |  cost / steps / retries    |   CancellationToken
-               |  timeout / circuit state   |   PartialResultBuffer
+               |  cost / steps / retries     |   CancellationToken
+               |  timeout / circuit state    |   PartialResultBuffer
                +--------------+--------------+
                               |
           +-------------------+-------------------+
           |                   |                   |
-  +-------+-------+  +-------+-------+  +-------+-------+
+  +-------+-------+  +-------+-------+  +-------+--------+
   | ShieldPipeline|  | ExecutionGraph|  | BudgetAllocator|
   | Hook chain    |  | DAG tracking  |  | Fair/Weighted  |
-  +-------+-------+  +-------+-------+  +-------+-------+
+  +-------+-------+  +-------+-------+  +-------+--------+
           |
   +-------+-------+-------+-------+-------+
   |       |       |       |       |       |
 Budget  Token  Circuit  Retry  Egress  Tool
-Hook    Hook   Breaker  Hook   Hook    Hook
+ Hook   Hook   Breaker  Hook    Hook   Hook
   |       |       |
   +-------+-------+
           |
@@ -179,15 +179,15 @@ This role is architecturally correct. The codebase maintains this boundary consi
                               |
                +--------------+--------------+
                |                             |
-      +--------+--------+          +--------+--------+
+      +--------+---------+          +--------+--------+
       | Model Layer      |          | Tool Execution  |
       | (LLM providers)  |          | (MCP servers)   |
-      +--------+--------+          +--------+--------+
+      +--------+---------+          +--------+--------+
                |                             |
-      +--------+--------+          +--------+--------+
+      +--------+---------+          +--------+--------+
       | Memory System    |          | External APIs   |
       | (TriMemory etc.) |          | (databases, web)|
-      +-----------------+          +-----------------+
+      +------------------+          +-----------------+
 ```
 
 VERONICA's position is between the agent framework and everything below it. Every outbound call (LLM, tool, memory read/write) passes through ExecutionContext.
