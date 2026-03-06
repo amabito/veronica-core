@@ -81,19 +81,56 @@ _SANDBOX_IGNORE_PREFIXES: tuple[str, ...] = (
 )
 
 
+def _is_junction(path: str) -> bool:
+    """Return True if *path* is an NTFS junction (reparse point).
+
+    ``os.path.islink()`` returns False for NTFS junctions on Python < 3.12.
+    ``Path.is_junction()`` was added in Python 3.12.  This helper works on
+    all supported Python versions by trying the stdlib API first, then
+    falling back to a ctypes ``GetFileAttributesW`` check on Windows.
+    """
+    # Python 3.12+ has Path.is_junction()
+    try:
+        return Path(path).is_junction()
+    except AttributeError:
+        pass
+
+    # Fallback for Python < 3.12 on Windows
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(path)  # type: ignore[union-attr]
+            if attrs == -1:
+                return False
+            return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+        except (OSError, AttributeError):
+            return False
+
+    return False
+
+
 def _sandbox_ignore(directory: str, names: list[str]) -> set[str]:
-    """Ignore function for shutil.copytree that also rejects symlinks."""
+    """Ignore function for shutil.copytree that also rejects symlinks/junctions."""
     ignored: set[str] = set()
     for name in names:
         full_path = os.path.join(directory, name)
-        # Reject symlinks/junctions to prevent sandbox escape via link traversal.
+        # Reject symlinks to prevent sandbox escape via link traversal.
         if os.path.islink(full_path):
+            ignored.add(name)
+            continue
+        # Reject NTFS junctions (os.path.islink returns False for junctions).
+        if _is_junction(full_path):
             ignored.add(name)
             continue
         if name in _SANDBOX_IGNORE_NAMES:
             ignored.add(name)
             continue
-        if name.endswith(_SANDBOX_IGNORE_SUFFIXES):
+        # Case-insensitive suffix match to prevent bypass via uppercase
+        # extensions on case-insensitive filesystems (e.g. secret.PEM).
+        name_lower = name.lower()
+        if name_lower.endswith(_SANDBOX_IGNORE_SUFFIXES):
             ignored.add(name)
             continue
         if name.startswith(_SANDBOX_IGNORE_PREFIXES):

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
 from veronica_core.adapter.exec import AdapterConfig, SecureExecutor
-from veronica_core.runner.sandbox import SandboxConfig, SandboxRunner
+from veronica_core.runner.sandbox import (
+    SandboxConfig,
+    SandboxRunner,
+    _sandbox_ignore,
+    _SANDBOX_IGNORE_NAMES,
+)
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.policy_engine import PolicyEngine
 
@@ -123,3 +129,88 @@ class TestSandboxCleanup:
         runner = SandboxRunner(sandbox_cfg)
         with pytest.raises(RuntimeError, match="not active"):
             runner.run_in_sandbox(["python", "--version"])
+
+
+# ---------------------------------------------------------------------------
+# _sandbox_ignore unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestSandboxIgnoreFunction:
+    """Direct unit tests for _sandbox_ignore()."""
+
+    def test_symlink_rejected(self, tmp_path: Path) -> None:
+        """Symlinks must be excluded from copytree."""
+        target = tmp_path / "real_file.txt"
+        target.write_text("data")
+        link = tmp_path / "link_to_file"
+        try:
+            link.symlink_to(target)
+        except OSError:
+            pytest.skip("symlink creation requires privileges on this platform")
+        result = _sandbox_ignore(str(tmp_path), ["real_file.txt", "link_to_file"])
+        assert "link_to_file" in result
+        assert "real_file.txt" not in result
+
+    def test_junction_rejected(self, tmp_path: Path) -> None:
+        """NTFS junctions must be excluded (os.path.islink returns False)."""
+        target_dir = tmp_path / "real_dir"
+        target_dir.mkdir()
+        junction = tmp_path / "junction_dir"
+        if sys.platform == "win32":
+            # Create NTFS junction via mklink /J
+            import subprocess
+
+            subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(target_dir)],
+                check=True,
+                capture_output=True,
+            )
+        else:
+            pytest.skip("NTFS junctions only exist on Windows")
+        result = _sandbox_ignore(str(tmp_path), ["real_dir", "junction_dir"])
+        assert "junction_dir" in result
+        assert "real_dir" not in result
+
+    @pytest.mark.parametrize("name", list(_SANDBOX_IGNORE_NAMES))
+    def test_credential_names_rejected(self, tmp_path: Path, name: str) -> None:
+        """Every name in the credential denylist must be ignored."""
+        (tmp_path / name).mkdir() if name in (".docker", ".aws", ".ssh") else (
+            tmp_path / name
+        ).write_text("x")
+        result = _sandbox_ignore(str(tmp_path), [name])
+        assert name in result
+
+    @pytest.mark.parametrize(
+        "name",
+        ["secret.key", "cert.pem", "store.pfx", "bundle.p12", "token.secret", "db.env"],
+    )
+    def test_suffix_match(self, tmp_path: Path, name: str) -> None:
+        """Files with credential suffixes must be ignored."""
+        (tmp_path / name).write_text("x")
+        result = _sandbox_ignore(str(tmp_path), [name])
+        assert name in result
+
+    @pytest.mark.parametrize(
+        "name",
+        ["SECRET.KEY", "cert.PEM", "store.PFX", "bundle.P12", "token.SECRET", "db.ENV"],
+    )
+    def test_suffix_case_insensitive(self, tmp_path: Path, name: str) -> None:
+        """Uppercase extensions must also be caught (case-insensitive match)."""
+        (tmp_path / name).write_text("x")
+        result = _sandbox_ignore(str(tmp_path), [name])
+        assert name in result, f"{name} should be ignored (case-insensitive suffix)"
+
+    def test_prefix_env_dot_variant(self, tmp_path: Path) -> None:
+        """.env.production and similar must be ignored."""
+        name = ".env.production"
+        (tmp_path / name).write_text("x")
+        result = _sandbox_ignore(str(tmp_path), [name])
+        assert name in result
+
+    def test_safe_file_not_ignored(self, tmp_path: Path) -> None:
+        """Normal source files must not be ignored."""
+        name = "main.py"
+        (tmp_path / name).write_text("x")
+        result = _sandbox_ignore(str(tmp_path), [name])
+        assert name not in result

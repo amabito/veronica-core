@@ -6,6 +6,22 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.0.3] -- 2026-03-06 -- Iron Legion Parallel Audit Fix
+
+### Fixed
+
+- **HIGH**: NTFS junction sandbox escape -- `os.path.islink()` returns False for junctions; added `_is_junction()` helper with `Path.is_junction()` (3.12+) and ctypes `GetFileAttributesW` fallback (3.11).
+- **MEDIUM**: Case-insensitive suffix bypass -- `_sandbox_ignore()` now uses `name.lower().endswith()` to catch uppercase extensions (e.g. `secret.PEM`) on all platforms.
+
+### Added
+
+- `_is_junction()` helper in `runner/sandbox.py` -- cross-version NTFS junction detection (Python 3.11+).
+- 27 new tests for `_sandbox_ignore()`: symlink rejection, NTFS junction rejection, credential denylist (all names), suffix matching, case-insensitive suffix, prefix matching, safe file passthrough.
+
+**Breaking changes**: none.
+
+---
+
 ## [3.0.2] -- 2026-03-06 -- F.R.I.D.A.Y. Independent Audit Fix
 
 ### Fixed
