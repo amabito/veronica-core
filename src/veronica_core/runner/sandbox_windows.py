@@ -244,25 +244,15 @@ class WindowsSandboxRunner:
             parent_temp = tempfile.mkdtemp(prefix="veronica_win_sandbox_")
             self._owns_temp_dir = True
             dest = Path(parent_temp) / "_repo"
+            # Import the shared ignore function to keep POSIX/Windows in sync
+            # and reject symlinks/junctions that could escape the sandbox.
+            from veronica_core.runner.sandbox import _sandbox_ignore
+
             shutil.copytree(
                 self._config.repo_root,
                 str(dest),
                 dirs_exist_ok=False,  # H-6: must not merge with existing content
-                ignore=shutil.ignore_patterns(
-                    # Build artifacts
-                    "__pycache__",
-                    "*.pyc",
-                    ".git",
-                    # Secrets and credentials — never copy into sandbox
-                    ".env",
-                    ".env.*",
-                    "*.env",
-                    "*.key",
-                    "*.pem",
-                    "*.pfx",
-                    "*.p12",
-                    "*.secret",
-                ),
+                ignore=_sandbox_ignore,
             )
             self._temp_dir = str(dest)
             # Remember parent for cleanup

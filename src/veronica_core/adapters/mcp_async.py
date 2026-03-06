@@ -120,16 +120,12 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         self._stats_lock = asyncio.Lock()
         # Cache backend reserve capability once (doesn't change after init).
         # True when the backend exposes reserve/commit/rollback (sync or async).
-        # At call time we further check iscoroutinefunction to decide whether
-        # to await the result.
+        # At call time we use inspect.isawaitable() on the return value to
+        # decide whether to await — this handles both async def and sync
+        # functions that return awaitables.
         _backend = getattr(self._ctx, "_budget_backend", None)
         self._backend_supports_reserve: bool = _backend is not None and hasattr(
             _backend, "reserve"
-        )
-        # Cache whether reserve is async so we avoid repeated inspection per call.
-        self._reserve_is_async: bool = (
-            _backend is not None
-            and inspect.iscoroutinefunction(getattr(_backend, "reserve", None))
         )
 
     # ------------------------------------------------------------------
@@ -224,7 +220,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 )
                 _reservation_id = (
                     await _reserve_result
-                    if self._reserve_is_async
+                    if inspect.isawaitable(_reserve_result)
                     else _reserve_result
                 )
             except OverflowError:
@@ -288,7 +284,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             if _reservation_id is not None:
                 try:
                     _rb = budget_backend.rollback(_reservation_id)
-                    if self._reserve_is_async:
+                    if inspect.isawaitable(_rb):
                         await _rb
                 except Exception:  # noqa: BLE001
                     pass
@@ -309,7 +305,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             if _reservation_id is not None:
                 try:
                     _rb = budget_backend.rollback(_reservation_id)
-                    if self._reserve_is_async:
+                    if inspect.isawaitable(_rb):
                         await _rb
                 except Exception:  # noqa: BLE001
                     pass
@@ -331,7 +327,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         if _reservation_id is not None:
             try:
                 _cm = budget_backend.commit(_reservation_id)
-                if self._reserve_is_async:
+                if inspect.isawaitable(_cm):
                     await _cm
             except Exception as _commit_exc:  # noqa: BLE001
                 # Commit failed (expired, already committed, or backend error).

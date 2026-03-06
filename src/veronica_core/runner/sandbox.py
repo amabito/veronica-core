@@ -6,6 +6,7 @@ Writes in the sandbox do NOT propagate to the original repository.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -40,6 +41,65 @@ class SandboxConfig:
     executor: "SecureExecutor"
     ephemeral_dir: str | None = None
     read_only: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Sandbox ignore function
+# ---------------------------------------------------------------------------
+
+# Patterns matched against basename only (like shutil.ignore_patterns).
+_SANDBOX_IGNORE_NAMES: frozenset[str] = frozenset(
+    {
+        "__pycache__",
+        ".git",
+        # Secrets and credentials
+        ".env",
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".git-credentials",
+        ".docker",
+        ".aws",
+        ".ssh",
+        "credentials.json",
+    }
+)
+
+# Glob-style suffix/prefix patterns.
+_SANDBOX_IGNORE_SUFFIXES: tuple[str, ...] = (
+    ".pyc",
+    ".env",
+    ".key",
+    ".pem",
+    ".pfx",
+    ".p12",
+    ".secret",
+)
+
+_SANDBOX_IGNORE_PREFIXES: tuple[str, ...] = (
+    ".env.",
+)
+
+
+def _sandbox_ignore(directory: str, names: list[str]) -> set[str]:
+    """Ignore function for shutil.copytree that also rejects symlinks."""
+    ignored: set[str] = set()
+    for name in names:
+        full_path = os.path.join(directory, name)
+        # Reject symlinks/junctions to prevent sandbox escape via link traversal.
+        if os.path.islink(full_path):
+            ignored.add(name)
+            continue
+        if name in _SANDBOX_IGNORE_NAMES:
+            ignored.add(name)
+            continue
+        if name.endswith(_SANDBOX_IGNORE_SUFFIXES):
+            ignored.add(name)
+            continue
+        if name.startswith(_SANDBOX_IGNORE_PREFIXES):
+            ignored.add(name)
+            continue
+    return ignored
 
 
 # ---------------------------------------------------------------------------
@@ -162,21 +222,7 @@ class SandboxRunner:
                 self._config.repo_root,
                 str(dest),
                 dirs_exist_ok=False,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__",
-                    "*.pyc",
-                    ".git",
-                    # Secrets and credentials — never copy into sandbox
-                    ".env",
-                    ".env.*",
-                    "*.env",
-                    "*.key",
-                    "*.pem",
-                    "*.pfx",
-                    "*.p12",
-                    "*.secret",
-                    "credentials.json",
-                ),
+                ignore=_sandbox_ignore,
             )
             self._temp_dir = str(dest)
 
