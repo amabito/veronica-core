@@ -54,9 +54,12 @@ class VeronicaExit:
 
     def _register_handlers(self) -> None:
         """Register signal handlers and atexit."""
-        # Graceful shutdown on SIGTERM/SIGINT
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
+        # signal.signal() raises ValueError when called from a non-main thread.
+        # Only register signal handlers from the main thread; atexit is always
+        # registered as the fallback path for all threads.
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGINT, self._signal_handler)
 
         # Atexit as fallback
         atexit.register(self._atexit_handler)

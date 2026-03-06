@@ -70,6 +70,11 @@ def _load_key() -> bytes:
     """
     hex_key = os.environ.get(_ENV_KEY_VAR)
     if hex_key:
+        if len(hex_key) > 2048:
+            raise RuntimeError(
+                f"{_ENV_KEY_VAR} is too long ({len(hex_key)} hex chars). "
+                "Maximum is 2048 hex chars (1024 bytes)."
+            )
         key = bytes.fromhex(hex_key)
         if len(key) < 32:
             raise RuntimeError(
@@ -117,16 +122,19 @@ class PolicySigner:
         """Normalize line endings to LF for cross-platform signature stability."""
         return raw.replace(b"\r\n", b"\n")
 
-    def sign(self, policy_path: Path) -> str:
+    def sign(self, policy_path: Path, policy_bytes: bytes | None = None) -> str:
         """Return hex-encoded HMAC-SHA256 of *policy_path* content.
 
         Args:
             policy_path: Path to the YAML policy file to sign.
+            policy_bytes: Pre-read policy bytes.  When provided the file is NOT
+                          re-read from disk (TOCTOU prevention).
 
         Returns:
             Hex string of the HMAC-SHA256 digest.
         """
-        content = self._normalize(policy_path.read_bytes())
+        raw = policy_bytes if policy_bytes is not None else policy_path.read_bytes()
+        content = self._normalize(raw)
         mac = hmac.new(self._key, content, hashlib.sha256)
         return mac.hexdigest()
 

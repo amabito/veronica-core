@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict
 import json
 import copy
+import threading
 from pathlib import Path
 import logging
 
@@ -68,22 +69,24 @@ class JSONBackend(PersistenceBackend):
         """
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._save_lock = threading.Lock()
 
     def save(self, data: Dict) -> bool:
-        """Save state to JSON file with atomic write."""
-        try:
-            # Atomic write: tmp -> rename
-            tmp_path = self.path.with_suffix(".tmp")
-            with open(tmp_path, "w") as f:
-                json.dump(data, f, indent=2)
+        """Save state to JSON file with atomic write (thread-safe)."""
+        with self._save_lock:
+            try:
+                # Atomic write: tmp -> rename
+                tmp_path = self.path.with_suffix(".tmp")
+                with open(tmp_path, "w") as f:
+                    json.dump(data, f, indent=2)
 
-            tmp_path.replace(self.path)
-            logger.info(f"[JSONBackend] State saved to {self.path}")
-            return True
+                tmp_path.replace(self.path)
+                logger.info(f"[JSONBackend] State saved to {self.path}")
+                return True
 
-        except Exception as e:
-            logger.error(f"[JSONBackend] Save failed: {e}")
-            return False
+            except Exception as e:
+                logger.error(f"[JSONBackend] Save failed: {e}")
+                return False
 
     def load(self) -> Optional[Dict]:
         """Load state from JSON file.

@@ -213,6 +213,8 @@ from veronica_core.protocols import (
     PlannerProtocol,
     ExecutionGraphObserver,
     ContainmentMetricsProtocol,
+    AsyncBudgetBackendProtocol,
+    ReconciliationCallback,
 )
 
 # Adapter capabilities (v3.0.0)
@@ -411,6 +413,8 @@ __all__ = [
     "PlannerProtocol",
     "ExecutionGraphObserver",
     "ContainmentMetricsProtocol",
+    "AsyncBudgetBackendProtocol",
+    "ReconciliationCallback",
     # Adapter capabilities (v3.0.0)
     "AdapterCapabilities",
     # Metrics implementations (v1.6.0)

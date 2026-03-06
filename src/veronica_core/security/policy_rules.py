@@ -648,7 +648,8 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
                 return decision
 
     # Check URL path segments (new in C-2 fix)
-    for segment in parsed.path.split("/"):
+    # URL-decode before checking so percent-encoded secrets are not bypassed.
+    for segment in urllib.parse.unquote(parsed.path).split("/"):
         if segment:
             if decision := _check_token(
                 segment, "path segment",
@@ -674,7 +675,7 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
     # code even though browsers don't send them to servers).
     if parsed.fragment:
         if decision := _check_token(
-            parsed.fragment, "fragment",
+            urllib.parse.unquote(parsed.fragment), "fragment",
             "net.base64_in_fragment", "net.hex_in_fragment", "net.high_entropy_fragment"
         ):
             return decision

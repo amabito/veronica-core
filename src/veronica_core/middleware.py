@@ -283,11 +283,21 @@ class VeronicaWSGIMiddleware:
             # invoke start_response a second time, violating the WSGI spec
             # and causing an AssertionError in compliant WSGI servers).
             tracker = _StartResponseTracker(start_response)
-            result = self._app(environ, tracker)
+            app_exception: BaseException | None = None
+            try:
+                result = self._app(environ, tracker)
+            except BaseException as exc:
+                app_exception = exc
 
             # Post-flight: check if aborted during the call.
+            # Run this check even when the app raised so that a halted context
+            # returns 429 instead of propagating the exception (mirrors ASGI
+            # behaviour where the halted flag takes priority).
             if ctx.get_snapshot().aborted and not tracker.started:
                 return _wsgi_429(start_response)
+
+            if app_exception is not None:
+                raise app_exception
 
             return result
         finally:

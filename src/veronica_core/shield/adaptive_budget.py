@@ -164,6 +164,16 @@ class AdaptiveBudgetHook:
             raise ValueError(
                 f"anomaly_recent_seconds must be > 0, got {anomaly_recent_seconds}"
             )
+        if anomaly_recent_seconds > window_seconds:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "anomaly_recent_seconds (%s) > window_seconds (%s); "
+                "clamping to window_seconds — spike detection will be effectively disabled",
+                anomaly_recent_seconds,
+                window_seconds,
+            )
+            anomaly_recent_seconds = window_seconds
 
         self._base_ceiling = base_ceiling
         self._window_seconds = window_seconds
@@ -190,6 +200,9 @@ class AdaptiveBudgetHook:
         self._anomaly_recent_seconds = anomaly_recent_seconds
 
         self._lock = threading.Lock()
+        # Compute event buffer capacity based on window. Assume at most 100
+        # events per second sustained, with a floor of 10,000.
+        self._event_buffer_maxlen: int = max(int(window_seconds * 100), 10_000)
         self._initialize_anomaly_state()
 
     # -- Init helpers --------------------------------------------------------
@@ -201,7 +214,9 @@ class AdaptiveBudgetHook:
         self._last_action: str | None = None
         self._anomaly_active: bool = False
         self._anomaly_activated_ts: float | None = None
-        self._event_buffer: deque[tuple[float, SafetyEvent]] = deque()
+        self._event_buffer: deque[tuple[float, SafetyEvent]] = deque(
+            maxlen=self._event_buffer_maxlen
+        )
         self._safety_events: deque[SafetyEvent] = deque(maxlen=1000)
 
     @staticmethod

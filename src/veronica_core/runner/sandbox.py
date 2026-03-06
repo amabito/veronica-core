@@ -162,7 +162,21 @@ class SandboxRunner:
                 self._config.repo_root,
                 str(dest),
                 dirs_exist_ok=False,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    ".git",
+                    # Secrets and credentials — never copy into sandbox
+                    ".env",
+                    ".env.*",
+                    "*.env",
+                    "*.key",
+                    "*.pem",
+                    "*.pfx",
+                    "*.p12",
+                    "*.secret",
+                    "credentials.json",
+                ),
             )
             self._temp_dir = str(dest)
 

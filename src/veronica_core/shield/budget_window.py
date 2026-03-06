@@ -39,6 +39,10 @@ class BudgetWindowHook:
         window_seconds: float = 60.0,
         degrade_threshold: float = 0.8,
     ) -> None:
+        if not (0.0 < degrade_threshold <= 1.0):
+            raise ValueError(
+                f"degrade_threshold must be in (0.0, 1.0], got {degrade_threshold!r}"
+            )
         self._max_calls = max_calls
         self._window_seconds = window_seconds
         self._degrade_threshold = degrade_threshold

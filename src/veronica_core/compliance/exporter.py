@@ -16,6 +16,7 @@ import logging
 import queue
 import threading
 import time
+import urllib.parse
 import urllib.request
 import weakref
 from typing import Any, Dict, List, Optional, Tuple
@@ -87,6 +88,13 @@ class ComplianceExporter:
                 "ComplianceExporter requires an explicit endpoint URL. "
                 "No default is provided to prevent unintended data transmission "
                 "to external services."
+            )
+        _parsed = urllib.parse.urlparse(endpoint)
+        _is_local = _parsed.hostname in ("localhost", "127.0.0.1", "::1")
+        if _parsed.scheme != "https" and not (_parsed.scheme == "http" and _is_local):
+            raise ValueError(
+                "ComplianceExporter endpoint must use HTTPS to protect API keys "
+                "in transit. Use 'https://' (or 'http://localhost' for local development)."
             )
         self._api_key = api_key
         self._endpoint = endpoint

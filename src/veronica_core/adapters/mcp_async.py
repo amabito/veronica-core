@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import inspect
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
@@ -118,9 +119,17 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # coroutines can interleave and produce torn reads/writes without locking.
         self._stats_lock = asyncio.Lock()
         # Cache backend reserve capability once (doesn't change after init).
+        # True when the backend exposes reserve/commit/rollback (sync or async).
+        # At call time we further check iscoroutinefunction to decide whether
+        # to await the result.
         _backend = getattr(self._ctx, "_budget_backend", None)
         self._backend_supports_reserve: bool = _backend is not None and hasattr(
             _backend, "reserve"
+        )
+        # Cache whether reserve is async so we avoid repeated inspection per call.
+        self._reserve_is_async: bool = (
+            _backend is not None
+            and inspect.iscoroutinefunction(getattr(_backend, "reserve", None))
         )
 
     # ------------------------------------------------------------------
@@ -208,9 +217,15 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
 
         if _use_reserve:
             # Phase 1a: reserve the cost estimate against the ceiling.
+            # Support both sync and async reserve implementations.
             try:
-                _reservation_id = budget_backend.reserve(
+                _reserve_result = budget_backend.reserve(
                     cost_estimate, self._ctx._config.max_cost_usd
+                )
+                _reservation_id = (
+                    await _reserve_result
+                    if self._reserve_is_async
+                    else _reserve_result
                 )
             except OverflowError:
                 logger.debug(
@@ -272,7 +287,9 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             )
             if _reservation_id is not None:
                 try:
-                    budget_backend.rollback(_reservation_id)
+                    _rb = budget_backend.rollback(_reservation_id)
+                    if self._reserve_is_async:
+                        await _rb
                 except Exception:  # noqa: BLE001
                     pass
             self._record_circuit_breaker_failure(call_error)
@@ -291,7 +308,9 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             logger.debug("[ASYNC_MCP_ADAPTER] tool=%s returned isError=True", tool_name)
             if _reservation_id is not None:
                 try:
-                    budget_backend.rollback(_reservation_id)
+                    _rb = budget_backend.rollback(_reservation_id)
+                    if self._reserve_is_async:
+                        await _rb
                 except Exception:  # noqa: BLE001
                     pass
             async with self._stats_lock:
@@ -311,7 +330,9 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Phase 3: commit the reservation or record cost on legacy path.
         if _reservation_id is not None:
             try:
-                budget_backend.commit(_reservation_id)
+                _cm = budget_backend.commit(_reservation_id)
+                if self._reserve_is_async:
+                    await _cm
             except Exception as _commit_exc:  # noqa: BLE001
                 # Commit failed (expired, already committed, or backend error).
                 # Do NOT call add() — that would double-charge the budget if the
