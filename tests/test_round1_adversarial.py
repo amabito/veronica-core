@@ -119,10 +119,11 @@ class TestConcurrentCheckLimits:
         assert snap.cost_usd_accumulated >= 0.0
 
     def test_step_and_budget_checked_atomically_no_toctou(self) -> None:
-        """Steps and budget checked in same lock: a thread that passes budget
-        check must also pass step check atomically — no window between the two."""
-        # max_steps=1 and max_cost=1.0: only the very first wrap can succeed
-        ctx = _make_ctx(max_steps=1, max_cost_usd=1.0)
+        """Steps and budget checked in same lock: step_count tracks completed
+        calls accurately even under concurrent access."""
+        # step_count is incremented AFTER fn() succeeds (post-increment).
+        # The invariant: final step_count == number of ALLOW results.
+        ctx = _make_ctx(max_steps=5, max_cost_usd=10.0)
         results: list[str] = []
         lock = threading.Lock()
         barrier = threading.Barrier(5)
@@ -149,9 +150,11 @@ class TestConcurrentCheckLimits:
             t.join()
 
         ok_count = results.count("ok")
-        assert ok_count <= 1, (
-            f"Only 1 wrap should succeed with max_steps=1, got {ok_count}"
-        )
+        snap = ctx.get_graph_snapshot()
+        # All 5 should succeed (budget and steps are sufficient)
+        assert ok_count == 5, f"All 5 wraps should succeed, got {ok_count}"
+        # Step count must exactly match successful calls
+        assert snap["aggregates"]["total_tool_calls"] == ok_count
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,33 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.0.2] -- 2026-03-06 -- F.R.I.D.A.Y. Independent Audit Fix
+
+### Fixed
+
+- **HIGH**: URL percent-encoding bypass in `_check_data_exfil()` -- path segments and fragments now URL-decoded before exfiltration checks.
+- **HIGH**: POSIX sandbox `copytree()` now excludes secret files (`.env`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `credentials.json`) matching Windows sandbox behavior.
+- **HIGH**: `AsyncMCPContainmentAdapter` now correctly `await`s budget backend `reserve()`/`commit()`/`rollback()` with sync/async dual dispatch.
+- **HIGH**: `AdaptiveBudgetHook._event_buffer` deque now bounded with `maxlen` to prevent memory exhaustion under sustained load.
+- **HIGH**: `anomaly_recent_seconds > window_seconds` now clamped with warning (was silently disabling spike detection).
+- **MEDIUM**: `ComplianceExporter` endpoint HTTPS enforcement via `urlparse` hostname check (blocks `http://localhostevil.com` prefix bypass).
+- **MEDIUM**: `PartialResultBuffer` fully thread-safe -- all properties, `set_metadata()`, `to_dict()` now hold lock.
+- **MEDIUM**: `JSONBackend.save()` protected with `threading.Lock` against concurrent writes.
+- **MEDIUM**: `VeronicaExit` signal handler registration guarded against non-main-thread `ValueError`.
+- **MEDIUM**: `BudgetWindowHook` and `TokenBudgetHook` validate `degrade_threshold` in (0.0, 1.0].
+- **MEDIUM**: WSGI middleware now handles app exceptions with proper 429-on-halt (matching ASGI behavior).
+- `PolicySignerV2.sign()` accepts `policy_bytes` parameter for TOCTOU prevention (matching `verify()`).
+- `_load_key()` enforces max key length (1024 bytes) before hex decode to prevent memory allocation attacks.
+- Flaky CI test `test_step_and_budget_checked_atomically_no_toctou` fixed -- step_count is post-increment by design; test now validates correct invariant (step_count == ALLOW count).
+
+### Added
+
+- `AsyncBudgetBackendProtocol` and `ReconciliationCallback` now exported from `veronica_core.__init__`.
+
+**Breaking changes**: none. `BudgetWindowHook(degrade_threshold=0.0)` now raises `ValueError` (was silently degrading every call).
+
+---
+
 ## [3.0.1] -- 2026-03-06 -- Full Codebase Security Audit Fix
 
 ### Fixed

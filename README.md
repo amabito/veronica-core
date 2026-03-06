@@ -30,8 +30,9 @@ pip install veronica-core
 | **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
 | **3.0.0** | God Class Split + AdapterCapabilities + AuditChain | `distributed.py`/`policy_engine.py`/`execution_context.py` split, `AdapterCapabilities` frozen dataclass, `AuditChain` tamper-proof hash chain |
 | **3.0.1** | Full Codebase Security Audit Fix | 68 findings (5 Critical, 17 High) resolved -- TOCTOU, data exfil, HMAC key length, thread safety, protocol compliance |
+| **3.0.2** | F.R.I.D.A.Y. Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
 
-3989 tests. Zero breaking changes from 2.1.0 through 3.0.1.
+3995 tests. Zero breaking changes from 2.1.0 through 3.0.2.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -210,7 +211,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.0.1
+## Ship Readiness -- v3.0.2
 
 3995 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
