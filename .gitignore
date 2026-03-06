@@ -97,5 +97,8 @@ docs/plans/
 # Promo scripts (not part of core library)
 scripts/gen_diagrams.py
 
+# Architecture drafts (local only, not published)
+docs/V4_ARCHITECTURE.md
+
 # SaaS app (local development only, not published)
 src/veronica_core/compliance/app/
