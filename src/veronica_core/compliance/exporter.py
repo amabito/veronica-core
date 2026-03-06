@@ -82,6 +82,7 @@ class ComplianceExporter:
         max_queue: int = 1000,
         timeout_s: float = 5.0,
         max_retries: int = 2,
+        allow_insecure_http: bool = False,
     ) -> None:
         if not endpoint:
             raise ValueError(
@@ -91,10 +92,15 @@ class ComplianceExporter:
             )
         _parsed = urllib.parse.urlparse(endpoint)
         _is_local = _parsed.hostname in ("localhost", "127.0.0.1", "::1")
-        if _parsed.scheme != "https" and not (_parsed.scheme == "http" and _is_local):
+        if (
+            _parsed.scheme != "https"
+            and not (_parsed.scheme == "http" and _is_local)
+            and not allow_insecure_http
+        ):
             raise ValueError(
                 "ComplianceExporter endpoint must use HTTPS to protect API keys "
-                "in transit. Use 'https://' (or 'http://localhost' for local development)."
+                "in transit. Use 'https://' (or 'http://localhost' for local dev). "
+                "For internal HTTP endpoints, pass allow_insecure_http=True."
             )
         self._api_key = api_key
         self._endpoint = endpoint

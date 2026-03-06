@@ -133,7 +133,8 @@ class PartialResultBuffer:
     def get_partial(self) -> str:
         """Get accumulated partial result as a single string."""
         with self._lock:
-            return "".join(self._chunks)
+            chunks = list(self._chunks)
+        return "".join(chunks)
 
     @property
     def chunk_count(self) -> int:
@@ -181,12 +182,17 @@ class PartialResultBuffer:
     def to_dict(self) -> Dict:
         """Serialize buffer state."""
         with self._lock:
-            result: Dict = {
-                "partial_text": "".join(self._chunks),
-                "chunk_count": len(self._chunks),
-                "is_complete": self._is_complete,
-                "metadata": dict(self._metadata),
-            }
-            if self._is_partial_overflow:
-                result["truncated"] = True
-            return result
+            chunks = list(self._chunks)
+            chunk_count = len(chunks)
+            is_complete = self._is_complete
+            metadata = dict(self._metadata)
+            truncated = self._is_partial_overflow
+        result: Dict = {
+            "partial_text": "".join(chunks),
+            "chunk_count": chunk_count,
+            "is_complete": is_complete,
+            "metadata": metadata,
+        }
+        if truncated:
+            result["truncated"] = True
+        return result

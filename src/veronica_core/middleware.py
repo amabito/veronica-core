@@ -31,7 +31,10 @@ get_current_execution_context().
 from __future__ import annotations
 
 import contextvars
+import logging
 from typing import Any, Callable, Iterable
+
+logger = logging.getLogger(__name__)
 
 from veronica_core.containment.execution_context import (
     ExecutionConfig,
@@ -294,6 +297,17 @@ class VeronicaWSGIMiddleware:
             # returns 429 instead of propagating the exception (mirrors ASGI
             # behaviour where the halted flag takes priority).
             if ctx.get_snapshot().aborted and not tracker.started:
+                if app_exception is not None:
+                    logger.warning(
+                        "WSGI app raised %s but context was halted; "
+                        "returning 429 instead of propagating exception",
+                        type(app_exception).__name__,
+                        exc_info=app_exception,
+                    )
+                # Close the app iterable (if any) to avoid resource leaks
+                # (WSGI PEP 3333: the server must call close() if present).
+                if app_exception is None and hasattr(result, "close"):
+                    result.close()
                 return _wsgi_429(start_response)
 
             if app_exception is not None:

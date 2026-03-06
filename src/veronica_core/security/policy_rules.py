@@ -631,7 +631,12 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
         return None
 
     # Check query string values (use original rule IDs for backward compat)
-    qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    # Handle both '&' and ';' as query separators (RFC 2396 legacy).
+    # Replace ';' with '&' before parsing because parse_qs separator param
+    # matches the full string, not individual characters.
+    qs = urllib.parse.parse_qs(
+        parsed.query.replace(";", "&"), keep_blank_values=True
+    )
     for key, values in qs.items():
         # Check query keys (new in C-2 fix)
         if decision := _check_token(
@@ -647,26 +652,38 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
             ):
                 return decision
 
-    # Check URL path segments (new in C-2 fix)
-    # URL-decode before checking so percent-encoded secrets are not bypassed.
-    for segment in urllib.parse.unquote(parsed.path).split("/"):
-        if segment:
-            if decision := _check_token(
-                segment, "path segment",
-                "net.base64_in_path", "net.hex_in_path", "net.high_entropy_path"
-            ):
-                return decision
+    # Check URL path segments and matrix parameters (;key=value).
+    # URL-decode each segment individually so that encoded slashes (%2F)
+    # do not alter segment boundaries and evade length/entropy thresholds.
+    # urlparse only extracts params from the LAST segment, so we also
+    # split every segment on ';' and '=' to catch matrix params on all segments.
+    # Re-attach parsed.params to the path so the last segment's params are included.
+    _full_path = parsed.path
+    if parsed.params:
+        _full_path += ";" + parsed.params
+    for raw_segment in _full_path.split("/"):
+        # Split segment on ';' to extract matrix params, then '=' for key/value.
+        for raw_part in raw_segment.split(";"):
+            for raw_token in raw_part.split("="):
+                token = urllib.parse.unquote(raw_token)
+                if token:
+                    if decision := _check_token(
+                        token, "path segment",
+                        "net.base64_in_path", "net.hex_in_path", "net.high_entropy_path"
+                    ):
+                        return decision
 
     # Check userinfo (user:password@host) (new in C-2 fix)
+    # Explicitly unquote in case urlparse preserves percent-encoded chars.
     if parsed.username:
         if decision := _check_token(
-            parsed.username, "userinfo username",
+            urllib.parse.unquote(parsed.username), "userinfo username",
             "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
         ):
             return decision
     if parsed.password:
         if decision := _check_token(
-            parsed.password, "userinfo password",
+            urllib.parse.unquote(parsed.password), "userinfo password",
             "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
         ):
             return decision
