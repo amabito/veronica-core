@@ -79,9 +79,9 @@ Crossing this boundary turns the Planner into an orchestrator. That is a differe
 
 ---
 
-## PlannerProtocol (planned, v1.0)
+## PlannerProtocol
 
-veronica-core will expose a minimal `PlannerProtocol` (Python `typing.Protocol`)
+veronica-core exposes a minimal `PlannerProtocol` (Python `typing.Protocol`)
 defining the contract between Planner and kernel.
 
 Design goals:

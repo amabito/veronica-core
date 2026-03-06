@@ -302,7 +302,7 @@ A: Separation of concerns. Strategy engines focus on decision quality. VERONICA 
 A: ~1-5ms per operation (atomic file write). < 5% throughput impact in production. Bottleneck is usually external systems, not state machine.
 
 **Q: Why Python?**
-A: Target audience (LLM agents, strategy engines) is predominantly Python. Stdlib-only requirement favors Python. Rust/Go bindings planned for v1.0.
+A: Target audience (LLM agents, strategy engines) is predominantly Python. Stdlib-only requirement favors Python. Zero runtime dependencies by design.
 
 **Q: Can I trust the proof tests?**
 A: Run them yourself (`python scripts/proof_runner.py`). Full reproduction steps in PROOF.md. If any test fails, file an issue — we'll fix immediately.
