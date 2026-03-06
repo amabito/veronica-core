@@ -8,7 +8,7 @@
 
 ---
 
-## Phase A: 宣言的ポリシー層 (v2.1)
+## Phase A: 宣言的ポリシー層 (v2.1) [DONE]
 
 ### 目的
 ShieldPipelineのポリシーをPythonコードではなくYAML/JSONで宣言的に定義可能にする。非エンジニア（コンプライアンス担当者、プロジェクトマネージャー）がポリシーを記述・変更できるようにする。
@@ -82,7 +82,7 @@ class PolicyRegistry:
 
 ---
 
-## Phase B: 適応的ポリシー (v2.2)
+## Phase B: 適応的ポリシー (v2.2) [DONE]
 
 ### 目的
 静的閾値ではなく、実行時のメトリクスに基づいて動的に制約を調整する。予測ベースの予算制御を実現する。
@@ -141,7 +141,7 @@ class AnomalyDetector:
 
 ---
 
-## Phase C: マルチテナント (v2.3)
+## Phase C: マルチテナント (v2.3) [DONE]
 
 ### 目的
 複数プロジェクト/チーム/エージェントに対して階層的な予算プールとポリシーを管理する。
@@ -194,7 +194,7 @@ class BudgetPool:
 
 ---
 
-## Phase D: OTelフィードバックループ (v2.4)
+## Phase D: OTelフィードバックループ (v2.4) [DONE]
 
 ### 目的
 OTelのメトリクスを入力としてポリシー判断に使う。観測 → 判断 → 制約の閉ループを形成する。
@@ -250,7 +250,7 @@ class MetricRule:
 
 ---
 
-## Phase E: A2A信頼境界 (v3.0)
+## Phase E: A2A信頼境界 (v2.7) [DONE]
 
 ### 目的
 A2A（Agent-to-Agent）プロトコルで外部エージェントが参加する場合の制約管理。未知のエージェントに対するデフォルト制約、信頼レベルに基づく予算割り当て。
@@ -408,30 +408,29 @@ class BudgetGrant:
 ```
 v2.0 (完了)
   │
-  ├── Phase A: 宣言的ポリシー (v2.1)
-  │     ← 独立、すぐ着手可能
+  ├── Phase A: 宣言的ポリシー (v2.1) [DONE]
   │
-  ├── Phase B: 適応的ポリシー (v2.2)
-  │     ← 独立、すぐ着手可能
+  ├── Phase B: 適応的ポリシー (v2.2) [DONE]
   │
-  ├── Phase C: マルチテナント (v2.3)
-  │     ← v2.0のRedisBudgetBackendに依存
+  ├── Phase C: マルチテナント (v2.3) [DONE]
   │
-  ├── Phase D: OTelフィードバック (v2.4)
-  │     ← Phase Bに依存（AnomalyDetector共有）
-  │     ← AG2 PR #2430マージ後に実テスト可能
+  ├── Phase D: OTelフィードバック (v2.4) [DONE]
   │
-  ├── Phase E: A2A信頼境界 (v3.0)
-  │     ← Phase C + Phase Dに依存
-  │     ← AG2 A2Aサポートの安定後
+  ├── Phase E: A2A信頼境界 (v2.7) [DONE]
   │
   ├── Phase F: ポリシーシミュレーション (v2.6) [DONE]
-  │     ← Phase A + Phase Dに依存（ログフォーマット共有）
+  │
+  ├── v3.0: God Class Split + AdapterCapabilities + AuditChain [DONE]
+  │
+  ├── v3.0.1-3.0.3: Security Audit (3 rounds, 108 fixes) [DONE]
   │
   └── Phase G: フェデレーション (v4.0)
-        ← Phase E + Phase Fに依存
         ← 実需確認後
+        ← 新ロードマップ: docs/ROADMAP.md 参照
 ```
+
+**v3.1以降のロードマップは `docs/ROADMAP.md` に移行。**
+本ドキュメントはPhase A-F の設計記録として保持する。
 
 ## 並行作業の指針
 

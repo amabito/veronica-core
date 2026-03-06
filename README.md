@@ -253,10 +253,16 @@ Supporting theory:
 - ~~Policy simulation: replay logs for what-if analysis~~ (v2.6.0)
 - ~~A2A trust boundary: cross-agent identity verification and policy routing~~ (v2.7.0)
 - ~~God class split, `AdapterCapabilities`, `AuditChain`~~ (v3.0.0)
+- ~~Security audit: 3 rounds, 108 findings fixed~~ (v3.0.1 -- v3.0.3)
 
 ### Next
 
-- Federation: multi-process policy coordination (Phase G)
+- Kernel stabilization: lazy imports, API surface cleanup, `time.monotonic()` migration (v3.1)
+- ExecutionContext decomposition: split 1500-line god class into focused trackers (v3.2)
+- nogil Python readiness: audit GIL-dependent patterns for PEP 703 (v3.3)
+- Federation: multi-process policy coordination (v4.0)
+
+Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 
 ---
