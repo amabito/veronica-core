@@ -17,6 +17,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 - `_is_junction()` helper in `runner/sandbox.py` -- cross-version NTFS junction detection (Python 3.11+).
 - 27 new tests for `_sandbox_ignore()`: symlink rejection, NTFS junction rejection, credential denylist (all names), suffix matching, case-insensitive suffix, prefix matching, safe file passthrough.
+- 23 new audit coverage tests: URL exfil (semicolon query, matrix params, %2F per-segment, backslash userinfo), ComplianceExporter HTTPS enforcement (7 tests), AsyncMCPContainmentAdapter sync/async budget dispatch (3 tests), WSGI iterable close + exception logging (3 tests).
 
 **Breaking changes**: none.
 

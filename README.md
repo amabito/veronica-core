@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4015%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4039%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -33,7 +33,7 @@ pip install veronica-core
 | **3.0.2** | F.R.I.D.A.Y. Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
 | **3.0.3** | Iron Legion Parallel Audit Fix | NTFS junction sandbox escape, case-insensitive suffix bypass, 27 new sandbox tests |
 
-4015 tests. Zero breaking changes from 2.1.0 through 3.0.3.
+4039 tests. Zero breaking changes from 2.1.0 through 3.0.3.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -214,7 +214,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Ship Readiness -- v3.0.3
 
-4015 tests, 92% coverage, zero required dependencies. Python 3.10+.
+4039 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
