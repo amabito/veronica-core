@@ -155,8 +155,11 @@ class WindowsSandboxRunner:
         """
         # Resolve path traversal (e.g. ..\..\Users) before comparison.
         # For relative paths, resolve against sandbox CWD to catch traversal.
+        # On Linux, os.path.isabs does not recognise Windows drive-letter paths
+        # (e.g. C:/Users), so we also check for X:/ and X:\ patterns.
         p = path
-        if not os.path.isabs(p) and self._temp_dir is not None:
+        _is_abs = os.path.isabs(p) or (len(p) >= 3 and p[1:3] in (":/", ":\\"))
+        if not _is_abs and self._temp_dir is not None:
             p = os.path.join(self._temp_dir, p)
         norm_path = os.path.normpath(p).replace("\\", "/").lower()
 
