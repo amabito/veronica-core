@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict
 import json
 import copy
+import os
 import threading
 from pathlib import Path
 import logging
@@ -75,12 +76,19 @@ class JSONBackend(PersistenceBackend):
         """Save state to JSON file with atomic write (thread-safe)."""
         with self._save_lock:
             try:
-                # Atomic write: tmp -> rename
-                tmp_path = self.path.with_suffix(".tmp")
-                with open(tmp_path, "w") as f:
-                    json.dump(data, f, indent=2)
+                # Atomic write: tmp -> rename (unpredictable name)
+                import tempfile as _tempfile
 
-                tmp_path.replace(self.path)
+                fd, tmp_name = _tempfile.mkstemp(
+                    dir=str(self.path.parent), suffix=".tmp"
+                )
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        json.dump(data, f, indent=2)
+                    Path(tmp_name).replace(self.path)
+                except BaseException:
+                    Path(tmp_name).unlink(missing_ok=True)
+                    raise
                 logger.info(f"[JSONBackend] State saved to {self.path}")
                 return True
 

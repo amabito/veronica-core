@@ -101,6 +101,10 @@ class VaultKeyProvider:
                 "hvac is required for VaultKeyProvider. "
                 "Install it with: pip install veronica-core[vault]"
             )
+        if not vault_url.startswith("https://"):
+            raise ValueError(
+                f"vault_url must use HTTPS to protect VAULT_TOKEN, got: {vault_url!r}"
+            )
         self._vault_url = vault_url
         self._mount_point = mount_point
         self._key_name = key_name

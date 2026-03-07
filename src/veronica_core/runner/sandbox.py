@@ -133,7 +133,7 @@ def _sandbox_ignore(directory: str, names: list[str]) -> set[str]:
         if name_lower.endswith(_SANDBOX_IGNORE_SUFFIXES):
             ignored.add(name)
             continue
-        if name.startswith(_SANDBOX_IGNORE_PREFIXES):
+        if name_lower.startswith(_SANDBOX_IGNORE_PREFIXES):
             ignored.add(name)
             continue
     return ignored
@@ -268,6 +268,7 @@ class SandboxRunner:
         if self._temp_dir is None:
             return
         if not self._owns_temp_dir:
+            self._temp_dir = None
             return
 
         # Walk up to the temp root we own (not the _repo subdirectory).

@@ -453,11 +453,10 @@ class TestSecureExecutorRaisesOnDeny:
         assert exc_info.value.rule_id == "FILE_WRITE_REQUIRE_APPROVAL"
         assert exc_info.value.args_hash  # non-empty hash
 
-    def test_fetch_url_post_raises_permission_error(self) -> None:
+    def test_fetch_url_post_raises_value_error(self) -> None:
         executor = _executor()
-        with pytest.raises(SecurePermissionError) as exc_info:
+        with pytest.raises(ValueError, match="Only GET requests are permitted"):
             executor.fetch_url("https://pypi.org/upload/", method="POST")
-        assert exc_info.value.rule_id == "NET_DENY_METHOD"
 
     def test_fetch_url_evil_host_raises_permission_error(self) -> None:
         executor = _executor()
@@ -732,12 +731,13 @@ class TestAdversarialPolicyEngine:
         ],
     )
     def test_net_ssrf_is_denied(self, label: str, url: str) -> None:
-        """SSRF via net action to loopback/metadata/IPv6 endpoints must be blocked (NET_DENY_HOST)."""
+        """SSRF via net action to loopback/metadata/IPv6 endpoints must be blocked."""
         engine = _engine()
         ctx = _ctx("net", [url, "GET"])
         decision = engine.evaluate(ctx)
         assert decision.verdict == "DENY"
-        assert decision.rule_id == "NET_DENY_HOST"
+        # May be blocked by scheme (NET_DENY_SCHEME) or host (NET_DENY_HOST)
+        assert decision.rule_id in ("NET_DENY_HOST", "NET_DENY_SCHEME")
 
 
 class TestUnicodeBypassPrevention:

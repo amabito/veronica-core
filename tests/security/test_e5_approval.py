@@ -328,24 +328,22 @@ class TestNonceRegistry:
         assert registry.consume("nonce1") is True
         assert registry.consume("nonce2") is True
 
-    def test_clear_expired_allows_reuse(self) -> None:
+    def test_clear_expired_only_evicts_expired(self) -> None:
         registry = NonceRegistry()
         registry.consume("abc123")
         registry.clear_expired()
-        # After clearing, nonce can be reused
-        assert registry.consume("abc123") is True
+        # clear_expired only removes expired nonces; fresh nonces remain
+        assert registry.consume("abc123") is False
 
-    def test_max_size_eviction(self) -> None:
+    def test_max_size_fail_closed(self) -> None:
         # max_size=2: n1, n2 fill the registry
         registry = NonceRegistry(max_size=2)
-        registry.consume("n1")
-        registry.consume("n2")
-        # n3 triggers eviction of n1 (oldest); registry now holds [n2, n3]
-        registry.consume("n3")
-        # n1 was evicted — can be consumed again
         assert registry.consume("n1") is True
-        # n3 is still tracked — replay should be detected
+        assert registry.consume("n2") is True
+        # n3 rejected (fail-closed): registry full with live nonces
         assert registry.consume("n3") is False
+        # n1 still tracked — replay also rejected
+        assert registry.consume("n1") is False
 
     def test_thread_safety(self) -> None:
         registry = NonceRegistry()

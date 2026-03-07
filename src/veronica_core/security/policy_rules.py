@@ -330,14 +330,23 @@ def _check_shell_operators(full_cmd: str) -> PolicyDecision | None:
     return None
 
 
-def _check_credentials_in_args(argv0: str, argv1: str) -> PolicyDecision | None:
+def _check_credentials_in_args(argv0: str, argv1: str, args: list[str] | None = None) -> PolicyDecision | None:
     """Return DENY if a credential sub-command is detected (git credential, gh auth, etc.)."""
     for cmd, blocked_subcmds in SHELL_CREDENTIAL_DENY:
-        if argv0 == cmd and argv1 in blocked_subcmds:
+        if argv0 != cmd:
+            continue
+        # Check argv1 directly and also scan non-option tokens for the blocked subcommand
+        # to prevent bypass via prepended global options (e.g. npm --silent token list).
+        tokens_to_check = {argv1}
+        if args:
+            tokens_to_check.update(t.lower() for t in args[1:] if not t.startswith("-"))
+        matched = tokens_to_check & blocked_subcmds
+        if matched:
+            found = next(iter(matched))
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_CREDENTIAL_SUBCMD",
-                reason=f"Subcommand '{argv0} {argv1}' is blocked (credential access)",
+                reason=f"Subcommand '{argv0} {found}' is blocked (credential access)",
                 risk_score_delta=9,
             )
     return None
@@ -349,7 +358,8 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
         return None
 
     for token in args[1:]:
-        if token == "-c" or _has_combined_short_flag(token, "c"):
+        # Match: -c, -c<code> (attached), -Ic (combined), etc.
+        if token == "-c" or token.startswith("-c") or _has_combined_short_flag(token, "c"):
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_INLINE_EXEC",
@@ -365,19 +375,45 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
             risk_score_delta=9,
         )
 
-    if "-m" in args[1:]:
-        m_idx = args[1:].index("-m") + 1  # offset for args[1:] slice
-        module = args[m_idx + 1].lower() if m_idx + 1 < len(args) else ""
-        if module in _PYTHON_MODULE_PKG_MANAGERS:
-            return PolicyDecision(
-                verdict="REQUIRE_APPROVAL",
-                rule_id="SHELL_PKG_INSTALL",
-                reason=(
-                    f"Package installation via '{argv0} -m {module}' "
-                    "requires approval (supply chain risk)"
-                ),
-                risk_score_delta=4,
-            )
+    # Detect -m flag including combined short flags like -Im, -mI, -Sm etc.
+    for i, arg in enumerate(args[1:], start=1):
+        if arg == "-m" or (arg.startswith("-") and not arg.startswith("--") and "m" in arg[1:]):
+            # The module name follows the -m flag (or the combined flag)
+            module_idx = i + 1 if arg == "-m" else i + 1
+            # For combined flags where -m is not standalone, module is next arg
+            if arg != "-m" and arg[1:].endswith("m"):
+                module_idx = i + 1
+            elif arg != "-m":
+                # -m is not at end: e.g. -mI -> module is embedded, skip
+                # -Im -> m at end, module is next arg (handled above)
+                # For -mPKG style, the module is the rest after m
+                m_pos = arg[1:].index("m")
+                rest = arg[2 + m_pos:]
+                if rest:
+                    # e.g. -mpip -> module is "pip"
+                    if rest.lower() in _PYTHON_MODULE_PKG_MANAGERS:
+                        return PolicyDecision(
+                            verdict="REQUIRE_APPROVAL",
+                            rule_id="SHELL_PKG_INSTALL",
+                            reason=(
+                                f"Package installation via '{argv0} {arg}' "
+                                "requires approval (supply chain risk)"
+                            ),
+                            risk_score_delta=4,
+                        )
+                    continue
+            module = args[module_idx].lower() if module_idx < len(args) else ""
+            if module in _PYTHON_MODULE_PKG_MANAGERS:
+                return PolicyDecision(
+                    verdict="REQUIRE_APPROVAL",
+                    rule_id="SHELL_PKG_INSTALL",
+                    reason=(
+                        f"Package installation via '{argv0} -m {module}' "
+                        "requires approval (supply chain risk)"
+                    ),
+                    risk_score_delta=4,
+                )
+            break
 
     return None
 
@@ -399,43 +435,128 @@ def _check_pkg_install(
                 risk_score_delta=9,
             )
 
-    # DENY: uv run wrapping inline code execution
-    if argv0 == "uv" and argv1 == "run":
-        matched = _UVR_INLINE_EXEC_FLAGS.intersection(args[2:])
-        if matched:
+    # DENY: uv run wrapping inline code execution or wrapped commands.
+    # Skip global options (e.g. --project, --no-config) to find "run" subcommand.
+    _UV_OPTS_WITH_VALUE = frozenset({
+        "--project", "--directory", "--config-file", "--cache-dir",
+        "--python-preference", "--python-fetch", "--color",
+    })
+    if argv0 == "uv":
+        uv_subcmd = ""
+        uv_subcmd_idx = -1
+        skip_val = False
+        for i, tok in enumerate(args[1:], start=1):
+            if skip_val:
+                skip_val = False
+                continue
+            if tok in _UV_OPTS_WITH_VALUE:
+                skip_val = True
+                continue
+            if tok.startswith("-"):
+                continue
+            uv_subcmd = tok.lower()
+            uv_subcmd_idx = i
+            break
+
+        if uv_subcmd == "run" and uv_subcmd_idx > 0:
+            rest = args[uv_subcmd_idx + 1:]
+            matched = _UVR_INLINE_EXEC_FLAGS.intersection(rest)
+            if matched:
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="SHELL_DENY_INLINE_EXEC",
+                    reason=f"Inline code execution via 'uv run' is blocked (flag(s): {sorted(matched)})",
+                    risk_score_delta=9,
+                )
+            # Check wrapped command through the full shell policy pipeline.
+            inner = [t for t in rest if t != "--"]
+            if inner:
+                inner0 = inner[0].lower()
+                inner1 = inner[1].lower() if len(inner) > 1 else ""
+                inner_cmd = " ".join(inner)
+                if decision := _check_shell_deny_commands(inner0):
+                    return decision
+                if decision := _check_shell_operators(inner_cmd):
+                    return decision
+                if decision := _check_credentials_in_args(inner0, inner1, inner):
+                    return decision
+                if decision := _check_python_exec_flags(inner0, inner):
+                    return decision
+                if decision := _check_pkg_install(inner0, inner1, inner):
+                    return decision
+                # Inner command must also be in the allowlist.
+                if inner0 not in SHELL_ALLOW_COMMANDS:
+                    return PolicyDecision(
+                        verdict="DENY",
+                        rule_id="SHELL_DENY_DEFAULT",
+                        reason=f"Wrapped command '{inner0}' (via 'uv run') is not in the allowlist",
+                        risk_score_delta=5,
+                    )
+
+    # REQUIRE_APPROVAL/DENY: npm/pnpm subcommand detection.
+    # Conservative: all --long options (without =) are assumed value-taking
+    # to prevent bypass via unknown options (fail-closed).
+    _NPM_EXEC_SUBCMDS = frozenset({"exec", "dlx", "x"})
+    # Scan ALL non-option tokens for dangerous subcommands (position-independent).
+    # This avoids option-parsing bypass where unknown flags hide the real subcommand.
+    if argv0 in ("npm", "pnpm") or argv0 in {cmd for cmd, _ in SHELL_PKG_INSTALL_APPROVAL}:
+        non_option_tokens = frozenset(
+            t.lower() for t in args[1:] if not t.startswith("-")
+        )
+
+        # Check install subcommands
+        for cmd, install_subcmds in SHELL_PKG_INSTALL_APPROVAL:
+            if argv0 == cmd and (non_option_tokens & install_subcmds):
+                matched_sub = next(iter(non_option_tokens & install_subcmds))
+                return PolicyDecision(
+                    verdict="REQUIRE_APPROVAL",
+                    rule_id="SHELL_PKG_INSTALL",
+                    reason=f"Package installation '{argv0} {matched_sub}' requires approval (supply chain risk)",
+                    risk_score_delta=4,
+                )
+
+        if argv0 in ("npm", "pnpm") and (non_option_tokens & _NPM_EXEC_SUBCMDS):
+            matched_exec = next(iter(non_option_tokens & _NPM_EXEC_SUBCMDS))
             return PolicyDecision(
                 verdict="DENY",
-                rule_id="SHELL_DENY_INLINE_EXEC",
-                reason=f"Inline code execution via 'uv run' is blocked (flag(s): {sorted(matched)})",
-                risk_score_delta=9,
+                rule_id="SHELL_DENY_PKG_EXEC",
+                reason=f"'{argv0} {matched_exec}' can execute arbitrary commands and is blocked",
+                risk_score_delta=8,
             )
 
-    # REQUIRE_APPROVAL: standard package managers
-    for cmd, install_subcmds in SHELL_PKG_INSTALL_APPROVAL:
-        if argv0 == cmd and argv1 in install_subcmds:
-            return PolicyDecision(
-                verdict="REQUIRE_APPROVAL",
-                rule_id="SHELL_PKG_INSTALL",
-                reason=f"Package installation '{argv0} {argv1}' requires approval (supply chain risk)",
-                risk_score_delta=4,
-            )
-
-    # REQUIRE_APPROVAL: uv add / uv pip install
+    # REQUIRE_APPROVAL: uv add / uv pip install.
+    # Reuse _UV_OPTS_WITH_VALUE to skip global options for all uv subcommands.
     if argv0 == "uv":
-        if argv1 == "add":
+        # Find effective subcommand (skip global options)
+        uv_sub = ""
+        uv_sub_idx = -1
+        skip_v = False
+        for i, tok in enumerate(args[1:], start=1):
+            if skip_v:
+                skip_v = False
+                continue
+            if tok in _UV_OPTS_WITH_VALUE:
+                skip_v = True
+                continue
+            if tok.startswith("-"):
+                continue
+            uv_sub = tok.lower()
+            uv_sub_idx = i
+            break
+        if uv_sub == "add":
             return PolicyDecision(
                 verdict="REQUIRE_APPROVAL",
                 rule_id="SHELL_PKG_INSTALL",
                 reason="Package installation 'uv add' requires approval (supply chain risk)",
                 risk_score_delta=4,
             )
-        if argv1 == "pip":
-            argv2 = args[2].lower() if len(args) > 2 else ""
-            if argv2 in _UV_PIP_INSTALL_SUBCMDS:
+        if uv_sub == "pip" and uv_sub_idx > 0:
+            pip_sub = args[uv_sub_idx + 1].lower() if uv_sub_idx + 1 < len(args) else ""
+            if pip_sub in _UV_PIP_INSTALL_SUBCMDS:
                 return PolicyDecision(
                     verdict="REQUIRE_APPROVAL",
                     rule_id="SHELL_PKG_INSTALL",
-                    reason=f"Package installation 'uv pip {argv2}' requires approval (supply chain risk)",
+                    reason=f"Package installation 'uv pip {pip_sub}' requires approval (supply chain risk)",
                     risk_score_delta=4,
                 )
 
@@ -460,7 +581,7 @@ def _eval_shell(ctx: PolicyContext) -> PolicyDecision | None:
     if decision := _check_shell_operators(full_cmd):
         return decision
 
-    if decision := _check_credentials_in_args(argv0, argv1):
+    if decision := _check_credentials_in_args(argv0, argv1, args):
         return decision
 
     if decision := _check_python_exec_flags(argv0, args):
@@ -551,12 +672,20 @@ def _eval_file_write(ctx: PolicyContext) -> PolicyDecision | None:
 
 
 def _check_host_restrictions(url: str, method: str) -> PolicyDecision | None:
-    """Return DENY for mutating methods, over-long URLs, or non-allowlisted hosts."""
-    if method in NET_DENY_METHODS:
+    """Return DENY for mutating methods, non-HTTPS, over-long URLs, or non-allowlisted hosts."""
+    # Enforce HTTPS to protect data integrity and confidentiality.
+    if not url.lower().startswith("https://"):
+        return PolicyDecision(
+            verdict="DENY",
+            rule_id="NET_DENY_SCHEME",
+            reason=f"Only HTTPS URLs are permitted, got: {url[:60]}",
+            risk_score_delta=7,
+        )
+    if method != "GET":
         return PolicyDecision(
             verdict="DENY",
             rule_id="NET_DENY_METHOD",
-            reason=f"HTTP method '{method}' is not allowed",
+            reason=f"HTTP method '{method}' is not allowed (only GET permitted)",
             risk_score_delta=6,
         )
     if len(url) > NET_URL_MAX_LENGTH:
@@ -732,11 +861,15 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     # as the subcommand and bypass the push deny rule (H-5 fix).
     _GIT_OPTS_WITH_VALUE = frozenset({
         "-c", "-C", "--git-dir", "--work-tree", "--namespace",
-        "--config-env", "--super-prefix",
+        "--config-env", "--super-prefix", "--exec-path",
     })
     subcmd = ""
     skip_next = False
-    for token in ctx.args:
+    # Strip leading executable name (e.g. "git", "git.exe", "/usr/bin/git")
+    git_args = ctx.args
+    if git_args and os.path.basename(git_args[0]).lower().rstrip(".exe") == "git":
+        git_args = git_args[1:]
+    for token in git_args:
         if skip_next:
             skip_next = False
             continue
@@ -749,7 +882,11 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
         subcmd = token.lower()
         break
 
-    if subcmd in GIT_DENY_SUBCMDS:
+    # Also scan all non-option tokens for denied subcommands (defense-in-depth
+    # against option-parsing gaps that could hide a blocked subcommand).
+    denied_anywhere = {t.lower() for t in git_args if not t.startswith("-")} & GIT_DENY_SUBCMDS
+    if subcmd in GIT_DENY_SUBCMDS or denied_anywhere:
+        matched = subcmd if subcmd in GIT_DENY_SUBCMDS else next(iter(denied_anywhere))
         # DENY unless GIT_PUSH_APPROVAL capability is granted
         from veronica_core.security.capabilities import has_cap
 
@@ -757,7 +894,7 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="GIT_DENY_SUBCMD",
-                reason=f"Git subcommand '{subcmd}' requires GIT_PUSH_APPROVAL capability",
+                reason=f"Git subcommand '{matched}' requires GIT_PUSH_APPROVAL capability",
                 risk_score_delta=7,
             )
 

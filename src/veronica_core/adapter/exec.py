@@ -124,7 +124,12 @@ class SecureExecutor:
         if not argv:
             raise ValueError("argv must not be empty")
 
-        ctx = self._make_ctx("shell", argv, cwd)
+        # Resolve cwd to an absolute canonical path.  Policy engine receives
+        # the resolved cwd so it can enforce directory constraints.
+        effective_cwd = cwd or self._config.repo_root
+        resolved_cwd = self._resolve_path(effective_cwd)
+
+        ctx = self._make_ctx("shell", argv, str(resolved_cwd))
         self._enforce(ctx, argv)
 
         result = subprocess.run(
@@ -133,7 +138,7 @@ class SecureExecutor:
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=cwd or self._config.repo_root,
+            cwd=str(resolved_cwd),
             env=env,
         )
         stdout = self._masker.mask(result.stdout)
@@ -162,13 +167,24 @@ class SecureExecutor:
             PermissionError: If path escapes repo_root without the capability.
             FileNotFoundError: If the file does not exist.
         """
-        resolved = self._resolve_path(path)
+        abs_path = self._abs_path(path)
+        resolved = abs_path.resolve()
         if not has_cap(self._config.caps, Capability.FILE_READ_SENSITIVE):
             self._check_within_repo(resolved)
 
-        # Pass original path to policy engine so glob patterns like .env match
+        # Reject symlinks on the unresolved path.  Path.resolve() follows
+        # symlinks, so checking after resolve() would always return False.
+        if abs_path.is_symlink():
+            raise PermissionError(f"Symlinks are not allowed: {abs_path}")
+
+        # Evaluate policy on BOTH original path (for pattern matching like
+        # .env) and the resolved real path (to catch symlink-based bypass).
         ctx = self._make_ctx("file_read", [path], None)
         self._enforce(ctx, [path])
+        resolved_str = str(resolved)
+        if resolved_str != str(abs_path):
+            ctx2 = self._make_ctx("file_read", [resolved_str], None)
+            self._enforce(ctx2, [resolved_str])
 
         content = resolved.read_text(encoding="utf-8", errors="replace")
         return self._masker.mask(content)
@@ -185,25 +201,44 @@ class SecureExecutor:
             ApprovalRequiredError: If PolicyEngine returns REQUIRE_APPROVAL.
             PermissionError: If path escapes repo_root.
         """
-        resolved = self._resolve_path(path)
+        abs_path = self._abs_path(path)
+        resolved = abs_path.resolve()
         self._check_within_repo(resolved)
 
-        # Pass original path to policy engine so glob patterns like .github/workflows/** match
+        # Reject symlinks on the unresolved path (before resolve() follows them).
+        if abs_path.exists() and abs_path.is_symlink():
+            raise PermissionError(f"Symlinks are not allowed: {abs_path}")
+
+        # Evaluate policy on BOTH original path (for pattern matching like
+        # .github/workflows/**) and the resolved real path.
         ctx = self._make_ctx("file_write", [path], None)
         self._enforce(ctx, [path])
+        resolved_str = str(resolved)
+        if resolved_str != str(abs_path):
+            ctx2 = self._make_ctx("file_write", [resolved_str], None)
+            self._enforce(ctx2, [resolved_str])
 
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        resolved.write_text(content, encoding="utf-8")
+        # Re-check the unresolved path for symlink swaps (TOCTOU mitigation).
+        if abs_path.is_symlink():
+            raise PermissionError(f"Symlinks are not allowed: {abs_path}")
+        # Re-resolve after mkdir to verify the target is still within repo.
+        final = abs_path.resolve()
+        self._check_within_repo(final)
+        final.write_text(content, encoding="utf-8")
 
     # ------------------------------------------------------------------
     # HTTP fetch
     # ------------------------------------------------------------------
 
+    _MAX_REDIRECTS = 10
+
     def fetch_url(self, url: str, method: str = "GET") -> str:
         """Fetch *url* with policy enforcement.
 
         Only GET requests are permitted. Uses urllib.request (no
-        external dependencies).
+        external dependencies). Redirects are followed up to
+        ``_MAX_REDIRECTS`` hops, with each target checked against policy.
 
         Args:
             url: Target URL.
@@ -216,19 +251,49 @@ class SecureExecutor:
             SecurePermissionError: If PolicyEngine returns DENY.
             ApprovalRequiredError: If PolicyEngine returns REQUIRE_APPROVAL.
             ValueError: If method is not GET.
-            URLError: If the request fails.
+            URLError: If the request fails or redirect limit exceeded.
         """
-        ctx = self._make_ctx("net", [url, method], None)
-        self._enforce(ctx, [url, method])
+        if method.upper() != "GET":
+            raise ValueError(f"Only GET requests are permitted, got {method!r}")
 
-        req = urllib.request.Request(url, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-        except URLError as exc:
-            raise URLError(f"fetch_url failed for {url}: {exc}") from exc
+        # Use a custom opener that does NOT follow redirects automatically.
+        # This prevents outbound connections to non-allowlisted hosts.
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(
+                self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+            ) -> None:
+                raise URLError(
+                    f"Redirect to {newurl} blocked (policy requires pre-check)"
+                )
 
-        return self._masker.mask(body)
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),  # Disable proxy to prevent egress bypass
+            _NoRedirect,
+        )
+        visited: set[str] = set()
+        current = url
+
+        for _ in range(self._MAX_REDIRECTS):
+            ctx = self._make_ctx("net", [current, method], None)
+            self._enforce(ctx, [current, method])
+
+            req = urllib.request.Request(current, method=method)
+            try:
+                with opener.open(req, timeout=30) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                return self._masker.mask(body)
+            except URLError as exc:
+                err_msg = str(exc.reason) if hasattr(exc, "reason") else str(exc)
+                if "Redirect to " in err_msg and " blocked" in err_msg:
+                    redirect_url = err_msg.split("Redirect to ", 1)[1].split(" blocked", 1)[0]
+                    if redirect_url in visited:
+                        raise URLError(f"Redirect loop detected: {redirect_url}") from exc
+                    visited.add(redirect_url)
+                    current = redirect_url
+                    continue
+                raise URLError(f"fetch_url failed for {current}: {exc}") from exc
+
+        raise URLError(f"Too many redirects (>{self._MAX_REDIRECTS}) for {url}")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -262,12 +327,16 @@ class SecureExecutor:
             args_hash = hashlib.sha256(repr(args).encode()).hexdigest()
             raise ApprovalRequiredError(decision.rule_id, decision.reason, args_hash)
 
-    def _resolve_path(self, path: str) -> Path:
-        """Resolve *path* to an absolute Path."""
+    def _abs_path(self, path: str) -> Path:
+        """Return *path* as an absolute Path (without resolving symlinks)."""
         p = Path(path)
         if not p.is_absolute():
             p = Path(self._config.repo_root) / p
-        return p.resolve()
+        return p
+
+    def _resolve_path(self, path: str) -> Path:
+        """Resolve *path* to an absolute, symlink-resolved Path."""
+        return self._abs_path(path).resolve()
 
     def _check_within_repo(self, resolved: Path) -> None:
         """Raise PermissionError if *resolved* is outside repo_root."""

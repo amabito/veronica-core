@@ -204,8 +204,6 @@ class PolicyEngine:
             raise RuntimeError(f"Policy tamper detected (v2): {policy_path}")
 
         resolved_pub = public_key_path or signer_v2.public_key_path
-        if not resolved_pub.exists():
-            return
 
         try:
             from veronica_core.security.key_pin import KeyPinChecker
@@ -218,12 +216,25 @@ class PolicyEngine:
                 audit_log = AuditLog(audit_dir / "policy.jsonl")
             except Exception:
                 audit_log = None
-            pub_pem = resolved_pub.read_bytes()
+
+            # Prefer key from provider (covers env/Vault-sourced keys);
+            # fall back to file if provider is absent.
+            pub_pem: bytes | None = None
+            if key_provider is not None:
+                pub_pem = key_provider.get_public_key_pem()
+            if not pub_pem and resolved_pub is not None and resolved_pub.exists():
+                pub_pem = resolved_pub.read_bytes()
+            if not pub_pem:
+                raise RuntimeError(
+                    "Key pin check requires a public key but none available "
+                    f"(key_provider={key_provider!r}, "
+                    f"public_key_path={resolved_pub})"
+                )
             KeyPinChecker(audit_log).enforce(pub_pem)
+        except RuntimeError:
+            raise
         except Exception as exc:
-            if isinstance(exc, RuntimeError):
-                raise
-            _log.warning("key_pin check failed unexpectedly: %s", exc)
+            raise RuntimeError(f"key_pin check failed: {exc}") from exc
 
     @staticmethod
     def _verify_jws_signature(
@@ -376,7 +387,15 @@ class PolicyEngine:
                 risk_score_delta=5,
             )
 
-        result = evaluator(ctx)
+        try:
+            result = evaluator(ctx)
+        except Exception:
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id="EVALUATOR_ERROR",
+                reason=f"Policy evaluator for '{ctx.action}' raised an exception",
+                risk_score_delta=10,
+            )
         return result if result is not None else _DEFAULT_DENY
 
 

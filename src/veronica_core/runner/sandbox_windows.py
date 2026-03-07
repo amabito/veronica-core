@@ -153,8 +153,35 @@ class WindowsSandboxRunner:
         Returns:
             True if the path matches a blocked prefix, False otherwise.
         """
-        # Normalise to forward slashes and lowercase for comparison
-        norm_path = path.replace("\\", "/").lower()
+        # Resolve path traversal (e.g. ..\..\Users) before comparison.
+        # For relative paths, resolve against sandbox CWD to catch traversal.
+        p = path
+        if not os.path.isabs(p) and self._temp_dir is not None:
+            p = os.path.join(self._temp_dir, p)
+        norm_path = os.path.normpath(p).replace("\\", "/").lower()
+
+        # Drive-less rooted paths (e.g. /Users/Alice, \Users\Alice) inherit the
+        # current drive.  Prepend it so the blocked-prefix check works correctly.
+        if len(norm_path) >= 1 and norm_path[0] == "/" and (len(norm_path) < 2 or norm_path[1] != "/"):
+            drive = os.path.splitdrive(os.getcwd())[0].lower()
+            if drive:
+                norm_path = drive + norm_path
+
+        # Strip Windows extended-length prefix (\\?\) and device namespace (\\.\)
+        # so that \\?\C:\Users\... is normalized to c:/users/...
+        if norm_path.startswith("//?/") or norm_path.startswith("//./"):
+            norm_path = norm_path[4:]
+
+        # Block UNC paths that map to local drives via admin shares
+        # e.g. //localhost/c$/Users/... or //127.0.0.1/c$/...
+        _LOCAL_UNC = ("//localhost/", "//127.0.0.1/", "//::1/", "//./")
+        for prefix in _LOCAL_UNC:
+            if norm_path.startswith(prefix):
+                # Convert //localhost/c$/Users → c:/users
+                remainder = norm_path[len(prefix):]
+                if len(remainder) >= 2 and remainder[1] == "$":
+                    norm_path = remainder[0] + ":/" + remainder[2:].lstrip("/")
+                break
 
         for blocked in self._config.blocked_paths:
             norm_blocked = blocked.replace("\\", "/").lower().rstrip("/")
@@ -192,10 +219,15 @@ class WindowsSandboxRunner:
                 "WindowsSandboxRunner is not active; use it as a context manager"
             )
 
-        # Validate all argv elements for blocked paths
+        # Validate all argv elements for blocked paths.
+        # Also split --key=value and check the value part.
         for arg in argv:
-            if self._looks_like_path(arg) and self.read_path_blocked(arg):
-                raise PermissionError(f"Argument references a blocked path: {arg!r}")
+            tokens = [arg]
+            if "=" in arg:
+                tokens.append(arg.split("=", 1)[1])
+            for token in tokens:
+                if self._looks_like_path(token) and self.read_path_blocked(token):
+                    raise PermissionError(f"Argument references a blocked path: {arg!r}")
 
         return self._executor.execute_shell(
             argv,

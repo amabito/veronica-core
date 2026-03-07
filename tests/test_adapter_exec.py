@@ -17,6 +17,7 @@ import tempfile
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
+import urllib.request
 from urllib.error import URLError
 
 import pytest
@@ -255,22 +256,24 @@ class TestFetchUrl:
         assert exc_info.value.rule_id == "NET_DENY"
 
     def test_url_error_wrapped_and_re_raised(self) -> None:
-        """URLError from urlopen must be caught and re-raised with context."""
+        """URLError from opener.open must be caught and re-raised with context."""
         exe, _ = _make_executor(engine=_allow_engine())
-        with patch(
-            "urllib.request.urlopen",
+        with patch.object(
+            urllib.request.OpenerDirector,
+            "open",
             side_effect=URLError("connection refused"),
         ):
             with pytest.raises(URLError, match="fetch_url failed"):
                 exe.fetch_url("https://example.com")
 
     def test_timeout_causes_url_error(self) -> None:
-        """socket.timeout from urlopen surfaces as URLError."""
+        """socket.timeout from opener.open surfaces as URLError."""
         import socket
 
         exe, _ = _make_executor(engine=_allow_engine())
-        with patch(
-            "urllib.request.urlopen",
+        with patch.object(
+            urllib.request.OpenerDirector,
+            "open",
             side_effect=URLError(socket.timeout("timed out")),
         ):
             with pytest.raises(URLError):
@@ -283,7 +286,9 @@ class TestFetchUrl:
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.read.return_value = b"hello world"
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        with patch.object(
+            urllib.request.OpenerDirector, "open", return_value=mock_resp
+        ):
             body = exe.fetch_url("https://example.com")
         assert "hello world" in body
 
@@ -301,7 +306,9 @@ class TestFetchUrl:
         mock_resp.__exit__ = MagicMock(return_value=False)
         # Response contains a masked pattern
         mock_resp.read.return_value = b"data: ok"
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        with patch.object(
+            urllib.request.OpenerDirector, "open", return_value=mock_resp
+        ):
             body = exe.fetch_url("https://example.com")
         # Body must be returned (masking of non-secrets leaves text unchanged)
         assert isinstance(body, str)

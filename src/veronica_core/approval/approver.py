@@ -115,12 +115,12 @@ class NonceRegistry:
             self._evict_expired(now)
             if nonce in self._used:
                 return False
+            # Fail-closed: reject new approvals when live nonce capacity is
+            # exhausted.  Evicting live nonces would allow replay attacks.
+            if len(self._order) >= self._max_size:
+                return False
             self._used[nonce] = now
             self._order.append(nonce)
-            # Safety net: cap memory if expiry-based eviction leaves too many
-            while len(self._order) > self._max_size:
-                oldest = self._order.popleft()
-                self._used.pop(oldest, None)
             return True
 
     def _evict_expired(self, now: float) -> None:
@@ -142,10 +142,9 @@ class NonceRegistry:
                 break
 
     def clear_expired(self) -> None:
-        """Clear all recorded nonces (optional maintenance call)."""
+        """Evict only expired nonces (optional maintenance call)."""
         with self._lock:
-            self._used.clear()
-            self._order.clear()
+            self._evict_expired(_time.monotonic())
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +165,8 @@ class CLIApprover:
         secret_key: Stable HMAC key (bytes). Use None only for testing.
     """
 
+    _MIN_KEY_LENGTH = 32
+
     def __init__(self, secret_key: bytes | None = None) -> None:
         if secret_key is None:
             warnings.warn(
@@ -175,6 +176,11 @@ class CLIApprover:
             )
             self._key = os.urandom(32)
         else:
+            if len(secret_key) < self._MIN_KEY_LENGTH:
+                raise ValueError(
+                    f"secret_key must be at least {self._MIN_KEY_LENGTH} bytes, "
+                    f"got {len(secret_key)}"
+                )
             self._key = secret_key
         self._nonce_registry = NonceRegistry()
 
@@ -247,7 +253,7 @@ class CLIApprover:
         """Sign *request* using the v2 scheme (recommended).
 
         The HMAC payload covers:
-        ``"{rule_id}:{action}:{args_hash}:{timestamp}:{nonce}:{scope}"``
+        ``"{rule_id}:{action}:{args_hash}:{timestamp}:{nonce}:{scope}:{expiry}"``
 
         Adds:
         - ``expiry``: timestamp + 5 minutes (ISO8601)
@@ -270,7 +276,7 @@ class CLIApprover:
 
         message = (
             f"{request.rule_id}:{request.action}:{request.args_hash}"
-            f":{request.timestamp}:{nonce}:{scope}"
+            f":{request.timestamp}:{nonce}:{scope}:{expiry}"
         )
         signature = hmac.new(
             self._key,
@@ -302,7 +308,7 @@ class CLIApprover:
         if token.nonce and token.scope:
             message = (
                 f"{token.rule_id}:{token.action}:{token.args_hash}"
-                f":{token.timestamp}:{token.nonce}:{token.scope}"
+                f":{token.timestamp}:{token.nonce}:{token.scope}:{token.expiry}"
             )
         else:
             # v1 token: legacy HMAC payload

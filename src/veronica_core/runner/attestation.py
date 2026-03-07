@@ -189,9 +189,10 @@ class SandboxProbe:
             actual = "BLOCKED"
             passed = True
         except Exception as exc:  # noqa: BLE001
-            # Timeouts and other non-OSError failures also indicate blocking.
+            # Non-OSError exceptions (e.g. ValueError, TypeError) are not
+            # evidence of sandbox blocking -- treat as inconclusive.
             actual = f"ERROR:{exc}"
-            passed = True
+            passed = False
         return ProbeResult(name=name, expected=expected, actual=actual, passed=passed)
 
     # ------------------------------------------------------------------

@@ -626,7 +626,17 @@ return tostring(new_total)
                     if not self._using_fallback:
                         self._seed_fallback_from_redis()
                         self._using_fallback = True
-                return self._fallback.commit(reservation_id)
+                try:
+                    return self._fallback.commit(reservation_id)
+                except KeyError:
+                    # Reservation was created in Redis, not in the local fallback.
+                    # Log warning and return the current fallback total as best effort.
+                    logger.warning(
+                        "RedisBudgetBackend.commit: reservation %r not found in local "
+                        "fallback after Redis failure -- reservation cost may be lost.",
+                        reservation_id,
+                    )
+                    return self._fallback.get()
             raise
 
     def rollback(self, reservation_id: str) -> None:

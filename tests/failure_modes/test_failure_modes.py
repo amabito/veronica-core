@@ -103,10 +103,9 @@ def test_redis_disconnect_during_commit() -> None:
     When the Redis client raises ConnectionError during commit(), the
     RedisBudgetBackend activates its fallback path. Because the original
     reservation was stored only in Redis (not in the local fallback),
-    the fallback commit raises KeyError — indicating the reservation is
-    unknown to the fallback. The critical invariant is that ConnectionError
-    itself is NOT propagated; the implementation catches it and redirects
-    to the fallback layer.
+    the fallback gracefully handles the missing reservation by logging a
+    warning and returning the current total. The critical invariant is that
+    ConnectionError itself is NOT propagated.
     """
     fake_client = fakeredis.FakeRedis(decode_responses=True)
     b = make_redis_backend(fake_client, chain_id="disconnect-test")
@@ -122,11 +121,11 @@ def test_redis_disconnect_during_commit() -> None:
 
     fake_client.eval = failing_eval
     try:
-        # commit() must NOT propagate ConnectionError — it catches it and
-        # redirects to the fallback. The fallback raises KeyError because the
-        # reservation was only in Redis (unknown to the local fallback).
-        with pytest.raises(KeyError):
-            b.commit(rid)
+        # commit() must NOT propagate ConnectionError -- it catches it and
+        # redirects to the fallback. The fallback handles the unknown
+        # reservation gracefully (logs warning, returns current total).
+        result = b.commit(rid)
+        assert isinstance(result, float)
         # Backend must have switched to fallback mode.
         assert b._using_fallback is True
     finally:
