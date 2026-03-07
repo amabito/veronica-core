@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4045%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4039%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -32,8 +32,9 @@ pip install veronica-core
 | **3.0.1** | Full Codebase Security Audit Fix | 68 findings (5 Critical, 17 High) resolved -- TOCTOU, data exfil, HMAC key length, thread safety, protocol compliance |
 | **3.0.2** | F.R.I.D.A.Y. Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
 | **3.0.3** | Iron Legion Parallel Audit Fix | NTFS junction sandbox escape, case-insensitive suffix bypass, 27 new sandbox tests |
+| **3.0.4** | F.R.I.D.A.Y. Full Security Audit (24 Rounds) | Symlink pre-resolve check, NonceRegistry fail-closed, uv/npm/git policy hardening, HTTPS enforcement, 22 fixes |
 
-4045 tests. Zero breaking changes from 2.1.0 through 3.0.3.
+4039 tests. Zero breaking changes from 2.1.0 through 3.0.4.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -212,7 +213,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.0.3
+## Ship Readiness -- v3.0.4
 
 4045 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
@@ -253,7 +254,7 @@ Supporting theory:
 - ~~Policy simulation: replay logs for what-if analysis~~ (v2.6.0)
 - ~~A2A trust boundary: cross-agent identity verification and policy routing~~ (v2.7.0)
 - ~~God class split, `AdapterCapabilities`, `AuditChain`~~ (v3.0.0)
-- ~~Security audit: 3 rounds, 108 findings fixed~~ (v3.0.1 -- v3.0.3)
+- ~~Security audit: 4 rounds, 130+ findings fixed~~ (v3.0.1 -- v3.0.4)
 
 ### Next
 

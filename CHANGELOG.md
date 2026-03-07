@@ -6,6 +6,38 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.0.4] -- 2026-03-08 -- F.R.I.D.A.Y. Full Security Audit (24 Rounds)
+
+### Fixed
+
+- **HIGH**: Symlink check after `Path.resolve()` always returned False -- now checks unresolved path before resolution, and evaluates policy on both original and resolved paths (`adapter/exec.py`).
+- **HIGH**: NonceRegistry evicted live nonces on capacity -- switched to fail-closed (reject new approvals when full) to prevent replay attacks (`approval/approver.py`).
+- **HIGH**: `uv run` inner command bypassed full shell policy pipeline -- now checks deny commands, operators, credentials, exec flags, package install, and allowlist (`security/policy_rules.py`).
+- **HIGH**: npm/pnpm option-parsing bypass hid dangerous subcommands -- switched to position-independent scanning of all non-option tokens (`security/policy_rules.py`).
+- **MEDIUM**: Policy evaluator exceptions silently returned None (default DENY) -- now explicitly catches and returns DENY with `EVALUATOR_ERROR` rule_id (`security/policy_engine.py`).
+- **MEDIUM**: HTTPS-only scheme enforcement missing in network policy -- non-HTTPS URLs now denied with `NET_DENY_SCHEME` (`security/policy_rules.py`).
+- **MEDIUM**: HTTP proxy bypass via system proxy settings -- disabled proxy with `ProxyHandler({})` (`adapter/exec.py`).
+- **MEDIUM**: HTTP redirect loop not detected -- added visited-URL tracking and max-redirect limit with no-auto-redirect opener (`adapter/exec.py`).
+- **MEDIUM**: VaultKeyProvider accepted HTTP URLs, exposing VAULT_TOKEN -- added HTTPS enforcement (`security/key_providers.py`).
+- **MEDIUM**: Windows sandbox `--key=value` arguments bypassed path check -- now splits on `=` and checks value part (`runner/sandbox_windows.py`).
+- **MEDIUM**: Drive-less rooted paths (`/Users/Alice`) bypassed sandbox block -- now prepends current drive on Windows (`runner/sandbox_windows.py`).
+- **MEDIUM**: UNC paths and extended-length prefix (`\\?\`) bypassed sandbox block -- added normalization (`runner/sandbox_windows.py`).
+- **MEDIUM**: `python -c<code>` attached form and combined short flags (`-Ic`) bypassed inline-exec deny (`security/policy_rules.py`).
+- **MEDIUM**: npm/pnpm `exec`/`dlx`/`x` subcommands not denied -- added `SHELL_DENY_PKG_EXEC` rule (`security/policy_rules.py`).
+- **MEDIUM**: `uv --color always run` bypassed subcommand detection -- added `--color` to `_UV_OPTS_WITH_VALUE` (`security/policy_rules.py`).
+- **MEDIUM**: Credential check only inspected argv1 -- now scans all non-option tokens (`security/policy_rules.py`).
+- **MEDIUM**: git `--exec-path` not in options-with-value set -- added to `_GIT_OPTS_WITH_VALUE` and scans all non-option tokens for deny subcommands (`security/policy_rules.py`).
+- **LOW**: Key pin check failed when public key file absent but key_provider available -- added fallback chain (`security/policy_engine.py`).
+- **LOW**: Shell `cwd` not resolved to canonical path -- now uses `_resolve_path` before passing to subprocess (`adapter/exec.py`).
+- **LOW**: Atomic file writes using `mkstemp` for crash safety (`backends.py`, `distributed.py`, `persist.py`, `runner/attestation.py`).
+- **LOW**: Sandbox `_temp_dir` not cleared on non-owned teardown (`runner/sandbox.py`).
+- **LOW**: Case-insensitive prefix check in `_sandbox_ignore` (`runner/sandbox.py`).
+- **LOW**: Cross-platform drive-letter path detection in sandbox_windows -- Linux `os.path.isabs` does not recognise `C:/` paths (`runner/sandbox_windows.py`).
+
+**Breaking changes**: none.
+
+---
+
 ## [3.0.3] -- 2026-03-06 -- Iron Legion Parallel Audit Fix
 
 ### Fixed
