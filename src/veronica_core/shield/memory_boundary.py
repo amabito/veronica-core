@@ -121,9 +121,9 @@ class MemoryBoundaryHook:
     (PostDispatchHook path) and also provides before_op / after_op for direct
     integration with MemoryGovernor (MemoryGovernanceHook path).
 
-    Trust-level isolation (when trust_router is provided):
-    - UNTRUSTED / UNKNOWN agents cannot access TRUSTED namespaces.
-    - VERIFIED agents can read TRUSTED namespaces but cannot write to them.
+    Trust-level isolation (when trust_tracker and trusted_namespaces are provided):
+    - UNTRUSTED agents cannot access TRUSTED namespaces (read or write).
+    - PROVISIONAL agents can read TRUSTED namespaces but cannot write to them.
     - TRUSTED / PRIVILEGED agents can read and write all namespaces.
 
     Thread safety: rule evaluation is stateless after __init__ (read-only config).
@@ -299,7 +299,7 @@ class MemoryBoundaryHook:
         """Return (allowed, reason) for the given access request.
 
         Evaluation proceeds in two stages:
-        1. Trust-level check (if trust_router is configured).
+        1. Trust-level check (if trust_tracker and trusted_namespaces are configured).
         2. Explicit rule check (if rules are configured).
 
         Args:
@@ -382,7 +382,7 @@ class MemoryBoundaryHook:
                 agent_id,
                 exc,
             )
-            return (False, f"trust resolution error: {exc}")
+            return (False, "trust resolution error (see logs)")
 
     def _resolve_trust_level(self, agent_id: str) -> "TrustLevel | None":
         """Attempt to resolve the trust level for an agent.

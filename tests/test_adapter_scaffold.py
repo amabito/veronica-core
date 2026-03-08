@@ -195,6 +195,11 @@ class TestNamingEdgeCases:
         with pytest.raises(ValueError):
             generate_adapter("my framework!", tmp_path)
 
+    def test_uppercase_name_rejected(self, tmp_path: Path) -> None:
+        """Uppercase names must raise ValueError to prevent PascalCase mismatch."""
+        with pytest.raises(ValueError, match="Invalid framework_name"):
+            generate_adapter("MyFramework", tmp_path)
+
 
 # ---------------------------------------------------------------------------
 # _to_pascal_case helper

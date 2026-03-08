@@ -307,6 +307,19 @@ class TestAdversarialTrustInputs:
         decision = hook.before_op(_op(MemoryAction.READ, agent_id="any"), None)
         assert decision.verdict is GovernanceVerdict.ALLOW
 
+    def test_tracker_without_router_still_runs_trust_check(self) -> None:
+        """trust_router=None but trust_tracker provided: trust check must run."""
+        tracker = TrustEscalationTracker(policy=_policy())
+        hook = MemoryBoundaryHook(
+            config=MemoryBoundaryConfig(default_allow=True),
+            trust_router=None,  # No router.
+            trust_tracker=tracker,  # Tracker present -- trust check runs.
+            trusted_namespaces=_TRUSTED_NS,
+        )
+        # Default trust is UNTRUSTED -> denied on trusted namespace.
+        decision = hook.before_op(_op(MemoryAction.READ, agent_id="agent-x"), None)
+        assert decision.verdict is GovernanceVerdict.DENY
+
     def test_trust_check_and_explicit_deny_rule_both_active(self) -> None:
         """When both trust and rules apply, most restrictive wins."""
         policy = TrustPolicy(

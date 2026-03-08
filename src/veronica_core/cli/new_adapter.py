@@ -20,8 +20,10 @@ from pathlib import Path
 
 __all__ = ["generate_adapter"]
 
-# Valid identifier: letters, digits, underscores/hyphens, starting with a letter.
-_VALID_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+# Valid identifier: lowercase letters, digits, underscores/hyphens, starting with
+# a lowercase letter.  Uppercase is rejected to avoid silent PascalCase mismatches
+# (e.g. "MyFramework" -> "Myframework" after lowercasing).
+_VALID_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 # ---------------------------------------------------------------------------
 # Templates
@@ -330,8 +332,8 @@ def generate_adapter(framework_name: str, output_dir: Path) -> list[Path]:
     if not _VALID_NAME_RE.match(framework_name):
         raise ValueError(
             f"Invalid framework_name {framework_name!r}. "
-            "Must start with a letter and contain only letters, digits, "
-            "underscores, or hyphens."
+            "Must start with a lowercase letter and contain only lowercase "
+            "letters, digits, underscores, or hyphens."
         )
 
     name = framework_name.lower().replace("-", "_")
