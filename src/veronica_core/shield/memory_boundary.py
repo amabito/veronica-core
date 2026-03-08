@@ -77,11 +77,11 @@ class MemoryBoundaryConfig:
     When rules is empty and default_allow is True (default), all memory
     accesses are permitted -- backward-compatible behaviour.
 
-    Rule evaluation order:
-    1. Exact agent_id + exact namespace match.
-    2. Wildcard agent_id ("*") + exact namespace match.
-    3. Exact agent_id + wildcard namespace ("*").
-    4. Wildcard agent_id + wildcard namespace.
+    Rule evaluation order (by specificity score, highest wins):
+    1. Exact agent_id + exact namespace match (score 3).
+    2. Exact agent_id + wildcard namespace ("*") (score 2).
+    3. Wildcard agent_id ("*") + exact namespace match (score 1).
+    4. Wildcard agent_id + wildcard namespace (score 0).
     5. No match -> default_allow determines the outcome.
 
     Args:

@@ -316,7 +316,7 @@ def generate_adapter(framework_name: str, output_dir: Path) -> list[Path]:
     Args:
         framework_name: Short lowercase identifier for the framework,
             e.g. ``"myframework"`` or ``"my-framework"``. Must match
-            ``^[a-zA-Z][a-zA-Z0-9_-]*$``.
+            ``^[a-z][a-z0-9_-]*$``.
         output_dir: Directory under which the files are written.
             Created automatically if it does not exist.
 

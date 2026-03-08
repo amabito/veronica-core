@@ -381,7 +381,12 @@ def _build_fixtures() -> list[AdapterFixture]:
         try:
             fixtures.append(builder())
         except Exception as exc:  # pragma: no cover
-            pytest.skip(f"Skipping fixture {builder.__name__}: {exc}")
+            import warnings
+
+            warnings.warn(
+                f"Skipping fixture {builder.__name__}: {exc}",
+                stacklevel=2,
+            )
     return fixtures
 
 
