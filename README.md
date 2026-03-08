@@ -10,7 +10,7 @@ Runtime containment for LLM agent systems.
 Budget, step, retry, and circuit breaker enforcement -- evaluated before the call reaches the model.
 
 veronica-core is the kernel: it enforces execution boundaries.
-[veronica](https://github.com/amabito/veronica) is the control plane: policy management, fleet coordination, and dashboard.
+[veronica](https://github.com/amabito/veronica-public) is the control plane: policy management, fleet coordination, and dashboard.
 
 Containment, not observability. VERONICA does not inspect prompts or completions.
 It governs resource consumption -- cost, steps, retries, timeouts, circuit state -- and halts calls that exceed policy.
