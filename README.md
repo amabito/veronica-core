@@ -216,9 +216,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.3.0
+## Ship Readiness -- v3.4.0
 
-4611 tests, 92% coverage, zero required dependencies. Python 3.10+.
+4828 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -261,6 +261,7 @@ Supporting theory:
 - ~~Kernel stabilization: lazy imports, time.monotonic, zero-budget fix~~ (v3.1.0)
 - ~~ExecutionContext decomposition + nogil readiness~~ (v3.2.0)
 - ~~Memory governance + policy audit wiring~~ (v3.3.0)
+- ~~Memory boundary + trust isolation + adapter tooling~~ (v3.4.0)
 
 ### Next
 - Federation: multi-process policy coordination (v4.0)
