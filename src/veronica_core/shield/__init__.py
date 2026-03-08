@@ -31,6 +31,11 @@ from veronica_core.shield.noop import (
     NoopRetryBoundaryHook,
     NoopToolDispatchHook,
 )
+from veronica_core.shield.memory_boundary import (
+    MemoryAccessRule,
+    MemoryBoundaryConfig,
+    MemoryBoundaryHook,
+)
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.safe_mode import SafeModeHook
 from veronica_core.shield.types import Decision, ToolCallContext
@@ -64,4 +69,7 @@ __all__ = [
     "TimeAwarePolicy",
     "TimeResult",
     "SafetyEvent",
+    "MemoryAccessRule",
+    "MemoryBoundaryConfig",
+    "MemoryBoundaryHook",
 ]

@@ -156,6 +156,7 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
             framework_name="LangChain",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=("0.1.0", "0.3.99"),
         )
 
     @property

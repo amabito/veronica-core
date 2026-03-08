@@ -277,6 +277,7 @@ class VeronicaCrewAIListener(BaseEventListener):
             framework_name="CrewAI",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=("0.80.0", "0.99.99"),
         )
 
     @property

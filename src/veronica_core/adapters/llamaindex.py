@@ -258,6 +258,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             framework_name="LlamaIndex",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=("0.10.0", "0.12.99"),
         )
 
     @property

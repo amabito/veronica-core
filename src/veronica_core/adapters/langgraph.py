@@ -210,6 +210,7 @@ class VeronicaLangGraphCallback:
             framework_name="LangGraph",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=("0.1.0", "0.2.99"),
         )
 
     @property

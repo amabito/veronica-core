@@ -168,6 +168,7 @@ class VeronicaConversableAgent(ConversableAgent):
             framework_name="AG2",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=("0.4.0", "0.6.99"),
         )
 
     @property

@@ -218,6 +218,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DefaultMemoryGovernanceHook": ("veronica_core.memory.hooks", "DefaultMemoryGovernanceHook"),
     "DenyAllMemoryGovernanceHook": ("veronica_core.memory.hooks", "DenyAllMemoryGovernanceHook"),
     "MemoryGovernor": ("veronica_core.memory.governor", "MemoryGovernor"),
+    # Memory Boundary Hook (v3.4.0)
+    "MemoryAccessRule": ("veronica_core.shield.memory_boundary", "MemoryAccessRule"),
+    "MemoryBoundaryConfig": ("veronica_core.shield.memory_boundary", "MemoryBoundaryConfig"),
+    "MemoryBoundaryHook": ("veronica_core.shield.memory_boundary", "MemoryBoundaryHook"),
 }
 
 
