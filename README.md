@@ -109,6 +109,7 @@ Full feature list: [docs/FEATURES.md](docs/FEATURES.md)
 | ROS2 | `SafetyMonitor` | [examples/ros2/](examples/ros2/) |
 
 AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) (merged)
+AG2 `AgentEligibilityPolicy` for runtime GroupChat filtering: [PR #2459](https://github.com/ag2ai/ag2/pull/2459)
 
 ---
 
