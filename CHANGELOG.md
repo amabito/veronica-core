@@ -6,6 +6,43 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.3.0] -- 2026-03-08 -- Memory Governance + Policy Audit Wiring
+
+**Breaking changes:** none
+
+### Added
+
+- **Memory Governance integration**: `MemoryGovernor` wired into `ExecutionContext._wrap()` pre-dispatch and `AIContainer.check()` post-pipeline. `MemoryGovernor.evaluate()` enforces fail-closed DENY on errors, None returns, and unknown verdicts. QUARANTINE/DEGRADE treated as "allow with annotation".
+- **Policy audit wiring**: All chain events (`abort`, `circuit_open`, `budget_exceeded`, `budget_exceeded_by_child`, `memory_governance_denied`, and limit-check callbacks) automatically enriched with `FrozenPolicyView.to_audit_dict()` metadata via unified `_emit_chain_event()` path.
+- **`_build_memory_op()` shared helper**: Eliminates duplication between `_check_memory_governance()` and `_notify_memory_governance_after()`.
+- **`_notify_memory_governance_after()`**: Post-dispatch notification to governance hooks. Catches `BaseException` to honour "never raises" contract and prevent successful call corruption.
+- **`_get_policy_audit_metadata()`**: Extracts JSON-serializable policy metadata from `PolicyViewHolder`. Never raises -- swallows errors to avoid disrupting containment control flow.
+- **`_make_emit_chain_event_cb` policy enrichment**: Limit-exceeded callbacks now include active policy metadata in emitted events.
+- **`ContextSnapshot.policy_metadata`**: New optional field on snapshot for policy audit trail.
+- **`_ChainEventLog.emit_chain_event` `policy_metadata` parameter**: Stores policy dict under `"policy"` key in `SafetyEvent.metadata`.
+- **`_STOP_REASON_EVENT_TYPE["memory_governance_denied"]`**: Maps to `CHAIN_MEMORY_GOVERNANCE_DENIED`.
+- **Child context propagation**: `create_child()` and `spawn_child()` propagate `memory_governor` and `policy_view_holder` to child contexts.
+- **Memory subsystem**: `memory.governor`, `memory.hooks`, `memory.types` -- governance hook framework with verdict aggregation (DENY short-circuits, QUARANTINE > DEGRADE > ALLOW).
+- **Policy subsystem**: `policy.bundle`, `policy.frozen_view`, `policy.verifier`, `policy.audit_helpers` -- immutable policy bundles with content-hash verification and frozen audit views.
+- **Tracker decomposition**: `_budget_tracker`, `_step_tracker`, `_retry_tracker`, `_timeout_manager` extracted from `_limit_checker`.
+
+### Fixed
+
+- **Emit path unification**: 3 direct `_event_log.emit_chain_event()` calls (abort, circuit_breaker, budget_exceeded_by_child) now route through `_emit_chain_event()` for consistent policy metadata enrichment.
+- **`_make_emit_chain_event_cb` missing policy metadata**: Limit-exceeded events (budget, step, retry, timeout) now include policy metadata via closure-captured `_get_policy_audit_metadata`.
+- **`AIContainer._check_memory_governor` silent error swallowing**: Added `logger.error()` for governor evaluation failures.
+- **`_notify_memory_governance_after` BaseException leak**: Changed from `except Exception` to `except BaseException` to prevent SystemExit/KeyboardInterrupt from corrupting successful call node status.
+
+### Tests
+
+- `tests/test_adversarial_v33_integration.py` -- 64 adversarial tests across 14 categories (hook poisoning, concurrent access, policy view corruption, state manipulation, notify_after failure, chain event flooding, TOCTOU, boundary abuse, AIContainer, emit path unification, limit-exceeded metadata, concurrent _build_memory_op, child propagation, BaseException swallowing).
+- `tests/test_policy_audit_wiring.py` -- 14 integration tests for policy metadata -> audit event wiring.
+- `tests/test_memory_gov_integration.py` -- happy-path tests for ExecutionContext with MemoryGovernor.
+- Plus unit tests for memory governor, hooks, types, policy bundle, frozen view, verifier, and individual trackers.
+- 4611 tests total, ruff clean.
+
+---
+
 ## [3.2.0] -- 2026-03-08 -- Context Decomposition + nogil Readiness
 
 **Breaking changes:** none

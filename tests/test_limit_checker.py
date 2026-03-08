@@ -411,7 +411,7 @@ class TestThreadSafety:
 
 
 class TestAtomicMethods:
-    """Tests for set_cost, set_step_count, add_cost_and_get_total, commit_success."""
+    """Tests for set_cost, set_step_count, add_cost_returning, commit_success."""
 
     def test_set_cost_overwrites(self) -> None:
         checker = _make_checker()
@@ -425,21 +425,21 @@ class TestAtomicMethods:
         checker.set_step_count(42)
         assert checker.step_count == 42
 
-    def test_add_cost_and_get_total_returns_new_total(self) -> None:
+    def test_add_cost_returning_returns_new_total(self) -> None:
         checker = _make_checker()
         checker.add_cost(1.0)
-        total = checker.add_cost_and_get_total(2.5)
+        total = checker.add_cost_returning(2.5)
         assert abs(total - 3.5) < 1e-9
         assert abs(checker.cost_usd_accumulated - 3.5) < 1e-9
 
-    def test_add_cost_and_get_total_atomic_under_concurrency(self) -> None:
+    def test_add_cost_returning_atomic_under_concurrency(self) -> None:
         checker = _make_checker(max_cost_usd=1_000.0)
         totals: list[float] = []
         lock = threading.Lock()
 
         def worker() -> None:
             for _ in range(100):
-                t = checker.add_cost_and_get_total(0.01)
+                t = checker.add_cost_returning(0.01)
                 with lock:
                     totals.append(t)
 
@@ -599,8 +599,8 @@ class TestAdversarialLimitCheckerRace:
         assert checker.abort_reason is not None
         assert checker.abort_reason.startswith("reason_")
 
-    def test_set_cost_racing_with_add_cost_and_get_total_no_corruption(self) -> None:
-        """set_cost(0) racing with add_cost_and_get_total() must not lose
+    def test_set_cost_racing_with_add_cost_returning_no_corruption(self) -> None:
+        """set_cost(0) racing with add_cost_returning() must not lose
         increments -- both operations hold the same internal lock, so interleaving
         is serial; the final value must be non-negative and finite.
         """
@@ -615,7 +615,7 @@ class TestAdversarialLimitCheckerRace:
         def adder() -> None:
             barrier.wait()
             for _ in range(200):
-                checker.add_cost_and_get_total(0.001)
+                checker.add_cost_returning(0.001)
 
         t1 = threading.Thread(target=setter)
         t2 = threading.Thread(target=adder)

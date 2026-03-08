@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 
 # ---------------------------------------------------------------------------
 # Eager imports -- minimal core types needed at import time
@@ -199,6 +199,25 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "identity_from_a2a_card": ("veronica_core.a2a", "identity_from_a2a_card"),
     # Security capability types (v3.0.0)
     "Capability": ("veronica_core.security.capabilities", "Capability"),
+    # Policy-attested bundle foundation (v3.2)
+    "PolicyBundle": ("veronica_core.policy.bundle", "PolicyBundle"),
+    "PolicyMetadata": ("veronica_core.policy.bundle", "PolicyMetadata"),
+    "PolicyRule": ("veronica_core.policy.bundle", "PolicyRule"),
+    "PolicyVerifier": ("veronica_core.policy.verifier", "PolicyVerifier"),
+    "VerificationResult": ("veronica_core.policy.verifier", "VerificationResult"),
+    "FrozenPolicyView": ("veronica_core.policy.frozen_view", "FrozenPolicyView"),
+    "PolicyViewHolder": ("veronica_core.policy.frozen_view", "PolicyViewHolder"),
+    # Memory Governance ABI (v3.3.0)
+    "MemoryAction": ("veronica_core.memory.types", "MemoryAction"),
+    "MemoryProvenance": ("veronica_core.memory.types", "MemoryProvenance"),
+    "MemoryOperation": ("veronica_core.memory.types", "MemoryOperation"),
+    "MemoryPolicyContext": ("veronica_core.memory.types", "MemoryPolicyContext"),
+    "GovernanceVerdict": ("veronica_core.memory.types", "GovernanceVerdict"),
+    "MemoryGovernanceDecision": ("veronica_core.memory.types", "MemoryGovernanceDecision"),
+    "MemoryGovernanceHook": ("veronica_core.memory.hooks", "MemoryGovernanceHook"),
+    "DefaultMemoryGovernanceHook": ("veronica_core.memory.hooks", "DefaultMemoryGovernanceHook"),
+    "DenyAllMemoryGovernanceHook": ("veronica_core.memory.hooks", "DenyAllMemoryGovernanceHook"),
+    "MemoryGovernor": ("veronica_core.memory.governor", "MemoryGovernor"),
 }
 
 

@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4147%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4611%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -35,8 +35,9 @@ pip install veronica-core
 | **3.0.4** | Full Security Audit (24 Rounds) | Symlink pre-resolve check, NonceRegistry fail-closed, uv/npm/git policy hardening, HTTPS enforcement, 22 fixes |
 | **3.1.0** | Kernel Stabilization | PEP 562 lazy imports (136 symbols), time.monotonic migration, BudgetEnforcer zero-budget fix, adapter unification |
 | **3.2.0** | Context Decomposition + nogil | `_LimitChecker` / `_ChainEventLog` extraction, atomic `commit_success()`, snapshot-then-emit, nogil audit (9 modules, 2 races fixed) |
+| **3.3.0** | Memory Governance + Policy Audit | `MemoryGovernor` integration, policy metadata auto-wiring to all chain events, emit path unification, 64 adversarial tests |
 
-4147 tests. Zero breaking changes from 2.1.0 through 3.2.0.
+4611 tests. Zero breaking changes from 2.1.0 through 3.3.0.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -215,9 +216,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.2.0
+## Ship Readiness -- v3.3.0
 
-4147 tests, 92% coverage, zero required dependencies. Python 3.10+.
+4611 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -259,6 +260,7 @@ Supporting theory:
 - ~~Security audit: 4 rounds, 130+ findings fixed~~ (v3.0.1 -- v3.0.4)
 - ~~Kernel stabilization: lazy imports, time.monotonic, zero-budget fix~~ (v3.1.0)
 - ~~ExecutionContext decomposition + nogil readiness~~ (v3.2.0)
+- ~~Memory governance + policy audit wiring~~ (v3.3.0)
 
 ### Next
 - Federation: multi-process policy coordination (v4.0)

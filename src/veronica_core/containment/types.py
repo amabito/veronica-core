@@ -208,3 +208,4 @@ class ContextSnapshot:
     graph_summary: Optional[dict[str, Any]] = None
     parent_chain_id: str | None = None
     agent_identity: "AgentIdentity | None" = None
+    policy_metadata: Optional[dict[str, Any]] = None

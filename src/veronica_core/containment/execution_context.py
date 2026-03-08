@@ -43,7 +43,6 @@ from __future__ import annotations
 import contextvars
 import logging
 import threading
-import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal, TYPE_CHECKING
@@ -51,7 +50,6 @@ from typing import Any, Callable, Literal, TYPE_CHECKING
 from veronica_core.containment._chain_event_log import _ChainEventLog
 from veronica_core.containment._limit_checker import _LimitChecker
 from veronica_core.containment.execution_graph import ExecutionGraph
-from veronica_core.containment.timeout_pool import _timeout_pool as _shared_timeout_pool
 from veronica_core.containment.types import (
     CancellationToken,
     ChainMetadata,
@@ -67,6 +65,9 @@ if TYPE_CHECKING:
     from veronica_core.a2a.types import AgentIdentity
     from veronica_core.circuit_breaker import CircuitBreaker
     from veronica_core.containment.budget_allocator import BudgetAllocator
+    from veronica_core.memory.governor import MemoryGovernor
+    from veronica_core.memory.types import MemoryOperation
+    from veronica_core.policy.frozen_view import PolicyViewHolder
     from veronica_core.shield.pipeline import ShieldPipeline
     from veronica_core.partial import PartialResultBuffer
 
@@ -157,6 +158,8 @@ class ExecutionContext:
         parent: "ExecutionContext | None" = None,
         metrics: Any = None,
         agent_identity: "AgentIdentity | None" = None,
+        memory_governor: "MemoryGovernor | None" = None,
+        policy_view_holder: "PolicyViewHolder | None" = None,
     ) -> None:
         self._config = config
         self._pipeline = pipeline
@@ -164,6 +167,10 @@ class ExecutionContext:
         # ContainmentMetricsProtocol-compatible object, or None for zero overhead.
         self._metrics = metrics
         self._agent_identity: AgentIdentity | None = agent_identity
+        # Memory governance -- optional chain-level memory operation gate (v3.3).
+        self._memory_governor: MemoryGovernor | None = memory_governor
+        # Policy view holder -- active policy metadata for audit enrichment (v3.3).
+        self._policy_view_holder: PolicyViewHolder | None = policy_view_holder
         self._metadata = metadata or ChainMetadata(
             request_id=str(uuid.uuid4()),
             chain_id=str(uuid.uuid4()),
@@ -235,10 +242,12 @@ class ExecutionContext:
         # is set; used by get_partial_result() to look up partial text per node.
         self._partial_buffers: dict[str, PartialResultBuffer] = {}
 
-        self._timeout_pool_handle: object | None = None
-
         if config.timeout_ms > 0:
-            self._start_timeout_watcher()
+            self._limits.timeout.start_watcher(
+                timeout_ms=config.timeout_ms,
+                emit_fn=self._emit_chain_event,
+                config_timeout_ms=config.timeout_ms,
+            )
 
     # ------------------------------------------------------------------
     # Context manager
@@ -305,6 +314,21 @@ class ExecutionContext:
     def _events(self) -> list:
         return self._event_log.snapshot()
 
+    @property
+    def _timeout_pool_handle(self) -> object | None:
+        """Return the active timeout pool handle, or None after cancellation.
+
+        Compatibility shim for tests that inspect the timeout pool handle
+        directly.  The handle is owned by TimeoutManager.
+        """
+        return self._limits.timeout._pool_handle
+
+    @_timeout_pool_handle.setter
+    def _timeout_pool_handle(self, value: object | None) -> None:
+        # Legacy setter: tests may clear this to None; forward to TimeoutManager.
+        with self._limits.timeout._lock:
+            self._limits.timeout._pool_handle = value
+
     def _increment_step_returning(self) -> int:
         """Atomically increment step count and return new value.
 
@@ -366,18 +390,11 @@ class ExecutionContext:
             # Clear partial buffers to release references.
             self._partial_buffers.clear()
 
-        # Signal and cancel timeout watcher (outside lock to avoid deadlock
-        # if the timeout callback tries to acquire _lock while we hold it).
+        # Signal cancellation token and cancel the scheduled timeout callback
+        # (outside lock to avoid deadlock if the timeout callback tries to
+        # acquire _lock while we hold it).
         self._cancellation_token.cancel()
-        if self._timeout_pool_handle is not None:
-            try:
-                _shared_timeout_pool.cancel(self._timeout_pool_handle)
-            except Exception:
-                # Intentionally swallowed: cancel is best-effort; if the pool
-                # handle is already expired the callback fires harmlessly since
-                # the context is already marked aborted.
-                pass
-            self._timeout_pool_handle = None
+        self._limits.timeout.cancel_watcher()
 
         if hasattr(self, "_budget_backend"):
             try:
@@ -492,6 +509,7 @@ class ExecutionContext:
             graph_summary=graph_summary,
             parent_chain_id=parent_chain_id,
             agent_identity=self._agent_identity,
+            policy_metadata=self._get_policy_audit_metadata(),
         )
 
     def get_graph_snapshot(self) -> dict[str, Any]:
@@ -529,9 +547,7 @@ class ExecutionContext:
         """
         if self._limits.mark_aborted(reason):
             self._cancellation_token.cancel()
-            self._event_log.emit_chain_event(
-                "aborted", reason, self._metadata.request_id
-            )
+            self._emit_chain_event("aborted", reason)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -635,6 +651,15 @@ class ExecutionContext:
                 if cb_decision is not None:
                     self._try_rollback(_reservation_id)
                     return cb_decision
+
+            # Memory governance pre-dispatch check (v3.3).
+            if self._memory_governor is not None:
+                mg_decision = self._check_memory_governance(
+                    kind, opts, node, stack, graph_node_id
+                )
+                if mg_decision is not None:
+                    self._try_rollback(_reservation_id)
+                    return mg_decision
 
             # Dispatch the callable.
             self._graph.mark_running(graph_node_id)
@@ -865,10 +890,9 @@ class ExecutionContext:
         )
         pd = self._circuit_breaker.check(policy_ctx)  # type: ignore[union-attr]
         if not pd.allowed:
-            self._event_log.emit_chain_event(
+            self._emit_chain_event(
                 "circuit_open",
                 f"circuit breaker denied: {pd.reason}",
-                self._metadata.request_id,
             )
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
@@ -890,6 +914,114 @@ class ExecutionContext:
                     )
             return Decision.HALT
         return None
+
+    _MG_DENIED = "memory_governance_denied"
+
+    def _build_memory_op(
+        self,
+        kind: Literal["llm", "tool"],
+        opts: WrapOptions,
+    ) -> "MemoryOperation":
+        """Build a MemoryOperation from the current wrap call context."""
+        from veronica_core.memory.types import MemoryAction, MemoryOperation
+
+        action = MemoryAction.WRITE if kind == "llm" else MemoryAction.READ
+        return MemoryOperation(
+            action=action,
+            agent_id=self._metadata.user_id or "",
+            namespace=self._metadata.chain_id,
+            content_size_bytes=0,  # TODO(v3.x): replace with actual token/byte count
+            metadata={"operation_name": opts.operation_name, "kind": kind},
+        )
+
+    def _check_memory_governance(
+        self,
+        kind: Literal["llm", "tool"],
+        opts: WrapOptions,
+        node: NodeRecord,
+        stack: list[str],
+        graph_node_id: str,
+    ) -> Decision | None:
+        """Evaluate memory governance before dispatch. Returns Decision.HALT or None.
+
+        Builds a MemoryOperation from the wrap call context and evaluates it
+        against the chain-level MemoryGovernor. If denied, emits a chain event
+        and halts the node.
+
+        Only DENY verdicts halt dispatch. QUARANTINE and DEGRADE are treated as
+        "allow with annotation" -- the dispatch proceeds and hooks can observe
+        the verdict via ``notify_after``.  This is intentional: quarantine and
+        degradation are post-processing concerns, not pre-dispatch gates.
+        """
+        from veronica_core.memory.types import MemoryPolicyContext
+
+        mem_op = self._build_memory_op(kind, opts)
+        mem_ctx = MemoryPolicyContext(
+            operation=mem_op,
+            chain_id=self._metadata.chain_id,
+            request_id=self._metadata.request_id,
+            total_memory_ops_in_chain=self._limits.step_count,
+            total_bytes_written_in_chain=0,
+        )
+        try:
+            decision = self._memory_governor.evaluate(mem_op, mem_ctx)  # type: ignore[union-attr]
+            if decision is None:
+                raise TypeError("MemoryGovernor.evaluate() returned None")
+        except Exception as exc:  # noqa: BLE001
+            # Fail-closed: governor error -> deny.
+            logger.error(
+                "ExecutionContext: MemoryGovernor.evaluate() raised: %s", exc
+            )
+            self._emit_chain_event(
+                self._MG_DENIED,
+                f"memory governor error: {exc}",
+            )
+            return self._halt_node(
+                node, stack, graph_node_id, self._MG_DENIED
+            )
+
+        if decision.denied:
+            self._emit_chain_event(
+                self._MG_DENIED,
+                f"memory governance denied: {decision.reason} "
+                f"(policy={decision.policy_id})",
+            )
+            return self._halt_node(
+                node, stack, graph_node_id, self._MG_DENIED
+            )
+        return None
+
+    def _notify_memory_governance_after(
+        self,
+        kind: Literal["llm", "tool"],
+        opts: WrapOptions,
+    ) -> None:
+        """Notify memory governor after successful dispatch. Never raises."""
+        from veronica_core.memory.types import (
+            GovernanceVerdict,
+            MemoryGovernanceDecision,
+        )
+
+        mem_op = self._build_memory_op(kind, opts)
+        allow_decision = MemoryGovernanceDecision(
+            verdict=GovernanceVerdict.ALLOW,
+            reason="post-dispatch notification",
+            policy_id="execution_context",
+            operation=mem_op,
+        )
+        try:
+            self._memory_governor.notify_after(  # type: ignore[union-attr]
+                mem_op, allow_decision
+            )
+        except BaseException:  # noqa: BLE001
+            # Catch BaseException (not just Exception) to honour the "never
+            # raises" contract.  SystemExit/KeyboardInterrupt from a governance
+            # hook after_op must not corrupt a successfully completed node --
+            # cost has already been committed and the graph node finalised.
+            logger.debug(
+                "ExecutionContext: MemoryGovernor.notify_after() raised unexpectedly",
+                exc_info=True,
+            )
 
     def _forward_divergence_events(self, graph_node_id: str) -> None:
         """Drain divergence events from ExecutionGraph and append to chain log.
@@ -1180,6 +1312,10 @@ class ExecutionContext:
                     "ExecutionContext: metrics recording failed", exc_info=True
                 )
 
+        # Memory governance post-dispatch notification (v3.3).
+        if self._memory_governor is not None:
+            self._notify_memory_governance_after(node.kind, opts)
+
         # Reconciliation callback: notify caller of estimated vs actual cost.
         if opts.reconciliation_callback is not None:
             try:
@@ -1194,12 +1330,16 @@ class ExecutionContext:
         return Decision.ALLOW
 
     def _make_emit_chain_event_cb(self) -> Any:
-        """Build the emit callback once (avoids lambda allocation on every call)."""
+        """Build the emit callback once (avoids lambda allocation on every call).
+
+        Enriches each emitted event with active policy metadata (v3.3).
+        """
         request_id = self._metadata.request_id
         emit = self._event_log.emit_chain_event
+        get_pm = self._get_policy_audit_metadata
 
         def _emit(stop_reason: str, detail: str) -> None:
-            emit(stop_reason, detail, request_id)
+            emit(stop_reason, detail, request_id, policy_metadata=get_pm())
 
         return _emit
 
@@ -1275,7 +1415,7 @@ class ExecutionContext:
             return
         _visited = _visited | {my_id}
 
-        new_total = self._limits.add_cost_and_get_total(cost_usd)
+        new_total = self._limits.add_cost_returning(cost_usd)
         if new_total >= self._config.max_cost_usd:
             detail = (
                 f"child propagation pushed chain total "
@@ -1285,9 +1425,7 @@ class ExecutionContext:
             if self._limits.mark_aborted(detail):
                 # mark_aborted() returns True only on first abort -- emit event and
                 # cancel token exactly once.
-                self._event_log.emit_chain_event(
-                    "budget_exceeded_by_child", detail, self._metadata.request_id
-                )
+                self._emit_chain_event("budget_exceeded_by_child", detail)
                 self._cancellation_token.cancel()
         # Propagate further up if we have a parent (outside lock to avoid deadlock).
         if self._parent is not None:
@@ -1375,7 +1513,13 @@ class ExecutionContext:
             ),
             timeout_ms=timeout_ms,
         )
-        return ExecutionContext(config=child_cfg, pipeline=pipeline, parent=self)
+        return ExecutionContext(
+            config=child_cfg,
+            pipeline=pipeline,
+            parent=self,
+            memory_governor=self._memory_governor,
+            policy_view_holder=self._policy_view_holder,
+        )
 
     def spawn_child(
         self,
@@ -1414,7 +1558,13 @@ class ExecutionContext:
             ),
             timeout_ms=timeout_ms,
         )
-        return ExecutionContext(config=child_cfg, pipeline=pipeline, parent=self)
+        return ExecutionContext(
+            config=child_cfg,
+            pipeline=pipeline,
+            parent=self,
+            memory_governor=self._memory_governor,
+            policy_view_holder=self._policy_view_holder,
+        )
 
     def _emit_chain_event(self, stop_reason: str, detail: str) -> None:
         """Append a chain-level SafetyEvent for *stop_reason*.
@@ -1423,30 +1573,37 @@ class ExecutionContext:
         called with or without self._lock held; _ChainEventLog is independently
         thread-safe.
 
+        Enriches the event with active policy metadata when a PolicyViewHolder
+        is configured (v3.3 audit wiring).
+
         Args:
             stop_reason: Key from _STOP_REASON_EVENT_TYPE.
             detail: Human-readable explanation.
         """
+        policy_metadata = self._get_policy_audit_metadata()
         self._event_log.emit_chain_event(
-            stop_reason, detail, self._metadata.request_id
+            stop_reason, detail, self._metadata.request_id,
+            policy_metadata=policy_metadata,
         )
 
-    def _start_timeout_watcher(self) -> None:
-        """Schedule cancellation via SharedTimeoutPool after timeout_ms.
+    def _get_policy_audit_metadata(self) -> dict[str, Any] | None:
+        """Extract policy audit metadata from the active PolicyViewHolder.
 
-        Uses the shared pool (single daemon thread) rather than spawning a
-        dedicated thread per ExecutionContext. The pool handle is stored in
-        ``_timeout_pool_handle`` so it can be cancelled on __exit__.
+        Returns None if no holder is configured or no view is loaded.
+        Never raises -- swallows errors to prevent audit enrichment from
+        disrupting the containment control flow.
         """
-        timeout_s = self._config.timeout_ms / 1000.0
-        deadline = time.monotonic() + timeout_s
+        if self._policy_view_holder is None:
+            return None
+        try:
+            current = self._policy_view_holder.current
+            if current is None:
+                return None
+            return current.to_audit_dict()
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "ExecutionContext: policy_view_holder.current.to_audit_dict() failed",
+                exc_info=True,
+            )
+            return None
 
-        def _on_timeout() -> None:
-            if not self._cancellation_token.is_cancelled:
-                self._emit_chain_event(
-                    "timeout",
-                    f"timeout_ms={self._config.timeout_ms} elapsed",
-                )
-                self._cancellation_token.cancel()
-
-        self._timeout_pool_handle = _shared_timeout_pool.schedule(deadline, _on_timeout)

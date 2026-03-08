@@ -10,6 +10,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from typing import TYPE_CHECKING
+
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.budget import BudgetEnforcer
 from veronica_core.circuit_breaker import CircuitBreaker
@@ -17,6 +19,9 @@ from veronica_core.partial import PartialResultBuffer
 from veronica_core.retry import RetryContainer
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision, PolicyPipeline
 from veronica_core.semantic import SemanticLoopGuard
+
+if TYPE_CHECKING:
+    from veronica_core.memory.governor import MemoryGovernor
 
 
 @dataclass
@@ -53,6 +58,7 @@ class AIContainer:
     step_guard: Optional[AgentStepGuard] = None
     partial_buffer: Optional[PartialResultBuffer] = None
     semantic_guard: Optional[SemanticLoopGuard] = None
+    memory_governor: Optional["MemoryGovernor"] = None
 
     _pipeline: PolicyPipeline = field(init=False, repr=False)
     _lock: threading.Lock = field(
@@ -99,7 +105,15 @@ class AIContainer:
             chain_id=chain_id,
         )
         with self._lock:
-            return self._pipeline.evaluate(context)
+            decision = self._pipeline.evaluate(context)
+        if not decision.allowed:
+            return decision
+        # Memory governance check (v3.3): evaluate after policy pipeline.
+        if self.memory_governor is not None:
+            mg_decision = self._check_memory_governor(chain_id, entity_id)
+            if mg_decision is not None:
+                return mg_decision
+        return decision
 
     def reset(self) -> None:
         """Reset all active primitives to their initial state.
@@ -124,6 +138,49 @@ class AIContainer:
 
             # Rebuild pipeline (reset does not change membership)
             self.__post_init__()
+
+    def _check_memory_governor(
+        self, chain_id: str, entity_id: str
+    ) -> Optional[PolicyDecision]:
+        """Evaluate memory governor. Returns PolicyDecision(denied) or None."""
+        from veronica_core.memory.types import (
+            MemoryAction,
+            MemoryOperation,
+            MemoryPolicyContext,
+        )
+
+        mem_op = MemoryOperation(
+            action=MemoryAction.WRITE,
+            agent_id=entity_id,
+            namespace=chain_id,
+        )
+        mem_ctx = MemoryPolicyContext(
+            operation=mem_op,
+            chain_id=chain_id,
+        )
+        try:
+            decision = self.memory_governor.evaluate(mem_op, mem_ctx)  # type: ignore[union-attr]
+            if decision is None:
+                raise TypeError("MemoryGovernor.evaluate() returned None")
+            if decision.denied:
+                return PolicyDecision(
+                    allowed=False,
+                    reason=f"memory governance denied: {decision.reason}",
+                    policy_type="memory_governance",
+                )
+        except Exception:  # noqa: BLE001
+            # Fail-closed: governor error -> deny.
+            import logging as _logging
+
+            _logging.getLogger(__name__).error(
+                "AIContainer: MemoryGovernor.evaluate() failed", exc_info=True
+            )
+            return PolicyDecision(
+                allowed=False,
+                reason="memory governor error",
+                policy_type="memory_governance",
+            )
+        return None
 
     @property
     def active_policies(self) -> List[str]:

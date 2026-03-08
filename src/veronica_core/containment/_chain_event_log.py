@@ -10,6 +10,8 @@ veronica_core.containment.
 from __future__ import annotations
 
 import threading
+from typing import Any
+
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
 
@@ -25,6 +27,7 @@ _STOP_REASON_EVENT_TYPE: dict[str, str] = {
     "retry_budget_exceeded": "CHAIN_RETRY_BUDGET_EXCEEDED",
     "timeout": "CHAIN_TIMEOUT",
     "circuit_open": "CHAIN_CIRCUIT_OPEN",
+    "memory_governance_denied": "CHAIN_MEMORY_GOVERNANCE_DENIED",
 }
 
 
@@ -81,6 +84,7 @@ class _ChainEventLog:
         stop_reason: str,
         detail: str,
         request_id: str,
+        policy_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Build and append a chain-level SafetyEvent for *stop_reason*.
 
@@ -90,14 +94,21 @@ class _ChainEventLog:
             stop_reason: Key from _STOP_REASON_EVENT_TYPE (or raw str as fallback).
             detail: Human-readable explanation.
             request_id: The chain's request_id for the event.
+            policy_metadata: Optional policy audit dict from FrozenPolicyView.
+                If provided, stored in the event's metadata under the
+                ``"policy"`` key for audit trail enrichment (v3.3).
         """
         event_type = _STOP_REASON_EVENT_TYPE.get(stop_reason, stop_reason.upper())
+        metadata: dict[str, Any] = {}
+        if policy_metadata is not None:
+            metadata["policy"] = policy_metadata
         event = SafetyEvent(
             event_type=event_type,
             decision=Decision.HALT,
             reason=detail,
             hook="ExecutionContext",
             request_id=request_id,
+            metadata=metadata,
         )
         with self._lock:
             self._append_locked(event)
