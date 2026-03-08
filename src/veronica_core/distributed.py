@@ -1,4 +1,13 @@
 """Distributed budget backends and circuit breakers for cross-process coordination."""
+# nogil-audited: 2026-03-08
+# Findings:
+#   - LocalBudgetBackend: all shared mutable fields accessed inside
+#     ``with self._lock:``. No changes needed.
+#   - RedisBudgetBackend: _using_fallback and _client are read under
+#     self._lock in add(), get(), reserve(), commit(), rollback(),
+#     get_reserved(), reset(), and is_using_fallback. No changes needed.
+#   - get_default_backend() is a pure factory (no module-level singleton).
+#     No changes needed.
 
 from __future__ import annotations
 

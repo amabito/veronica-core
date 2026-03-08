@@ -1,8 +1,20 @@
 """Shared utilities for veronica-core framework adapters.
 
-Internal module — not part of the public API. Centralizes patterns
+Internal module -- not part of the public API. Centralizes patterns
 that all adapter modules (langchain, crewai, langgraph, etc.) share.
 """
+# nogil-audited: 2026-03-08
+# Findings:
+#   - _BudgetProxy.spend() and _StepGuardProxy.step() have a branch that
+#     accesses ctx._cost_usd_accumulated / ctx._step_count WITHOUT a lock
+#     when self._lock is None (lines ~232-235 and ~268-269). This can only
+#     happen when the wrapped ExecutionContext has no lock; the proxy cannot
+#     fix that from outside. The paths are documented with "no lock" intent
+#     and fall through from the guarded branch above them. No additional
+#     locking added here -- the ExecutionContext itself must carry a lock
+#     (Mark-1 is responsible for that in execution_context.py).
+#   - All other code in this module is stateless utility functions.
+#     No changes needed.
 
 from __future__ import annotations
 

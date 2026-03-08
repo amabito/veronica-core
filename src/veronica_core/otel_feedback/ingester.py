@@ -12,6 +12,14 @@ protected by _global_lock to allow concurrent per-agent updates.
 Zero external dependencies (stdlib only).
 """
 
+# nogil-audited: 2026-03-08
+# Findings:
+#   - Two-level locking: _global_lock guards the _agents dict (creation/lookup);
+#     each _AgentState has its own lock guarding per-agent counters.
+#   - get_all_agents() correctly snapshots agent_ids under _global_lock, then
+#     acquires per-agent locks individually (no nested lock held).
+#   - No changes needed.
+
 from __future__ import annotations
 
 import logging

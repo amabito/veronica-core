@@ -1,4 +1,8 @@
 """VERONICA Budget Enforcement - Chain-level cost ceiling for LLM calls."""
+# nogil-audited: 2026-03-08
+# Findings:
+#   - All shared mutable fields (_spent_usd, _call_count, _exceeded) are
+#     accessed exclusively inside ``with self._lock:``. No changes needed.
 
 from __future__ import annotations
 

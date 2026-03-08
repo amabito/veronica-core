@@ -4,6 +4,15 @@ Extracted from ``distributed.py`` to keep file sizes manageable.
 All public symbols are re-exported from ``distributed.py`` for
 backward compatibility.
 """
+# nogil-audited: 2026-03-08
+# Findings:
+#   - state, failure_count, success_count, reset() read _using_fallback without
+#     lock: TOCTOU under nogil (thread A reads False, thread B flips to True
+#     mid-read, thread A dispatches to Redis against a stale/closed client).
+#     Fixed: read _using_fallback under self._lock in all four properties/methods.
+#   - All other shared state (_last_reconnect_attempt, _client, _script_*) is
+#     accessed either under self._lock or in the constructor (single-threaded).
+#     No additional changes needed.
 
 from __future__ import annotations
 
@@ -568,10 +577,16 @@ class DistributedCircuitBreaker:
         Uses HMGET to fetch only ``state`` and ``last_failure_time`` (2 fields)
         instead of HGETALL (all fields), reducing data transfer.
         """
-        if self._using_fallback or self._client is None:
+        # nogil: read _using_fallback and capture _client under lock to prevent
+        # a concurrent _activate_fallback() from flipping the flag between the
+        # check and the Redis call.
+        with self._lock:
+            on_fallback = self._using_fallback or self._client is None
+            client = self._client
+        if on_fallback:
             return self._fallback.state
         try:
-            vals = self._client.hmget(self._key, "state", "last_failure_time")
+            vals = client.hmget(self._key, "state", "last_failure_time")
             state_str = vals[0] or "CLOSED"
             lft = self._parse_last_failure_time(vals[1] or "")
             return self._resolve_state_str(state_str, lft)
@@ -584,10 +599,14 @@ class DistributedCircuitBreaker:
     @property
     def failure_count(self) -> int:
         """Consecutive failure count (reads from Redis or fallback)."""
-        if self._using_fallback or self._client is None:
+        # nogil: capture under lock -- same rationale as state property.
+        with self._lock:
+            on_fallback = self._using_fallback or self._client is None
+            client = self._client
+        if on_fallback:
             return self._fallback.failure_count
         try:
-            val = self._client.hget(self._key, "failure_count")
+            val = client.hget(self._key, "failure_count")
             return int(val) if val is not None else 0
         except Exception as exc:
             if self._fallback_on_error:
@@ -600,10 +619,14 @@ class DistributedCircuitBreaker:
     @property
     def success_count(self) -> int:
         """Total success count (reads from Redis or fallback)."""
-        if self._using_fallback or self._client is None:
+        # nogil: capture under lock -- same rationale as state property.
+        with self._lock:
+            on_fallback = self._using_fallback or self._client is None
+            client = self._client
+        if on_fallback:
             return self._fallback.success_count
         try:
-            val = self._client.hget(self._key, "success_count")
+            val = client.hget(self._key, "success_count")
             return int(val) if val is not None else 0
         except Exception as exc:
             if self._fallback_on_error:
@@ -772,11 +795,15 @@ class DistributedCircuitBreaker:
 
     def reset(self) -> None:
         """Reset circuit to CLOSED state."""
-        if self._using_fallback or self._client is None:
+        # nogil: capture under lock -- same rationale as state property.
+        with self._lock:
+            on_fallback = self._using_fallback or self._client is None
+            client = self._client
+        if on_fallback:
             self._fallback.reset()
             return
         try:
-            pipe = self._client.pipeline()
+            pipe = client.pipeline()
             pipe.hset(
                 self._key,
                 mapping={

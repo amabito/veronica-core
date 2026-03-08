@@ -4,6 +4,16 @@ Tracks consecutive failures and opens the circuit when the threshold
 is exceeded. After a recovery timeout, allows a single test request
 (half-open state). Implements the RuntimePolicy protocol.
 """
+# nogil-audited: 2026-03-08
+# Findings:
+#   - All shared mutable state (_state, _failure_count, _last_failure_time,
+#     _success_count, _half_open_in_flight, _owner_id) is accessed exclusively
+#     inside ``with self._lock:`` blocks. No changes needed.
+#   - failure_predicate is evaluated OUTSIDE the lock (documented in
+#     record_failure() docstring). The predicate must only inspect the
+#     exception object -- accessing CircuitBreaker state from inside a predicate
+#     would deadlock. This design is nogil-safe because the predicate itself is
+#     stateless relative to the breaker.
 
 from __future__ import annotations
 

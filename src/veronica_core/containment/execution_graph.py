@@ -21,6 +21,16 @@ Usage::
     snap = graph.snapshot()
 """
 
+# nogil-audited: 2026-03-08
+# Findings:
+#   - All mutable state is protected by self._lock (RLock).
+#   - _notify_observers() and _fire_subscribers() read the observer/subscriber
+#     list reference under the lock, then call out with the lock released --
+#     correct pattern (copy-on-write list, lock dropped before callbacks).
+#   - _observers and _subscribers use copy-on-write (add/remove create a new
+#     list) so the snapshot taken under lock is stable after release.
+#   - No changes needed.
+
 # ---------------------------------------------------------------------------
 # Changelog
 # ---------------------------------------------------------------------------

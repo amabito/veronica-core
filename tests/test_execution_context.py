@@ -1277,7 +1277,7 @@ class TestSilentExceptsLogged:
             ctx = ExecutionContext(config=config)
 
             with caplog.at_level(
-                logging.DEBUG, logger="veronica_core.containment.execution_context"
+                logging.DEBUG, logger="veronica_core.containment"
             ):
                 ctx.wrap_llm_call(
                     fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
@@ -1390,7 +1390,7 @@ class TestComputeActualCostEventCap:
         """Repeated auto-pricing skips (model known, no response_hint) must not
         grow _events beyond _MAX_CHAIN_EVENTS.
         """
-        from veronica_core.containment.execution_context import _MAX_CHAIN_EVENTS
+        from veronica_core.containment._chain_event_log import _MAX_CHAIN_EVENTS
 
         # Use a step limit high enough to exceed _MAX_CHAIN_EVENTS
         over = _MAX_CHAIN_EVENTS + 50

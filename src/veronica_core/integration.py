@@ -3,6 +3,17 @@
 This module provides a drop-in replacement for global variables
 (veronica_fail_counts, veronica_cooldowns) with state machine persistence.
 """
+# nogil-audited: 2026-03-08
+# Findings:
+#   - VeronicaIntegration._atexit_registered (class-level bool) and
+#     _live_instances (WeakSet) were read/written without a lock, creating
+#     a TOCTOU race under nogil: two threads could both observe
+#     _atexit_registered=False and register atexit twice.
+#     Fixed: added _class_lock (threading.Lock) guarding both fields.
+#   - _op_lock already serialises record_fail() and _maybe_auto_save().
+#   - get_veronica_integration() uses double-checked locking with
+#     _singleton_lock -- correct under both GIL and nogil.
+#   - No other shared mutable state found without locking.
 
 from __future__ import annotations
 from typing import Dict, Optional
@@ -36,6 +47,9 @@ class VeronicaIntegration:
 
     _atexit_registered: bool = False
     _live_instances: weakref.WeakSet["VeronicaIntegration"] = weakref.WeakSet()
+    # nogil: guards _atexit_registered and _live_instances against concurrent
+    # __init__ calls from multiple threads.
+    _class_lock: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -170,10 +184,14 @@ class VeronicaIntegration:
         self.exit_handler = VeronicaExit(self.state, self.backend)
 
         # Track all instances for atexit save.
-        VeronicaIntegration._live_instances.add(self)
-        if not VeronicaIntegration._atexit_registered:
-            atexit.register(VeronicaIntegration._save_all_instances)
-            VeronicaIntegration._atexit_registered = True
+        # nogil: guard both _live_instances and _atexit_registered under
+        # _class_lock to prevent two threads from both seeing
+        # _atexit_registered=False and registering atexit twice.
+        with VeronicaIntegration._class_lock:
+            VeronicaIntegration._live_instances.add(self)
+            if not VeronicaIntegration._atexit_registered:
+                atexit.register(VeronicaIntegration._save_all_instances)
+                VeronicaIntegration._atexit_registered = True
 
         # Auto-save tracking
         self.auto_save_interval = auto_save_interval
@@ -282,7 +300,11 @@ class VeronicaIntegration:
     @classmethod
     def _save_all_instances(cls) -> None:
         """Atexit handler: save all live instances with backends."""
-        for instance in list(cls._live_instances):
+        # nogil: snapshot _live_instances under _class_lock to avoid iterating
+        # a WeakSet that another thread may be modifying concurrently.
+        with cls._class_lock:
+            instances = list(cls._live_instances)
+        for instance in instances:
             try:
                 instance.save()
             except Exception:

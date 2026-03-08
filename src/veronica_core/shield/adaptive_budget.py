@@ -35,6 +35,15 @@ Design principles:
   - Backward compatible: new params default to no-op values
 """
 
+# nogil-audited: 2026-03-08
+# Findings:
+#   - All mutable runtime state (_ceiling_multiplier, _last_adjustment_ts,
+#     _last_action, _anomaly_active, _anomaly_activated_ts, _event_buffer,
+#     _safety_events) is accessed inside ``with self._lock:``. No changes needed.
+#   - Configuration fields (_base_ceiling, _window_seconds, etc.) are set in
+#     __init__ and never mutated after construction -- safely readable without
+#     a lock from any thread.
+
 from __future__ import annotations
 
 import threading

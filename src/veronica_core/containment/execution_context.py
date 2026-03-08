@@ -1,4 +1,4 @@
-# TODO: Split into execution_context_core.py + execution_context_async.py (1531 lines, target 400)
+# Refactored: limit-checking extracted to _limit_checker.py, event-log to _chain_event_log.py
 """ExecutionContext — chain-level containment for VERONICA agent runs.
 
 Provides a lifespan-scoped container that enforces chain-wide limits
@@ -48,6 +48,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal, TYPE_CHECKING
 
+from veronica_core.containment._chain_event_log import _ChainEventLog
+from veronica_core.containment._limit_checker import _LimitChecker
 from veronica_core.containment.execution_graph import ExecutionGraph
 from veronica_core.containment.timeout_pool import _timeout_pool as _shared_timeout_pool
 from veronica_core.containment.types import (
@@ -116,20 +118,6 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # ExecutionContext
 # ---------------------------------------------------------------------------
-
-_STOP_REASON_EVENT_TYPE: dict[str, str] = {
-    "aborted": "CHAIN_ABORTED",
-    "budget_exceeded": "CHAIN_BUDGET_EXCEEDED",
-    "budget_exceeded_by_child": "CHAIN_BUDGET_EXCEEDED_BY_CHILD",
-    "step_limit_exceeded": "CHAIN_STEP_LIMIT_EXCEEDED",
-    "retry_budget_exceeded": "CHAIN_RETRY_BUDGET_EXCEEDED",
-    "timeout": "CHAIN_TIMEOUT",
-    "circuit_open": "CHAIN_CIRCUIT_OPEN",
-}
-
-# Maximum number of SafetyEvents stored per chain to prevent memory exhaustion
-# from flooding callers or repeated limit-check emissions.
-_MAX_CHAIN_EVENTS: int = 1_000
 
 # Maximum number of NodeRecords stored per chain. Prevents unbounded growth in
 # long-running agents or run-away loops that generate many nodes.
@@ -200,18 +188,23 @@ class ExecutionContext:
 
             self._budget_backend = LocalBudgetBackend()
 
-        # Mutable chain-level counters (protected by _lock)
+        # Outer lock for operations that span multiple helpers (e.g. _wrap reads
+        # from _limits AND appends nodes).  Each helper also has its own internal
+        # lock for its own state.
         self._lock = threading.Lock()
-        self._step_count: int = 0
-        self._cost_usd_accumulated: float = 0.0
-        self._retries_used: int = 0
-        self._aborted: bool = False
         self._closed: bool = False
-        self._abort_reason: str | None = None
         self._nodes: list[NodeRecord] = []
-        self._events: list[SafetyEvent] = []
-        # M4: O(1) dedup for _emit_chain_event (replaces O(n) any() scan)
-        self._event_dedup_keys: set[tuple[str, Any, str, str, str]] = set()
+
+        # Initialise CancellationToken before _LimitChecker so the token is
+        # available when passed to the checker.
+        self._cancellation_token = CancellationToken()
+
+        # Delegated helpers: limit counters and chain event log.
+        self._limits = _LimitChecker(config, self._cancellation_token)
+        self._event_log = _ChainEventLog()
+
+        # Pre-built emit callback for _check_limits_delegate (avoid per-call lambda).
+        self._emit_chain_event_cb = self._make_emit_chain_event_cb()
 
         # Execution graph for DAG tracking of all nodes.
         self._graph = ExecutionGraph(chain_id=self._metadata.chain_id)
@@ -242,9 +235,6 @@ class ExecutionContext:
         # is set; used by get_partial_result() to look up partial text per node.
         self._partial_buffers: dict[str, PartialResultBuffer] = {}
 
-        # Timeout bookkeeping
-        self._start_time: float = time.monotonic()
-        self._cancellation_token = CancellationToken()
         self._timeout_pool_handle: object | None = None
 
         if config.timeout_ms > 0:
@@ -270,6 +260,51 @@ class ExecutionContext:
         """Return the agent identity associated with this context, or None."""
         return self._agent_identity
 
+    # ------------------------------------------------------------------
+    # Internal compatibility shims (used by tests that access private state)
+    # These proxy directly to the _LimitChecker helper.
+    # ------------------------------------------------------------------
+
+    @property
+    def _aborted(self) -> bool:
+        return self._limits.is_aborted
+
+    @_aborted.setter
+    def _aborted(self, value: bool) -> None:  # noqa: FBT001
+        # Only used in legacy tests; setting False is silently ignored (safe).
+        if value:
+            self._limits.mark_aborted("external_set")
+
+    @property
+    def _cost_usd_accumulated(self) -> float:
+        return self._limits.cost_usd_accumulated
+
+    @_cost_usd_accumulated.setter
+    def _cost_usd_accumulated(self, value: float) -> None:
+        # Tests directly assign this to set up specific scenarios.
+        self._limits.set_cost(value)
+
+    @property
+    def _step_count(self) -> int:
+        return self._limits.step_count
+
+    @_step_count.setter
+    def _step_count(self, value: int) -> None:
+        # External code (adapters, tests) may increment _step_count directly.
+        self._limits.set_step_count(value)
+
+    @property
+    def _retries_used(self) -> int:
+        return self._limits.retries_used
+
+    @property
+    def _abort_reason(self) -> str | None:
+        return self._limits.abort_reason
+
+    @property
+    def _events(self) -> list:
+        return self._event_log.snapshot()
+
     def close(self) -> None:
         """Release resources held by this context.
 
@@ -288,11 +323,11 @@ class ExecutionContext:
                 return
             self._closed = True
 
-            # Mark aborted so subsequent wrap calls return HALT immediately.
-            self._aborted = True
-            if self._abort_reason is None:
-                self._abort_reason = "context_closed"
+        # Mark aborted so subsequent wrap calls return HALT immediately.
+        # _limits.mark_closed() is idempotent and uses its own lock.
+        self._limits.mark_closed()
 
+        with self._lock:
             # Warn when non-terminal graph nodes exist (in-flight wrap calls).
             try:
                 _non_terminal = [
@@ -407,9 +442,7 @@ class ExecutionContext:
         Args:
             event: SafetyEvent to record.
         """
-        with self._lock:
-            if len(self._events) < _MAX_CHAIN_EVENTS:
-                self._events.append(event)
+        self._event_log.append(event)
 
     def get_snapshot(self) -> ContextSnapshot:
         """Return an immutable snapshot of current chain state.
@@ -423,27 +456,29 @@ class ExecutionContext:
             ExecutionGraph (total_cost_usd, total_llm_calls,
             total_tool_calls, total_retries, max_depth).
         """
+        counters = self._limits.snapshot_counters()
         with self._lock:
-            elapsed_ms = (time.monotonic() - self._start_time) * 1000.0
-            graph_snap = self._graph.snapshot()
-            graph_summary = graph_snap["aggregates"]
-            return ContextSnapshot(
-                chain_id=self._metadata.chain_id,
-                request_id=self._metadata.request_id,
-                step_count=self._step_count,
-                cost_usd_accumulated=self._cost_usd_accumulated,
-                retries_used=self._retries_used,
-                aborted=self._aborted,
-                abort_reason=self._abort_reason,
-                elapsed_ms=elapsed_ms,
-                nodes=list(self._nodes),
-                events=list(self._events),
-                graph_summary=graph_summary,
-                parent_chain_id=self._parent._metadata.chain_id
-                if self._parent is not None
-                else None,
-                agent_identity=self._agent_identity,
+            nodes_copy = list(self._nodes)
+            parent_chain_id = (
+                self._parent._metadata.chain_id if self._parent is not None else None
             )
+            graph_snap = self._graph.snapshot()
+        graph_summary = graph_snap["aggregates"]
+        return ContextSnapshot(
+            chain_id=self._metadata.chain_id,
+            request_id=self._metadata.request_id,
+            step_count=counters["step_count"],
+            cost_usd_accumulated=counters["cost_usd_accumulated"],
+            retries_used=counters["retries_used"],
+            aborted=counters["aborted"],
+            abort_reason=counters["abort_reason"],
+            elapsed_ms=counters["elapsed_ms"],
+            nodes=nodes_copy,
+            events=self._event_log.snapshot(),
+            graph_summary=graph_summary,
+            parent_chain_id=parent_chain_id,
+            agent_identity=self._agent_identity,
+        )
 
     def get_graph_snapshot(self) -> dict[str, Any]:
         """Return the full ExecutionGraph snapshot as a JSON-serializable dict.
@@ -478,12 +513,11 @@ class ExecutionContext:
         Args:
             reason: Human-readable explanation recorded in the snapshot.
         """
-        with self._lock:
-            if not self._aborted:
-                self._aborted = True
-                self._abort_reason = reason
-                self._cancellation_token.cancel()
-                self._emit_chain_event("aborted", reason)
+        if self._limits.mark_aborted(reason):
+            self._cancellation_token.cancel()
+            self._event_log.emit_chain_event(
+                "aborted", reason, self._metadata.request_id
+            )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -538,7 +572,7 @@ class ExecutionContext:
             stack, graph_node_id = self._begin_graph_node(kind, opts)
 
             # Pre-flight: chain-level limit check.
-            halt_reason = self._check_limits()
+            halt_reason = self._check_limits_delegate()
             if halt_reason is not None:
                 return self._halt_node(node, stack, graph_node_id, halt_reason)
 
@@ -740,27 +774,27 @@ class ExecutionContext:
         Returns:
             True if budget would be exceeded (caller should halt).
         """
-        with self._lock:
-            projected = self._cost_usd_accumulated + opts.cost_estimate_hint
-            if projected > self._config.max_cost_usd:
-                self._emit_chain_event(
-                    "budget_exceeded",
-                    f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
-                    f"chain ceiling ${self._config.max_cost_usd:.4f}",
-                )
-                node.status = "halted"
-                node.end_ts = datetime.now(timezone.utc)
+        projected = self._limits.cost_usd_accumulated + opts.cost_estimate_hint
+        if projected > self._config.max_cost_usd:
+            self._emit_chain_event(
+                "budget_exceeded",
+                f"cost estimate ${opts.cost_estimate_hint:.4f} would exceed "
+                f"chain ceiling ${self._config.max_cost_usd:.4f}",
+            )
+            node.status = "halted"
+            node.end_ts = datetime.now(timezone.utc)
+            with self._lock:
                 if len(self._nodes) < _MAX_NODES:
                     self._nodes.append(node)
-                if self._metrics is not None:
-                    try:
-                        self._metrics.record_decision(self._metadata.chain_id, "HALT")
-                    except Exception:
-                        logger.debug(
-                            "ExecutionContext: metrics.record_decision failed in _check_budget_estimate",
-                            exc_info=True,
-                        )
-                return True
+            if self._metrics is not None:
+                try:
+                    self._metrics.record_decision(self._metadata.chain_id, "HALT")
+                except Exception:
+                    logger.debug(
+                        "ExecutionContext: metrics.record_decision failed in _check_budget_estimate",
+                        exc_info=True,
+                    )
+            return True
         return False
 
     def _check_pipeline_pre_dispatch(
@@ -789,15 +823,8 @@ class ExecutionContext:
             pre_halt_events = self._pipeline.get_events()  # type: ignore[union-attr]
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
+            self._event_log.append_batch(pre_halt_events)
             with self._lock:
-                for ev in pre_halt_events:
-                    dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                    if (
-                        len(self._events) < _MAX_CHAIN_EVENTS
-                        and dk not in self._event_dedup_keys
-                    ):
-                        self._events.append(ev)
-                        self._event_dedup_keys.add(dk)
                 if len(self._nodes) < _MAX_NODES:
                     self._nodes.append(node)
             stack.pop()
@@ -814,9 +841,8 @@ class ExecutionContext:
         """Run CircuitBreaker.check(). Returns Decision.HALT or None."""
         from veronica_core.runtime_policy import PolicyContext
 
-        with self._lock:
-            cost = self._cost_usd_accumulated
-            step = self._step_count
+        cost = self._limits.cost_usd_accumulated
+        step = self._limits.step_count
         policy_ctx = PolicyContext(
             cost_usd=cost,
             step_count=step,
@@ -825,10 +851,11 @@ class ExecutionContext:
         )
         pd = self._circuit_breaker.check(policy_ctx)  # type: ignore[union-attr]
         if not pd.allowed:
-            with self._lock:
-                self._emit_chain_event(
-                    "circuit_open", f"circuit breaker denied: {pd.reason}"
-                )
+            self._event_log.emit_chain_event(
+                "circuit_open",
+                f"circuit breaker denied: {pd.reason}",
+                self._metadata.request_id,
+            )
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
             with self._lock:
@@ -879,20 +906,7 @@ class ExecutionContext:
                 request_id=self._metadata.request_id,
                 metadata=metadata,
             )
-            with self._lock:
-                dk = (
-                    safe_evt.event_type,
-                    safe_evt.decision,
-                    safe_evt.reason,
-                    safe_evt.hook,
-                    safe_evt.request_id,
-                )
-                if (
-                    len(self._events) < _MAX_CHAIN_EVENTS
-                    and dk not in self._event_dedup_keys
-                ):
-                    self._events.append(safe_evt)
-                    self._event_dedup_keys.add(dk)
+            self._event_log.append(safe_evt)
 
     def _invoke_fn(
         self,
@@ -991,9 +1005,8 @@ class ExecutionContext:
 
         # Only increment retry counters when we are actually going to retry.
         # HALT decisions should not consume the retry budget.
-        with self._lock:
-            self._retries_used += 1
-            node.retries_used += 1
+        self._limits.increment_retries()
+        node.retries_used += 1
 
         return Decision.RETRY
 
@@ -1031,20 +1044,7 @@ class ExecutionContext:
                     ),
                     hook="AutoPricing",
                 )
-                with self._lock:
-                    dk = (
-                        _ev.event_type,
-                        _ev.decision,
-                        _ev.reason,
-                        _ev.hook,
-                        _ev.request_id,
-                    )
-                    if (
-                        len(self._events) < _MAX_CHAIN_EVENTS
-                        and dk not in self._event_dedup_keys
-                    ):
-                        self._events.append(_ev)
-                        self._event_dedup_keys.add(dk)
+                self._event_log.append(_ev)
         return actual_cost
 
     def _check_before_charge(
@@ -1065,15 +1065,8 @@ class ExecutionContext:
             before_charge_events = self._pipeline.get_events()  # type: ignore[union-attr]
             node.status = "halted"
             node.end_ts = datetime.now(timezone.utc)
+            self._event_log.append_batch(before_charge_events)
             with self._lock:
-                for ev in before_charge_events:
-                    dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                    if (
-                        len(self._events) < _MAX_CHAIN_EVENTS
-                        and dk not in self._event_dedup_keys
-                    ):
-                        self._events.append(ev)
-                        self._event_dedup_keys.add(dk)
                 if len(self._nodes) < _MAX_NODES:
                     self._nodes.append(node)
             stack.pop()
@@ -1123,12 +1116,16 @@ class ExecutionContext:
             self._pipeline.get_events() if self._pipeline is not None else []
         )
 
+        # Update limit-checker counters atomically (single lock acquisition).
+        self._limits.commit_success(actual_cost)
+
+        # Append pipeline events to the chain log (lock-safe in _event_log).
+        self._event_log.append_batch(pipeline_events)
+
+        node.cost_usd = actual_cost
+        node.status = "ok"
+        node.end_ts = datetime.now(timezone.utc)
         with self._lock:
-            self._step_count += 1
-            self._cost_usd_accumulated += actual_cost
-            node.cost_usd = actual_cost
-            node.status = "ok"
-            node.end_ts = datetime.now(timezone.utc)
             if len(self._nodes) < _MAX_NODES:
                 self._nodes.append(node)
             else:
@@ -1137,15 +1134,6 @@ class ExecutionContext:
                     _MAX_NODES,
                     node.node_id,
                 )
-
-            for ev in pipeline_events:
-                dk = (ev.event_type, ev.decision, ev.reason, ev.hook, ev.request_id)
-                if (
-                    len(self._events) < _MAX_CHAIN_EVENTS
-                    and dk not in self._event_dedup_keys
-                ):
-                    self._events.append(ev)
-                    self._event_dedup_keys.add(dk)
 
         if self._parent is not None and actual_cost > 0.0:
             self._parent._propagate_child_cost(actual_cost)
@@ -1191,83 +1179,26 @@ class ExecutionContext:
 
         return Decision.ALLOW
 
-    def _check_limits(self) -> str | None:
+    def _make_emit_chain_event_cb(self) -> Any:
+        """Build the emit callback once (avoids lambda allocation on every call)."""
+        request_id = self._metadata.request_id
+        emit = self._event_log.emit_chain_event
+
+        def _emit(stop_reason: str, detail: str) -> None:
+            emit(stop_reason, detail, request_id)
+
+        return _emit
+
+    def _check_limits_delegate(self) -> str | None:
         """Return a stop-reason string if any chain-level limit is exceeded.
 
-        Returns None when all limits are within bounds.
-
-        Checked in priority order:
-        1. aborted flag
-        2. cost ceiling (local + cross-process if distributed backend)
-        3. step limit
-        4. retry budget
-        5. timeout / cancellation
+        Delegates entirely to _LimitChecker.check_limits().  Returns None when
+        all limits are within bounds.
         """
-        # H1: Import epsilon for IEEE-754 rounding tolerance on INCRBYFLOAT totals.
-        # H4: Import LocalBudgetBackend for cross-process budget check guard.
-        # Both imports are deferred to avoid circular import at module load time.
-        from veronica_core.distributed import LocalBudgetBackend, _BUDGET_EPSILON
-
-        with self._lock:
-            if self._aborted:
-                return "aborted"
-
-            if (
-                self._cost_usd_accumulated + _BUDGET_EPSILON
-                >= self._config.max_cost_usd
-            ):
-                reason = (
-                    f"cost ${self._cost_usd_accumulated:.4f} >= "
-                    f"ceiling ${self._config.max_cost_usd:.4f}"
-                )
-                self._emit_chain_event("budget_exceeded", reason)
-                return "budget_exceeded"
-
-            if self._step_count >= self._config.max_steps:
-                reason = f"steps {self._step_count} >= limit {self._config.max_steps}"
-                self._emit_chain_event("step_limit_exceeded", reason)
-                return "step_limit_exceeded"
-
-            if self._retries_used >= self._config.max_retries_total:
-                reason = (
-                    f"retries {self._retries_used} >= "
-                    f"budget {self._config.max_retries_total}"
-                )
-                self._emit_chain_event("retry_budget_exceeded", reason)
-                return "retry_budget_exceeded"
-
-        # H4: Cross-process budget check. When using a distributed backend
-        # (e.g. RedisBudgetBackend), other processes may have accumulated spend
-        # that is not reflected in _cost_usd_accumulated (which is local only).
-        # We check the backend's global total outside the lock to avoid blocking
-        # other threads during a potentially slow Redis round-trip.
-
-        if not isinstance(self._budget_backend, LocalBudgetBackend):
-            try:
-                global_total = self._budget_backend.get()
-                if global_total + _BUDGET_EPSILON >= self._config.max_cost_usd:
-                    with self._lock:
-                        reason = (
-                            f"cross-process cost ${global_total:.4f} >= "
-                            f"ceiling ${self._config.max_cost_usd:.4f}"
-                        )
-                        self._emit_chain_event("budget_exceeded", reason)
-                    return "budget_exceeded"
-            except Exception:
-                # Best-effort: if the backend is unavailable, fall through to
-                # the local check that already passed above.
-                logger.debug(
-                    "ExecutionContext: budget backend unavailable during cross-process check; "
-                    "falling back to local limit",
-                    exc_info=True,
-                )
-
-        if self._cancellation_token.is_cancelled:
-            with self._lock:
-                self._emit_chain_event("timeout", "cancellation token signalled")
-            return "timeout"
-
-        return None
+        return self._limits.check_limits(
+            budget_backend=self._budget_backend,
+            emit_fn=self._emit_chain_event_cb,
+        )
 
     def _make_tool_ctx(
         self,
@@ -1330,23 +1261,20 @@ class ExecutionContext:
             return
         _visited = _visited | {my_id}
 
-        _just_aborted = False
-        with self._lock:
-            self._cost_usd_accumulated += cost_usd
-            if (
-                self._cost_usd_accumulated >= self._config.max_cost_usd
-                and not self._aborted
-            ):
-                self._emit_chain_event(
-                    "budget_exceeded_by_child",
-                    f"child propagation pushed chain total "
-                    f"${self._cost_usd_accumulated:.4f} >= "
-                    f"ceiling ${self._config.max_cost_usd:.4f}",
+        new_total = self._limits.add_cost_and_get_total(cost_usd)
+        if new_total >= self._config.max_cost_usd:
+            detail = (
+                f"child propagation pushed chain total "
+                f"${new_total:.4f} >= "
+                f"ceiling ${self._config.max_cost_usd:.4f}"
+            )
+            if self._limits.mark_aborted(detail):
+                # mark_aborted() returns True only on first abort -- emit event and
+                # cancel token exactly once.
+                self._event_log.emit_chain_event(
+                    "budget_exceeded_by_child", detail, self._metadata.request_id
                 )
-                self._aborted = True
-                _just_aborted = True
-        if _just_aborted:
-            self._cancellation_token.cancel()
+                self._cancellation_token.cancel()
         # Propagate further up if we have a parent (outside lock to avoid deadlock).
         if self._parent is not None:
             self._parent._propagate_child_cost(cost_usd, _visited)
@@ -1410,8 +1338,7 @@ class ExecutionContext:
             FairShareAllocator,
         )
 
-        with self._lock:
-            remaining = self._config.max_cost_usd - self._cost_usd_accumulated
+        remaining = self._config.max_cost_usd - self._limits.cost_usd_accumulated
 
         effective_allocator: BudgetAllocator = (
             allocator if allocator is not None else FairShareAllocator()
@@ -1461,8 +1388,7 @@ class ExecutionContext:
             with parent_ctx.spawn_child(max_cost_usd=0.5) as child:
                 child.wrap_llm_call(agent_b_fn)
         """
-        with self._lock:
-            remaining = self._config.max_cost_usd - self._cost_usd_accumulated
+        remaining = self._config.max_cost_usd - self._limits.cost_usd_accumulated
         child_max = max_cost_usd if max_cost_usd is not None else remaining
         child_cfg = ExecutionConfig(
             max_cost_usd=max(0.0, child_max),
@@ -1479,40 +1405,17 @@ class ExecutionContext:
     def _emit_chain_event(self, stop_reason: str, detail: str) -> None:
         """Append a chain-level SafetyEvent for *stop_reason*.
 
-        Must be called with self._lock already held or from a context where
-        thread safety is guaranteed by the caller.
+        Thin wrapper delegating to _event_log.emit_chain_event().  May be
+        called with or without self._lock held; _ChainEventLog is independently
+        thread-safe.
 
         Args:
             stop_reason: Key from _STOP_REASON_EVENT_TYPE.
             detail: Human-readable explanation.
         """
-        event_type = _STOP_REASON_EVENT_TYPE.get(stop_reason, stop_reason.upper())
-        event = SafetyEvent(
-            event_type=event_type,
-            decision=Decision.HALT,
-            reason=detail,
-            hook="ExecutionContext",
-            request_id=self._metadata.request_id,
+        self._event_log.emit_chain_event(
+            stop_reason, detail, self._metadata.request_id
         )
-        # Dedup by content fields (excluding ts, which is unique per-instance).
-        # SafetyEvent.ts is auto-set to datetime.now() on construction, so two
-        # events with identical fields but different creation times would NOT be
-        # equal under the default frozen-dataclass __eq__. Compare by key tuple
-        # instead to correctly suppress duplicate limit-check emissions.
-        # M4: O(1) dedup using pre-built key set (was O(n) any() linear scan)
-        dedup_key = (
-            event.event_type,
-            event.decision,
-            event.reason,
-            event.hook,
-            event.request_id,
-        )
-        if (
-            len(self._events) < _MAX_CHAIN_EVENTS
-            and dedup_key not in self._event_dedup_keys
-        ):
-            self._events.append(event)
-            self._event_dedup_keys.add(dedup_key)
 
     def _start_timeout_watcher(self) -> None:
         """Schedule cancellation via SharedTimeoutPool after timeout_ms.
@@ -1526,11 +1429,10 @@ class ExecutionContext:
 
         def _on_timeout() -> None:
             if not self._cancellation_token.is_cancelled:
-                with self._lock:
-                    self._emit_chain_event(
-                        "timeout",
-                        f"timeout_ms={self._config.timeout_ms} elapsed",
-                    )
+                self._emit_chain_event(
+                    "timeout",
+                    f"timeout_ms={self._config.timeout_ms} elapsed",
+                )
                 self._cancellation_token.cancel()
 
         self._timeout_pool_handle = _shared_timeout_pool.schedule(deadline, _on_timeout)
