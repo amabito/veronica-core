@@ -20,6 +20,19 @@ from veronica_core.cli.new_adapter import _to_pascal_case, generate_adapter
 # ---------------------------------------------------------------------------
 
 
+def _ruff_available() -> bool:
+    """Return True if ruff is available (binary or Python module)."""
+    import shutil
+
+    if shutil.which("ruff"):
+        return True
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "--version"],
+        capture_output=True, text=True,
+    )
+    return result.returncode == 0
+
+
 def _ruff_check(path: Path) -> subprocess.CompletedProcess[str]:
     """Run ruff check on *path* and return the completed process.
 
@@ -34,6 +47,11 @@ def _ruff_check(path: Path) -> subprocess.CompletedProcess[str]:
     else:
         cmd = [sys.executable, "-m", "ruff", "check", str(path)]
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+_SKIP_NO_RUFF = pytest.mark.skipif(
+    not _ruff_available(), reason="ruff not installed"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +83,7 @@ class TestGenerateAdapter:
         test_file = tmp_path / "tests" / "test_testfw_adapter.py"
         assert test_file.exists()
 
+    @_SKIP_NO_RUFF
     def test_generated_adapter_passes_ruff_check(self, tmp_path: Path) -> None:
         """The generated adapter file must pass ruff check with no errors."""
         generate_adapter("cleanfw", tmp_path)
@@ -74,6 +93,7 @@ class TestGenerateAdapter:
             f"ruff reported errors in generated adapter:\n{result.stdout}\n{result.stderr}"
         )
 
+    @_SKIP_NO_RUFF
     def test_generated_test_file_passes_ruff_check(self, tmp_path: Path) -> None:
         """The generated test file must pass ruff check with no errors."""
         generate_adapter("cleanfw", tmp_path)
