@@ -461,6 +461,41 @@ class ExecutionContext:
         """
         return self._wrap(fn, kind="tool", options=options)
 
+    _VALID_MEMORY_KINDS: frozenset[str] = frozenset({"memory_read", "memory_write"})
+
+    def wrap_memory_call(
+        self,
+        fn: Callable[[], Any],
+        kind: Literal["memory_read", "memory_write"],
+        options: WrapOptions | None = None,
+    ) -> Decision:
+        """Execute *fn* under chain-level containment (memory variant).
+
+        Memory calls count toward the step budget identically to tool calls.
+        They do NOT go through ShieldPipeline.before_tool_call -- memory
+        operations are not subject to the tool-call hook chain.
+        They DO go through MemoryGovernor when one is configured.
+
+        Args:
+            fn: Zero-argument callable representing the memory operation.
+            kind: "memory_read" for read operations, "memory_write" for writes.
+            options: Optional per-call configuration.
+
+        Returns:
+            Decision.ALLOW on clean completion.
+            Decision.HALT when any chain-level limit is exceeded or the
+            MemoryGovernor denies the operation.
+
+        Raises:
+            ValueError: If *kind* is not "memory_read" or "memory_write".
+        """
+        if kind not in self._VALID_MEMORY_KINDS:
+            raise ValueError(
+                f"wrap_memory_call() kind must be 'memory_read' or 'memory_write', "
+                f"got {kind!r}"
+            )
+        return self._wrap(fn, kind=kind, options=options)
+
     def record_event(self, event: SafetyEvent) -> None:
         """Append *event* to the chain-level event log.
 
@@ -556,10 +591,10 @@ class ExecutionContext:
     def _wrap(
         self,
         fn: Callable[[], Any],
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         options: WrapOptions | None,
     ) -> Decision:
-        """Common implementation for wrap_llm_call and wrap_tool_call."""
+        """Common implementation for wrap_llm_call, wrap_tool_call, and wrap_memory_call."""
         opts = options or WrapOptions()
         node_id = str(uuid.uuid4())
 
@@ -738,7 +773,7 @@ class ExecutionContext:
 
     def _begin_graph_node(
         self,
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
     ) -> tuple[list[str], str]:
         """Initialize the ContextVar node stack and create a graph node.
@@ -839,7 +874,7 @@ class ExecutionContext:
     def _check_pipeline_pre_dispatch(
         self,
         node_id: str,
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
         node: NodeRecord,
         stack: list[str],
@@ -847,9 +882,15 @@ class ExecutionContext:
     ) -> Decision | None:
         """Run pipeline before_llm_call / before_tool_call.
 
+        Memory calls (kind="memory_read" or kind="memory_write") skip the
+        ShieldPipeline entirely -- they are governed by MemoryGovernor only.
+
         Returns:
             The pipeline Decision if it is not ALLOW, else None.
         """
+        if kind in ("memory_read", "memory_write"):
+            # Memory operations bypass ShieldPipeline hook chain.
+            return None
         tool_ctx = self._make_tool_ctx(node_id, opts)
         if kind == "llm":
             pipeline_decision = self._pipeline.before_llm_call(tool_ctx)  # type: ignore[union-attr]
@@ -919,13 +960,28 @@ class ExecutionContext:
 
     def _build_memory_op(
         self,
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
     ) -> "MemoryOperation":
-        """Build a MemoryOperation from the current wrap call context."""
+        """Build a MemoryOperation from the current wrap call context.
+
+        memory_read -> MemoryAction.READ
+        memory_write -> MemoryAction.WRITE
+        llm -> MemoryAction.WRITE (legacy: LLM calls are treated as writes)
+        tool -> MemoryAction.READ (legacy: tool calls are treated as reads)
+        """
         from veronica_core.memory.types import MemoryAction, MemoryOperation
 
-        action = MemoryAction.WRITE if kind == "llm" else MemoryAction.READ
+        if kind == "memory_read":
+            action = MemoryAction.READ
+        elif kind == "memory_write":
+            action = MemoryAction.WRITE
+        elif kind == "llm":
+            action = MemoryAction.WRITE
+        elif kind == "tool":
+            action = MemoryAction.READ
+        else:
+            raise AssertionError(f"unreachable kind: {kind!r}")
         return MemoryOperation(
             action=action,
             agent_id=self._metadata.user_id or "",
@@ -936,7 +992,7 @@ class ExecutionContext:
 
     def _check_memory_governance(
         self,
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
         node: NodeRecord,
         stack: list[str],
@@ -993,7 +1049,7 @@ class ExecutionContext:
 
     def _notify_memory_governance_after(
         self,
-        kind: Literal["llm", "tool"],
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
     ) -> None:
         """Notify memory governor after successful dispatch. Never raises."""
@@ -1157,12 +1213,15 @@ class ExecutionContext:
         return Decision.RETRY
 
     def _compute_actual_cost(
-        self, kind: Literal["llm", "tool"], opts: WrapOptions
+        self,
+        kind: Literal["llm", "tool", "memory_read", "memory_write"],
+        opts: WrapOptions,
     ) -> float:
         """Determine the actual cost for this call.
 
         Uses cost_estimate_hint when provided; otherwise attempts auto-pricing
-        from opts.response_hint for LLM calls.
+        from opts.response_hint for LLM calls. Memory calls never trigger
+        auto-pricing (they have no token usage).
 
         Returns:
             Actual cost in USD (0.0 if not determinable).

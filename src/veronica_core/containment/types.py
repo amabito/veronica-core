@@ -177,7 +177,7 @@ class NodeRecord:
 
     node_id: str
     parent_id: str | None
-    kind: Literal["llm", "tool"]
+    kind: Literal["llm", "tool", "memory_read", "memory_write"]
     operation_name: str
     start_ts: datetime
     end_ts: datetime | None

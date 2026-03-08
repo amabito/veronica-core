@@ -42,6 +42,7 @@ Usage::
 #   - Aggregate counters updated atomically on status transitions
 #   - snapshot() returns deep-copied JSON-serializable dict
 # v0.11 — cost-rate and token-velocity divergence heuristics added.
+# v0.12 — max_nodes LRU pruning added (oldest completed node evicted first).
 # ---------------------------------------------------------------------------
 
 from __future__ import annotations
@@ -73,7 +74,7 @@ NodeSignature = tuple[str, str]
 # Node dataclass
 # ---------------------------------------------------------------------------
 
-NodeKind = Literal["llm", "tool", "system"]
+NodeKind = Literal["llm", "tool", "system", "memory_read", "memory_write"]
 NodeStatus = Literal["created", "running", "success", "fail", "halt"]
 
 
@@ -157,7 +158,12 @@ class ExecutionGraph:
         cost_rate_threshold_usd_per_sec: float = 0.10,
         token_velocity_threshold: float = 500.0,
         observers: Optional[List["ExecutionGraphObserver"]] = None,
+        max_nodes: int = 0,
     ) -> None:
+        if max_nodes < 0:
+            raise ValueError(
+                f"max_nodes must be >= 0 (0 = unlimited); got {max_nodes}"
+            )
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()
         # Observers are called outside the lock to avoid deadlocks.
@@ -170,6 +176,13 @@ class ExecutionGraph:
         # Node storage and ID counter.
         self._nodes: dict[str, Node] = {}
         self._counter: int = 0
+
+        # LRU pruning configuration.
+        # max_nodes == 0 means unlimited (backward compatible default).
+        # Insertion order is preserved by Python 3.7+ dict semantics, so the
+        # oldest node is always dict's first key -- no separate deque needed.
+        self._max_nodes: int = max_nodes
+        self._pruned_count: int = 0
 
         # Root node (set by create_root).
         self._root_id: Optional[str] = None
@@ -199,10 +212,14 @@ class ExecutionGraph:
         self._sig_window: deque[NodeSignature] = deque(maxlen=self._K)
         # Consecutive-repeat thresholds per kind.  "system" is set to 999 so
         # that chain-management nodes never trigger the heuristic.
+        # memory_read/memory_write share tool thresholds -- they represent
+        # discrete storage operations and benefit from the same loop detection.
         self._diverge_thresholds: dict[str, int] = {
             "tool": 3,
             "llm": 5,
             "system": 999,
+            "memory_read": 3,
+            "memory_write": 3,
         }
         # Frequency-based thresholds: fires when a signature appears >= N times
         # anywhere in the _K window, regardless of consecutiveness.  This catches
@@ -211,6 +228,8 @@ class ExecutionGraph:
             "tool": 5,
             "llm": 7,
             "system": 999,
+            "memory_read": 5,
+            "memory_write": 5,
         }
         # Deduplication: tracks (sig, mode) pairs so that consecutive and
         # frequency detections are independent, but each mode fires at most
@@ -220,6 +239,50 @@ class ExecutionGraph:
         # Buffer of pending divergence event dicts.  Drained by
         # drain_divergence_events().
         self._pending_divergence_events: list[dict[str, Any]] = []
+
+    # ------------------------------------------------------------------
+    # Pruning
+    # ------------------------------------------------------------------
+
+    @property
+    def pruned_count(self) -> int:
+        """Total number of nodes evicted by LRU pruning since construction."""
+        with self._lock:
+            return self._pruned_count
+
+    def _maybe_prune(self) -> None:
+        """Evict the oldest COMPLETED node if max_nodes is set and reached.
+
+        Must be called with ``self._lock`` held, BEFORE inserting the new node.
+
+        Eviction policy:
+        - Only evicts nodes in terminal status ("success", "fail", "halt").
+        - "created" and "running" nodes are never evicted.
+        - Oldest-first: dict insertion order gives FIFO eviction among
+          completed nodes.
+        - If no completed node exists when the limit is reached the new node
+          is added anyway (over-limit) to avoid blocking live execution.
+        """
+        if self._max_nodes == 0:
+            return
+        if len(self._nodes) < self._max_nodes:
+            return
+        # Find the oldest completed node in insertion order.
+        # Never evict the root node -- it anchors the graph and its ID is
+        # referenced by _root_id for begin_node parent lookups.
+        evict_id: Optional[str] = None
+        for nid, node in self._nodes.items():
+            if nid == self._root_id:
+                continue
+            if node.status in _TERMINAL_STATUSES:
+                evict_id = nid
+                break
+        if evict_id is None:
+            # All nodes are in-progress -- allow over-limit rather than block.
+            return
+        del self._nodes[evict_id]
+        self._depth.pop(evict_id, None)
+        self._pruned_count += 1
 
     # ------------------------------------------------------------------
     # Observer and subscriber management
@@ -287,6 +350,7 @@ class ExecutionGraph:
                     f"Root node already exists: {self._root_id}. "
                     "ExecutionGraph supports exactly one root per chain."
                 )
+            self._maybe_prune()
             node_id = self._next_id()
             now_ms = _now_ms()
             node = Node(
@@ -342,6 +406,7 @@ class ExecutionGraph:
             if parent_id not in self._nodes:
                 raise KeyError(f"Parent node not found: {parent_id!r}")
             parent_depth = self._depth[parent_id]
+            self._maybe_prune()
             node_id = self._next_id()
             now_ms = _now_ms()
             node = Node(
