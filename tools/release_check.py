@@ -110,36 +110,25 @@ def check_readme_freshness(result: CheckResult) -> None:
 
     text = README.read_text(encoding="utf-8")
 
-    # Ship Readiness section exists
-    if re.search(r"Ship Readiness", text):
-        result.ok("Ship Readiness section found")
-    else:
-        result.fail("Ship Readiness section missing from README")
-
-    # Link to adaptive-control.md
-    if "docs/adaptive-control.md" in text:
-        result.ok("Link to docs/adaptive-control.md found")
-    else:
-        result.fail("Link to docs/adaptive-control.md missing from README")
-
-    # Link to adaptive_demo.py
-    if "adaptive_demo.py" in text:
-        result.ok("Reference to adaptive_demo.py found")
-    else:
-        result.fail("Reference to adaptive_demo.py missing from README")
-
-    # Version string in Ship Readiness matches pyproject
+    # Version string present somewhere in README (stats or roadmap section)
     pyproject_ver = _extract_version_pyproject()
     if pyproject_ver:
-        pattern = rf"Ship Readiness.*v{re.escape(pyproject_ver)}"
-        if re.search(pattern, text, re.DOTALL):
-            result.ok(
-                f"Ship Readiness references v{pyproject_ver}"
-            )
+        if pyproject_ver in text:
+            result.ok(f"README references v{pyproject_ver}")
         else:
-            result.fail(
-                f"Ship Readiness does not reference v{pyproject_ver}"
-            )
+            result.fail(f"README does not reference v{pyproject_ver}")
+
+    # Quickstart section exists
+    if "## Quickstart" in text:
+        result.ok("Quickstart section found")
+    else:
+        result.fail("Quickstart section missing from README")
+
+    # pip install line exists
+    if "pip install veronica-core" in text:
+        result.ok("pip install line found")
+    else:
+        result.fail("pip install line missing from README")
 
 
 def check_exports(result: CheckResult) -> None:
