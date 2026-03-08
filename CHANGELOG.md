@@ -6,6 +6,25 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.4.2] -- 2026-03-08 -- Review-Fix Hardening + AG2 Merge
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Version comparison tuple-length mismatch**: `_compare_versions()` with zero-padding prevents `(0, 4) < (0, 4, 0)` false inequality when comparing 2-segment vs 3-segment version strings in `is_version_compatible()`.
+- **MemoryBoundaryHook docstring accuracy** (Round 1-4): Corrected trust_router vs trust_tracker references, rule priority order documentation to match `_rule_specificity` scoring (agent_id=+2, namespace=+1), PROVISIONAL trust label, and `default_trust` impact on unknown agent access.
+- **Info leak prevention**: Internal exception details removed from `PermissionError` message in trust resolution failure path -- logged only.
+- **Adapter scaffold regex strictness**: `_VALID_NAME_RE` restricted to lowercase-only (`^[a-z][a-z0-9_-]*$`) to prevent silent PascalCase mismatch on uppercase input.
+- **CI ruff-check skip**: Tests requiring ruff now guarded by `_ruff_available()` check with `@_SKIP_NO_RUFF` marker for environments without ruff installed.
+- **Fixture skip safety**: `_build_fixtures` replaced module-level `pytest.skip()` with `warnings.warn()` to prevent silent test module exclusion.
+
+### Tests
+
+- 4 new tests: 2 version tuple-length regression tests in `test_adapter_harness.py`, 1 tracker-without-router trust check in `test_trust_memory_isolation.py`, 1 uppercase name rejection in `test_adapter_scaffold.py`. Total: 4844.
+
+---
+
 ## [3.4.1] -- 2026-03-08 -- Post-Release Hardening
 
 **Breaking changes:** none

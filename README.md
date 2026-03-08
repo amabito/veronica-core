@@ -1,45 +1,23 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4840%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
+![CI](https://img.shields.io/badge/tests-4844%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-Runtime containment for LLM systems. Enforce cost, step, and retry limits before the call reaches the model.
+Runtime containment for LLM agent systems.
+Budget, step, retry, and circuit breaker enforcement -- evaluated before the call reaches the model.
 
-veronica-core is the kernel. [veronica](https://github.com/amabito/veronica) is the control plane.
+veronica-core is the kernel: it enforces execution boundaries.
+[veronica](https://github.com/amabito/veronica) is the control plane: policy management, fleet coordination, and dashboard.
+
+Containment, not observability. VERONICA does not inspect prompts or completions.
+It governs resource consumption -- cost, steps, retries, timeouts, circuit state -- and halts calls that exceed policy.
 
 ```bash
 pip install veronica-core
 ```
-
----
-
-## Release Series
-
-| Version | Milestone | Key additions |
-|---------|-----------|---------------|
-| **2.0.0** | Reserve/Commit/Rollback | Two-phase budget protocol, async budget backends, WebSocket containment, CancellationToken hierarchy, SharedTimeoutPool |
-| **2.1.0** | Declarative Policy | YAML/JSON policy loader with hot-reload, adaptive budget with burn-rate estimation, multi-tenant budget hierarchy, anomaly detection |
-| **2.2.0** | OTel Feedback Loop | Metrics-driven runtime policy, span ingestion (AG2/OpenLLMetry), per-agent sliding-window cost tracking |
-| **2.3.0** | ExecutionGraph Hooks | Dynamic observer/subscriber registration, `NodeEvent` frozen dataclass, copy-on-write lock-free iteration |
-| **2.4.0** | Code Quality | `ExecutionContext.close()`, Decision enum migration, CrewAI context wiring, adapter snapshot reuse |
-| **2.5.0** | HALT Unification | Shared `check_and_halt()` across all 5 framework adapters, metrics emission on ALLOW/HALT/tokens, API docs rewrite |
-| **2.6.0** | Policy Simulation | Replay execution logs against policy configs, OTel span import, per-agent breakdown, NaN-safe accumulation |
-| **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
-| **3.0.0** | God Class Split + AdapterCapabilities + AuditChain | `distributed.py`/`policy_engine.py`/`execution_context.py` split, `AdapterCapabilities` frozen dataclass, `AuditChain` tamper-proof hash chain |
-| **3.0.1** | Full Codebase Security Audit Fix | 68 findings (5 Critical, 17 High) resolved -- TOCTOU, data exfil, HMAC key length, thread safety, protocol compliance |
-| **3.0.2** | Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
-| **3.0.3** | Parallel Audit Fix | NTFS junction sandbox escape, case-insensitive suffix bypass, 27 new sandbox tests |
-| **3.0.4** | Full Security Audit (24 Rounds) | Symlink pre-resolve check, NonceRegistry fail-closed, uv/npm/git policy hardening, HTTPS enforcement, 22 fixes |
-| **3.1.0** | Kernel Stabilization | PEP 562 lazy imports (136 symbols), time.monotonic migration, BudgetEnforcer zero-budget fix, adapter unification |
-| **3.2.0** | Context Decomposition + nogil | `_LimitChecker` / `_ChainEventLog` extraction, atomic `commit_success()`, snapshot-then-emit, nogil audit (9 modules, 2 races fixed) |
-| **3.3.0** | Memory Governance + Policy Audit | `MemoryGovernor` integration, policy metadata auto-wiring to all chain events, emit path unification, 64 adversarial tests |
-
-4840 tests. Zero breaking changes from 2.1.0 through 3.4.1.
-
-See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
 ---
 
@@ -81,7 +59,7 @@ SDK-level injection (no per-call changes):
 from veronica_core.patch import patch_openai
 from veronica_core import veronica_guard
 
-patch_openai()  # patches openai.chat.completions.create
+patch_openai()
 
 @veronica_guard(max_cost_usd=1.0, max_steps=20)
 def run_agent(prompt: str) -> str:
@@ -96,41 +74,22 @@ def run_agent(prompt: str) -> str:
 
 ## Features
 
-- **Budget enforcement** -- hard cost ceiling per chain, HALT before the call is made
+- **Budget enforcement** -- hard cost ceiling per chain, HALT before the call
 - **Step limits** -- bounded recursion depth per entity
-- **Circuit breaker** -- per-entity fail counts, COOLDOWN state, configurable threshold
-- **Distributed circuit breaker** -- Redis-backed cross-process failure isolation with Lua-atomic transitions
-- **Failure classification** -- predicate-based exception filtering (ignore 400s, count 500s)
+- **Circuit breaker** -- per-entity failure counting with COOLDOWN state (local and Redis-backed)
 - **Token budget** -- cumulative output/total token ceiling with DEGRADE zone
 - **Retry containment** -- amplification control with jitter and backoff
-- **Adaptive ceiling** -- auto-adjusts budget based on SafetyEvent history
-- **Time-aware policy** -- weekend/off-hours budget multipliers
 - **Semantic loop detection** -- word-level Jaccard similarity, no ML dependencies
-- **Input compression** -- gates oversized inputs before they reach the model
-- **Execution graph** -- typed node lifecycle, amplification metrics, divergence detection
+- **Execution graph** -- typed node lifecycle, amplification metrics
 - **Degradation ladder** -- 4-tier graceful degradation (model_downgrade, context_trim, rate_limit, halt)
-- **Multi-agent context** -- parent-child ExecutionContext hierarchy with cost propagation
-- **Two-phase budget** -- reserve/commit/rollback protocol prevents double-spending across concurrent calls
-- **Async budget backends** -- `AsyncLocalBudgetBackend` and `AsyncRedisBudgetBackend` with native asyncio coordination
-- **WebSocket containment** -- ASGI middleware enforces step limits on WebSocket connections with `close(1008)`
-- **CancellationToken** -- parent/child propagation with upward cost enforcement
-- **SafetyEvent** -- structured evidence for every non-ALLOW decision (SHA-256 hashed, no raw prompts)
-- **Security containment** -- PolicyEngine, AuditLog, ed25519 policy signing, red-team regression suite
-- **ASGI/WSGI middleware** -- per-request ExecutionContext via ContextVar, 429 on HALT
+- **Two-phase budget** -- reserve/commit/rollback prevents double-spending across concurrent calls
+- **Security containment** -- PolicyEngine, AuditLog, ed25519 signing, red-team regression suite
 - **MCP containment** -- sync and async MCP server adapters with per-tool budget enforcement
-- **Auto cost calculation** -- pricing table for OpenAI, Anthropic, Google models
-- **Declarative policy** -- YAML/JSON policy files with hot-reload watcher, 7 builtin rule types
-- **Adaptive budget** -- burn-rate estimation, time-to-exhaustion escalation, spike detection via Z-score anomaly
-- **Multi-tenant budget** -- hierarchical Organisation/Project/Team/Agent with ancestor-walk policy resolution
-- **OTel feedback loop** -- ingest AG2/OpenLLMetry spans, per-agent metrics, declarative `MetricRule` thresholds
-- **ExecutionGraph hooks** -- dynamic observer/subscriber registration, `NodeEvent` lifecycle events
-- **Policy simulation** -- replay execution logs against policy configs for what-if analysis, OTel span import
-- **Framework adapter metrics** -- `record_decision` and `record_tokens` emission across all 5 framework adapters
-- **Adapter capabilities** -- `AdapterCapabilities` frozen dataclass; each adapter declares its features at runtime via `capabilities()`
-- **Audit chain** -- `AuditChain` tamper-proof SHA-256 hash chain for safety events; append-only, thread-safe, exportable to JSON
-- **God class split** -- `distributed.py`, `security/policy_engine.py`, `containment/execution_context.py` split into focused modules; all original import paths preserved
+- **Declarative policy** -- YAML/JSON policy files with hot-reload, 7 builtin rule types
 
 No required dependencies. Works with any LLM provider.
+
+Full feature list: [docs/FEATURES.md](docs/FEATURES.md)
 
 ---
 
@@ -144,16 +103,12 @@ No required dependencies. Works with any LLM provider.
 | AG2 (AutoGen) | `CircuitBreakerCapability` | [examples/ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) |
 | LlamaIndex | `VeronicaLlamaIndexHandler` | -- |
 | CrewAI | `VeronicaCrewAIListener` | [examples/integrations/crewai/](examples/integrations/crewai/) |
-| LangGraph | `VeronicaLangGraphCallback` / `veronica_node_wrapper` | [examples/langgraph_minimal.py](examples/langgraph_minimal.py) |
+| LangGraph | `VeronicaLangGraphCallback` | [examples/langgraph_minimal.py](examples/langgraph_minimal.py) |
 | ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
-| MCP | `MCPContainmentAdapter` / `AsyncMCPContainmentAdapter` | -- |
-| ROS2 | `SafetyMonitor` / `OperatingMode` | [examples/ros2/](examples/ros2/) |
+| MCP | `MCPContainmentAdapter` | -- |
+| ROS2 | `SafetyMonitor` | [examples/ros2/](examples/ros2/) |
 
-veronica-core integrates with [AG2](https://github.com/ag2ai/ag2) via `AgentCapability`. `CircuitBreakerCapability` wraps AG2 agents with failure detection and automatic recovery.
-
-Working example: [PR #2430](https://github.com/ag2ai/ag2/pull/2430)
-
-Current integration uses monkey-patching as AG2 does not expose before/after hooks on `generate_reply`. See the PR thread for context.
+AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) (merged)
 
 ---
 
@@ -163,14 +118,10 @@ Current integration uses monkey-patching as AG2 does not expose before/after hoo
 |------|-------------|
 | [basic_usage.py](examples/basic_usage.py) | Budget enforcement and step limits |
 | [execution_context_demo.py](examples/execution_context_demo.py) | Step limit, budget, abort, circuit, divergence |
-| [adaptive_demo.py](examples/adaptive_demo.py) | Adaptive ceiling, cooldown, direction lock, anomaly, replay |
+| [adaptive_demo.py](examples/adaptive_demo.py) | Adaptive ceiling, cooldown, anomaly, replay |
 | [ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) | AG2 agent-level circuit breaker |
-| [runaway_loop_demo.py](examples/runaway_loop_demo.py) | Runaway execution containment |
-| [budget_degrade_demo.py](examples/budget_degrade_demo.py) | DEGRADE before HALT |
-| [token_budget_minimal_demo.py](examples/token_budget_minimal_demo.py) | Token ceiling enforcement |
 | [langchain_minimal.py](examples/langchain_minimal.py) | LangChain integration quickstart |
 | [langgraph_minimal.py](examples/langgraph_minimal.py) | LangGraph integration quickstart |
-| [ag2_minimal.py](examples/ag2_minimal.py) | AG2 integration quickstart |
 
 ---
 
@@ -184,90 +135,27 @@ Application / Agent Framework
     LLM Provider (OpenAI, Anthropic, etc.)
 ```
 
-Each call passes through a `ShieldPipeline` of registered hooks. Any hook may emit `DEGRADE` or `HALT`. A `HALT` blocks the call and emits a `SafetyEvent`. The caller receives the decision.
+Each call passes through a `ShieldPipeline` of registered hooks. Any hook may emit `DEGRADE` or `HALT`. A `HALT` blocks the call and emits a `SafetyEvent`. veronica-core enforces that the evaluation occurs and the call does not proceed past `HALT`.
 
-veronica-core does not prescribe how the caller handles `DEGRADE` or `HALT`. It enforces that the evaluation occurs, the decision is recorded, and the call does not proceed past `HALT`.
+veronica-core does not schedule, route, or orchestrate agents. Policy management and fleet coordination belong to [veronica](https://github.com/amabito/veronica).
 
-For detailed architecture, see [docs/architecture.md](docs/architecture.md).
-
----
-
-## Distributed Safety Model
-
-veronica-core enforces execution boundaries for LLM agents across concurrent calls:
-
-- **Budget transactions**: two-phase reserve/commit/rollback protocol prevents cost overrun across concurrent calls
-- **Circuit breaker**: local and distributed (Redis-backed) failure containment with Lua-atomic state transitions
-- **Timeout propagation**: `SharedTimeoutPool` daemon thread handles deadline scheduling for all `ExecutionContext` instances in a process
-- **Redis fallback**: `RedisBudgetBackend` seeds a local fallback on Redis failure and reconciles the delta on reconnection
-- **Reservation expiry**: reservations auto-expire after 60 seconds to prevent budget lock-up from crashed callers
-
-See [docs/DISTRIBUTED_CONSISTENCY.md](docs/DISTRIBUTED_CONSISTENCY.md) for the full consistency model.
+Details: [docs/architecture.md](docs/architecture.md)
 
 ---
 
 ## Security
 
-Policy enforcement is at the process boundary (argv-level). This is not an OS-level sandbox.
+Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 4 rounds of independent security audit (130+ findings fixed).
 
-Includes a 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. All scenarios blocked on every CI run.
-
-Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | [docs/SECURITY_CLAIMS.md](docs/SECURITY_CLAIMS.md)
+Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
-## Ship Readiness -- v3.4.1
+## Stats
 
-4840 tests, 92% coverage, zero required dependencies. Python 3.10+.
+4844 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.4.2. Python 3.10+.
 
-Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
-
----
-
-## Academic Evaluation
-
-veronica-core includes reproducible evaluation of runtime containment across four
-canonical runaway failure modes (retry amplification, recursive tools, multi-agent
-loops, WebSocket runaway):
-
-- [arXiv paper](docs/paper/veronica_runtime_containment_arxiv.md) -- system design, threat model, formal safety guarantees (G1-G6), evaluation
-- [Baseline comparison](benchmarks/bench_baseline_comparison.py) -- no containment vs veronica across four scenarios (avg 78.8% call reduction)
-- [Ablation study](benchmarks/bench_ablation_study.py) -- incremental component contribution (BudgetEnforcer, AgentStepGuard, CircuitBreaker, RetryContainer)
-- [Real incident reproduction](benchmarks/real_incidents/) -- five real-world failure scenarios with before/after comparison
-- [Scale simulation](benchmarks/scale_simulation.py) -- 1 to 1000 concurrent agent chains (~83.1% reduction, ~12.63 us/chain overhead)
-- [Reproducibility guide](docs/reproducibility.md) -- environment, commands, expected output, verification against paper claims
-
-Supporting theory:
-
-- [Amplification model](docs/theory/amplification_model.md) -- formal model of retry and agent amplification with worked examples
-- [Safety guarantees](docs/security/safety_guarantees.md) -- cost bound, termination, retry budget, failure isolation proofs
-
----
-
-## Roadmap
-
-### Done (v2.0 -- v3.0)
-
-- ~~Two-phase budget, async backends, WebSocket containment~~ (v2.0.0)
-- ~~Declarative policy, adaptive budget, multi-tenant hierarchy~~ (v2.1.0)
-- ~~OTel feedback loop, metrics-driven runtime policy~~ (v2.2.0)
-- ~~ExecutionGraph extensibility hooks~~ (v2.3.0)
-- ~~Code quality: `close()`, Decision enum, adapter hardening~~ (v2.3.1 -- v2.4.0)
-- ~~HALT unification, metrics wiring, API docs rewrite~~ (v2.5.0)
-- ~~Policy simulation: replay logs for what-if analysis~~ (v2.6.0)
-- ~~A2A trust boundary: cross-agent identity verification and policy routing~~ (v2.7.0)
-- ~~God class split, `AdapterCapabilities`, `AuditChain`~~ (v3.0.0)
-- ~~Security audit: 4 rounds, 130+ findings fixed~~ (v3.0.1 -- v3.0.4)
-- ~~Kernel stabilization: lazy imports, time.monotonic, zero-budget fix~~ (v3.1.0)
-- ~~ExecutionContext decomposition + nogil readiness~~ (v3.2.0)
-- ~~Memory governance + policy audit wiring~~ (v3.3.0)
-- ~~Memory boundary + trust isolation + adapter tooling~~ (v3.4.0)
-
-### Next
-- Federation: multi-process policy coordination (v4.0)
-
-Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
-
+Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -296,9 +184,11 @@ pytest
 
 ---
 
-## Version History
+## Roadmap
 
-See [CHANGELOG.md](CHANGELOG.md).
+v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.4.2.
+
+Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 
