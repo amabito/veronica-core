@@ -6,6 +6,24 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.4.1] -- 2026-03-08 -- Post-Release Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Trust-router condition** (#73): Simplified trust check from `trust_router or trust_tracker` to `trust_tracker is not None` -- prevents false DENY when only trust_router is provided without tracker.
+- **UNCONSTRAINED_VERSIONS constant**: Replaced magic tuple `("0.0.0", "99.99.99")` with named constant in `adapter_capabilities.py` and `test_adapter_harness.py`.
+- **Adapter scaffold ruff check**: `_ruff_check` helper now uses `shutil.which("ruff")` fallback for standalone ruff binaries.
+- **Test consolidation**: `TestGeneratedContent` consolidated from 6 separate tests to 1 parametrized test (21 tests, was 26).
+- **Ship Readiness CI gate**: Updated version reference for Publish to PyPI quality gate.
+
+### Tests
+
+- `tests/test_memory_boundary_hook.py` -- 5 new adversarial boundary abuse tests (same-specificity ordering, 100-rule performance, wildcard specificity scoring, deny_count non-negative, 10-thread mixed allow/deny). Total: 35 tests.
+
+---
+
 ## [3.4.0] -- 2026-03-08 -- Memory Boundary + Trust Isolation + Adapter Tooling
 
 **Breaking changes:** none
