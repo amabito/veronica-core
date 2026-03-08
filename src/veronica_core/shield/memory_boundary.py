@@ -335,7 +335,12 @@ class MemoryBoundaryHook:
         - PROVISIONAL -> allow read, deny write (intermediate trust -- read-only).
         - TRUSTED    -> allow read and write (full access, fall through to rules).
         - PRIVILEGED -> allow read and write (full access, fall through to rules).
-        - None/unknown -> deny (fail-closed for unknown agents).
+        - None       -> deny (fail-closed when tracker returns None).
+
+        Note: unknown agents (never seen by the tracker) receive the tracker's
+        ``default_trust`` level.  If ``default_trust`` is TRUSTED, unknown agents
+        will be granted access.  Use ``default_trust=UNTRUSTED`` (the default)
+        for fail-closed behavior on unknown agents.
 
         Namespaces not in trusted_namespaces are always permitted here
         (trust-level rules only restrict access to TRUSTED namespaces).
