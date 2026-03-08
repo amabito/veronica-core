@@ -6,6 +6,27 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.4.0] -- 2026-03-08 -- Memory Boundary + Trust Isolation + Adapter Tooling
+
+**Breaking changes:** none
+
+### Added
+
+- **MemoryBoundaryHook** (#71): Dual-protocol hook (PostDispatchHook + MemoryGovernanceHook) for trust-based memory access control. Declarative `MemoryAccessRule` with agent_id/namespace wildcard matching and specificity scoring. Intercepts `memory_read`/`memory_write` calls and enforces per-agent namespace access rules.
+- **Trust-based memory isolation** (#73): Integration with `TrustEscalationTracker` for namespace protection. UNTRUSTED agents denied all access to trusted namespaces, PROVISIONAL agents get read-only access, TRUSTED/PRIVILEGED agents get full access. Fail-closed for unknown trust levels.
+- **Adapter test harness** (#68): Parameterized test suite across all 5 framework adapters (LangChain, LangGraph, AG2, CrewAI, LlamaIndex) with stub injection for optional dependencies. 98 tests covering instantiation, ALLOW/HALT paths, metrics emission, capabilities, concurrency, and error handling.
+- **Adapter version declaration** (#69): `AdapterCapabilities.supported_versions` field with `is_version_compatible()` method for semver-style range checking. All 5 adapters declare real version ranges.
+- **Adapter scaffold generator** (#70): `generate_adapter()` API and `python -m veronica_core.cli new-adapter` CLI for generating adapter + test boilerplate. Validates framework names, prevents overwrites, generates ruff-clean code.
+
+### Tests
+
+- `tests/test_memory_boundary_hook.py` -- 30 tests (rules, wildcards, governor integration, PostDispatchHook, concurrent, adversarial)
+- `tests/test_trust_memory_isolation.py` -- 15 tests (trust levels, transitions, concurrent, adversarial)
+- `tests/test_adapter_harness.py` -- 98 parameterized tests across 5 adapters
+- `tests/test_adapter_scaffold.py` -- 26 tests (generation, content, naming, edge cases)
+
+---
+
 ## [3.3.0] -- 2026-03-08 -- Memory Governance + Policy Audit Wiring
 
 **Breaking changes:** none
