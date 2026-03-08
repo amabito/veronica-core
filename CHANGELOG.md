@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.2.0] -- 2026-03-08 -- Context Decomposition + nogil Readiness
+
+**Breaking changes:** none
+
+### Changed
+
+- **ExecutionContext decomposition**: Extracted `_LimitChecker` (step/cost/retry counters, limit enforcement) and `_ChainEventLog` (SafetyEvent dedup, append, snapshot) into focused internal helpers. Reduces `execution_context.py` from 1536 to ~1430 lines.
+- **Atomic operations**: `commit_success()` atomically increments step count and adds cost in a single lock acquisition. `add_cost_and_get_total()` eliminates TOCTOU in `_propagate_child_cost`.
+- **Snapshot-then-emit**: `check_limits()` snapshots counters under the lock, then emits events outside the lock to avoid holding the lock during potentially slow I/O.
+- **Setter encapsulation**: Compatibility shims (`_cost_usd_accumulated`, `_step_count` setters) now delegate to `set_cost()` / `set_step_count()` instead of accessing internal `_lock` directly.
+- **Lambda elimination**: Pre-built emit callback cached in `__init__` instead of allocating a lambda on every `_check_limits_delegate` call.
+
+### Added
+
+- **nogil (PEP 703) audit**: 9 modules audited for GIL-dependent patterns. 2 real races fixed:
+  - `distributed_circuit_breaker.py`: `state`, `failure_count`, `success_count`, `reset()` now snapshot `_using_fallback` and `client` atomically under `self._lock` before I/O.
+  - `integration.py`: Added `_class_lock` protecting `_atexit_registered` and `_live_instances` in `__init__` and `_save_all_instances`.
+- 7 modules confirmed GIL-safe with explicit lock annotations: `circuit_breaker.py`, `distributed.py`, `execution_graph.py`, `budget.py`, `adaptive_budget.py`, `ingester.py`, `_shared.py`.
+- `tests/test_limit_checker.py` -- 43 tests across 7 classes.
+- `tests/test_chain_event_log.py` -- 27 tests across 6 classes.
+- `tests/test_nogil_safety.py` -- 12 tests across 3 classes (adversarial threading).
+- 4147 tests total, ruff clean.
+
+---
+
 ## [3.1.0] -- 2026-03-08 -- Kernel Stabilization
 
 **Breaking changes:** none
