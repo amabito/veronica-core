@@ -24,6 +24,7 @@ from typing import NamedTuple
 _ALLOWLIST: frozenset[str] = frozenset(
     {
         "src/veronica_core/adapter/exec.py",
+        "src/veronica_core/adapters/exec.py",
         "src/veronica_core/runner/sandbox.py",
         "src/veronica_core/runner/sandbox_windows.py",
         # SandboxProbe intentionally calls urllib.request.urlopen to test

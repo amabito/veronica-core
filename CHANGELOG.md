@@ -6,7 +6,32 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [3.0.4] -- 2026-03-08 -- F.R.I.D.A.Y. Full Security Audit (24 Rounds)
+## [3.1.0] -- 2026-03-08 -- Kernel Stabilization
+
+**Breaking changes:** none
+
+### Changed
+
+- **PEP 562 lazy imports**: Converted 136 eager imports to on-demand loading via `__getattr__` + `_LAZY_IMPORTS` registry. 7 core symbols remain eager (`VeronicaState`, `StateTransition`, `VeronicaStateMachine`, `ExecutionConfig`, `ExecutionContext`, `WrapOptions`). Import time reduced for consumers that use only core types.
+- **time.monotonic migration**: `CircuitBreaker._last_failure_time`, `BudgetWindowHook`, and `ExecutionGraph._init_time` now use `time.monotonic()` for local timers. Wall-clock `time.time()` preserved for cross-process timestamps (Redis, persist, distributed circuit breaker).
+- **adapter/ to adapters/ unification**: `SecureExecutor` and related types moved from `veronica_core.adapter` to `veronica_core.adapters.exec`. Old import paths emit `DeprecationWarning` and re-export transparently.
+
+### Fixed
+
+- **BudgetEnforcer zero-budget**: `limit_usd=0.0` now correctly blocks all calls (was allowing due to missing early return). `utilization` property returns `1.0` instead of `float('inf')` for zero budgets.
+- **persist.py encoding**: Added explicit `encoding="utf-8"` to save/load operations for cross-platform consistency.
+- **middleware.py**: Fixed ruff E402 import ordering violation.
+- **Test deduplication**: Removed duplicate `test_utilization_zero_limit_returns_one` from two test files.
+
+### Added
+
+- `tests/conftest.py` -- shared fixtures (`default_config`, `ctx`, `strict_config`, `strict_ctx`, `wrap_options`) for 157 test files.
+- `tests/test_persist.py` -- 18 tests for deprecated-but-used `VeronicaPersistence` (roundtrip, corrupted JSON, binary garbage, concurrent writes, backup).
+- 3 new `TestBudgetZeroLimit` tests for zero-budget edge cases.
+
+---
+
+## [3.0.4] -- 2026-03-08 -- Full Security Audit (24 Rounds)
 
 ### Fixed
 
@@ -38,7 +63,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [3.0.3] -- 2026-03-06 -- Iron Legion Parallel Audit Fix
+## [3.0.3] -- 2026-03-06 -- Parallel Audit Fix
 
 ### Fixed
 
@@ -55,7 +80,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [3.0.2] -- 2026-03-06 -- F.R.I.D.A.Y. Independent Audit Fix
+## [3.0.2] -- 2026-03-06 -- Independent Audit Fix
 
 ### Fixed
 
@@ -308,7 +333,7 @@ none
   - `PolicyRegistry` integration: `metric_rule` builtin factory with explicit null/empty field rejection.
   - Module-level default ingester via `set_default_ingester()` / `get_default_ingester()`.
 
-### Hardened (5 audit rounds -- R1-R4 adversarial + R5 F.R.I.D.A.Y.)
+### Hardened (5 audit rounds -- R1-R4 adversarial + R5 independent)
 
 - NaN/inf threshold rejection in `MetricRule.__post_init__` (silent bypass / DoS prevention).
 - Agent cardinality cap (`max_agents=10,000`) to prevent unbounded state growth.

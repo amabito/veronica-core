@@ -51,7 +51,7 @@ class VeronicaPersistence:
                 dir=str(self.path.parent), suffix=".tmp"
             )
             try:
-                with os.fdopen(fd, "w") as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 Path(tmp_name).replace(self.path)
             except BaseException:
@@ -73,7 +73,7 @@ class VeronicaPersistence:
             return None
 
         try:
-            with open(self.path, "r") as f:
+            with open(self.path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             state = VeronicaStateMachine.from_dict(data)

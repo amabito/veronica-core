@@ -272,11 +272,6 @@ class TestBudgetEnforcerValidationBoundaries:
         decision = b.check(ctx)
         assert not decision.allowed
 
-    def test_utilization_zero_limit_returns_inf(self) -> None:
-        """Zero limit must return inf utilization (not ZeroDivisionError)."""
-        b = BudgetEnforcer(limit_usd=0.0)
-        assert b.utilization == float("inf")
-
     def test_remaining_usd_after_exceed(self) -> None:
         """remaining_usd must return 0.0 after budget exceeded."""
         b = BudgetEnforcer(limit_usd=1.0)

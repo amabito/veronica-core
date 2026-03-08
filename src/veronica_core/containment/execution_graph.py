@@ -175,7 +175,8 @@ class ExecutionGraph:
         self._max_depth: int = 0
 
         # Time-based divergence heuristics state.
-        self._init_time: float = time.time()
+        # monotonic: used only for elapsed-time rate calculations (no serialization).
+        self._init_time: float = time.monotonic()
         self._cost_rate_threshold_usd_per_sec: float = cost_rate_threshold_usd_per_sec
         self._token_velocity_threshold: float = token_velocity_threshold
         self._total_tokens_out: int = 0

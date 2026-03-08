@@ -67,7 +67,7 @@ class TestAdversarialS1HaltTimestamp:
         def fake_time() -> float:
             return 0.0  # all calls at t=0
 
-        monkeypatch.setattr(time, "time", fake_time)
+        monkeypatch.setattr(time, "monotonic", fake_time)
 
         # degrade_threshold=1.0: degrade_at = 1.0 * max_calls = 2.
         # HALT check fires first (count >= max_calls), so no DEGRADE zone confusion.
@@ -91,7 +91,7 @@ class TestAdversarialS1HaltTimestamp:
         - t=120.001: cutoff=60.001; all ts=0.0 pruned (0.0 < 60.001) -> ALLOW
         """
         timestamps = iter([0.0, 0.0, 0.0, 120.001])
-        monkeypatch.setattr(time, "time", lambda: next(timestamps))
+        monkeypatch.setattr(time, "monotonic", lambda: next(timestamps))
 
         hook = BudgetWindowHook(max_calls=2, window_seconds=60.0, degrade_threshold=1.0)
 
@@ -112,7 +112,7 @@ class TestAdversarialS1HaltTimestamp:
         - t=62.0: cutoff=2.0; ts=0.0 and ts=1.0 pruned; ts=2.0 retained -> HALT
         """
         timestamps = iter([0.0, 1.0, 2.0, 62.0])
-        monkeypatch.setattr(time, "time", lambda: next(timestamps))
+        monkeypatch.setattr(time, "monotonic", lambda: next(timestamps))
 
         # degrade_threshold=1.0: degrade_at=1.0*1=1; HALT check fires first.
         hook = BudgetWindowHook(max_calls=1, window_seconds=60.0, degrade_threshold=1.0)

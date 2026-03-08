@@ -12,6 +12,7 @@ Covers code paths NOT already tested in test_runtime_policy.py:
 
 from __future__ import annotations
 
+import math
 import threading
 
 import pytest
@@ -117,10 +118,6 @@ class TestBudgetExceededGate:
 
 class TestBudgetUtilizationEdgeCases:
     """utilization property edge cases."""
-
-    def test_utilization_zero_limit_returns_inf(self) -> None:
-        b = BudgetEnforcer(limit_usd=0.0)
-        assert b.utilization == float("inf")
 
     def test_utilization_exact_limit(self) -> None:
         b = BudgetEnforcer(limit_usd=10.0)
@@ -248,3 +245,35 @@ class TestBudgetEnforcerConstructorValidation:
     def test_limit_usd_zero_is_valid(self) -> None:
         b = BudgetEnforcer(limit_usd=0.0)
         assert b.limit_usd == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Zero-budget adversarial tests
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetZeroLimit:
+    """Adversarial tests for limit_usd=0.0 edge case.
+
+    A zero budget must block ALL calls -- even zero-cost ones.
+    """
+
+    def test_check_zero_cost_denied_on_zero_budget(self) -> None:
+        """Zero-cost call on zero-budget must be DENIED."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=0.0))
+        assert not decision.allowed
+        assert decision.policy_type == "budget"
+        assert "zero" in decision.reason.lower()
+
+    def test_check_nonzero_cost_denied_on_zero_budget(self) -> None:
+        """Non-zero cost call on zero-budget must be DENIED."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=0.001))
+        assert not decision.allowed
+
+    def test_utilization_zero_budget_is_one(self) -> None:
+        """utilization for zero-budget must be 1.0 (100%), not inf."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        assert b.utilization == 1.0
+        assert math.isfinite(b.utilization)

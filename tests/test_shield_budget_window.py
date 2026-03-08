@@ -55,7 +55,7 @@ class TestBudgetWindowExpiry:
 
     def test_window_expiry_allows_new_calls(self, monkeypatch):
         times = iter([0.0, 0.5, 1.0, 61.5, 62.0])
-        monkeypatch.setattr(time, "time", lambda: next(times))
+        monkeypatch.setattr(time, "monotonic", lambda: next(times))
 
         hook = BudgetWindowHook(max_calls=2, window_seconds=60.0)
         assert hook.before_llm_call(CTX) is None  # t=0.0, count=1
@@ -138,7 +138,7 @@ class TestBudgetWindowExpiryBoundary:
         # At t=60.001: cutoff=0.001, ts=0.0 pruned, ts=60.0 retained -> still HALT.
         # At t=120.001: cutoff=60.001, ts=60.0 < 60.001 -> pruned, fresh window -> None.
         times = iter([0.0, 60.0, 60.001, 120.001])
-        monkeypatch.setattr(time, "time", lambda: next(times))
+        monkeypatch.setattr(time, "monotonic", lambda: next(times))
 
         hook = BudgetWindowHook(max_calls=1, window_seconds=60.0)
         assert hook.before_llm_call(CTX) is None  # t=0.0, reserved slot

@@ -229,7 +229,7 @@ class CircuitBreaker:
 
         with self._lock:
             self._failure_count += 1
-            self._last_failure_time = time.time()
+            self._last_failure_time = time.monotonic()
             self._half_open_in_flight = 0
 
             if self._state == CircuitState.HALF_OPEN:
@@ -251,7 +251,7 @@ class CircuitBreaker:
         if (
             self._state == CircuitState.OPEN
             and self._last_failure_time is not None
-            and time.time() - self._last_failure_time >= self.recovery_timeout
+            and time.monotonic() - self._last_failure_time >= self.recovery_timeout
         ):
             self._state = CircuitState.HALF_OPEN
             logger.info("[VERONICA_CIRCUIT] Circuit half-open, allowing test request")

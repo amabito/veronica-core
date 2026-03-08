@@ -524,7 +524,12 @@ class DistributedCircuitBreaker:
     def _resolve_state_str(
         self, state_str: str, last_failure_time: Optional[float]
     ) -> CircuitState:
-        """Parse state string, applying OPEN->HALF_OPEN timeout if appropriate."""
+        """Parse state string, applying OPEN->HALF_OPEN timeout if appropriate.
+
+        Note: Uses ``time.time()`` (wall-clock) because ``last_failure_time``
+        is stored in Redis and shared across processes.  ``time.monotonic()``
+        is not comparable cross-process.
+        """
         if state_str == "OPEN" and last_failure_time is not None:
             if time.time() - last_failure_time >= self._recovery_timeout:
                 state_str = "HALF_OPEN"

@@ -58,7 +58,7 @@ class BudgetWindowHook:
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
         """Return DEGRADE or HALT when approaching or at the call limit."""
-        now = time.time()
+        now = time.monotonic()
         cutoff = now - self._window_seconds
 
         with self._lock:

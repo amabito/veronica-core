@@ -112,13 +112,16 @@ class BudgetEnforcer:
     def utilization(self) -> float:
         """Budget utilization as a fraction (0.0 to 1.0+).
 
-        L1: Returns ``float('inf')`` when ``limit_usd <= 0`` (zero or negative
-        limit means any spending is infinite utilization). Callers that perform
-        arithmetic on this value should guard with ``math.isfinite(utilization)``
-        before using the result in comparisons or displays.
+        Returns 1.0 (100% utilized) when ``limit_usd == 0`` -- a zero budget
+        is immediately exhausted by definition, not infinitely exceeded.
+        Returns ``float('inf')`` when ``limit_usd < 0`` (negative limits are
+        invalid but kept for backward-compat; callers should guard with
+        ``math.isfinite(utilization)``).
         """
         with self._lock:
-            if self.limit_usd <= 0:
+            if self.limit_usd == 0.0:
+                return 1.0  # 100% utilized: zero-budget is always exhausted
+            if self.limit_usd < 0:
                 return float("inf")
             return self._spent_usd / self.limit_usd
 
@@ -149,6 +152,14 @@ class BudgetEnforcer:
             PolicyDecision allowing or denying the operation
         """
         with self._lock:
+            # Zero-budget: deny all calls regardless of cost_estimate.
+            # A limit of 0.0 means no spending is permitted at all.
+            if self.limit_usd == 0.0:
+                return PolicyDecision(
+                    allowed=False,
+                    policy_type=self.policy_type,
+                    reason="Budget is zero: no spending permitted",
+                )
             if self._exceeded:
                 return PolicyDecision(
                     allowed=False,

@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4039%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4043%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -30,11 +30,12 @@ pip install veronica-core
 | **2.7.0** | A2A Trust Boundary | Cross-agent trust classification (4 tiers), policy routing by trust level, automatic promotion/demotion tracking |
 | **3.0.0** | God Class Split + AdapterCapabilities + AuditChain | `distributed.py`/`policy_engine.py`/`execution_context.py` split, `AdapterCapabilities` frozen dataclass, `AuditChain` tamper-proof hash chain |
 | **3.0.1** | Full Codebase Security Audit Fix | 68 findings (5 Critical, 17 High) resolved -- TOCTOU, data exfil, HMAC key length, thread safety, protocol compliance |
-| **3.0.2** | F.R.I.D.A.Y. Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
-| **3.0.3** | Iron Legion Parallel Audit Fix | NTFS junction sandbox escape, case-insensitive suffix bypass, 27 new sandbox tests |
-| **3.0.4** | F.R.I.D.A.Y. Full Security Audit (24 Rounds) | Symlink pre-resolve check, NonceRegistry fail-closed, uv/npm/git policy hardening, HTTPS enforcement, 22 fixes |
+| **3.0.2** | Independent Audit Fix | URL-decode exfil bypass, POSIX sandbox secrets, async MCP await, adaptive budget bounds, thread safety hardening |
+| **3.0.3** | Parallel Audit Fix | NTFS junction sandbox escape, case-insensitive suffix bypass, 27 new sandbox tests |
+| **3.0.4** | Full Security Audit (24 Rounds) | Symlink pre-resolve check, NonceRegistry fail-closed, uv/npm/git policy hardening, HTTPS enforcement, 22 fixes |
+| **3.1.0** | Kernel Stabilization | PEP 562 lazy imports (136 symbols), time.monotonic migration, BudgetEnforcer zero-budget fix, adapter unification |
 
-4039 tests. Zero breaking changes from 2.1.0 through 3.0.4.
+4043 tests. Zero breaking changes from 2.1.0 through 3.1.0.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details per version.
 
@@ -213,9 +214,9 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ---
 
-## Ship Readiness -- v3.0.4
+## Ship Readiness -- v3.1.0
 
-4045 tests, 92% coverage, zero required dependencies. Python 3.10+.
+4043 tests, 92% coverage, zero required dependencies. Python 3.10+.
 
 Adaptive budget control: [docs/adaptive-control.md](docs/adaptive-control.md)
 
@@ -255,10 +256,9 @@ Supporting theory:
 - ~~A2A trust boundary: cross-agent identity verification and policy routing~~ (v2.7.0)
 - ~~God class split, `AdapterCapabilities`, `AuditChain`~~ (v3.0.0)
 - ~~Security audit: 4 rounds, 130+ findings fixed~~ (v3.0.1 -- v3.0.4)
+- ~~Kernel stabilization: lazy imports, time.monotonic, zero-budget fix~~ (v3.1.0)
 
 ### Next
-
-- Kernel stabilization: lazy imports, API surface cleanup, `time.monotonic()` migration (v3.1)
 - ExecutionContext decomposition: split 1500-line god class into focused trackers (v3.2)
 - nogil Python readiness: audit GIL-dependent patterns for PEP 703 (v3.3)
 - Federation: multi-process policy coordination (v4.0)

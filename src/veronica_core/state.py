@@ -92,7 +92,10 @@ class VeronicaStateMachine:
     )
 
     def is_in_cooldown(self, pair: str) -> bool:
-        """Check if pair is in cooldown."""
+        """Check if pair is in cooldown.
+
+        Uses wall-clock ``time.time()`` because cooldown expiry is persisted/serialized.
+        """
         now = time.time()
         with self._lock:
             if pair in self.cooldowns:

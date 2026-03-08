@@ -32,16 +32,14 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from typing import Any, Callable, Iterable
-
-logger = logging.getLogger(__name__)
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from veronica_core.containment.execution_context import (
     ExecutionConfig,
     ExecutionContext,
 )
 
-from typing import TYPE_CHECKING
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from veronica_core.shield.pipeline import ShieldPipeline
