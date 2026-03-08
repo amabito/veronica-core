@@ -34,6 +34,26 @@ def _parse_version(version: str) -> tuple[int, ...]:
     return tuple(parts) if parts else (0,)
 
 
+def _compare_versions(a: tuple[int, ...], b: tuple[int, ...]) -> int:
+    """Compare two parsed version tuples with implicit zero-padding.
+
+    Returns negative if a < b, zero if a == b, positive if a > b.
+
+    Without padding, Python tuple comparison treats (0, 4) < (0, 4, 0)
+    because the shorter tuple is exhausted first and is considered "less".
+    This function pads both tuples to the same length with trailing zeros
+    so that "0.4" and "0.4.0" compare as equal.
+    """
+    max_len = max(len(a), len(b))
+    a_padded = a + (0,) * (max_len - len(a))
+    b_padded = b + (0,) * (max_len - len(b))
+    if a_padded < b_padded:
+        return -1
+    if a_padded > b_padded:
+        return 1
+    return 0
+
+
 @dataclass(frozen=True)
 class AdapterCapabilities:
     """Static capability descriptor for a framework adapter.
@@ -88,4 +108,7 @@ class AdapterCapabilities:
         """
         min_ver, max_ver = self.supported_versions
         parsed = _parse_version(version)
-        return _parse_version(min_ver) <= parsed <= _parse_version(max_ver)
+        return (
+            _compare_versions(_parse_version(min_ver), parsed) <= 0
+            and _compare_versions(parsed, _parse_version(max_ver)) <= 0
+        )

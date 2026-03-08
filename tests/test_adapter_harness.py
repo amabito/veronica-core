@@ -698,3 +698,14 @@ class TestIsVersionCompatible:
         caps = self._caps("0.0.0", "99.99.99")
         # "1.alpha.0" -> (1, 0, 0) which is within [0.0.0, 99.99.99]
         assert caps.is_version_compatible("1.alpha.0")
+
+    def test_two_segment_version_matches_three_segment_min(self) -> None:
+        """'0.4' must be treated as '0.4.0' and match min='0.4.0'."""
+        assert self._caps("0.4.0", "0.6.99").is_version_compatible("0.4")
+
+    def test_three_segment_version_matches_two_segment_range(self) -> None:
+        """'1.0.0' must match range ('1.0', '2.0')."""
+        caps = self._caps("1.0", "2.0")
+        assert caps.is_version_compatible("1.0.0")
+        assert caps.is_version_compatible("2.0.0")
+        assert not caps.is_version_compatible("2.0.1")
