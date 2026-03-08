@@ -362,10 +362,87 @@ class TestAdversarialInputs:
     def test_after_op_with_error_does_not_raise(self) -> None:
         hook = MemoryBoundaryHook()
         op = _read_op()
-        from veronica_core.memory.types import GovernanceVerdict, MemoryGovernanceDecision
+        from veronica_core.memory.types import MemoryGovernanceDecision
 
         decision = MemoryGovernanceDecision(
             verdict=GovernanceVerdict.ALLOW, policy_id="test", operation=op
         )
         # after_op must never raise.
         hook.after_op(op, decision, result=None, error=RuntimeError("oops"))
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: boundary abuse and resource exhaustion
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialBoundaryAbuse:
+    def test_same_specificity_first_rule_wins(self) -> None:
+        """When two rules have equal specificity, the first match in list order wins."""
+        rule_deny = MemoryAccessRule(agent_id="agent-x", namespace="ns-y", allow_write=False)
+        rule_allow = MemoryAccessRule(agent_id="agent-x", namespace="ns-y", allow_write=True)
+        config = MemoryBoundaryConfig(rules=[rule_deny, rule_allow])
+        hook = MemoryBoundaryHook(config=config)
+        # Both rules have max specificity (3) and match. First match (deny) should win
+        # because _evaluate_rules picks the highest score, and on tie, keeps the first.
+        decision = hook.before_op(_write_op(agent_id="agent-x", namespace="ns-y"), None)
+        assert decision.verdict is GovernanceVerdict.DENY
+
+    def test_many_rules_performance(self) -> None:
+        """100 rules must not crash or produce incorrect results."""
+        rules = [
+            MemoryAccessRule(agent_id=f"agent-{i}", namespace="ns", allow_write=False)
+            for i in range(100)
+        ]
+        # Add one wildcard allow at the end.
+        rules.append(MemoryAccessRule(agent_id="*", namespace="ns", allow_write=True))
+        config = MemoryBoundaryConfig(rules=rules)
+        hook = MemoryBoundaryHook(config=config)
+
+        # Exact match for agent-50 should deny (specificity 3 > wildcard specificity 1).
+        dec_exact = hook.before_op(_write_op(agent_id="agent-50", namespace="ns"), None)
+        assert dec_exact.verdict is GovernanceVerdict.DENY
+
+        # Unknown agent should match wildcard allow.
+        dec_wild = hook.before_op(_write_op(agent_id="outsider", namespace="ns"), None)
+        assert dec_wild.verdict is GovernanceVerdict.ALLOW
+
+    def test_wildcard_agent_exact_ns_vs_exact_agent_wildcard_ns(self) -> None:
+        """Exact namespace (specificity +1) vs exact agent (specificity +2): agent wins."""
+        rule_ns = MemoryAccessRule(agent_id="*", namespace="vault", allow_write=False)
+        rule_agent = MemoryAccessRule(agent_id="admin", namespace="*", allow_write=True)
+        config = MemoryBoundaryConfig(rules=[rule_ns, rule_agent])
+        hook = MemoryBoundaryHook(config=config)
+
+        # admin + vault: rule_agent has specificity 2, rule_ns has specificity 1.
+        # Agent-specific rule wins -> allow.
+        dec = hook.before_op(_write_op(agent_id="admin", namespace="vault"), None)
+        assert dec.verdict is GovernanceVerdict.ALLOW
+
+    def test_deny_count_never_negative(self) -> None:
+        """deny_count must never go below 0 even after many allows."""
+        hook = MemoryBoundaryHook()
+        for _ in range(20):
+            hook.before_op(_read_op(), None)
+        assert hook.deny_count == 0
+
+    def test_concurrent_mixed_allow_deny(self) -> None:
+        """10 threads: 5 denied + 5 allowed. deny_count must be exactly 5."""
+        deny_rule = MemoryAccessRule(agent_id="deny-agent", namespace="ns", allow_read=False)
+        config = MemoryBoundaryConfig(rules=[deny_rule], default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
+
+        def denied_task() -> None:
+            hook.before_op(_read_op(agent_id="deny-agent", namespace="ns"), None)
+
+        def allowed_task() -> None:
+            hook.before_op(_read_op(agent_id="ok-agent", namespace="ns"), None)
+
+        threads = [threading.Thread(target=denied_task) for _ in range(5)]
+        threads += [threading.Thread(target=allowed_task) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert hook.deny_count == 5
