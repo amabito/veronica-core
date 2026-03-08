@@ -305,6 +305,20 @@ class ExecutionContext:
     def _events(self) -> list:
         return self._event_log.snapshot()
 
+    def _increment_step_returning(self) -> int:
+        """Atomically increment step count and return new value.
+
+        Used by adapter proxies to avoid read-modify-write through property shims.
+        """
+        return self._limits.increment_step_returning()
+
+    def _add_cost_returning(self, amount: float) -> float:
+        """Atomically add cost and return new accumulated total.
+
+        Used by adapter proxies to avoid read-modify-write through property shims.
+        """
+        return self._limits.add_cost_returning(amount)
+
     def close(self) -> None:
         """Release resources held by this context.
 

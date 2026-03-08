@@ -237,6 +237,9 @@ class _BudgetProxy:
                     return False
                 self._add_fn(amount_usd)
                 return float(self._get_fn()) <= self._limit_usd
+            if hasattr(self._ctx, "_add_cost_returning"):
+                new_total = self._ctx._add_cost_returning(amount_usd)
+                return new_total <= self._limit_usd
             if self._lock is not None:
                 with self._lock:
                     self._ctx._cost_usd_accumulated += amount_usd
@@ -273,6 +276,9 @@ class _StepGuardProxy:
     def step(self, result: Any = None) -> bool:
         """Increment step counter; return True if still within limit."""
         try:
+            if hasattr(self._ctx, "_increment_step_returning"):
+                new_count = self._ctx._increment_step_returning()
+                return new_count < self._max_steps
             if self._lock is not None:
                 with self._lock:
                     self._ctx._step_count = getattr(self._ctx, "_step_count", 0) + 1

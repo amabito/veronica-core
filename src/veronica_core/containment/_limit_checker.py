@@ -114,6 +114,18 @@ class _LimitChecker:
             self._step_count += 1
             self._cost_usd_accumulated += cost
 
+    def increment_step_returning(self) -> int:
+        """Increment step counter by 1 and return the new value atomically."""
+        with self._lock:
+            self._step_count += 1
+            return self._step_count
+
+    def add_cost_returning(self, amount: float) -> float:
+        """Add *amount* and return the new accumulated cost atomically."""
+        with self._lock:
+            self._cost_usd_accumulated += amount
+            return self._cost_usd_accumulated
+
     def increment_retries(self) -> None:
         """Increment retry counter by 1 (called when RETRY decision is taken)."""
         with self._lock:

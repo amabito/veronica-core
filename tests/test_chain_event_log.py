@@ -361,3 +361,390 @@ class TestThreadSafety:
             t.join()
 
         assert errors == [], f"Concurrent read/write raised: {errors[0]}"
+
+
+# ---------------------------------------------------------------------------
+# Dedup dimension coverage (v3.2.0)
+# ---------------------------------------------------------------------------
+
+
+class TestDedupDimensions:
+    """Verify dedup distinguishes all 5 key dimensions independently."""
+
+    def test_same_event_different_decision_stored_separately(self) -> None:
+        log = _ChainEventLog()
+        e1 = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r",
+            hook="h", request_id="req",
+        )
+        e2 = SafetyEvent(
+            event_type="T", decision=Decision.ALLOW, reason="r",
+            hook="h", request_id="req",
+        )
+        log.append(e1)
+        log.append(e2)
+        assert len(log) == 2
+
+    def test_same_event_different_hook_stored_separately(self) -> None:
+        log = _ChainEventLog()
+        e1 = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r",
+            hook="hook_a", request_id="req",
+        )
+        e2 = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r",
+            hook="hook_b", request_id="req",
+        )
+        log.append(e1)
+        log.append(e2)
+        assert len(log) == 2
+
+    def test_none_request_id_deduped_correctly(self) -> None:
+        log = _ChainEventLog()
+        e1 = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r",
+            hook="h", request_id=None,
+        )
+        e2 = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r",
+            hook="h", request_id=None,
+        )
+        log.append(e1)
+        log.append(e2)
+        assert len(log) == 1  # deduped
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: Flooding / Resource Exhaustion
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialChainEventLogFlooding:
+    """Attacker mindset: flood the log with events to exhaust memory or bypass cap."""
+
+    def test_cap_plus_one_unique_events_hard_cap_enforced(self) -> None:
+        """Append _MAX_CHAIN_EVENTS+1 unique events -- cap must hold exactly."""
+        log = _ChainEventLog()
+        for i in range(_MAX_CHAIN_EVENTS + 1):
+            log.append(_make_event(event_type=f"FLOOD_{i}", request_id=str(i)))
+        # Cap is a hard ceiling -- never exceed
+        assert len(log) == _MAX_CHAIN_EVENTS
+        # Dedup key set must not grow beyond cap either
+        snap = log.snapshot()
+        assert len(snap) == _MAX_CHAIN_EVENTS
+
+    def test_ten_thousand_duplicate_events_stored_once(self) -> None:
+        """10,000 identical events -- dedup prevents storage bloat."""
+        log = _ChainEventLog()
+        ev = _make_event(event_type="DUP", request_id="dup-req")
+        for _ in range(10_000):
+            log.append(ev)
+        # Only 1 stored despite 10,000 calls
+        assert len(log) == 1
+        snap = log.snapshot()
+        assert len(snap) == 1
+
+    def test_emit_chain_event_with_one_mb_reason_no_crash(self) -> None:
+        """emit_chain_event with a 1 MB reason string must not raise."""
+        log = _ChainEventLog()
+        big_reason = "x" * (1024 * 1024)  # 1 MB
+        log.emit_chain_event("timeout", big_reason, "req-big")
+        snap = log.snapshot()
+        assert len(snap) == 1
+        # Stored reason must be exactly the big string (no silent truncation)
+        assert snap[0].reason == big_reason
+
+    def test_append_batch_5000_events_cap_enforced(self) -> None:
+        """append_batch with 5,000 unique events -- cap still enforced after batch."""
+        log = _ChainEventLog()
+        batch = [
+            _make_event(event_type=f"BATCH_{i}", request_id=str(i))
+            for i in range(5_000)
+        ]
+        log.append_batch(batch)
+        # Must never exceed _MAX_CHAIN_EVENTS
+        assert len(log) == _MAX_CHAIN_EVENTS
+        snap = log.snapshot()
+        assert len(snap) == _MAX_CHAIN_EVENTS
+
+    def test_append_batch_mixed_duplicates_and_uniques_cap_respected(self) -> None:
+        """Batch containing both duplicates and uniques -- cap is the ceiling."""
+        log = _ChainEventLog()
+        # Fill log to cap first
+        for i in range(_MAX_CHAIN_EVENTS):
+            log.append(_make_event(event_type=f"PRE_{i}", request_id=str(i)))
+        assert len(log) == _MAX_CHAIN_EVENTS
+        # Now batch-append 100 more (all new uniques) -- must all be dropped
+        extra = [
+            _make_event(event_type=f"EXTRA_{i}", request_id=f"extra-{i}")
+            for i in range(100)
+        ]
+        log.append_batch(extra)
+        assert len(log) == _MAX_CHAIN_EVENTS
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: TOCTOU / Race Conditions
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialChainEventLogRace:
+    """Attacker mindset: concurrent access must preserve cap, dedup, and snapshot integrity."""
+
+    def test_10_threads_100_unique_events_each_total_at_most_cap(self) -> None:
+        """10 threads x 100 unique events = 1,000 total -- cap never exceeded."""
+        log = _ChainEventLog()
+        n_threads = 10
+        events_per_thread = 100
+        barrier = threading.Barrier(n_threads)
+
+        def worker(tid: int) -> None:
+            barrier.wait()
+            for i in range(events_per_thread):
+                log.append(
+                    _make_event(
+                        event_type=f"T{tid}_E{i}",
+                        request_id=f"t{tid}-{i}",
+                    )
+                )
+
+        threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        total_attempted = n_threads * events_per_thread
+        assert len(log) <= _MAX_CHAIN_EVENTS
+        # When total_attempted <= cap, all must be stored (no dedup here)
+        assert len(log) == min(total_attempted, _MAX_CHAIN_EVENTS)
+
+    def test_5_writer_5_snapshot_threads_no_partial_state(self) -> None:
+        """5 writers + 5 readers -- snapshot must always return a consistent list."""
+        log = _ChainEventLog()
+        errors: list[Exception] = []
+        stop_flag = threading.Event()
+        barrier = threading.Barrier(10)
+
+        def writer(tid: int) -> None:
+            barrier.wait()
+            for i in range(200):
+                if stop_flag.is_set():
+                    break
+                try:
+                    log.append(
+                        _make_event(
+                            event_type=f"W{tid}_{i}",
+                            request_id=f"w{tid}-{i}",
+                        )
+                    )
+                except Exception as exc:
+                    errors.append(exc)
+                    return
+
+        def reader() -> None:
+            barrier.wait()
+            for _ in range(100):
+                try:
+                    snap = log.snapshot()
+                    # Snapshot must always be a proper list -- no RuntimeError from mutation
+                    assert isinstance(snap, list)
+                    for ev in snap:
+                        # Each element must be a SafetyEvent (no None/corrupted entries)
+                        assert ev.event_type is not None
+                except Exception as exc:
+                    errors.append(exc)
+                    return
+
+        writers = [threading.Thread(target=writer, args=(tid,)) for tid in range(5)]
+        readers = [threading.Thread(target=reader) for _ in range(5)]
+        all_threads = writers + readers
+        for t in all_threads:
+            t.start()
+        for t in readers:
+            t.join()
+        stop_flag.set()
+        for t in writers:
+            t.join()
+
+        assert errors == [], f"Race condition raised: {errors[0]}"
+
+    def test_emit_same_stop_reason_10_threads_dedup_under_concurrency(self) -> None:
+        """10 threads emitting the same (stop_reason, detail, request_id) -- stored once."""
+        log = _ChainEventLog()
+        barrier = threading.Barrier(10)
+
+        def worker() -> None:
+            barrier.wait()
+            for _ in range(50):
+                log.emit_chain_event("timeout", "same-detail", "same-req-id")
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads emit the identical event -- dedup must reduce to exactly 1
+        assert len(log) == 1
+
+    def test_append_and_snapshot_interleaved_no_runtime_error(self) -> None:
+        """Rapid interleaving of append + snapshot must never raise RuntimeError."""
+        log = _ChainEventLog()
+        errors: list[Exception] = []
+        stop_flag = threading.Event()
+
+        def appender() -> None:
+            i = 0
+            while not stop_flag.is_set():
+                try:
+                    log.append(_make_event(event_type=f"A{i}", request_id=str(i)))
+                    i += 1
+                except Exception as exc:
+                    errors.append(exc)
+                    return
+
+        def snapshotter() -> None:
+            for _ in range(500):
+                try:
+                    result = log.snapshot()
+                    assert isinstance(result, list)
+                except RuntimeError as exc:
+                    # RuntimeError from "dictionary changed size during iteration"
+                    # or "list changed size during iteration" -- must never happen
+                    errors.append(exc)
+                    return
+                except Exception as exc:
+                    errors.append(exc)
+                    return
+
+        appender_thread = threading.Thread(target=appender)
+        snapshotter_thread = threading.Thread(target=snapshotter)
+        appender_thread.start()
+        snapshotter_thread.start()
+        snapshotter_thread.join()
+        stop_flag.set()
+        appender_thread.join()
+
+        assert errors == [], f"Interleaved append/snapshot raised: {errors[0]}"
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: Corrupted Input
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialChainEventLogCorrupted:
+    """Attacker mindset: malformed / edge-case inputs must not crash or bypass dedup."""
+
+    def test_safety_event_with_none_request_id_dedup_works(self) -> None:
+        """SafetyEvent with request_id=None -- dedup key handles None correctly."""
+        log = _ChainEventLog()
+        e1 = SafetyEvent(
+            event_type="NULL_REQ",
+            decision=Decision.HALT,
+            reason="test",
+            hook="TestHook",
+            request_id=None,
+        )
+        e2 = SafetyEvent(
+            event_type="NULL_REQ",
+            decision=Decision.HALT,
+            reason="test",
+            hook="TestHook",
+            request_id=None,
+        )
+        log.append(e1)
+        log.append(e2)
+        # Both share the same 5-tuple (including None) -- must dedup to 1
+        assert len(log) == 1
+
+    def test_safety_event_with_none_request_id_differs_from_non_none(self) -> None:
+        """None request_id and non-None request_id are distinct dedup keys."""
+        log = _ChainEventLog()
+        e_none = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r", hook="h", request_id=None
+        )
+        e_str = SafetyEvent(
+            event_type="T", decision=Decision.HALT, reason="r", hook="h", request_id="req-1"
+        )
+        log.append(e_none)
+        log.append(e_str)
+        assert len(log) == 2
+
+    def test_safety_event_with_empty_strings_stored_correctly(self) -> None:
+        """SafetyEvent with all empty string fields -- stored without error."""
+        log = _ChainEventLog()
+        ev = SafetyEvent(
+            event_type="",
+            decision=Decision.HALT,
+            reason="",
+            hook="",
+            request_id="",
+        )
+        log.append(ev)
+        assert len(log) == 1
+        snap = log.snapshot()
+        assert snap[0].event_type == ""
+        assert snap[0].reason == ""
+        assert snap[0].hook == ""
+        assert snap[0].request_id == ""
+
+    def test_empty_string_events_deduplicate_correctly(self) -> None:
+        """Two identical empty-string events -- dedup must prevent double storage."""
+        log = _ChainEventLog()
+        for _ in range(5):
+            log.append(
+                SafetyEvent(
+                    event_type="", decision=Decision.HALT, reason="", hook="", request_id=""
+                )
+            )
+        assert len(log) == 1
+
+    def test_emit_chain_event_unknown_stop_reason_falls_back_to_upper(self) -> None:
+        """Unknown stop_reason not in _STOP_REASON_EVENT_TYPE -- fallback .upper() applied."""
+        log = _ChainEventLog()
+        log.emit_chain_event("some_unknown_reason", "detail", "req-1")
+        snap = log.snapshot()
+        assert len(snap) == 1
+        # Fallback: stop_reason.upper() -- NOT stop_reason as-is
+        assert snap[0].event_type == "SOME_UNKNOWN_REASON"
+
+    def test_emit_chain_event_lowercase_unknown_reason_uppercased(self) -> None:
+        """emit_chain_event with a multi-word unknown reason -- fully uppercased."""
+        log = _ChainEventLog()
+        log.emit_chain_event("my_custom_stop_reason", "x", "req-x")
+        snap = log.snapshot()
+        assert snap[0].event_type == "MY_CUSTOM_STOP_REASON"
+
+    def test_safety_event_with_very_long_event_type_no_truncation(self) -> None:
+        """SafetyEvent with a 10,000-char event_type -- stored without truncation."""
+        log = _ChainEventLog()
+        long_type = "E" * 10_000
+        ev = _make_event(event_type=long_type, request_id="req-long")
+        log.append(ev)
+        assert len(log) == 1
+        snap = log.snapshot()
+        # Must be stored verbatim -- no silent truncation
+        assert snap[0].event_type == long_type
+        assert len(snap[0].event_type) == 10_000
+
+    def test_safety_event_long_event_type_dedup_uses_full_key(self) -> None:
+        """Two events with same 10K event_type -- dedup key uses full string, not truncated."""
+        log = _ChainEventLog()
+        long_type = "X" * 10_000
+        ev1 = _make_event(event_type=long_type, request_id="req-1")
+        ev2 = _make_event(event_type=long_type, request_id="req-1")
+        log.append(ev1)
+        log.append(ev2)
+        assert len(log) == 1
+
+    def test_safety_event_long_event_type_vs_slightly_different_not_deduped(self) -> None:
+        """Two 10K event_type strings that differ by 1 char are distinct dedup keys."""
+        log = _ChainEventLog()
+        base = "Y" * 9_999
+        ev1 = _make_event(event_type=base + "A", request_id="req-1")
+        ev2 = _make_event(event_type=base + "B", request_id="req-1")
+        log.append(ev1)
+        log.append(ev2)
+        assert len(log) == 2

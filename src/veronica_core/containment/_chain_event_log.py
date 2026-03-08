@@ -42,7 +42,7 @@ class _ChainEventLog:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._events: list[SafetyEvent] = []
-        self._dedup_keys: set[tuple[str, Decision, str, str, str]] = set()
+        self._dedup_keys: set[tuple[str, Decision, str, str, str | None]] = set()
 
     # ------------------------------------------------------------------
     # Append helpers
