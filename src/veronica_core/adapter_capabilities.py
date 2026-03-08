@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# Sentinel for adapters that have not declared a real version range yet.
+UNCONSTRAINED_VERSIONS: tuple[str, str] = ("0.0.0", "99.99.99")
+
 
 def _parse_version(version: str) -> tuple[int, ...]:
     """Parse a dotted version string into a tuple of ints for comparison.
@@ -61,7 +64,7 @@ class AdapterCapabilities:
     supports_agent_identity: bool = False
     framework_name: str = ""
     framework_version_constraint: str = ""
-    supported_versions: tuple[str, str] = ("0.0.0", "99.99.99")
+    supported_versions: tuple[str, str] = UNCONSTRAINED_VERSIONS
     extra: dict[str, object] = field(default_factory=dict)
 
     def is_version_compatible(self, version: str) -> bool:

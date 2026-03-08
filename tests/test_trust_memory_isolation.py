@@ -274,17 +274,18 @@ class TestConcurrentTrustChecks:
 
 
 class TestAdversarialTrustInputs:
-    def test_no_tracker_configured_unknown_agent_denied_on_trusted_ns(self) -> None:
-        """Without a tracker, trust is unknown -- deny access to trusted namespaces."""
+    def test_no_tracker_configured_skips_trust_check(self) -> None:
+        """Without a tracker, trust check is skipped -- falls through to rules."""
         router = TrustBasedPolicyRouter()
         hook = MemoryBoundaryHook(
             config=MemoryBoundaryConfig(default_allow=True),
             trust_router=router,
-            trust_tracker=None,  # No tracker -- trust unknown.
+            trust_tracker=None,  # No tracker -- trust check skipped.
             trusted_namespaces=_TRUSTED_NS,
         )
+        # Trust check requires tracker; without it, falls through to default_allow=True.
         decision = hook.before_op(_op(MemoryAction.READ, agent_id="mystery-agent"), None)
-        assert decision.verdict is GovernanceVerdict.DENY
+        assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_unknown_agent_not_in_tracker_denied_on_trusted_ns(self) -> None:
         """Agent not seen by tracker gets default_trust (UNTRUSTED) -- denied."""

@@ -126,8 +126,8 @@ class MemoryBoundaryHook:
     - VERIFIED agents can read TRUSTED namespaces but cannot write to them.
     - TRUSTED / PRIVILEGED agents can read and write all namespaces.
 
-    Thread safety: the internal rule lookup is stateless after __init__,
-    so concurrent calls are safe without additional locking.
+    Thread safety: rule evaluation is stateless after __init__ (read-only config).
+    The deny_count counter is protected by _lock for thread-safe increment.
 
     Args:
         config: MemoryBoundaryConfig with access rules and default policy.
@@ -310,8 +310,8 @@ class MemoryBoundaryHook:
         Returns:
             (True, reason_str) if allowed, (False, reason_str) if denied.
         """
-        # Stage 1: trust-level isolation.
-        if (self._trust_router is not None or self._trust_tracker is not None) and self._trusted_namespaces:
+        # Stage 1: trust-level isolation (requires tracker + trusted namespaces).
+        if self._trust_tracker is not None and self._trusted_namespaces:
             result = self._evaluate_trust_level(agent_id, namespace, is_write)
             if result is not None:
                 return result

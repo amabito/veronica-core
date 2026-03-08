@@ -18,15 +18,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from veronica_core.adapter_capabilities import AdapterCapabilities
+from veronica_core.adapter_capabilities import AdapterCapabilities, UNCONSTRAINED_VERSIONS
 from veronica_core.inject import GuardConfig, VeronicaHalt
-
-
-# ---------------------------------------------------------------------------
-# Default version range sentinel -- used to detect Issue #69 violations
-# ---------------------------------------------------------------------------
-
-_DEFAULT_VERSION_RANGE = ("0.0.0", "99.99.99")
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +592,7 @@ class TestAdapterHarness:
         """
         adapter = fixture.make(_unlimited_config())
         caps = adapter.capabilities()
-        assert caps.supported_versions != _DEFAULT_VERSION_RANGE, (
+        assert caps.supported_versions != UNCONSTRAINED_VERSIONS, (
             f"{fixture.name} adapter still uses the default supported_versions tuple. "
             "Update capabilities() to declare a real version range."
         )

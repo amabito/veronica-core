@@ -128,37 +128,24 @@ class TestGenerateAdapter:
 
 
 class TestGeneratedContent:
-    def test_adapter_contains_check_and_halt_method(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "expected_fragment",
+        [
+            "def check_and_halt(",
+            "def capabilities(",
+            "def record_decision(",
+            "def record_tokens(",
+            "from veronica_core.adapter_capabilities import AdapterCapabilities",
+            "_SUPPORTED_VERSIONS",
+        ],
+    )
+    def test_generated_adapter_has_required_content(
+        self, tmp_path: Path, expected_fragment: str
+    ) -> None:
+        """Generated adapter source must contain all required methods and imports."""
         generate_adapter("contentfw", tmp_path)
         src = (tmp_path / "adapters" / "contentfw.py").read_text()
-        assert "def check_and_halt(" in src
-
-    def test_adapter_contains_capabilities_method(self, tmp_path: Path) -> None:
-        generate_adapter("contentfw2", tmp_path)
-        src = (tmp_path / "adapters" / "contentfw2.py").read_text()
-        assert "def capabilities(" in src
-
-    def test_adapter_contains_record_decision_method(self, tmp_path: Path) -> None:
-        generate_adapter("contentfw3", tmp_path)
-        src = (tmp_path / "adapters" / "contentfw3.py").read_text()
-        assert "def record_decision(" in src
-
-    def test_adapter_contains_record_tokens_method(self, tmp_path: Path) -> None:
-        generate_adapter("contentfw4", tmp_path)
-        src = (tmp_path / "adapters" / "contentfw4.py").read_text()
-        assert "def record_tokens(" in src
-
-    def test_adapter_imports_adapter_capabilities(self, tmp_path: Path) -> None:
-        generate_adapter("contentfw5", tmp_path)
-        src = (tmp_path / "adapters" / "contentfw5.py").read_text()
-        assert "from veronica_core.adapter_capabilities import AdapterCapabilities" in src
-
-    def test_adapter_supported_versions_placeholder_present(
-        self, tmp_path: Path
-    ) -> None:
-        generate_adapter("contentfw6", tmp_path)
-        src = (tmp_path / "adapters" / "contentfw6.py").read_text()
-        assert "_SUPPORTED_VERSIONS" in src
+        assert expected_fragment in src
 
 
 # ---------------------------------------------------------------------------
