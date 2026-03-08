@@ -403,10 +403,13 @@ class ExecutionGraph:
             KeyError: If *parent_id* does not exist in the graph.
         """
         with self._lock:
+            # Prune BEFORE reading parent -- otherwise the parent itself
+            # could be evicted between the depth lookup and the insert,
+            # leaving a dangling parent_id in the new node.
+            self._maybe_prune()
             if parent_id not in self._nodes:
                 raise KeyError(f"Parent node not found: {parent_id!r}")
             parent_depth = self._depth[parent_id]
-            self._maybe_prune()
             node_id = self._next_id()
             now_ms = _now_ms()
             node = Node(
