@@ -1,0 +1,1514 @@
+\documentclass[11pt]{article}
+
+% --- Packages (arXiv-safe) ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% --- Theorem environments ---
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+
+% --- Proof environment ---
+\newenvironment{proof}{\par\noindent\textit{Proof.}\enspace}{\hfill$\square$\par\medskip}
+\newenvironment{proofsketch}{\par\noindent\textit{Proof sketch.}\enspace}{\hfill$\square$\par\medskip}
+
+% --- Code listings ---
+\definecolor{codebg}{gray}{0.97}
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{codepurple}{rgb}{0.5,0,0.5}
+\lstset{
+  language=Python,
+  basicstyle=\small\ttfamily,
+  keywordstyle=\bfseries\color{codepurple},
+  commentstyle=\color{codegreen},
+  stringstyle=\color{gray},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=4,
+  showstringspaces=false,
+  columns=flexible,
+  captionpos=b,
+  xleftmargin=2em,
+  framexleftmargin=1.5em,
+}
+\lstdefinestyle{bash}{
+  language=bash,
+  basicstyle=\small\ttfamily,
+  frame=single,
+  breaklines=true,
+  backgroundcolor=\color{codebg},
+  xleftmargin=2em,
+  framexleftmargin=1.5em,
+}
+\lstdefinestyle{plain}{
+  language={},
+  basicstyle=\small\ttfamily,
+  frame=single,
+  breaklines=true,
+  backgroundcolor=\color{codebg},
+  xleftmargin=2em,
+  framexleftmargin=1.5em,
+}
+
+% =====================================================================
+\title{VERONICA: A Runtime Containment Layer for\\
+Compositional Resource Amplification in LLM Agent Systems}
+
+\author{
+  Keita Amo\\
+  Independent Researcher\\
+  \url{https://github.com/amabito/veronica-core}
+}
+
+\date{}
+
+% =====================================================================
+\begin{document}
+\maketitle
+
+% ----- Abstract -----
+\begin{abstract}
+Large language model (LLM) agent frameworks expose a class of runaway failure
+modes that differ qualitatively from classical software defects. Retry
+amplification, recursive tool invocation loops, multi-agent cost cascades, and
+WebSocket session runaways share a common structure: they originate from
+individually reasonable local decisions that compose into unbounded global
+resource consumption. Existing frameworks (LangChain, AG2, LangGraph) delegate
+containment to application developers through per-call timeouts and manual
+budget checks, leaving compositional failures unaddressed.
+
+We present VERONICA, a runtime containment layer that enforces chain-level
+resource bounds without requiring modifications to agent logic. VERONICA
+introduces four primitives---BudgetEnforcer, AgentStepGuard, CircuitBreaker,
+and RetryContainer---unified under a RuntimePolicy structural protocol and
+composed by PolicyPipeline with first-denial-wins semantics. A chain-scoped
+ExecutionContext enforces simultaneous bounds on cost, step count, retry count,
+and wall-clock time across all LLM and tool calls within a single agent run,
+with propagation through ASGI/WSGI middleware and WebSocket sessions.
+
+We state six safety guarantees (G1--G6) with code-grounded proofs, present
+benchmark results demonstrating 53--90\% operation reduction versus uncontained
+baselines, and measure a policy pipeline overhead of 11.43 microseconds per
+call. VERONICA is available as \texttt{veronica-core} on PyPI (v3.4.2, 4844
+tests, 94\% coverage).
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+\label{sec:introduction}
+
+LLM agent systems execute multi-step plans by repeatedly calling language
+models and invoking tools based on model outputs. This structure creates
+several runaway failure modes that are absent in classical request/response
+software:
+
+\textbf{Retry amplification.} When $L$ nested tool layers each retry $r$
+times on failure, a single user action generates at most $(1 + r)^L$ LLM
+calls. At $L{=}3$, $r{=}3$, this is 64 calls from a single user action.
+Frameworks that implement per-call retry budgets do not track cross-layer
+retry counts; the ceiling is the product of all per-layer budgets.
+
+\textbf{Recursive tool loops.} An agent producing a tool call whose output
+triggers the same tool call will loop indefinitely unless an external step
+counter intervenes. LangChain's \texttt{max\_iterations} parameter addresses
+this within a single chain but does not apply across chain boundaries in
+multi-agent topologies.
+
+\textbf{Multi-agent amplification.} A coordinator spawning $K$ sub-agents in
+a tree of depth $D$ creates $(K^{D+1} - 1) / (K - 1)$ total agents; at
+$K{=}5$, $D{=}2$, that is 31 agents. If each agent independently makes $S$
+steps with $r$ retries, total calls are $31 \times S \times (1 + r)$. The
+frameworks surveyed in Section~\ref{sec:related} do not enforce a cross-agent
+cost ceiling without custom application code.
+
+\textbf{WebSocket runaway.} Long-running WebSocket sessions that stream LLM
+output accumulate cost and step counts across hundreds of receive/send cycles.
+Existing ASGI frameworks provide no budget enforcement for WebSocket scopes.
+
+These failure modes are compositional: they arise from combining features
+(retry logic, agent spawning, tool invocation) that are individually
+reasonable but collectively unbounded. Classical per-call defenses are
+insufficient because each call is legitimate; only the aggregate violates the
+resource constraint.
+
+VERONICA addresses these failure modes through a single architectural
+decision: containment is enforced at the chain level rather than the call
+level. Each agent run or HTTP request receives a dedicated
+\texttt{ExecutionContext} that tracks cumulative cost, step count, and retry
+count across all operations, enforcing hard limits without requiring
+agent-level awareness of the containment layer.
+
+\subsection{Contributions}
+\label{sec:contributions}
+
+\begin{enumerate}
+  \item A formal model of compositional resource amplification in LLM agent
+    systems, covering retry, recursive tool, and multi-agent failure modes
+    (Section~\ref{sec:amplification}).
+  \item A runtime containment architecture with four composable policy
+    primitives and a chain-scoped execution context
+    (Section~\ref{sec:architecture}).
+  \item Six safety guarantees (G1--G6) with proofs grounded in implementation
+    code paths (Section~\ref{sec:guarantees}).
+  \item Empirical evaluation against four baseline configurations showing
+    53--90\% operation reduction with sub-12-microsecond overhead per call
+    (Section~\ref{sec:evaluation}).
+\end{enumerate}
+
+The system is available as \texttt{veronica-core} on PyPI (v3.4.2, 4844
+tests, 94\% coverage). All benchmarks and tests are included in the
+repository.
+
+% =====================================================================
+\section{Background and Related Work}
+\label{sec:related}
+
+\subsection{LLM Agent Frameworks}
+
+\textbf{LangChain}~\cite{harrison2022langchain} provides
+\texttt{max\_iterations} for chain step limits and per-call retry logic
+through \texttt{tenacity}-backed decorators. It does not enforce cross-chain
+cost ceilings, multi-agent retry budgets, or WebSocket containment.
+
+\textbf{AG2 (AutoGen)}~\cite{wu2023autogen} supports nested agent
+conversations with configurable \texttt{max\_consecutive\_auto\_reply}.
+Resource limits are delegated to application code. No circuit breaker or
+distributed budget enforcement is provided.
+
+\textbf{LangGraph}~\cite{langchain2024langgraph} provides graph-based agent
+orchestration with checkpoint support and step-level event streams. Budget
+enforcement is not a first-class primitive; users must instrument graph nodes
+manually.
+
+\textbf{CrewAI}~\cite{moura2024crewai} provides role-based agent teams with
+task delegation. Cost tracking is not provided at the framework level.
+
+\subsection{Tool-Augmented and Autonomous Agents}
+
+\textbf{ReAct}~\cite{yao2023react} interleaves reasoning and tool invocation,
+creating multi-step execution traces where each tool call may trigger further
+reasoning. ReAct does not bound the total number of reasoning-action cycles;
+unbounded loops are possible when the model repeatedly selects the same tool.
+
+\textbf{Toolformer}~\cite{schick2023toolformer} fine-tunes LLMs to insert API
+calls into generated text. Cost containment is delegated to the API layer; the
+model itself has no budget awareness.
+
+\textbf{AutoGPT}~\cite{richards2023autogpt} chains LLM calls autonomously
+with minimal human oversight. Early deployments demonstrated unbounded cost
+accumulation due to recursive goal decomposition, motivating external
+containment mechanisms.
+
+\subsection{Containment and Safety Libraries}
+
+\textbf{Guardrails AI}~\cite{inan2023guardrails} focuses on output
+validation: schema enforcement, content filtering, and structured output
+parsing. It does not address resource consumption during execution.
+
+\textbf{NeMo Guardrails}~\cite{rebedea2023nemo} provides dialog flow control
+and safety filtering through conversation rail specifications. Retry and cost
+containment are outside scope.
+
+\textbf{OpenAI function calling} with \texttt{tool\_choice} parameters
+constrains which tools the model selects but does not bound total cost or
+retry depth.
+
+\textbf{Agent safety.} Ruan et al.~\cite{ruan2023risks} identify risk
+categories for LLM agents including resource exhaustion and uncontrolled tool
+invocation, but propose monitoring rather than enforcement mechanisms. VERONICA
+addresses the enforcement gap.
+
+To our knowledge, none of the above systems enforce chain-level cost ceilings,
+cross-layer retry budgets, or circuit breaking at the framework abstraction
+level.
+
+\subsection{Resilience Patterns in Distributed Systems}
+
+The circuit breaker pattern~\cite{nygard2007releaseit} is standard in
+distributed systems for failure isolation. Libraries such as
+Hystrix~\cite{netflix2012hystrix},
+resilience4j~\cite{resilience4j2017}, and
+Polly~\cite{dotnet2015polly} implement circuit breakers, bulkheads, and retry
+policies for microservice architectures. These libraries target
+service-to-service communication; they do not model the compositional
+amplification structure of LLM agent systems
+(Section~\ref{sec:amplification}), where retry layers multiply rather than
+add. VERONICA adapts the circuit breaker pattern to the LLM call domain and
+extends it with chain-level budget enforcement that spans multiple retry and
+agent layers.
+
+% =====================================================================
+\section{Amplification Model}
+\label{sec:amplification}
+
+\subsection{Definitions}
+
+\begin{definition}[Call Node]
+A call node $v$ is a single LLM API call or tool invocation with attributes:
+$\mathrm{cost}(v) \geq 0$ USD, $\mathrm{tokens\_in}(v)$,
+$\mathrm{tokens\_out}(v)$, $\mathrm{retries}(v) \geq 0$.
+\end{definition}
+
+\begin{definition}[Agent Chain]
+An agent chain $C$ is a sequence of call nodes $v_1, v_2, \ldots, v_n$ with:
+\begin{align}
+  \text{total\_cost}(C) &= \sum_{i=1}^{n} \mathrm{cost}(v_i) \\
+  \text{total\_steps}(C) &= n \\
+  \text{total\_retries}(C) &= \sum_{i=1}^{n} \mathrm{retries}(v_i)
+\end{align}
+\end{definition}
+
+\begin{definition}[Amplification Factor]
+For a chain $C$ with known minimum required steps $\text{min\_steps}(C)$:
+\[
+  A(C) = \frac{\text{total\_steps}(C)}{\text{min\_steps}(C)}
+\]
+In pathological cases (retry explosion, recursive loops), $A(C)$ is unbounded.
+\end{definition}
+
+\subsection{Multi-Layer Retry Amplification}
+
+\begin{theorem}[Multi-Layer Retry]
+For a nested call structure with $L$ layers, each independently retrying with
+$r_i$ retries at layer $i$, the worst-case total calls are:
+\[
+  \text{Total\_calls} = \prod_{i=1}^{L} (1 + r_i)
+\]
+\end{theorem}
+
+\begin{proof}
+By induction on $L$. For $L{=}1$: at most $1 + r_1$ calls. Inductively, each
+call at layer $k$ triggers at most $\prod_{j=k+1}^{L} (1 + r_j)$ calls in
+deeper layers; summing over at most $(1 + r_k)$ attempts at layer $k$ gives
+the product. QED.
+\end{proof}
+
+\textbf{Example.} At $L{=}3$, $r_i{=}3$ for all $i$:
+$\text{Total\_calls} = 4^3 = 64$. At \$0.01/call, a single user action
+incurs \$0.64 in the worst case versus \$0.01 for the minimum path.
+
+\subsection{Multi-Agent Amplification}
+
+\begin{theorem}[Multi-Agent Amplification]
+For a coordinator spawning $K$ sub-agents to depth $D$, each making $S$ steps
+with $r$ retries:
+\[
+  \text{Total\_calls} = \frac{K^{D+1} - 1}{K - 1} \cdot S \cdot (1 + r)
+\]
+\end{theorem}
+
+\begin{proofsketch}
+The total number of agents in a $K$-ary tree of depth $D$ is the geometric
+series $\sum_{d=0}^{D} K^d = (K^{D+1} - 1) / (K - 1)$. Each agent
+independently executes $S$ steps with up to $r$ retries per step, contributing
+$S \cdot (1 + r)$ calls. The product gives the total. This assumes no
+cross-agent coordination on retry budgets (the scenario VERONICA is designed
+to contain). QED.
+\end{proofsketch}
+
+\textbf{Example.} At $K{=}5$, $D{=}2$, $S{=}10$, $r{=}3$:
+$\text{Total\_calls} = 31 \times 10 \times 4 = 1{,}240$.
+
+\subsection{Failure Model}
+
+VERONICA's safety guarantees (Section~\ref{sec:guarantees}) assume the
+following failure model. Deviations from these assumptions weaken specific
+guarantees as noted.
+
+\textbf{Process-local mode (default).} All state---budget accumulators, step
+counters, circuit breaker state machines---resides in the process address
+space, protected by \texttt{threading.Lock}. The failure model is:
+
+\begin{itemize}[nosep]
+  \item \textbf{Thread crash.} A thread holding a lock that terminates
+    abnormally (e.g., via \texttt{KeyboardInterrupt} between lock acquisition
+    and release) may leave the lock in an inconsistent state. Python's
+    \texttt{threading.Lock} is not reentrant-safe across
+    \texttt{KeyboardInterrupt}. In practice, \texttt{with self.\_lock:} blocks
+    are short (microseconds), minimizing the vulnerability window. This is a
+    known limitation of CPython's \texttt{threading} module and affects all
+    lock-based Python libraries.
+  \item \textbf{Process crash.} All in-memory state is lost. No durability
+    guarantee is provided for process-local mode. Callers requiring crash
+    recovery should use the Redis backend.
+\end{itemize}
+
+\textbf{Distributed mode (Redis backend).} Budget and circuit breaker state
+is stored in Redis. The failure model extends to:
+
+\begin{itemize}[nosep]
+  \item \textbf{Network partition.} If the application cannot reach Redis,
+    behavior depends on \texttt{fallback\_on\_error}:
+    \begin{itemize}[nosep]
+      \item \texttt{fallback\_on\_error=True} (default): The system falls back
+        to a process-local budget backend seeded with the last known Redis
+        state. G1 (cost bound) holds within each process but not across
+        processes during the partition. On reconnection,
+        \texttt{\_reconcile\_with\_redis()} pushes the locally accumulated
+        delta back to Redis.
+      \item \texttt{fallback\_on\_error=False}: The call raises
+        \texttt{RedisError}, and the caller must handle it. G1 is not weakened
+        because no cost is committed.
+    \end{itemize}
+  \item \textbf{Partial commit.} Redis \texttt{INCRBYFLOAT} is atomic for a
+    single key. Budget commit is a single \texttt{INCRBYFLOAT} operation;
+    there is no multi-key transaction that could be partially committed.
+    Circuit breaker state transitions use Lua scripts executed via
+    \texttt{eval()}, which Redis guarantees to run atomically.
+  \item \textbf{Redis atomicity scope.} Lua scripts provide atomicity within a
+    single Redis instance. In Redis Cluster mode, keys must hash to the same
+    slot for cross-key atomicity; VERONICA uses \texttt{\{chain\_id\}} hash
+    tags to ensure co-location. Cluster failover (replica promotion) may lose
+    the most recent write if the primary fails before replication completes;
+    this is a Redis Cluster property, not a VERONICA limitation.
+  \item \textbf{Clock skew.} \texttt{CircuitBreaker} recovery timeout and
+    \texttt{SharedTimeoutPool} deadlines use \texttt{time.time()} (wall
+    clock). On the local host, monotonic alternatives
+    (\texttt{time.monotonic()}) would avoid NTP adjustment issues; the current
+    implementation uses \texttt{time.time()} for Redis compatibility, where
+    server-side \texttt{TIME} is the only available clock. Clock skew between
+    application hosts and Redis does not affect G4 (failure isolation) because
+    the Lua scripts compare timestamps stored and read within the same Redis
+    instance.
+\end{itemize}
+
+\subsection{VERONICA Containment Bounds}
+
+\begin{theorem}[Cost Bound]
+For any agent chain $X$ under an \texttt{ExecutionContext} with
+\texttt{max\_cost\_usd} $= B$: $\text{total\_cost}(X) \leq B$, independent
+of agent count, retry depth, or topology.
+\end{theorem}
+
+\begin{theorem}[Step Bound]
+For any agent chain $X$ under an \texttt{ExecutionContext} with
+\texttt{max\_steps} $= S$: $\text{total\_steps}(X) \leq S$.
+\end{theorem}
+
+\begin{theorem}[Retry Bound]
+For any agent chain $X$ under an \texttt{ExecutionContext} with
+\texttt{max\_retries\_total} $= R$: $\text{total\_retries}(X) \leq R$,
+bounding total calls at $1 + R$.
+\end{theorem}
+
+Proofs are given in Section~\ref{sec:guarantees} (G1--G3). The bounds hold
+simultaneously and independently; violation of any triggers
+\texttt{Decision.HALT} for all subsequent calls.
+
+% =====================================================================
+\section{System Architecture}
+\label{sec:architecture}
+
+\subsection{Overview}
+
+\begin{verbatim}
+User / Framework
+      |
+      v
+ [ExecutionContext]  <-- chain-level containment boundary
+      |
+      +-- [PolicyPipeline]
+      |       |
+      |       +-- [BudgetEnforcer]     cost_usd ceiling
+      |       +-- [AgentStepGuard]     max_steps limit
+      |       +-- [CircuitBreaker]     failure isolation
+      |       +-- [RetryContainer]     retry budget
+      |
+      +-- [ExecutionGraph]             call-tree observation
+      |
+      +-- [CancellationToken]          cooperative shutdown
+      |
+      +-- [SharedTimeoutPool]          wall-clock timeout
+      |
+      v
+   LLM API / Tools
+\end{verbatim}
+
+The containment layer sits between the agent framework and the LLM API. Each
+\texttt{wrap\_llm\_call()} or \texttt{wrap\_tool\_call()} invocation passes
+through the policy pipeline before dispatching to the underlying callable.
+
+\subsection{RuntimePolicy Protocol}
+
+All policy primitives implement the \texttt{RuntimePolicy} structural protocol
+(\texttt{src/veronica\_core/runtime\_policy.py}):
+
+\begin{lstlisting}
+@runtime_checkable
+class RuntimePolicy(Protocol):
+    def check(self, context: PolicyContext) -> PolicyDecision: ...
+    def reset(self) -> None: ...
+
+    @property
+    def policy_type(self) -> str: ...
+\end{lstlisting}
+
+\texttt{PolicyContext} carries ambient information about the current operation:
+
+\begin{lstlisting}
+@dataclass
+class PolicyContext:
+    cost_usd: float = 0.0
+    step_count: int = 0
+    entity_id: str = ""
+    chain_id: str = ""
+    timestamp: float = field(default_factory=time.time)
+    metadata: dict = field(default_factory=dict)
+\end{lstlisting}
+
+\texttt{PolicyDecision} carries the allow/deny result, policy identity, and
+optional degradation actions (model downgrade, rate limiting):
+
+\begin{lstlisting}
+@dataclass
+class PolicyDecision:
+    allowed: bool
+    policy_type: str
+    reason: str = ""
+    partial_result: Any = None
+    degradation_action: str | None = None
+    fallback_model: str | None = None
+    rate_limit_ms: int = 0
+\end{lstlisting}
+
+The \texttt{degradation\_action} field enables graceful degradation responses
+(model downgrade, context trimming, rate limiting) as alternatives to hard
+denial, allowing callers to adapt behavior without necessarily halting.
+
+\subsection{PolicyPipeline}
+
+\texttt{PolicyPipeline}
+(\texttt{src/veronica\_core/runtime\_policy.py}) composes multiple
+\texttt{RuntimePolicy} instances with AND semantics: the first denial
+terminates evaluation and returns the denying decision.
+
+\begin{lstlisting}
+class PolicyPipeline:
+    def evaluate(self, context: PolicyContext) -> PolicyDecision:
+        for policy in self._policies:
+            decision = policy.check(context)
+            if not decision.allowed:
+                return decision  # First denial wins
+        return PolicyDecision(allowed=True, policy_type="pipeline", ...)
+\end{lstlisting}
+
+No override mechanism exists. This is a deliberate design decision: safety
+policies must not be overridable by lower-priority policies or application
+code.
+
+\subsection{BudgetEnforcer}
+
+\texttt{BudgetEnforcer} (\texttt{src/veronica\_core/budget.py}) enforces a USD
+ceiling with thread-safe check-before-commit semantics:
+
+\begin{lstlisting}
+def spend(self, amount_usd: float) -> bool:
+    with self._lock:
+        projected = self._spent_usd + amount_usd
+        if projected > self.limit_usd:
+            self._exceeded = True
+            return False
+        self._spent_usd = projected
+        self._call_count += 1
+        return True
+\end{lstlisting}
+
+Input validation at both construction (\texttt{\_\_post\_init\_\_}) and call
+time (\texttt{spend}) rejects NaN, Inf, and negative amounts with
+\texttt{ValueError}, preventing cost poisoning attacks that could corrupt the
+accumulator via IEEE-754 arithmetic anomalies.
+
+Measured overhead: 0.191 microseconds per \texttt{spend()} call (100,000
+calls).
+
+\subsection{AgentStepGuard}
+
+\texttt{AgentStepGuard} (\texttt{src/veronica\_core/agent\_guard.py}) limits
+agent iterations via increment-before-check protocol:
+
+\begin{lstlisting}
+def step(self, result: Any = None) -> bool:
+    with self._lock:
+        self._current_step += 1        # increment first
+        if result is not None:
+            self._last_result = result  # preserve partial result
+        if self._current_step >= self.max_steps:
+            return False               # then check
+    return True
+\end{lstlisting}
+
+The increment-before-check ordering prevents the off-by-one error where
+\texttt{max\_steps=25} would allow 26 steps if check-before-increment were
+used. The \texttt{\_last\_result} field preserves the most recent partial
+output for halted chains.
+
+\subsection{CircuitBreaker}
+
+\texttt{CircuitBreaker} (\texttt{src/veronica\_core/circuit\_breaker.py})
+implements the three-state circuit breaker pattern with atomic state
+transitions via \texttt{threading.Lock}. States:
+
+\begin{itemize}[nosep]
+  \item \textbf{CLOSED}: consecutive failures $<$ threshold; all requests
+    allowed
+  \item \textbf{OPEN}: failures $\geq$ threshold; all requests denied
+  \item \textbf{HALF\_OPEN}: recovery timeout elapsed; exactly one test request
+    allowed
+\end{itemize}
+
+The HALF\_OPEN single-slot constraint, enforced by
+\texttt{\_half\_open\_in\_flight}, prevents thundering-herd on recovery:
+concurrent callers in HALF\_OPEN all receive \texttt{allowed=False} except the
+first. This is identical in semantics to the original circuit breaker
+pattern~\cite{nygard2007releaseit} and prevents load amplification on an
+already-stressed endpoint.
+
+\texttt{bind\_to\_context()} prevents accidental sharing of a
+\texttt{CircuitBreaker} instance across independent chains, which would
+corrupt failure counts.
+
+In distributed deployments (\texttt{src/veronica\_core/distributed.py}), state
+transitions use Lua scripts executed atomically by Redis \texttt{eval()},
+extending the consistency guarantee to multi-process environments without
+application-level locking.
+
+Measured overhead: 0.528 microseconds per \texttt{check()} call (100,000
+calls, CLOSED state).
+
+\subsection{RetryContainer}
+
+\texttt{RetryContainer} (\texttt{src/veronica\_core/retry.py}) enforces a
+chain-wide retry budget with exponential backoff and jitter:
+
+\begin{lstlisting}
+def execute(self, fn: Callable[..., T], *args, **kwargs) -> T:
+    for attempt in range(self.max_retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            if attempt == self.max_retries:
+                raise
+            delay = min(self.backoff_base * (2 ** attempt), self.backoff_max)
+            delay *= 1.0 + self.jitter * (2 * random.random() - 1)
+            time.sleep(delay)
+\end{lstlisting}
+
+Jitter (default $\pm$25\%) prevents thundering-herd when multiple
+\texttt{RetryContainer} instances retry simultaneously after a shared service
+failure. The serialization lock held during \texttt{fn()} execution enforces
+serial retry semantics, preventing concurrent retries from racing on the
+attempt counter; this is a deliberate design decision, not a performance
+issue.
+
+\subsection{ExecutionContext}
+
+\texttt{ExecutionContext}
+(\texttt{src/veronica\_core/containment/execution\_context.py}) is the
+chain-level container. \texttt{ExecutionConfig} specifies hard limits:
+
+\begin{lstlisting}
+@dataclass(frozen=True)
+class ExecutionConfig:
+    max_cost_usd: float
+    max_steps: int
+    max_retries_total: int
+    timeout_ms: int = 0
+\end{lstlisting}
+
+All limits are validated at construction to be finite and non-negative. The
+context is used as a context manager:
+
+\begin{lstlisting}
+config = ExecutionConfig(
+    max_cost_usd=1.0, max_steps=50,
+    max_retries_total=10, timeout_ms=30_000
+)
+with ExecutionContext(config=config, pipeline=pipeline) as ctx:
+    decision = ctx.wrap_llm_call(fn=lambda: client.chat(...))
+    if decision == Decision.HALT:
+        break
+\end{lstlisting}
+
+On entering the context manager, the wall-clock timeout is registered with
+\texttt{SharedTimeoutPool} (a singleton daemon-thread scheduler with a
+heap-priority queue of deadline-callback pairs). When the deadline fires,
+\texttt{CancellationToken.cancel()} is called, and all subsequent
+\texttt{wrap\_llm\_call()} invocations return \texttt{Decision.HALT} without
+dispatching.
+
+Measured overhead: 11.43 microseconds per \texttt{wrap\_llm\_call()} call
+over a full \texttt{ExecutionContext} round-trip (10,000 calls).
+
+\subsection{Middleware Integration}
+
+\texttt{VeronicaASGIMiddleware} and \texttt{VeronicaWSGIMiddleware}
+(\texttt{src/veronica\_core/middleware.py}) create a fresh
+\texttt{ExecutionContext} per HTTP request, stored in a \texttt{ContextVar}
+accessible via \texttt{get\_current\_execution\_context()}. For WebSocket
+scopes, each \texttt{receive()} and \texttt{send()} call increments the step
+counter. Budget exceeded at pre-flight returns HTTP 429; mid-session limit
+triggers \texttt{websocket.close} code 1008.
+
+Integration with LangChain, AG2, LangGraph, LlamaIndex, CrewAI, and ROS2 is
+provided through framework-specific adapters in
+\texttt{src/veronica\_core/adapters/}.
+
+\subsection{ExecutionGraph}
+
+\texttt{ExecutionGraph}
+(\texttt{src/veronica\_core/containment/execution\_graph.py}) tracks the
+parent-child call tree for observation and diagnostics. Each LLM and tool call
+creates a \texttt{Node} with timing, cost, and token counts. The graph
+supports divergence heuristics based on repeated (kind, name) node signatures,
+enabling early detection of pathological loops before they exhaust the budget.
+
+% =====================================================================
+\section{Formal Safety Guarantees}
+\label{sec:guarantees}
+
+We state six safety guarantees and identify the code paths that enforce each.
+All guarantees assume a correctly configured \texttt{ExecutionContext} with
+finite, non-negative limit values; G6 proves that invalid configurations
+cannot be created.
+
+\subsection{G1: Cost Bound}
+
+\textbf{Guarantee.} For any agent chain under an \texttt{ExecutionContext}
+with \texttt{ExecutionConfig.max\_cost\_usd} $= B$:
+\[
+  \text{total\_cost}(\text{chain}) \leq B
+\]
+
+\begin{proof}
+The budget accumulator is \texttt{\_cost\_usd\_accumulated} in
+\texttt{ExecutionContext}. Every LLM call passes through \texttt{\_wrap()},
+which calls \texttt{\_commit\_cost(actual\_cost)} after the callable returns:
+
+\begin{lstlisting}
+with self._lock:
+    projected = self._cost_usd_accumulated + actual_cost
+    if projected > self._config.max_cost_usd:
+        self._aborted = True
+        self._abort_reason = "budget_exceeded"
+        return Decision.HALT
+    self._cost_usd_accumulated = projected
+\end{lstlisting}
+
+No code path commits cost without first checking the ceiling. The lock
+prevents concurrent commits from racing past the ceiling. Additionally,
+\texttt{BudgetEnforcer.spend()} (\texttt{src/veronica\_core/budget.py}) uses
+the identical pattern for standalone use.
+
+Input validation in \texttt{BudgetEnforcer.\_\_post\_init\_\_()} and
+\texttt{spend()} rejects NaN, Inf, and negative values, preventing cost
+poisoning via IEEE-754 arithmetic anomalies.
+
+In distributed mode (\texttt{RedisBudgetBackend},
+\texttt{src/veronica\_core/distributed.py}), Redis \texttt{INCRBYFLOAT} is
+atomic; an epsilon guard (\texttt{\_BUDGET\_EPSILON = 1e-9}) prevents spurious
+under-enforcement from floating-point rounding.
+
+G1 holds in both local and distributed configurations. QED.
+\end{proof}
+
+\subsection{G2: Termination Guarantee}
+
+\textbf{Guarantee.} For any agent chain under an \texttt{ExecutionContext}
+with \texttt{ExecutionConfig.max\_steps} $= S$:
+\[
+  \text{successful\_operations}(\text{chain}) \leq S
+\]
+
+\begin{proof}
+The step counter is \texttt{\_step\_count} in \texttt{ExecutionContext}. Every
+call through \texttt{wrap\_llm\_call()} or \texttt{wrap\_tool\_call()} passes
+through \texttt{\_wrap()}:
+
+\begin{lstlisting}
+with self._lock:
+    if self._step_count >= self._config.max_steps:
+        self._aborted = True
+        return Decision.HALT
+\end{lstlisting}
+
+After a successful call, \texttt{\_step\_count} is incremented. The
+check-before-increment ordering means: at step count $S$, the next call is
+denied before \texttt{\_step\_count} would become $S{+}1$. No code path
+increments past $S$. QED.
+\end{proof}
+
+\subsection{G3: Retry Budget}
+
+\textbf{Guarantee.} For any agent chain under an \texttt{ExecutionContext}
+with \texttt{ExecutionConfig.max\_retries\_total} $= R$:
+\[
+  \text{total\_retries}(\text{chain}) \leq R
+\]
+
+\begin{proof}
+The retry counter is \texttt{\_retries\_used} in \texttt{ExecutionContext}.
+Before each retry in \texttt{\_wrap()}, \texttt{\_check\_retry\_budget()} is
+called:
+
+\begin{lstlisting}
+with self._lock:
+    if self._retries_used >= self._config.max_retries_total:
+        self._aborted = True
+        return Decision.HALT
+    self._retries_used += 1
+\end{lstlisting}
+
+The check-before-increment protocol provides the same bound as G2. When
+\texttt{RetryContainer} instances operate within an \texttt{ExecutionContext},
+the chain-level check fires before each retry attempt, enforcing the
+cross-container ceiling. QED.
+\end{proof}
+
+\subsection{G4: Failure Isolation}
+
+\textbf{Guarantee.} Once \texttt{CircuitBreaker} enters OPEN state:
+\[
+  \text{state} = \texttt{OPEN} \implies \texttt{check}(\textit{ctx}).\texttt{allowed} = \texttt{False}
+\]
+during all calls until at least \texttt{recovery\_timeout} seconds have
+elapsed.
+
+\begin{proof}
+State transitions are protected by \texttt{threading.Lock}. The only
+transition out of OPEN is OPEN $\to$ HALF\_OPEN, gated by
+\texttt{\_maybe\_half\_open\_locked()}:
+
+\begin{lstlisting}
+time.time() - self._last_failure_time >= self.recovery_timeout
+\end{lstlisting}
+
+evaluated under lock, preventing two threads from simultaneously observing
+OPEN as expired. No code path transitions OPEN directly to CLOSED; the
+mandatory HALF\_OPEN state ensures at least one test call before recovery.
+
+In distributed mode, Lua scripts executed via Redis \texttt{eval()} provide
+identical atomicity across processes. QED.
+\end{proof}
+
+\subsection{G5: Wall-Clock Timeout}
+
+\textbf{Guarantee.} For any chain under \texttt{ExecutionContext} with
+\texttt{timeout\_ms} $= T > 0$:
+\[
+  \text{elapsed\_ms} > T \;\Longrightarrow\; \forall\;\text{new calls: } \texttt{wrap\_llm\_call()} \to \texttt{Decision.HALT}
+\]
+
+\begin{proof}
+On \texttt{\_\_enter\_\_}, a deadline is registered with
+\texttt{SharedTimeoutPool}. When the deadline fires, \texttt{\_on\_timeout()}
+calls \texttt{CancellationToken.cancel()}. All subsequent
+\texttt{wrap\_llm\_call()} calls check
+\texttt{CancellationToken.is\_cancelled} before dispatching; cancelled
+contexts return \texttt{Decision.HALT} immediately.
+
+\textbf{Caveat.} Operations already in-flight when the timeout fires may
+complete before observing cancellation. G5 applies only to new operations;
+in-flight operations must poll \texttt{is\_cancelled} for preemptive
+cancellation. QED.
+\end{proof}
+
+\subsection{G6: Configuration Validity}
+
+\textbf{Guarantee.} An \texttt{ExecutionContext} with NaN, Inf, or negative
+limits cannot be created.
+
+\begin{proof}
+\texttt{ExecutionConfig.\_\_post\_init\_\_()} validates all fields:
+
+\begin{lstlisting}
+if math.isnan(self.max_cost_usd) or math.isinf(self.max_cost_usd):
+    raise ValueError(...)
+if self.max_cost_usd < 0:
+    raise ValueError(...)
+# ... analogous for max_steps, max_retries_total, timeout_ms
+\end{lstlisting}
+
+\texttt{BudgetEnforcer.\_\_post\_init\_\_()},
+\texttt{CircuitBreaker.\_\_post\_init\_\_()}, and \texttt{AgentStepGuard}
+validation analogously reject invalid inputs. Invalid configurations raise
+\texttt{ValueError} at construction, not at runtime. QED.
+\end{proof}
+
+\subsection{Compositional Safety}
+
+\begin{theorem}[Compositional Bound]
+For a \texttt{PolicyPipeline} containing
+\texttt{BudgetEnforcer(limit\_usd=$B$)},
+\texttt{AgentStepGuard(max\_steps=$S$)}, and
+\texttt{RetryContainer(max\_retries=$R$)}, the following hold simultaneously:
+\begin{itemize}[nosep]
+  \item $\text{total\_cost} \leq B$
+  \item $\text{total\_steps} \leq S$
+  \item $\text{total\_retries} \leq R$
+\end{itemize}
+\end{theorem}
+
+\begin{proofsketch}
+Each bound is enforced by an independent check-before-commit protocol under
+its own lock. Violation of any bound returns \texttt{False}/\texttt{HALT}
+before the underlying callable is invoked.
+\texttt{PolicyPipeline.evaluate()} returns the first denial, preventing
+execution from reaching any primitive with a satisfied check when an earlier
+primitive has already denied. No code path bypasses any check. QED.
+\end{proofsketch}
+
+% =====================================================================
+\section{Evaluation}
+\label{sec:evaluation}
+
+All benchmarks use stub LLM/tool implementations with no network calls.
+Experiments run on a single host (no distributed backend). Source:
+\texttt{benchmarks/} in the repository.
+
+\subsection{Baseline Definitions}
+
+We define four baseline configurations to isolate the contribution of each
+containment layer. Each configuration specifies the retry policy, timeout
+scope, failure propagation behavior, and termination semantics.
+
+\begin{table}[!ht]
+\centering
+\footnotesize
+\caption{Baseline configuration definitions.}
+\label{tab:baselines}
+\begin{tabular}{@{}p{1.8cm}p{3cm}p{2.2cm}p{3cm}p{3cm}@{}}
+\toprule
+\textbf{Baseline} & \textbf{Retry Policy} & \textbf{Timeout} &
+\textbf{Failure Propagation} & \textbf{Termination} \\
+\midrule
+No containment &
+Per-call retry with no cross-layer budget. Each layer independently retries
+$r$ times; total calls $=$ product of per-layer budgets. &
+None. Execution continues until the callable returns or the process is
+killed. &
+Uncontrolled. A failure in one layer propagates upward only after exhausting
+local retries, amplifying cost at every level. &
+None. The chain runs until all retries are exhausted or an unhandled exception
+escapes the top frame. \\
+\midrule
+Retry limit only &
+Chain-wide \texttt{max\_retries\_total=R}. The first $R$ retries proceed
+normally; subsequent retries return \texttt{Decision.HALT}. &
+None. &
+Cross-layer: the chain-level counter is decremented by retries at any
+depth. &
+Retry budget exhaustion triggers \texttt{HALT} on the next retry attempt;
+in-progress calls complete. \\
+\midrule
+Timeout only &
+Per-call retry with no cross-layer budget (same as no containment). &
+\texttt{timeout\_ms=T}. \texttt{SharedTimeoutPool} fires
+\texttt{CancellationToken.cancel()} after $T$~ms. &
+Uncontrolled within the timeout window. &
+\texttt{CancellationToken.is\_cancelled} returns \texttt{True}; all
+subsequent \texttt{wrap\_llm\_call()} return \texttt{Decision.HALT}.
+In-flight calls may complete (cooperative cancellation; see G5). \\
+\midrule
+VERONICA (full) &
+\texttt{max\_retries\_total=R} (chain-wide). &
+\texttt{timeout\_ms=T}. &
+\texttt{PolicyPipeline} with all four primitives. First denial wins
+(Section~4.3). &
+Any policy denial returns \texttt{Decision.HALT} before the callable is
+invoked. \texttt{CancellationToken} propagates to child contexts. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ``No containment'' baseline represents the default behavior of current
+frameworks (LangChain, AG2, LangGraph) where retry, budget, and timeout
+enforcement is delegated to application code. The ``Retry limit only'' and
+``Timeout only'' baselines isolate the contribution of VERONICA's two most
+commonly requested features; the ``VERONICA (full)'' configuration enables
+all four primitives simultaneously.
+
+\subsection{Benchmark Scenarios}
+
+We evaluate four failure modes corresponding to Section~\ref{sec:introduction}:
+
+\begin{table}[!ht]
+\centering
+\caption{Benchmark scenario configurations.}
+\label{tab:scenarios}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Scenario} & \textbf{Baseline Setup} & \textbf{VERONICA Config} \\
+\midrule
+Retry amplification & 3 layers $\times$ 3 retries $=$ 27 calls &
+\texttt{max\_retries\_total=5} \\
+Recursive tools & 20 recursive tool calls &
+\texttt{max\_steps=5} \\
+Multi-agent loop & Planner/critic loop, 30 iterations &
+\texttt{AgentStepGuard(max\_steps=8)} \\
+WebSocket runaway & 50 send/receive pairs $=$ 100 ops &
+\texttt{max\_steps=10} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results}
+
+\begin{table}[!ht]
+\centering
+\caption{Evaluation results: baseline versus VERONICA.}
+\label{tab:results}
+\begin{tabular}{@{}lrrrl@{}}
+\toprule
+\textbf{Scenario} & \textbf{Baseline Ops} & \textbf{VERONICA Ops} &
+\textbf{Reduction} & \textbf{Mechanism} \\
+\midrule
+Retry amplification & 27 & 3 & 88.9\% &
+\texttt{max\_retries\_total}, \texttt{RetryContainer} \\
+Recursive tools & 20 & 5 & 75.0\% &
+\texttt{max\_steps}, \texttt{wrap\_tool\_call()} \\
+Multi-agent loop & 60 & 28 & 53.3\% &
+\texttt{AgentStepGuard(max\_steps=8)} \\
+WebSocket runaway & 100 & 10 & 90.0\% &
+\texttt{max\_steps}, close code 1008 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The retry amplification result confirms Theorem~3: 3-layer $\times$ 3-retry
+$= 27$ theoretical calls is bounded to 3 actual calls
+(\texttt{max\_retries\_total=5} limits to $1{+}5{=}6$ calls, but the stub LLM
+succeeds after 2 failures, so 3 tasks $\times$ 1 call each $= 3$).
+
+The WebSocket scenario shows containment latency of 0.0168~ms from limit
+detection to \texttt{websocket.close} code 1008, consistent with
+sub-millisecond cooperative shutdown.
+
+\subsection{Policy Pipeline Overhead}
+
+All overhead measurements are taken on a single core of an AMD Ryzen 9
+9950X3D (5.7~GHz boost) running Python~3.11 on Windows~11. Each measurement
+reports the mean of the specified number of calls after a 1000-call warmup to
+eliminate JIT and cache effects. The callable dispatched is a stub returning
+\texttt{None} (zero application-level work) to isolate containment overhead.
+
+\begin{table}[!ht]
+\centering
+\caption{Policy pipeline overhead measurements.}
+\label{tab:overhead}
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Primitive} & \textbf{Mean ($\mu$s/call)} & \textbf{Calls} &
+\textbf{Notes} \\
+\midrule
+\texttt{BudgetEnforcer.spend()} & 0.191 & 100,000 &
+Lock acquisition + float comparison \\
+\texttt{CircuitBreaker.check()} & 0.528 & 100,000 &
+Lock acquisition + state machine check \\
+\texttt{ExecutionContext.wrap\_llm\_call()} & 11.43 & 10,000 &
+Full round-trip (see below) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The primitive benchmarks use 100,000 calls to reduce variance on the
+sub-microsecond measurements. The full \texttt{ExecutionContext} round-trip
+uses 10,000 calls because it allocates an \texttt{ExecutionGraph} node per
+call, and the node list contributes measurable memory pressure at higher
+counts. The round-trip includes: \texttt{CancellationToken} check, budget
+pre-flight, \texttt{PolicyPipeline.evaluate()}, callable dispatch (stub),
+cost commit, step increment, and \texttt{ExecutionGraph} node creation. At
+11.43~$\mu$s/call, the overhead is dominated by lock acquisition and
+\texttt{ExecutionGraph} node allocation.
+
+For comparison, a typical LLM API call has latency of 500--5000~ms;
+11.43~$\mu$s represents less than 0.002\% of total call time. Measurements
+on different hardware may vary; the overhead scales linearly with the number
+of registered policies in the pipeline.
+
+\subsection{Realistic Agent Workload Simulation}
+
+The deterministic benchmarks in Sections~6.2--6.4 isolate containment
+behavior from runtime variability. To evaluate VERONICA under conditions
+closer to production agent deployments, we simulate a workload with stochastic
+latency, failure probability, and variable tool-call depth.
+
+\textbf{Workload model.} Each simulated agent chain consists of a coordinator
+that invokes tool calls with parameters drawn from the following
+distributions:
+
+\begin{itemize}[nosep]
+  \item \textbf{Call latency:} Lognormal($\mu{=}5.5$, $\sigma{=}1.2$),
+    producing a median of ${\sim}245$~ms and a heavy right tail (95th
+    percentile ${\sim}2.1$~s), consistent with observed LLM API latency
+    distributions.
+  \item \textbf{Failure probability:} $p_{\text{fail}} = 0.15$ per call,
+    independent across calls. This matches the empirical 10--20\% transient
+    failure rate reported in production agent deployments with multiple tool
+    integrations.
+  \item \textbf{Tool-call depth:} Geometric($p{=}0.3$), giving a mean depth
+    of ${\sim}3.3$ nested calls per agent step. At each depth level, the
+    agent may invoke 1--3 tools (uniform).
+  \item \textbf{Cost per call:} Uniform(0.001, 0.05)~USD, reflecting the
+    range from cached/small-model calls to full GPT-4-class invocations.
+\end{itemize}
+
+\textbf{Simulation parameters:} 100 independent agent chains, each with
+\texttt{max\_cost\_usd=1.0}, \texttt{max\_steps=50},
+\texttt{max\_retries\_total=10}, \texttt{timeout\_ms=30000}. The ``No
+containment'' baseline runs with unlimited resources (no limits).
+
+\begin{table}[!ht]
+\centering
+\caption{Stochastic workload simulation results (100 chains).}
+\label{tab:stochastic}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Metric} & \textbf{No Containment} & \textbf{VERONICA} &
+\textbf{Reduction} \\
+\midrule
+Mean total calls per chain & 147.3 & 28.6 & 80.6\% \\
+Mean total cost per chain & \$2.18 & \$0.73 & 66.5\% \\
+Chains exceeding \$5.00 & 23/100 & 0/100 & 100\% \\
+Chains exceeding 200 calls & 31/100 & 0/100 & 100\% \\
+p99 chain duration (s) & 48.2 & 12.7 & 73.7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The stochastic workload confirms that VERONICA's containment bounds hold under
+realistic conditions: no chain exceeded its configured limits, and the mean
+call reduction (80.6\%) is consistent with the deterministic results
+(53--90\%). The elimination of tail cases (chains exceeding \$5 or 200 calls)
+is the primary practical benefit; these tail cases represent the runaway
+failure modes that motivate the system.
+
+The simulation uses a fixed random seed (\texttt{seed=42}) for
+reproducibility. Results reported are the mean over 100 chains; variance
+across seeds is less than 3\% for all metrics. Source:
+\texttt{benchmarks/scale\_simulation.py} (stochastic mode).
+
+\subsection{Comparison with Existing Frameworks}
+
+\begin{table}[!ht]
+\centering
+\footnotesize
+\caption{Feature comparison with existing frameworks.}
+\label{tab:comparison}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Feature} & \textbf{VERONICA} & \textbf{LangChain} & \textbf{AG2} &
+\textbf{LangGraph} \\
+\midrule
+Chain-level cost ceiling & Yes & No & No & No \\
+Cross-layer retry budget & Yes & No & No & No \\
+Circuit breaker & Yes & No & No & No \\
+WebSocket containment & Yes & No & No & No \\
+Step limit & Yes & Yes & Yes & Yes \\
+Multi-agent budget & Yes & No & No & No \\
+Cost poisoning defense & Yes & No & No & No \\
+Partial result preservation & Yes & No & No & No \\
+Formal safety guarantees & Yes & No & No & No \\
+Framework-agnostic & Yes & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+VERONICA operates at the resource consumption layer rather than the content or
+dialog layer. It is designed to compose with the above frameworks through
+adapter modules (\texttt{src/veronica\_core/adapters/}), not to replace them.
+The comparison reflects default framework behavior; application developers can
+implement equivalent containment logic using framework hooks, but must do so
+manually for each deployment. VERONICA provides these guarantees as a reusable
+library.
+
+% =====================================================================
+\section{Implementation}
+\label{sec:implementation}
+
+VERONICA is implemented in Python~3.10+. The library is structured to be
+framework-agnostic with no hard dependency on any specific LLM client or agent
+framework.
+
+\textbf{Core dependencies:}
+
+\begin{itemize}[nosep]
+  \item \texttt{threading} (standard library): lock-based concurrency for all
+    state-machine primitives
+  \item \texttt{contextvars} (standard library): per-request
+    \texttt{ContextVar} storage for middleware integration
+  \item \texttt{redis} (optional): distributed budget backend and atomic Lua
+    scripts for \texttt{DistributedCircuitBreaker}
+  \item \texttt{opentelemetry-api} (optional):
+    \texttt{OTelExecutionGraphObserver} for execution graph export
+\end{itemize}
+
+\textbf{Source structure:}
+
+\begin{lstlisting}[style=plain]
+src/veronica_core/
+  runtime_policy.py          # RuntimePolicy, PolicyContext, PolicyDecision,
+                             # PolicyPipeline
+  budget.py                  # BudgetEnforcer
+  agent_guard.py             # AgentStepGuard
+  circuit_breaker.py         # CircuitBreaker (local + distributed)
+  retry.py                   # RetryContainer
+  distributed.py             # RedisBudgetBackend, DistributedCircuitBreaker
+  containment/
+    execution_context.py     # ExecutionContext, ExecutionConfig, WrapOptions
+    execution_graph.py       # ExecutionGraph, Node
+    timeout_pool.py          # SharedTimeoutPool, CancellationToken
+    budget_allocator.py      # BudgetAllocator (hierarchical budgets)
+  middleware.py              # VeronicaASGIMiddleware, VeronicaWSGIMiddleware
+  adapters/
+    langchain.py             # LangChain callback adapter
+    ag2.py                   # AG2 capability adapter
+    langgraph.py             # LangGraph node wrapper
+    mcp.py                   # MCP containment adapter (sync)
+    mcp_async.py             # MCP containment adapter (async)
+    crewai.py                # CrewAI adapter
+    llamaindex.py            # LlamaIndex adapter
+    ros2.py                  # ROS2 adapter
+  partial.py                 # PartialResultBuffer
+  otel.py                    # OTelExecutionGraphObserver
+\end{lstlisting}
+
+\textbf{Distribution:} \texttt{veronica-core} on PyPI (v3.4.2).
+
+\textbf{Testing:} 4844 tests, 94\% coverage (v3.4.2). Test categories: unit
+tests for each primitive, integration tests for middleware and adapters,
+adversarial tests for concurrent access patterns, corrupted input handling,
+and TOCTOU race conditions (\texttt{tests/adversarial/}).
+
+\textbf{Reproducibility:} All benchmarks are deterministic (no network calls,
+no random seeds beyond jitter). See \texttt{benchmarks/README.md} for
+reproduction instructions.
+
+% =====================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Design Decisions}
+
+\textbf{Chain-level versus call-level containment.} The central design
+decision in VERONICA is to enforce limits at the chain boundary rather than
+per-call. This requires a persistent context object (\texttt{ExecutionContext})
+that outlives individual calls, which in turn requires lifecycle management
+(context managers, middleware). The alternative---per-call limits---is simpler
+to implement but cannot prevent compositional failures because each individual
+call is within its local budget.
+
+\textbf{No override mechanism.} \texttt{PolicyPipeline} has no override or
+exception path. Any policy denial terminates evaluation. This is intentional:
+safety policies should not be overridable by lower-priority code. Applications
+requiring conditional exceptions should configure narrower policies rather
+than override existing ones.
+
+\textbf{Cooperative cancellation.} G5 (wall-clock timeout) provides
+cooperative rather than preemptive cancellation. This trades completeness
+(in-flight operations may complete after timeout) for safety (no thread
+interruption, no resource leak from killed threads). Long-running operations
+can poll \texttt{CancellationToken.is\_cancelled} for finer-grained
+cancellation.
+
+\textbf{Redis for distribution.} The choice of Redis for distributed state is
+pragmatic: Redis \texttt{INCRBYFLOAT} and Lua \texttt{eval()} provide the
+atomic operations required for G1 and G4 in distributed mode. Alternative
+backends (PostgreSQL, DynamoDB) would require explicit compare-and-swap loops;
+Redis provides native atomicity at lower latency.
+
+\subsection{Limitations}
+
+\begin{enumerate}
+  \item \textbf{Cooperative cancellation.} G5 applies only to new operations.
+    In-flight operations at timeout time may complete before observing
+    cancellation.
+
+  \item \textbf{\texttt{RetryContainer} must use \texttt{ExecutionContext} for
+    G3.} Standalone \texttt{RetryContainer} provides only local bounds; the
+    chain-level ceiling requires an active \texttt{ExecutionContext}.
+
+  \item \textbf{Redis availability for G1 distributed.} When Redis is
+    unavailable and \texttt{fallback\_on\_error=True}, the
+    \texttt{LocalBudgetBackend} fallback provides only process-local bounds,
+    not cross-process bounds.
+
+  \item \textbf{Cost accuracy.} G1 bounds accumulated reported costs, not
+    actual costs. If the LLM provider reports costs inaccurately, the bound
+    applies to reported values.
+
+  \item \textbf{Agent framework integration depth.} Framework adapters wrap
+    the outermost callable boundary; agent-internal retry logic (e.g.,
+    LangChain's \texttt{tenacity} integration at the chain level) may not be
+    captured by \texttt{RetryContainer} without explicit wrapping.
+
+  \item \textbf{Residual cost bound.} G1 bounds the \emph{committed} cost.
+    Because VERONICA uses cooperative containment (check-before-dispatch),
+    calls that are already in-flight when \texttt{HALT} fires may complete and
+    incur cost that is not reflected in the committed accumulator until after
+    the halt. The worst-case residual cost is:
+    \[
+      \text{ResidualCost} \leq \text{MaxInFlight} \times \text{AvgCallCost}
+    \]
+    where $\text{MaxInFlight}$ is the maximum number of concurrent
+    \texttt{wrap\_llm\_call()} invocations in a single
+    \texttt{ExecutionContext} (bounded by the number of threads calling
+    \texttt{wrap\_llm\_call()} on the same context) and $\text{AvgCallCost}$
+    is the average cost of a single LLM call.
+
+    In the common single-threaded agent pattern, $\text{MaxInFlight} = 1$,
+    and the residual is at most one call's cost. In multi-threaded
+    configurations with $N$ worker threads, $\text{MaxInFlight} = N$, and the
+    total cost may exceed \texttt{max\_cost\_usd} by up to
+    $N \times \text{AvgCallCost}$ in the worst case.
+
+    This bound is tight: it is achievable when all $N$ threads pass the budget
+    check simultaneously, each dispatches one call, and all $N$ calls succeed
+    and commit cost before any observes the updated accumulator. The two-phase
+    reserve/commit protocol (v2.0 roadmap) would reduce the residual to the
+    cost of the single reserving call, at the expense of additional lock
+    contention.
+
+  \item \textbf{Single-language implementation.} VERONICA is implemented in
+    Python. Agent systems written in other languages (TypeScript, Go, Rust)
+    cannot use the library directly. The containment model is
+    language-independent, but the implementation relies on Python's
+    \texttt{threading.Lock} and \texttt{contextvars} for its concurrency and
+    context-propagation guarantees.
+
+  \item \textbf{GIL and concurrency model.} Python's Global Interpreter Lock
+    (GIL) serializes bytecode execution, which simplifies reasoning about lock
+    correctness but limits true parallelism to I/O-bound workloads. Under
+    CPython with the GIL, the \texttt{threading.Lock} acquisitions in
+    \texttt{BudgetEnforcer} and \texttt{AgentStepGuard} are effectively
+    uncontended for CPU-bound code. On future GIL-free Python builds (PEP
+    703), the lock-based protocols remain correct but may exhibit higher
+    contention under true thread parallelism.
+
+  \item \textbf{LLM cost estimation accuracy.} VERONICA's pricing table maps
+    model names to per-token costs. When providers change pricing or introduce
+    new models, the table may be stale. The \texttt{cost\_estimate\_hint}
+    parameter in \texttt{WrapOptions} allows callers to override the estimate,
+    but incorrect hints weaken the practical accuracy of G1 (the formal bound
+    still holds on committed values).
+\end{enumerate}
+
+\subsection{Future Work}
+
+The v2.0 roadmap includes: async-native budget enforcement
+(\texttt{AsyncBudgetBackend}); reserve-commit-rollback budget protocol for
+speculative cost accounting; \texttt{on\_halt} callback for
+application-level cleanup on containment; and OpenTelemetry metric exports
+for containment events. The distributed circuit breaker Lua scripts target
+Redis Cluster compatibility in a future release.
+
+% =====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+VERONICA provides a runtime containment layer that addresses the compositional
+resource amplification failures inherent in LLM agent systems. By enforcing
+hard limits at the chain level rather than the call level, VERONICA provides
+guarantees that per-call policies cannot: cost bounds that hold across nested
+retry layers (G1), step limits that apply across tool recursion (G2), retry
+budgets that span agent topologies (G3), and circuit breakers that isolate
+failures across process boundaries (G4).
+
+The four core primitives---\texttt{BudgetEnforcer}, \texttt{AgentStepGuard},
+\texttt{CircuitBreaker}, and \texttt{RetryContainer}---are composable via
+\texttt{PolicyPipeline} and require no modification to existing agent logic.
+Empirical evaluation shows 53--90\% operation reduction versus uncontained
+baselines, with full-pipeline overhead of 11.43 microseconds per call, less
+than 0.002\% of typical LLM API latency. The implementation is available as
+\texttt{veronica-core} on PyPI (v3.4.2, 4844 tests, 94\% coverage).
+
+% =====================================================================
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+% =====================================================================
+\appendix
+
+\section{API Quick Reference}
+\label{sec:appendix-api}
+
+\begin{lstlisting}
+from veronica_core.containment import ExecutionContext, ExecutionConfig, WrapOptions
+from veronica_core import BudgetEnforcer, AgentStepGuard, CircuitBreaker, RetryContainer
+from veronica_core.runtime_policy import PolicyPipeline, PolicyContext
+
+# Compose a policy pipeline
+pipeline = PolicyPipeline([
+    BudgetEnforcer(limit_usd=10.0),
+    AgentStepGuard(max_steps=25),
+    CircuitBreaker(failure_threshold=5, recovery_timeout=60.0),
+])
+
+# Configure chain limits
+config = ExecutionConfig(
+    max_cost_usd=1.0,
+    max_steps=50,
+    max_retries_total=10,
+    timeout_ms=30_000,
+)
+
+# Execute with containment
+with ExecutionContext(config=config, pipeline=pipeline) as ctx:
+    for step in agent_steps():
+        decision = ctx.wrap_llm_call(
+            fn=lambda: client.chat(messages=step.messages),
+            options=WrapOptions(
+                operation_name="agent_step",
+                cost_estimate_hint=step.estimated_cost,
+            ),
+        )
+        if decision == Decision.HALT:
+            result = ctx.get_partial_result()
+            break
+\end{lstlisting}
+
+\section{Benchmark Reproduction}
+\label{sec:appendix-benchmarks}
+
+\textbf{Environment.}
+
+\begin{table}[!ht]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Version / Specification} \\
+\midrule
+Python & 3.10, 3.11, or 3.12 (tested on all three in CI) \\
+OS & Linux (Ubuntu 22.04), macOS 14, Windows 11 \\
+Hardware & Any x86\_64 or ARM64 (no GPU required) \\
+\texttt{veronica-core} & 2.0.0 (\texttt{pip install veronica-core==2.0.0}) \\
+\texttt{fakeredis} & $\geq$ 2.26 with \texttt{lupa} $\geq$ 2.6
+(distributed tests only) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No external services (Redis, LLM APIs) are required for benchmark
+reproduction. All benchmarks use stub implementations with deterministic
+behavior.
+
+\textbf{Installation.}
+
+\begin{lstlisting}[style=bash]
+# From PyPI
+pip install veronica-core==2.0.0
+
+# From source (for development/modification)
+git clone https://github.com/amabito/veronica-core
+cd veronica-core
+git checkout v3.4.2
+pip install -e ".[dev]"
+\end{lstlisting}
+
+\textbf{Benchmark commands and expected output.}
+
+\begin{lstlisting}[style=bash]
+# Section 6.2-6.3: Four canonical failure modes
+python benchmarks/bench_retry_amplification.py
+# Expected: baseline_ops=27, veronica_ops=3, reduction=88.9%
+
+python benchmarks/bench_recursive_tools.py
+# Expected: baseline_ops=20, veronica_ops=5, reduction=75.0%
+
+python benchmarks/bench_multi_agent_loop.py
+# Expected: baseline_ops=60, veronica_ops=28, reduction=53.3%
+
+python benchmarks/bench_websocket_runaway.py
+# Expected: baseline_ops=100, veronica_ops=10, reduction=90.0%
+
+# Baseline comparison (all 4 baselines x 4 scenarios)
+python benchmarks/bench_baseline_comparison.py
+# Expected: JSON with 16 entries, avg reduction ~78.8%
+
+# Ablation study (component contribution)
+python benchmarks/bench_ablation_study.py
+# Expected: 7 configurations, monotonic reduction as components added
+
+# Section 6.5: Scale simulation (1-1000 concurrent chains)
+python benchmarks/scale_simulation.py
+# Expected: ~83% reduction, ~12.6 us/chain overhead at 1000 chains
+
+# Real incident reproductions
+python benchmarks/real_incidents/run_all.py
+# Expected: 5/5 PASS
+\end{lstlisting}
+
+All scripts produce JSON to stdout. Numeric results should match the values in
+Section~\ref{sec:evaluation} within rounding tolerance. Timing measurements
+(microseconds/call) may vary by $\pm$50\% depending on hardware; the relative
+ordering and order-of-magnitude should be consistent.
+
+\textbf{Verification against paper claims.}
+
+\begin{table}[!ht]
+\centering
+\footnotesize
+\caption{Paper claim verification.}
+\label{tab:verification}
+\begin{tabular}{@{}p{4cm}p{5cm}p{3.5cm}@{}}
+\toprule
+\textbf{Paper Claim} & \textbf{Verification Command} &
+\textbf{Pass Criterion} \\
+\midrule
+88.9\% retry reduction (Section~6.3) &
+\texttt{bench\_retry\_amplification.py} &
+\texttt{reduction $\geq$ 0.88} \\
+75.0\% recursive reduction (Section~6.3) &
+\texttt{bench\_recursive\_tools.py} &
+\texttt{reduction $\geq$ 0.74} \\
+53.3\% multi-agent reduction (Section~6.3) &
+\texttt{bench\_multi\_agent\_loop.py} &
+\texttt{reduction $\geq$ 0.52} \\
+90.0\% WebSocket reduction (Section~6.3) &
+\texttt{bench\_websocket\_runaway.py} &
+\texttt{reduction $\geq$ 0.89} \\
+$<$ 12 $\mu$s/call overhead (Section~6.4) &
+\texttt{bench\_baseline\_comparison.py} &
+\texttt{overhead\_us $<$ 20} (hardware-dependent) \\
+G1--G6 hold (Section~5) &
+\texttt{pytest tests/ -q} &
+4844 tests pass, 0 fail \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Test Suite Structure}
+\label{sec:appendix-tests}
+
+\begin{lstlisting}[style=plain]
+tests/
+  unit/
+    test_budget.py                  # BudgetEnforcer, including NaN/Inf/negative
+    test_agent_guard.py             # AgentStepGuard, increment-before-check
+    test_circuit_breaker.py         # State machine, HALF_OPEN slot constraint
+    test_retry.py                   # RetryContainer, jitter, backoff
+    test_execution_context.py       # ExecutionContext, WrapOptions, snapshots
+    test_runtime_policy.py          # PolicyPipeline, PolicyContext, PolicyDecision
+  integration/
+    test_middleware.py              # ASGI/WSGI middleware, WebSocket
+    test_adapters_langchain.py      # LangChain adapter
+    test_adapters_ag2.py            # AG2 capability adapter
+    test_distributed.py             # Redis backend (fakeredis + lupa)
+  adversarial/
+    test_concurrent_budget.py       # Race conditions on BudgetEnforcer
+    test_concurrent_circuit.py      # TOCTOU on CircuitBreaker HALF_OPEN
+    test_corrupted_input.py         # NaN, Inf, garbage strings in Redis state
+    test_partial_failure.py         # Backend unavailable mid-operation
+\end{lstlisting}
+
+\end{document}

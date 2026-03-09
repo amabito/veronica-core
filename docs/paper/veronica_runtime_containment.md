@@ -516,7 +516,7 @@ The library is structured to be framework-agnostic: no hard dependency on
 LangChain, AG2, LangGraph, or any specific LLM client library.
 
 Source: `src/veronica_core/`
-Tests: `tests/` (2232 tests, 92% coverage as of v1.8.1)
+Tests: `tests/` (4844 tests, 94% coverage as of v3.4.2)
 Distribution: PyPI (`veronica-core`)
 
 ---

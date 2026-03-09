@@ -23,7 +23,7 @@ WebSocket sessions.
 We present four formal safety guarantees (G1--G6), benchmark results demonstrating
 83--90% operation reduction versus uncontained baselines, and a policy pipeline overhead
 of 11.43 microseconds per call. VERONICA is available as `veronica-core` on PyPI
-(v2.0.0, 2232 tests, 92% coverage).
+(v3.4.2, 4844 tests, 94% coverage).
 
 ---
 
@@ -74,7 +74,7 @@ requiring agent-level awareness of the containment layer.
    (Section 5).
 4. Empirical evaluation against uncontained baselines showing 53--90% operation
    reduction with sub-12-microsecond overhead per call (Section 6).
-5. An open-source implementation (`veronica-core`, PyPI) with 2232 tests and 92%
+5. An open-source implementation (`veronica-core`, PyPI) with 4844 tests and 94%
    coverage (Section 7).
 
 ---
@@ -715,9 +715,9 @@ src/veronica_core/
   otel.py                    # OTelExecutionGraphObserver
 ```
 
-**Distribution:** `veronica-core` on PyPI (v2.0.0).
+**Distribution:** `veronica-core` on PyPI (v3.4.2).
 
-**Testing:** 2232 tests, 92% coverage (v1.8.1). Test categories: unit tests for each
+**Testing:** 4844 tests, 94% coverage (v3.4.2). Test categories: unit tests for each
 primitive, integration tests for middleware and adapters, adversarial tests for
 concurrent access patterns, corrupted input handling, and TOCTOU race conditions.
 (`tests/adversarial/`)
@@ -777,11 +777,12 @@ explicit compare-and-swap loops; Redis provides native atomicity at lower latenc
 
 ### 8.3 Future Work
 
-The v2.0 roadmap includes: async-native budget enforcement (`AsyncBudgetBackend`);
-reserve-commit-rollback budget protocol for speculative cost accounting; `on_halt`
-callback for application-level cleanup on containment; and OpenTelemetry metric
-exports for containment events. The distributed circuit breaker Lua scripts target
-Redis Cluster compatibility in a future release.
+Since the original v2.0 paper, the following have been implemented: async-native budget
+enforcement (`AsyncBudgetBackend`, v2.3); reserve-commit-rollback budget protocol (v2.0);
+OpenTelemetry metric exports for containment events (v2.4); declarative YAML/JSON policy
+with hot-reload (v2.1); multi-tenant hierarchical budget pools (v2.3); A2A trust boundary
+with per-agent policy routing (v2.7); and memory governance hooks (v3.4). The v4.0 roadmap
+targets cross-process federation with cryptographic budget grants.
 
 ---
 
@@ -799,7 +800,7 @@ The four core primitives -- `BudgetEnforcer`, `AgentStepGuard`, `CircuitBreaker`
 existing agent logic. Empirical evaluation shows 53--90% operation reduction versus
 uncontained baselines, with full-pipeline overhead of 11.43 microseconds per call,
 less than 0.002% of typical LLM API latency. The implementation is available as
-`veronica-core` on PyPI (v2.0.0, 2232 tests, 92% coverage).
+`veronica-core` on PyPI (v3.4.2, 4844 tests, 94% coverage).
 
 ---
 

@@ -82,7 +82,18 @@ Cross-cutting:
 
 ## 2. Current State
 
-21+ `@runtime_checkable` protocols. Zero required dependencies. 4045 tests, 92% coverage. 3 rounds of independent security audits (108 findings, all fixed). `V2_DEFERRED.md` documents 20 latent edge cases, 5 design tradeoffs, and 7 architectural items.
+veronica-core v3.4.2. Stable kernel release.
+
+- 21+ `@runtime_checkable` protocols
+- Zero required dependencies
+- 4844 tests, 94% coverage
+- 4 rounds of independent security audit (130+ findings, all fixed)
+- Zero breaking changes from v2.1.0 through v3.4.2
+- `V2_DEFERRED.md` documents 20 latent edge cases, 5 design tradeoffs, and 7 architectural items
+
+v3.x is the containment kernel. It is feature-complete for single-process, single-organization use.
+
+v4.0 (Federation) is scoped but not scheduled. It will be built when the first concrete cross-organization use case appears.
 
 ---
 
@@ -232,7 +243,7 @@ class ExecutionContext:
 
 **Risks**: Performance regression from added locks. Benchmark before/after.
 
-### Phase 4: Federation (v4.0)
+### Phase 4: Federation (v4.0) -- NOT SCHEDULED
 
 **Goal**: Multiple VERONICA instances share budget state and policy decisions across processes/organizations.
 
@@ -263,7 +274,7 @@ Node A (org-alpha)                    Node B (org-beta)
 
 **Risks**: Network partition handling. Grant revocation propagation delay. Double-spend across partitioned nodes. Mitigation: pessimistic grant model -- grantee cannot exceed granted amount even if grantor is unreachable. Grants expire on timeout.
 
-### Phase 5: Adapter Ecosystem Hardening (v4.1)
+### Phase 5: Adapter Ecosystem Hardening (v4.1) -- NOT SCHEDULED
 
 **Goal**: Stabilize adapter API and reduce per-adapter maintenance burden.
 
@@ -274,7 +285,7 @@ Node A (org-alpha)                    Node B (org-beta)
 
 **Risks**: Breaking existing adapter implementations. Migration period with deprecation warnings.
 
-### Phase 6: Memory Governance Integration (v4.2)
+### Phase 6: Memory Governance Integration (v4.2) -- NOT SCHEDULED
 
 **Goal**: Extend containment to memory system operations.
 
