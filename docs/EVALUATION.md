@@ -4,7 +4,7 @@ veronica-core includes reproducible evaluation of runtime containment across fou
 canonical runaway failure modes (retry amplification, recursive tools, multi-agent
 loops, WebSocket runaway):
 
-- [arXiv paper](paper/veronica_runtime_containment_arxiv.md) -- system design, threat model, formal safety guarantees (G1-G6), evaluation
+- [Technical paper](paper/veronica_runtime_containment_draft.md) -- system design, threat model, formal safety guarantees (G1-G6), evaluation
 - [Baseline comparison](../benchmarks/bench_baseline_comparison.py) -- no containment vs veronica across four scenarios (avg 78.8% call reduction)
 - [Ablation study](../benchmarks/bench_ablation_study.py) -- incremental component contribution (BudgetEnforcer, AgentStepGuard, CircuitBreaker, RetryContainer)
 - [Real incident reproduction](../benchmarks/real_incidents/) -- five real-world failure scenarios with before/after comparison

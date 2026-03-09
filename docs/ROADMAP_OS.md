@@ -253,7 +253,7 @@ Prerequisites: Phase 1-5 complete. At least 3 single-org deployments stable.
 - Docker Compose single-org deploy.
 - Design partner outreach and onboarding.
 - HN/Reddit launch (kernel first, then OS).
-- arXiv paper submission.
+- Technical paper publication.
 
 ### Not Now
 

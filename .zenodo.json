@@ -1,0 +1,43 @@
+{
+  "title": "VERONICA: A Runtime Containment Layer for Compositional Resource Amplification in LLM Agent Systems",
+  "description": "LLM agent frameworks expose runaway failure modes -- retry amplification, recursive tool loops, multi-agent cost cascades, and WebSocket session runaways -- that arise from individually reasonable local decisions composing into unbounded global resource consumption. VERONICA enforces chain-level resource bounds through four orthogonal primitives (BudgetEnforcer, AgentStepGuard, CircuitBreaker, RetryContainer) unified under a RuntimePolicy protocol. We present six formal safety guarantees (G1-G6), benchmark results showing 53-90% operation reduction versus uncontained baselines, and a policy pipeline overhead of 11.43 microseconds per call.",
+  "creators": [
+    {
+      "name": "amabito",
+      "affiliation": "Independent Researcher"
+    }
+  ],
+  "upload_type": "publication",
+  "publication_type": "workingpaper",
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "LLM agents",
+    "runtime containment",
+    "resource amplification",
+    "AI safety",
+    "circuit breaker",
+    "budget enforcement",
+    "multi-agent systems",
+    "cost control"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/amabito/veronica-core",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://pypi.org/project/veronica-core/",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "zenodo"
+    }
+  ],
+  "notes": "Working paper. Open-source implementation available as veronica-core on PyPI (v3.4.2, 4844 tests, 94% coverage).",
+  "version": "3.4.2"
+}

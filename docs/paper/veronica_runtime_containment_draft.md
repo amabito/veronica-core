@@ -1,5 +1,12 @@
 # VERONICA: A Runtime Containment Layer for Compositional Resource Amplification in LLM Agent Systems
 
+**Author:** amabito
+**Version:** 3.4.2 | **Date:** 2026-03-09 | **Status:** Working Paper
+**Source:** https://github.com/amabito/veronica-core
+**Package:** https://pypi.org/project/veronica-core/
+
+---
+
 **Abstract**
 
 Large language model (LLM) agent frameworks expose a class of runaway failure modes

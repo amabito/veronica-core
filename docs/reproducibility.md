@@ -1,7 +1,7 @@
 # Reproducibility Guide
 
 This document describes how to reproduce the evaluation results reported in the
-[arXiv paper](paper/veronica_runtime_containment_arxiv.md).
+[technical paper](paper/veronica_runtime_containment_draft.md).
 
 ---
 

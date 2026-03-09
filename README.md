@@ -6,18 +6,24 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-Runtime containment for LLM agent systems.
-Budget, step, retry, and circuit breaker enforcement -- evaluated before the call reaches the model.
+Stops LLM agent runs from burning money. Catches runaway retries, infinite agent loops, and surprise API bills before they happen.
 
-veronica-core is the kernel: it enforces execution boundaries.
-[veronica](https://github.com/amabito/veronica-public) is the control plane: policy management, fleet coordination, and dashboard.
-
-Containment, not observability. VERONICA does not inspect prompts or completions.
-It governs resource consumption -- cost, steps, retries, timeouts, circuit state -- and halts calls that exceed policy.
+Your agent retries 3 times per layer. Three layers deep, that's 64 API calls from one user click. veronica-core enforces a hard budget across the entire run -- cost, steps, retries, timeouts -- and halts the call before it reaches the model.
 
 ```bash
 pip install veronica-core
 ```
+
+```
+# 3-layer retry, no run-level cap:  up to 64 API calls per user action
+# 3-layer retry, with veronica-core: capped at 6 (example: max_retries_total=5)
+```
+
+No required dependencies. Python 3.10+. Works with any LLM provider.
+
+Containment, not observability -- it doesn't inspect prompts or completions, it caps resource consumption.
+
+veronica-core is the enforcement kernel. [veronica](https://github.com/amabito/veronica-public) is the control plane (policy management, fleet coordination, dashboard).
 
 ---
 
