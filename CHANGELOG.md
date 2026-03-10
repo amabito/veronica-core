@@ -6,7 +6,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [3.4.3] -- 2026-03-10 -- F.R.I.D.A.Y. Security Hardening (R1-R5)
+## [3.4.3] -- 2026-03-10 -- Security Hardening
 
 **Breaking changes:** none
 
