@@ -19,6 +19,7 @@ Usage::
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -146,8 +147,8 @@ class WeightedAllocator:
     """
 
     def __init__(self, weights: dict[str, float]) -> None:
-        if any(w < 0.0 for w in weights.values()):
-            raise ValueError("All weights must be non-negative.")
+        if any(not math.isfinite(w) or w < 0.0 for w in weights.values()):
+            raise ValueError("All weights must be non-negative finite floats.")
         self._weights = dict(weights)
 
     def allocate(

@@ -129,15 +129,19 @@ class VaultKeyProvider:
             )
         except Exception as exc:
             raise RuntimeError(
-                f"Failed to fetch key '{self._key_name}' from Vault "
-                f"at {self._vault_url}: {exc}"
+                f"Failed to fetch key '{self._key_name}' from Vault: {type(exc).__name__}"
             ) from exc
 
         keys = response.get("data", {}).get("keys", {})
         if not keys:
             raise RuntimeError(f"No keys found for '{self._key_name}' in Vault")
-        # Get the latest version's public key
-        latest_version = max(keys.keys(), key=int)
+        # Get the latest version's public key (filter non-numeric keys)
+        numeric_keys = [k for k in keys if str(k).isdigit()]
+        if not numeric_keys:
+            raise RuntimeError(
+                f"No numeric version keys found for '{self._key_name}' in Vault"
+            )
+        latest_version = max(numeric_keys, key=int)
         public_key = keys[latest_version].get("public_key", "")
         if not public_key:
             raise RuntimeError(

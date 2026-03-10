@@ -179,7 +179,7 @@ class PolicyVerifier:
                 except Exception as exc:
                     errors.append(
                         f"Bundle signature verification raised "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{type(exc).__name__}"
                     )
             else:
                 warnings.append(

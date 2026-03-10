@@ -48,6 +48,7 @@ Usage::
 from __future__ import annotations
 
 import copy
+import math
 import threading
 import time
 import uuid
@@ -163,6 +164,14 @@ class ExecutionGraph:
         if max_nodes < 0:
             raise ValueError(
                 f"max_nodes must be >= 0 (0 = unlimited); got {max_nodes}"
+            )
+        if not math.isfinite(cost_rate_threshold_usd_per_sec) or cost_rate_threshold_usd_per_sec <= 0:
+            raise ValueError(
+                f"cost_rate_threshold_usd_per_sec must be a positive finite float; got {cost_rate_threshold_usd_per_sec}"
+            )
+        if not math.isfinite(token_velocity_threshold) or token_velocity_threshold <= 0:
+            raise ValueError(
+                f"token_velocity_threshold must be a positive finite float; got {token_velocity_threshold}"
             )
         self._chain_id: str = chain_id or str(uuid.uuid4())
         self._lock = threading.RLock()

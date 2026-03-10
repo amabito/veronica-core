@@ -190,7 +190,7 @@ class TestAdversarialFailClosed:
         gov.add_hook(_BombHook())
         decision = gov.evaluate(_op())
         assert decision.verdict is GovernanceVerdict.DENY
-        assert "bomb" in decision.reason
+        assert "ValueError" in decision.reason
 
     def test_hook_exception_after_allow_hook_returns_deny(self) -> None:
         """ALLOW hook followed by a raising hook must still return DENY."""

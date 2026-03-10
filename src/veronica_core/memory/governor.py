@@ -157,7 +157,7 @@ class MemoryGovernor:
                 )
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
-                    reason=f"hook error: {exc}",
+                    reason=f"hook error: {type(exc).__name__}",
                     policy_id=type(hook).__name__,
                     operation=operation,
                 )

@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -95,8 +96,10 @@ class DegradationLadder:
         Returns:
             PolicyDecision with degradation_action set, or None.
         """
-        if max_cost_usd <= 0:
+        if not math.isfinite(max_cost_usd) or max_cost_usd <= 0:
             return None
+        if not math.isfinite(cost_accumulated):
+            cost_accumulated = 0.0
 
         fraction = cost_accumulated / max_cost_usd
         thresholds = self._config.cost_thresholds

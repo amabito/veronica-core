@@ -592,7 +592,7 @@ class DistributedCircuitBreaker:
             return self._resolve_state_str(state_str, lft)
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("DistributedCircuitBreaker.state read failed: %s", exc)
+                logger.error("DistributedCircuitBreaker.state read failed: %s", _redact_exc(exc))
                 return self._fallback.state
             raise
 
@@ -611,7 +611,7 @@ class DistributedCircuitBreaker:
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error(
-                    "DistributedCircuitBreaker.failure_count read failed: %s", exc
+                    "DistributedCircuitBreaker.failure_count read failed: %s", _redact_exc(exc)
                 )
                 return self._fallback.failure_count
             raise
@@ -631,7 +631,7 @@ class DistributedCircuitBreaker:
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error(
-                    "DistributedCircuitBreaker.success_count read failed: %s", exc
+                    "DistributedCircuitBreaker.success_count read failed: %s", _redact_exc(exc)
                 )
                 return self._fallback.success_count
             raise
@@ -823,7 +823,7 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             if self._fallback_on_error:
-                logger.error("DistributedCircuitBreaker.reset failed: %s", exc)
+                logger.error("DistributedCircuitBreaker.reset failed: %s", _redact_exc(exc))
                 self._fallback.reset()
             else:
                 raise

@@ -24,9 +24,9 @@ from veronica_core.shield.types import Decision
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of distinct tool names tracked in stats before emitting a
-# warning.  Does not prevent tracking -- the limit exists to alert operators of
-# unbounded tool-name generation (e.g. from attacker-controlled input).
+# Hard cap on distinct tool names tracked in stats.  Beyond this limit new
+# tool names are silently dropped to prevent DoS via attacker-controlled
+# tool-name generation.  A warning is emitted when the cap is reached.
 _STATS_WARN_LIMIT = 10_000
 
 

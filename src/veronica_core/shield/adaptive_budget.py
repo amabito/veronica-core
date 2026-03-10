@@ -46,6 +46,7 @@ Design principles:
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections import deque
@@ -211,7 +212,7 @@ class AdaptiveBudgetHook:
         self._lock = threading.Lock()
         # Compute event buffer capacity based on window. Assume at most 100
         # events per second sustained, with a floor of 10,000.
-        self._event_buffer_maxlen: int = max(int(window_seconds * 100), 10_000)
+        self._event_buffer_maxlen: int = min(max(int(window_seconds * 100), 10_000), 1_000_000)
         self._initialize_anomaly_state()
 
     # -- Init helpers --------------------------------------------------------
@@ -720,10 +721,12 @@ class AdaptiveBudgetHook:
             state: A dict previously returned by ``export_control_state()``.
         """
         with self._lock:
-            self._ceiling_multiplier = float(state["adaptive_multiplier"])
+            raw_mult = float(state["adaptive_multiplier"])
+            if not math.isfinite(raw_mult):
+                raw_mult = 1.0
             self._ceiling_multiplier = max(
                 self._min_multiplier,
-                min(self._max_multiplier, self._ceiling_multiplier),
+                min(self._max_multiplier, raw_mult),
             )
             self._last_adjustment_ts = state.get("last_adjustment_ts")
             # Only "tighten" and "loosen" are ever written to _last_action

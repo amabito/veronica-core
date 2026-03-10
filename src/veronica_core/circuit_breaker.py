@@ -78,7 +78,7 @@ class CircuitBreaker:
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.failure_threshold, int) or math.isnan(
+        if isinstance(self.failure_threshold, bool) or not isinstance(self.failure_threshold, int) or math.isnan(
             float(self.failure_threshold)
         ):
             raise ValueError(

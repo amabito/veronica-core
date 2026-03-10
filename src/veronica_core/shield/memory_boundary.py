@@ -181,8 +181,10 @@ class MemoryBoundaryHook:
         if kind not in (_MEMORY_READ_KIND, _MEMORY_WRITE_KIND):
             return  # Not a memory call -- no opinion.
 
-        agent_id = str(ctx.metadata.get(_META_AGENT_ID) or "")
-        namespace = str(ctx.metadata.get(_META_NAMESPACE) or "")
+        raw_agent_id = ctx.metadata.get(_META_AGENT_ID)
+        agent_id = str(raw_agent_id) if raw_agent_id is not None else ""
+        raw_namespace = ctx.metadata.get(_META_NAMESPACE)
+        namespace = str(raw_namespace) if raw_namespace is not None else ""
         is_write = kind == _MEMORY_WRITE_KIND
 
         allowed, reason = self._evaluate_access(agent_id, namespace, is_write)

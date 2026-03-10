@@ -1030,7 +1030,7 @@ class ExecutionContext:
             )
             self._emit_chain_event(
                 self._MG_DENIED,
-                f"memory governor error: {exc}",
+                f"memory governor error: {type(exc).__name__}",
             )
             return self._halt_node(
                 node, stack, graph_node_id, self._MG_DENIED

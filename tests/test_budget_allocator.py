@@ -575,17 +575,10 @@ class TestAdversarialBudgetAllocator:
         # But allocations dict has only 1 entry for "a" (last assignment wins)
         assert "a" in result.allocations
 
-    def test_nan_in_weighted_weights_no_crash(self) -> None:
-        """NaN weight should not crash WeightedAllocator."""
-        # NaN weights are >= 0 check: NaN < 0 is False, so constructor won't reject
-        alloc = WeightedAllocator({"a": float("nan"), "b": 1.0})
-        result = alloc.allocate(
-            total_budget=1.0,
-            agent_names=["a", "b"],
-            current_usage={},
-        )
-        # NaN in sum -> NaN total_weight -> NaN division. Must not hang or crash.
-        assert len(result.allocations) == 2
+    def test_nan_in_weighted_weights_rejected(self) -> None:
+        """NaN weight must be rejected by WeightedAllocator."""
+        with pytest.raises(ValueError, match="non-negative finite"):
+            WeightedAllocator({"a": float("nan"), "b": 1.0})
 
     def test_nan_in_current_usage_dynamic_no_crash(self) -> None:
         """NaN usage value must not crash DynamicAllocator."""

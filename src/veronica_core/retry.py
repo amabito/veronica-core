@@ -93,7 +93,7 @@ class RetryContainer:
 
                 if attempt >= self.max_retries:
                     logger.warning(
-                        f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {e}"
+                        f"[VERONICA_RETRY] All {self.max_retries} retries exhausted: {type(e).__name__}"
                     )
                     raise
 
@@ -102,7 +102,7 @@ class RetryContainer:
                     base_delay *= 1.0 + random.uniform(-self.jitter, self.jitter)
                 delay = min(max(0.0, base_delay), self.backoff_max)
                 logger.info(
-                    f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {e}. "
+                    f"[VERONICA_RETRY] Attempt {attempt + 1} failed: {type(e).__name__}. "
                     f"Retrying in {delay:.1f}s "
                     f"({self.max_retries - attempt} remaining)"
                 )
@@ -117,17 +117,20 @@ class RetryContainer:
     @property
     def attempt_count(self) -> int:
         """Number of attempts in the last execute() call."""
-        return self._attempt_count
+        with self._lock:
+            return self._attempt_count
 
     @property
     def total_retries(self) -> int:
         """Total retries across all execute() calls."""
-        return self._total_retries
+        with self._lock:
+            return self._total_retries
 
     @property
     def last_error(self) -> Optional[Exception]:
         """Last error encountered."""
-        return self._last_error
+        with self._lock:
+            return self._last_error
 
     @property
     def policy_type(self) -> str:

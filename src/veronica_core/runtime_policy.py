@@ -179,7 +179,8 @@ class PolicyPipeline:
             return list(self._policies)
 
     def __len__(self) -> int:
-        return len(self._policies)
+        with self._lock:
+            return len(self._policies)
 
 
 # ---------------------------------------------------------------------------

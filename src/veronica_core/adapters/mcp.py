@@ -290,7 +290,8 @@ class MCPContainmentAdapter(_MCPAdapterBase):
                 if len(self._stats) >= _STATS_WARN_LIMIT:
                     logger.warning(
                         "MCP adapter stats tracking %d+ distinct tool names; "
-                        "this may indicate unbounded tool-name generation",
+                        "dropping new tool name to prevent DoS",
                         _STATS_WARN_LIMIT,
                     )
+                    return
                 self._stats[tool_name] = MCPToolStats(tool_name=tool_name)
