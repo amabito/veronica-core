@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4844%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4837%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -151,7 +151,7 @@ Details: [docs/architecture.md](docs/architecture.md)
 
 ## Security
 
-Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 4 rounds of independent security audit (130+ findings fixed).
+Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 5 rounds of independent security audit (150+ findings fixed).
 
 Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
@@ -159,7 +159,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Stats
 
-4844 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.4.2. Python 3.10+.
+4837 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.4.3. Python 3.10+.
 
 Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 
@@ -192,7 +192,7 @@ pytest
 
 ## Roadmap
 
-v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.4.2.
+v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.4.3.
 
 Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 

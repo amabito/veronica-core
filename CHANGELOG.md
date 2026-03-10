@@ -6,6 +6,27 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.4.3] -- 2026-03-10 -- F.R.I.D.A.Y. Security Hardening (R1-R5)
+
+**Breaking changes:** none
+
+### Fixed
+
+- **NaN/Inf bypass guards**: `circuit_breaker`, `degradation`, `adaptive_budget`, `budget_allocator`, `execution_graph` -- `math.isfinite()` validation on numeric thresholds and cost inputs to prevent silent policy bypass via `float('nan')`.
+- **Bool-as-int coercion guard**: `circuit_breaker.failure_threshold` -- explicit `isinstance(v, bool)` check before `isinstance(v, int)` to prevent `True`/`False` being accepted as valid thresholds.
+- **Info leakage prevention**: `retry`, `governor`, `execution_context`, `key_providers`, `verifier` -- replaced `str(exc)` with `type(exc).__name__` in error messages and logs to avoid exposing internal URLs, credentials, or stack details.
+- **Log injection prevention**: `distributed_circuit_breaker` -- 4 log paths now use `_redact_exc()` to sanitize Redis URLs from exception messages.
+- **Thread safety**: `runtime_policy.__len__()` and `retry` property reads now acquire lock for nogil readiness.
+- **Agent-id coercion**: `memory_boundary` -- `None`-safe `str()` conversion prevents `str(None)` producing literal `"None"` as agent ID.
+- **Resource exhaustion**: `adaptive_budget` event buffer capped at 1M entries; MCP stats dict hard-capped at 10K distinct tool names (was warn-only).
+- **Vault key parsing**: `VaultKeyProvider` filters non-numeric version keys to prevent `int()` crash on malformed Vault responses.
+
+### Tests
+
+- 2 test updates: `test_adversarial_memory_gov` assertion aligned with info-leakage fix; `test_budget_allocator` NaN weight test updated from "no crash" to "rejected with ValueError". Total: 4837 (net -7 from test consolidation).
+
+---
+
 ## [3.4.2] -- 2026-03-08 -- Review-Fix Hardening + AG2 Merge
 
 **Breaking changes:** none
