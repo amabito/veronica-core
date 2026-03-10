@@ -168,6 +168,52 @@ class TestWrapMCPServerCreation:
 
         assert asyncio.run(run()) == pytest.approx(0.99)
 
+    def test_allowed_tools_filters_discovered(self) -> None:
+        """Only tools in allowed_tools should be registered."""
+        async def run() -> dict:
+            session = _make_session(tools=["search", "browse", "execute"])
+            ctx = _make_ctx()
+            adapter = await wrap_mcp_server(
+                session=session,
+                execution_context=ctx,
+                allowed_tools={"search", "browse"},
+            )
+            return adapter._tool_costs
+
+        costs = asyncio.run(run())
+        assert "search" in costs
+        assert "browse" in costs
+        assert "execute" not in costs
+
+    def test_allowed_tools_none_allows_all(self) -> None:
+        """When allowed_tools is None (default), all discovered tools are registered."""
+        async def run() -> dict:
+            session = _make_session(tools=["search", "browse", "execute"])
+            ctx = _make_ctx()
+            adapter = await wrap_mcp_server(
+                session=session, execution_context=ctx, allowed_tools=None
+            )
+            return adapter._tool_costs
+
+        costs = asyncio.run(run())
+        assert "search" in costs
+        assert "browse" in costs
+        assert "execute" in costs
+
+    def test_allowed_tools_empty_set_blocks_all(self) -> None:
+        """Empty allowed_tools set should block all discovered tools."""
+        async def run() -> dict:
+            session = _make_session(tools=["search", "browse"])
+            ctx = _make_ctx()
+            adapter = await wrap_mcp_server(
+                session=session, execution_context=ctx, allowed_tools=set()
+            )
+            return adapter._tool_costs
+
+        costs = asyncio.run(run())
+        assert "search" not in costs
+        assert "browse" not in costs
+
 
 # ---------------------------------------------------------------------------
 # call_tool delegation

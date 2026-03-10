@@ -65,7 +65,11 @@ def serialize_snapshot(
         "cost_usd": snapshot.cost_usd_accumulated,
         "retries_used": snapshot.retries_used,
         "aborted": snapshot.aborted,
-        "abort_reason": snapshot.abort_reason,
+        # Truncate abort_reason to prevent leaking internal exception details
+        # (e.g. connection strings, file paths) into compliance exports.
+        "abort_reason": snapshot.abort_reason[:256]
+        if snapshot.abort_reason
+        else snapshot.abort_reason,
         "elapsed_ms": snapshot.elapsed_ms,
         "started_at": _iso(snapshot.nodes[0].start_ts)
         if snapshot.nodes

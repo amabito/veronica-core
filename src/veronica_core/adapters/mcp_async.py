@@ -444,6 +444,7 @@ async def wrap_mcp_server(
     circuit_breaker: Optional[CircuitBreaker] = None,
     default_cost_per_call: float = 0.001,
     timeout_seconds: Optional[float] = None,
+    allowed_tools: Optional[set[str]] = None,
 ) -> _BoundMCPAdapter:
     """Create an AsyncMCPContainmentAdapter pre-configured for an MCP server.
 
@@ -464,6 +465,10 @@ async def wrap_mcp_server(
         circuit_breaker: Optional circuit breaker for the server.
         default_cost_per_call: Default cost applied to unconfigured tools.
         timeout_seconds: Per-call timeout passed to asyncio.wait_for().
+        allowed_tools: Optional allowlist of tool names. When set, tools
+            discovered via ``list_tools()`` are only registered if their
+            name appears in this set. This prevents untrusted MCP servers
+            from injecting unexpected tool names.
 
     Returns:
         _BoundMCPAdapter with ``wrap_tool_call()`` and ``call_tool()`` methods.
@@ -477,11 +482,19 @@ async def wrap_mcp_server(
             tools = getattr(tools_response, "tools", None) or tools_response
             for tool in tools:
                 tool_name = getattr(tool, "name", None)
-                if tool_name and tool_name not in resolved_costs:
-                    resolved_costs[tool_name] = MCPToolCost(
-                        tool_name=tool_name,
-                        cost_per_call=default_cost_per_call,
+                if not tool_name or tool_name in resolved_costs:
+                    continue
+                # When an allowlist is configured, skip tools not in it.
+                if allowed_tools is not None and tool_name not in allowed_tools:
+                    logger.debug(
+                        "[wrap_mcp_server] tool %r not in allowed_tools; skipped",
+                        tool_name,
                     )
+                    continue
+                resolved_costs[tool_name] = MCPToolCost(
+                    tool_name=tool_name,
+                    cost_per_call=default_cost_per_call,
+                )
         except Exception:  # noqa: BLE001
             # list_tools failure must not prevent adapter creation.
             logger.warning(

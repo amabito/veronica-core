@@ -111,6 +111,23 @@ class TestDummyClientBasicBehavior:
         assert client.generate("p") == response
 
 
+class TestDummyClientLogging:
+    """DummyClient must never log prompt content (secret leakage prevention)."""
+
+    def test_generate_does_not_log_prompt_content(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Prompt text must not appear in debug logs."""
+        import logging
+
+        secret_prompt = "API_KEY=sk-secret-12345 do something"
+        client = DummyClient()
+        with caplog.at_level(logging.DEBUG, logger="veronica_core.clients"):
+            client.generate(secret_prompt)
+
+        for record in caplog.records:
+            assert secret_prompt not in record.getMessage()
+            assert "sk-secret" not in record.getMessage()
+
+
 class TestDummyClientThreadSafety:
     """DummyClient.call_count must be accurate under concurrent access."""
 

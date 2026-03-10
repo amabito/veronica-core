@@ -85,5 +85,6 @@ class DummyClient:
         """Return fixed response (for testing)."""
         self.call_count += 1
         self.last_prompt = prompt
-        logger.debug(f"[DummyClient] Call #{self.call_count}: {prompt[:50]}...")
+        # Log call count only -- never log prompt content (may contain secrets).
+        logger.debug("[DummyClient] Call #%d", self.call_count)
         return self.fixed_response

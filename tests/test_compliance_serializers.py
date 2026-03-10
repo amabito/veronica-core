@@ -356,6 +356,28 @@ class TestAdversarialSerializers:
         result = serialize_snapshot(snapshot)
         assert result["chain"]["abort_reason"] == reason
 
+    def test_snapshot_abort_reason_truncated_at_256(self) -> None:
+        """Long abort_reason must be truncated to 256 chars to prevent leaking internals."""
+        reason = "X" * 500
+        snapshot = _make_snapshot(aborted=True, abort_reason=reason)
+        result = serialize_snapshot(snapshot)
+        assert len(result["chain"]["abort_reason"]) == 256
+        assert result["chain"]["abort_reason"] == "X" * 256
+
+    def test_snapshot_abort_reason_short_not_truncated(self) -> None:
+        """abort_reason shorter than 256 chars must not be truncated."""
+        reason = "Budget exceeded at $1.05"
+        snapshot = _make_snapshot(aborted=True, abort_reason=reason)
+        result = serialize_snapshot(snapshot)
+        assert result["chain"]["abort_reason"] == reason
+
+    def test_snapshot_abort_reason_exactly_256(self) -> None:
+        """abort_reason exactly 256 chars must pass through unchanged."""
+        reason = "A" * 256
+        snapshot = _make_snapshot(aborted=True, abort_reason=reason)
+        result = serialize_snapshot(snapshot)
+        assert result["chain"]["abort_reason"] == reason
+
     # -- Type variation: all Decision enum values --
 
     @pytest.mark.parametrize("decision", list(Decision))

@@ -114,8 +114,13 @@ class AuditChain:
     def append(self, data: dict[str, Any]) -> AuditEntry:
         """Append a new event to the chain and return the entry.
 
+        The chain stores *data* as-is.  Callers are responsible for masking
+        secrets **before** calling ``append()`` -- use ``SecretMasker`` from
+        ``veronica_core.security.masking`` or the ``AuditLog`` wrapper which
+        applies masking automatically.
+
         Args:
-            data: JSON-serializable event payload.
+            data: JSON-serializable event payload (must be pre-masked).
 
         Returns:
             The newly created AuditEntry with computed hash.
