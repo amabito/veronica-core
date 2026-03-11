@@ -6,7 +6,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [Unreleased] -- Kernel Hardening + Stable Contract
+## [3.5.0] -- 2026-03-11 -- Kernel Hardening + Stable Contract
 
 **Breaking changes:** none
 

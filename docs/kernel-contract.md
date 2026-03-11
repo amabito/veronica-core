@@ -66,7 +66,7 @@ Attestation wrapper for governance decisions. Frozen dataclass.
 | `metadata` | dict | Arbitrary key/value, frozen via MappingProxyType |
 
 **Status**: Optional. Not all decision paths attach an envelope.
-Production wiring started on the budget denial path (v3.5.0-dev).
+Production wiring started on the budget denial path (v3.5.0).
 Other paths emit decisions without envelopes.
 
 ### Decision vocabulary
