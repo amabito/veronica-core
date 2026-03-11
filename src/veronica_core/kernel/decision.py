@@ -1,9 +1,10 @@
-"""DecisionEnvelope -- unified attestation wrapper for all governance decisions.
+"""DecisionEnvelope -- attestation wrapper for governance decisions.
 
-Every governance outcome (budget, circuit breaker, memory, shield, policy)
-is wrapped in a DecisionEnvelope before being returned to callers. The
-envelope carries mandatory audit fields so that every decision can be traced
-to a policy, an issuer, and a point in time.
+Governance outcomes (budget, circuit breaker, memory, shield, policy)
+can be wrapped in a DecisionEnvelope to carry mandatory audit fields
+so that each decision can be traced to a policy, an issuer, and a
+point in time.  Wrapping is opt-in per decision path; not all paths
+attach an envelope yet.
 
 No reasoning, no AI, no sandbox, no policy authoring is implemented here.
 This module is pure ABI -- types and factories only.
@@ -73,12 +74,12 @@ class ReasonCode(str, Enum):
 
 @dataclass(frozen=True)
 class DecisionEnvelope:
-    """Unified attestation wrapper for all governance decisions.
+    """Attestation wrapper for governance decisions.
 
-    Every governance outcome -- budget, circuit breaker, memory governance,
-    execution shield, policy pipeline -- is wrapped in a DecisionEnvelope
-    before being returned to callers. The envelope provides a mandatory
-    audit trail: policy hash, reason code, unique audit ID, and timestamp.
+    Governance outcomes -- budget, circuit breaker, memory governance,
+    execution shield, policy pipeline -- can be wrapped in a
+    DecisionEnvelope to provide a mandatory audit trail: policy hash,
+    reason code, unique audit ID, and timestamp.
 
     Fields:
         decision: Categorical outcome. One of ALLOW, DENY, HALT, DEGRADE,

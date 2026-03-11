@@ -1,7 +1,7 @@
 """VERONICA kernel package -- core governance primitives.
 
 Exports:
-- DecisionEnvelope: unified attestation wrapper for all governance decisions
+- DecisionEnvelope: attestation wrapper for governance decisions (opt-in per path)
 - ReasonCode: machine-readable reason codes
 - make_envelope: factory for DecisionEnvelope with auto-generated audit fields
 """
