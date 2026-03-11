@@ -277,3 +277,73 @@ class TestBudgetZeroLimit:
         b = BudgetEnforcer(limit_usd=0.0)
         assert b.utilization == 1.0
         assert math.isfinite(b.utilization)
+
+
+class TestBudgetEnvelopeWiring:
+    """DecisionEnvelope must be attached to all DENY paths in check()."""
+
+    def test_zero_budget_deny_has_envelope(self) -> None:
+        """Zero-budget DENY must carry a DecisionEnvelope."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=0.0))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.decision == "DENY"
+        assert decision.envelope.reason_code == "BUDGET_EXCEEDED"
+        assert decision.envelope.issuer == "BudgetEnforcer"
+        assert decision.envelope.audit_id  # non-empty UUID4
+
+    def test_exceeded_deny_has_envelope(self) -> None:
+        """Already-exceeded DENY must carry a DecisionEnvelope."""
+        b = BudgetEnforcer(limit_usd=10.0)
+        b.spend(11.0)  # projected > limit -> _exceeded=True, returns False
+        decision = b.check(PolicyContext(cost_usd=1.0))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.decision == "DENY"
+        assert decision.envelope.reason_code == "BUDGET_EXCEEDED"
+        assert "exceeded" in decision.envelope.reason.lower()
+
+    def test_would_exceed_deny_has_envelope(self) -> None:
+        """Would-exceed DENY must carry a DecisionEnvelope."""
+        b = BudgetEnforcer(limit_usd=10.0)
+        b.spend(9.0)
+        decision = b.check(PolicyContext(cost_usd=5.0))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.decision == "DENY"
+        assert decision.envelope.reason_code == "BUDGET_EXCEEDED"
+        assert "would exceed" in decision.envelope.reason.lower()
+
+    def test_invalid_cost_deny_has_envelope(self) -> None:
+        """Invalid cost_usd DENY must carry a DecisionEnvelope with UNKNOWN reason code."""
+        b = BudgetEnforcer(limit_usd=10.0)
+        decision = b.check(PolicyContext(cost_usd=float("nan")))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.decision == "DENY"
+        assert decision.envelope.reason_code == "UNKNOWN"
+        assert "invalid" in decision.envelope.reason.lower()
+
+    def test_allow_has_no_envelope(self) -> None:
+        """ALLOW decision must NOT carry an envelope (minimal wiring)."""
+        b = BudgetEnforcer(limit_usd=100.0)
+        decision = b.check(PolicyContext(cost_usd=1.0))
+        assert decision.allowed
+        assert decision.envelope is None
+
+    def test_envelope_audit_id_is_unique_per_deny(self) -> None:
+        """Each DENY must produce a unique audit_id."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        d1 = b.check(PolicyContext(cost_usd=0.0))
+        d2 = b.check(PolicyContext(cost_usd=0.0))
+        assert d1.envelope is not None
+        assert d2.envelope is not None
+        assert d1.envelope.audit_id != d2.envelope.audit_id
+
+    def test_envelope_reason_matches_decision_reason(self) -> None:
+        """Envelope reason must match the PolicyDecision reason."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=1.0))
+        assert decision.envelope is not None
+        assert decision.envelope.reason == decision.reason

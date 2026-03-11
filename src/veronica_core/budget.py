@@ -13,6 +13,7 @@ import logging
 import math
 import threading
 
+from veronica_core.kernel.decision import ReasonCode, make_envelope
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
 
 logger = logging.getLogger(__name__)
@@ -159,18 +160,32 @@ class BudgetEnforcer:
             # Zero-budget: deny all calls regardless of cost_estimate.
             # A limit of 0.0 means no spending is permitted at all.
             if self.limit_usd == 0.0:
+                reason = "Budget is zero: no spending permitted"
                 return PolicyDecision(
                     allowed=False,
                     policy_type=self.policy_type,
-                    reason="Budget is zero: no spending permitted",
+                    reason=reason,
+                    envelope=make_envelope(
+                        decision="DENY",
+                        reason_code=ReasonCode.BUDGET_EXCEEDED,
+                        reason=reason,
+                        issuer="BudgetEnforcer",
+                    ),
                 )
             if self._exceeded:
+                reason = (
+                    f"Budget exceeded: "
+                    f"${self._spent_usd:.2f} / ${self.limit_usd:.2f}"
+                )
                 return PolicyDecision(
                     allowed=False,
                     policy_type=self.policy_type,
-                    reason=(
-                        f"Budget exceeded: "
-                        f"${self._spent_usd:.2f} / ${self.limit_usd:.2f}"
+                    reason=reason,
+                    envelope=make_envelope(
+                        decision="DENY",
+                        reason_code=ReasonCode.BUDGET_EXCEEDED,
+                        reason=reason,
+                        issuer="BudgetEnforcer",
                     ),
                 )
             # Validate cost_usd: NaN compares as False in > checks, letting
@@ -178,18 +193,32 @@ class BudgetEnforcer:
             # spend and bypass limits near the ceiling.
             cost = context.cost_usd
             if math.isnan(cost) or math.isinf(cost) or cost < 0:
+                reason = f"Invalid cost_usd in context: {cost!r}"
                 return PolicyDecision(
                     allowed=False,
                     policy_type=self.policy_type,
-                    reason=f"Invalid cost_usd in context: {cost!r}",
+                    reason=reason,
+                    envelope=make_envelope(
+                        decision="DENY",
+                        reason_code=ReasonCode.UNKNOWN,
+                        reason=reason,
+                        issuer="BudgetEnforcer",
+                    ),
                 )
             projected = self._spent_usd + cost
             if projected > self.limit_usd:
+                reason = (
+                    f"Budget would exceed: ${projected:.2f} > ${self.limit_usd:.2f}"
+                )
                 return PolicyDecision(
                     allowed=False,
                     policy_type=self.policy_type,
-                    reason=(
-                        f"Budget would exceed: ${projected:.2f} > ${self.limit_usd:.2f}"
+                    reason=reason,
+                    envelope=make_envelope(
+                        decision="DENY",
+                        reason_code=ReasonCode.BUDGET_EXCEEDED,
+                        reason=reason,
+                        issuer="BudgetEnforcer",
                     ),
                 )
             return PolicyDecision(allowed=True, policy_type=self.policy_type)
