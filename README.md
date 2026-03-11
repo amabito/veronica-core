@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-4837%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-4996%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -88,7 +88,7 @@ def run_agent(prompt: str) -> str:
 - **Semantic loop detection** -- word-level Jaccard similarity, no ML dependencies
 - **Execution graph** -- typed node lifecycle, amplification metrics
 - **Degradation ladder** -- 4-tier graceful degradation (model_downgrade, context_trim, rate_limit, halt)
-- **Two-phase budget** -- reserve/commit/rollback prevents double-spending across concurrent calls
+- **Two-phase budget** -- reserve/commit prevents double-spending across concurrent calls
 - **Security containment** -- PolicyEngine, AuditLog, ed25519 signing, red-team regression suite
 - **MCP containment** -- sync and async MCP server adapters with per-tool budget enforcement
 - **Declarative policy** -- YAML/JSON policy files with hot-reload, 7 builtin rule types
@@ -151,7 +151,7 @@ Details: [docs/architecture.md](docs/architecture.md)
 
 ## Security
 
-Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 5 rounds of independent security audit (150+ findings fixed).
+Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 4 rounds of independent security audit (130+ findings fixed).
 
 Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
@@ -159,7 +159,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Stats
 
-4837 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.4.3. Python 3.10+.
+4996 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.4.3. Python 3.10+.
 
 Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 

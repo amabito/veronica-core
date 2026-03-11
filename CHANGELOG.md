@@ -6,6 +6,38 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [Unreleased] -- Kernel Hardening + Stable Contract
+
+**Breaking changes:** none
+
+### Added
+
+- **DecisionEnvelope** (`kernel/decision.py`): Frozen attestation wrapper carrying decision, policy_hash, reason_code, audit_id (UUID4), timestamp, policy_epoch, issuer, and metadata. 7 decision values (ALLOW, DENY, HALT, DEGRADE, QUARANTINE, RETRY, QUEUE). `make_envelope()` factory with auto-generated audit fields.
+- **ReasonCode enum** (`kernel/decision.py`): 17 machine-readable reason codes (BUDGET_EXCEEDED, STEP_LIMIT, CIRCUIT_OPEN, SHELL_BLOCKED, etc.).
+- **Signed policy bundles** (`security/policy_signing.py`): HMAC-SHA256 bundle signing with canonical form. Newline injection defense on policy_id/issuer/version fields. Ed25519 support via optional `cryptography` package.
+- **Policy verification** (`policy/verifier.py`): 6-check verification pipeline -- content hash, epoch, rule types, duplicate IDs, signature requirement, signature verification. Fail-closed: signed bundle without signer is rejected. `verify_or_halt()` production entry point.
+- **Tamper-evident audit chain** (`audit/log.py`): SHA-256 hash chain with optional per-entry HMAC-SHA256 signing. Chain verification rejects entries with missing HMAC when signer is provided. Internal consistency only -- not publicly verifiable.
+- **HA-ready ABI types** (`kernel/ha.py`): `ReservationState`, `Reservation`, `HeartbeatSnapshot`, `BreakerReflection` -- passive observation types for future HA integration. No business logic, no consensus.
+- **Budget denial envelope wiring**: `BudgetEnforcer.check()` attaches `DecisionEnvelope` on all 4 DENY paths (zero-budget, exceeded, invalid cost, would-exceed). ALLOW path unchanged (envelope=None). First production use of `make_envelope()`.
+- **Kernel contract doc** (`docs/kernel-contract.md`): Boundary definition (kernel vs control plane), hook inventory, decision vocabulary, envelope status, audit signing status, HA ABI status, sample audit payload.
+
+### Fixed
+
+- **Overstated docs** (`kernel/decision.py`, `kernel/__init__.py`): "all governance decisions" corrected to "governance decisions"; "is wrapped" corrected to "can be wrapped". Envelope is opt-in per path, not mandatory.
+- **Hex validation** (`audit/log.py`): `_load_last_hash` now validates 64-char hex format via `int(h, 16)` to reject non-hex strings.
+- **Newline injection** (`security/policy_signing.py`): `sign_bundle` rejects `\n` and `\r` in metadata string fields to prevent canonical form injection.
+- **Fail-closed verification** (`policy/verifier.py`): Signed bundle with no signer now produces an error (was silently passing).
+- **README accuracy**: Security audit rounds corrected from 5 to 4 (130+ findings). Test count updated to 4992.
+
+### Tests
+
+- 7 envelope wiring tests in `TestBudgetEnvelopeWiring` (4 DENY paths, ALLOW-no-envelope, audit_id uniqueness, reason consistency).
+- 4 newline injection adversarial tests in `test_signed_policy_bundle.py`.
+- Updated `test_adversarial_policy.py` for fail-closed signed-bundle-no-signer behavior.
+- F.R.I.D.A.Y. 3-unit review-fix loop: 2 consecutive clean rounds achieved on each change set.
+
+---
+
 ## [3.4.3] -- 2026-03-10 -- Security Hardening
 
 **Breaking changes:** none

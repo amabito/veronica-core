@@ -347,3 +347,141 @@ class TestBudgetEnvelopeWiring:
         decision = b.check(PolicyContext(cost_usd=1.0))
         assert decision.envelope is not None
         assert decision.envelope.reason == decision.reason
+
+
+class TestAdversarialBudgetEnvelope:
+    """Adversarial tests for DecisionEnvelope wiring -- attacker mindset."""
+
+    def test_concurrent_deny_envelopes_no_mixup(self) -> None:
+        """10 threads hitting DENY must each get a distinct envelope."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        results: list = []
+
+        def check_deny() -> None:
+            d = b.check(PolicyContext(cost_usd=1.0))
+            results.append(d)
+
+        threads = [threading.Thread(target=check_deny) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == 10
+        audit_ids = [r.envelope.audit_id for r in results]
+        assert len(set(audit_ids)) == 10  # all unique
+
+        for r in results:
+            assert not r.allowed
+            assert r.envelope is not None
+            assert r.envelope.decision == "DENY"
+            assert r.envelope.issuer == "BudgetEnforcer"
+
+    def test_envelope_is_frozen_immutable(self) -> None:
+        """Returned envelope must be frozen -- mutation raises."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=0.0))
+        envelope = decision.envelope
+        assert envelope is not None
+        with pytest.raises(AttributeError):
+            envelope.decision = "ALLOW"  # type: ignore[misc]
+        with pytest.raises(AttributeError):
+            envelope.reason_code = "TAMPERED"  # type: ignore[misc]
+        with pytest.raises(TypeError):
+            envelope.metadata["injected"] = "evil"  # type: ignore[index]
+
+    def test_envelope_survives_pipeline_propagation(self) -> None:
+        """Envelope must survive through PolicyPipeline.evaluate()."""
+        from veronica_core.runtime_policy import PolicyPipeline
+
+        b = BudgetEnforcer(limit_usd=0.0)
+        pipeline = PolicyPipeline([b])
+        decision = pipeline.evaluate(PolicyContext(cost_usd=1.0))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.decision == "DENY"
+        assert decision.envelope.issuer == "BudgetEnforcer"
+
+    def test_envelope_to_audit_dict_serializable(self) -> None:
+        """Envelope.to_audit_dict() must return JSON-serializable dict."""
+        import json
+
+        b = BudgetEnforcer(limit_usd=0.0)
+        decision = b.check(PolicyContext(cost_usd=0.0))
+        assert decision.envelope is not None
+        audit = decision.envelope.to_audit_dict()
+        # Must not raise
+        serialized = json.dumps(audit)
+        parsed = json.loads(serialized)
+        assert parsed["decision"] == "DENY"
+        assert parsed["issuer"] == "BudgetEnforcer"
+        assert parsed["audit_id"] == decision.envelope.audit_id
+
+    def test_spend_does_not_produce_envelope(self) -> None:
+        """spend() returns bool, not PolicyDecision -- no envelope leakage."""
+        b = BudgetEnforcer(limit_usd=10.0)
+        result = b.spend(5.0)
+        assert result is True
+        assert not hasattr(result, "envelope")
+
+        result_deny = b.spend(100.0)
+        assert result_deny is False
+        assert not hasattr(result_deny, "envelope")
+
+    @pytest.mark.parametrize(
+        "cost,expected_code",
+        [
+            (float("nan"), "UNKNOWN"),
+            (float("inf"), "UNKNOWN"),
+            (float("-inf"), "UNKNOWN"),
+            (-1.0, "UNKNOWN"),
+        ],
+        ids=["nan", "inf", "-inf", "negative"],
+    )
+    def test_invalid_cost_uses_unknown_not_budget_exceeded(
+        self, cost: float, expected_code: str
+    ) -> None:
+        """Invalid cost_usd must use UNKNOWN reason code, not BUDGET_EXCEEDED."""
+        b = BudgetEnforcer(limit_usd=100.0)
+        decision = b.check(PolicyContext(cost_usd=cost))
+        assert not decision.allowed
+        assert decision.envelope is not None
+        assert decision.envelope.reason_code == expected_code
+
+    def test_concurrent_mixed_allow_deny_envelope_correctness(self) -> None:
+        """Mixed ALLOW/DENY under concurrency -- ALLOW must have no envelope."""
+        b = BudgetEnforcer(limit_usd=10.0)
+        b.spend(9.5)  # near limit
+        results: list = []
+
+        def check(cost: float) -> None:
+            d = b.check(PolicyContext(cost_usd=cost))
+            results.append(d)
+
+        threads = []
+        for i in range(10):
+            cost = 0.01 if i % 2 == 0 else 5.0  # small vs over-limit
+            threads.append(threading.Thread(target=check, args=(cost,)))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == 10
+        for r in results:
+            if r.allowed:
+                assert r.envelope is None
+            else:
+                assert r.envelope is not None
+                assert r.envelope.decision == "DENY"
+
+    def test_envelope_timestamp_is_recent(self) -> None:
+        """Envelope timestamp must be within last 5 seconds (not stale)."""
+        import time
+
+        b = BudgetEnforcer(limit_usd=0.0)
+        before = time.time()
+        decision = b.check(PolicyContext(cost_usd=0.0))
+        after = time.time()
+        assert decision.envelope is not None
+        assert before <= decision.envelope.timestamp <= after
