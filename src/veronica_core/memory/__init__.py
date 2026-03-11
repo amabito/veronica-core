@@ -16,12 +16,19 @@ from veronica_core.memory.hooks import (
     MemoryGovernanceHook,
 )
 from veronica_core.memory.types import (
+    BridgePolicy,
+    CompactnessConstraints,
+    DegradeDirective,
+    ExecutionMode,
     GovernanceVerdict,
     MemoryAction,
     MemoryGovernanceDecision,
     MemoryOperation,
     MemoryPolicyContext,
     MemoryProvenance,
+    MemoryView,
+    MessageContext,
+    ThreatContext,
 )
 
 __all__ = [
@@ -35,4 +42,12 @@ __all__ = [
     "DefaultMemoryGovernanceHook",
     "DenyAllMemoryGovernanceHook",
     "MemoryGovernor",
+    # v3.6.0
+    "MemoryView",
+    "ExecutionMode",
+    "DegradeDirective",
+    "CompactnessConstraints",
+    "MessageContext",
+    "BridgePolicy",
+    "ThreatContext",
 ]

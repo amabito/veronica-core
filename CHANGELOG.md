@@ -6,6 +6,33 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.6.0] -- 2026-03-11 -- Governed Memory Mediation
+
+**Breaking changes:** none
+
+### Added
+
+- **MemoryView enum** (`memory/types.py`): 7 memory namespace views -- agent_private, local_working, team_shared, session_state, verified_archive, provisional_archive, quarantined.
+- **ExecutionMode enum** (`memory/types.py`): 5 runtime modes -- live_execution, replay, simulation, consolidation, audit_review.
+- **DegradeDirective** (`memory/types.py`): Frozen dataclass for structured DEGRADE parameters -- mode, max_packet_tokens, verified_only, summary_required, raw_replay_blocked, namespace_downscoped_to, redacted_fields, max_content_size_bytes.
+- **CompactnessConstraints** (`memory/types.py`): Frozen dataclass for packet size and content policy -- max_packet_tokens, max_raw_replay_ratio, require_compaction_if_over_budget, prefer_verified_summary, max_attributes_per_packet, max_payload_bytes.
+- **MessageContext** (`memory/types.py`): Frozen dataclass for message governance context with metadata freezing and content_size_bytes validation.
+- **BridgePolicy** (`memory/types.py`): Frozen dataclass for message-to-memory promotion rules -- allow_archive, require_signature, quarantine_untrusted.
+- **ThreatContext** (`memory/types.py`): Frozen dataclass for threat-aware audit metadata -- threat_hypothesis, mitigation_applied, effective_scope, effective_view, compactness_enforced, source_trust, source_provenance.
+- **CompactnessEvaluator** (`memory/compactness.py`): MemoryGovernanceHook implementation. Hard limit (max_payload_bytes -> DENY), soft limits (packet_tokens, attributes, raw_replay_ratio -> DEGRADE with merged DegradeDirective), prefer_verified_summary.
+- **ViewPolicyEvaluator** (`memory/view_policy.py`): MemoryGovernanceHook implementation. Trust-ranked access matrix (untrusted < provisional < trusted < privileged) across all 7 views and 5 execution modes. AGENT_PRIVATE owner-only, CONSOLIDATION exceptions, AUDIT_REVIEW quarantined read.
+- **MessageGovernanceHook protocol** (`memory/message_governance.py`): Runtime-checkable protocol for message-level governance (before_message / after_message).
+- **DefaultMessageGovernanceHook** (`memory/message_governance.py`): Fail-open default.
+- **DenyOversizedMessageHook** (`memory/message_governance.py`): Size-based DENY/DEGRADE with configurable threshold and DegradeDirective.
+- **MessageBridgeHook** (`memory/message_governance.py`): BridgePolicy evaluation -- archive eligibility, signature requirement, type filtering, quarantine routing.
+- **Governor DegradeDirective merging** (`memory/governor.py`): `_merge_directives()` with per-type merge rules (bool=OR, int=max, str=last-non-empty, tuple=union). Accumulated directive attached only when final verdict is DEGRADE. ThreatContext propagated from worst-verdict hook.
+- **6 new ReasonCode members** (`kernel/decision.py`): MEMORY_GOVERNANCE_DEGRADE, MEMORY_VIEW_DENIED, EXECUTION_MODE_DENIED, COMPACTNESS_EXCEEDED, MESSAGE_GOVERNANCE_DENIED, BRIDGE_PROMOTION_DENIED.
+- **to_audit_dict() extensions** (`memory/types.py`): DegradeDirective and ThreatContext serialized to flat audit dict.
+- **docs/GOVERNED_MEMORY_MEDIATION.md**: Responsibility boundary, mediation pipeline, DEGRADE semantics, compactness policy, memory views, execution modes, message governance, bridge policy, threat-aware audit, data flow diagram.
+- **339 new tests** (175 functional + 164 adversarial): Concurrent access (10-thread), corrupted inputs (NaN/Inf/garbage), boundary abuse, privilege escalation, type immutability, governor error handling, evaluation order verification.
+
+---
+
 ## [3.5.0] -- 2026-03-11 -- Kernel Hardening + Stable Contract
 
 **Breaking changes:** none

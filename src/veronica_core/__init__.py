@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__version__ = "3.5.0"
+__version__ = "3.6.0"
 
 # ---------------------------------------------------------------------------
 # Eager imports -- minimal core types needed at import time
@@ -222,6 +222,22 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MemoryAccessRule": ("veronica_core.shield.memory_boundary", "MemoryAccessRule"),
     "MemoryBoundaryConfig": ("veronica_core.shield.memory_boundary", "MemoryBoundaryConfig"),
     "MemoryBoundaryHook": ("veronica_core.shield.memory_boundary", "MemoryBoundaryHook"),
+    # Memory View / Execution Mode / DEGRADE (v3.6.0)
+    "MemoryView": ("veronica_core.memory.types", "MemoryView"),
+    "ExecutionMode": ("veronica_core.memory.types", "ExecutionMode"),
+    "DegradeDirective": ("veronica_core.memory.types", "DegradeDirective"),
+    "CompactnessConstraints": ("veronica_core.memory.types", "CompactnessConstraints"),
+    "MessageContext": ("veronica_core.memory.types", "MessageContext"),
+    "BridgePolicy": ("veronica_core.memory.types", "BridgePolicy"),
+    "ThreatContext": ("veronica_core.memory.types", "ThreatContext"),
+    # Memory Evaluators (v3.6.0)
+    "CompactnessEvaluator": ("veronica_core.memory.compactness", "CompactnessEvaluator"),
+    "ViewPolicyEvaluator": ("veronica_core.memory.view_policy", "ViewPolicyEvaluator"),
+    # Message Governance (v3.6.0)
+    "MessageGovernanceHook": ("veronica_core.memory.message_governance", "MessageGovernanceHook"),
+    "DefaultMessageGovernanceHook": ("veronica_core.memory.message_governance", "DefaultMessageGovernanceHook"),
+    "DenyOversizedMessageHook": ("veronica_core.memory.message_governance", "DenyOversizedMessageHook"),
+    "MessageBridgeHook": ("veronica_core.memory.message_governance", "MessageBridgeHook"),
 }
 
 

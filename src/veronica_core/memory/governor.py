@@ -25,10 +25,12 @@ from typing import Any
 
 from veronica_core.memory.hooks import MemoryGovernanceHook
 from veronica_core.memory.types import (
+    DegradeDirective,
     GovernanceVerdict,
     MemoryGovernanceDecision,
     MemoryOperation,
     MemoryPolicyContext,
+    ThreatContext,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,42 @@ _VERDICT_RANK: dict[GovernanceVerdict, int] = {
     GovernanceVerdict.QUARANTINE: 2,
     # DENY is handled separately (short-circuit) and not ranked here.
 }
+
+
+def _merge_directives(
+    existing: DegradeDirective | None,
+    new: DegradeDirective | None,
+) -> DegradeDirective | None:
+    """Merge two DegradeDirective instances, returning a combined directive.
+
+    Merging rules per field type:
+    - bool:  OR (True wins)
+    - int:   max of non-zero values (0 = no limit)
+    - float: min of non-1.0 values (stricter wins for ratios)
+    - str:   new value if non-empty, else existing
+    - tuple: union (sorted for determinism)
+    """
+    if new is None:
+        return existing
+    if existing is None:
+        return new
+    return DegradeDirective(
+        mode=new.mode or existing.mode,
+        max_packet_tokens=max(existing.max_packet_tokens, new.max_packet_tokens),
+        allowed_provenance=tuple(
+            sorted(set(existing.allowed_provenance) | set(new.allowed_provenance))
+        ),
+        verified_only=existing.verified_only or new.verified_only,
+        summary_required=existing.summary_required or new.summary_required,
+        raw_replay_blocked=existing.raw_replay_blocked or new.raw_replay_blocked,
+        namespace_downscoped_to=new.namespace_downscoped_to or existing.namespace_downscoped_to,
+        redacted_fields=tuple(
+            sorted(set(existing.redacted_fields) | set(new.redacted_fields))
+        ),
+        max_content_size_bytes=max(
+            existing.max_content_size_bytes, new.max_content_size_bytes
+        ),
+    )
 
 
 class MemoryGovernor:
@@ -141,6 +179,8 @@ class MemoryGovernor:
         accumulated_verdict = GovernanceVerdict.ALLOW
         accumulated_reason = ""
         accumulated_policy_id = "governor"
+        accumulated_directive: DegradeDirective | None = None
+        accumulated_threat: ThreatContext | None = None
 
         for hook in hooks_snapshot:
             try:
@@ -194,12 +234,33 @@ class MemoryGovernor:
                 accumulated_verdict = decision.verdict
                 accumulated_reason = decision.reason
                 accumulated_policy_id = decision.policy_id
+                # Propagate threat_context from the worst-verdict hook.
+                accumulated_threat = decision.threat_context
 
+            # Merge DegradeDirective from every DEGRADE hook encountered.
+            if decision.verdict is GovernanceVerdict.DEGRADE and decision.degrade_directive is not None:
+                accumulated_directive = _merge_directives(
+                    accumulated_directive, decision.degrade_directive
+                )
+
+        # Only attach directive/threat if the final verdict is DEGRADE.
+        final_directive = (
+            accumulated_directive
+            if accumulated_verdict is GovernanceVerdict.DEGRADE
+            else None
+        )
+        final_threat = (
+            accumulated_threat
+            if accumulated_verdict is not GovernanceVerdict.ALLOW
+            else None
+        )
         return MemoryGovernanceDecision(
             verdict=accumulated_verdict,
             reason=accumulated_reason,
             policy_id=accumulated_policy_id,
             operation=operation,
+            degrade_directive=final_directive,
+            threat_context=final_threat,
         )
 
     def notify_after(
