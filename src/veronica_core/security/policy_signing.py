@@ -75,12 +75,18 @@ def _load_key() -> bytes:
                 f"{_ENV_KEY_VAR} is too long ({len(hex_key)} hex chars). "
                 "Maximum is 2048 hex chars (1024 bytes)."
             )
-        key = bytes.fromhex(hex_key)
+        try:
+            key = bytes.fromhex(hex_key)
+        except ValueError:
+            raise RuntimeError(
+                f"{_ENV_KEY_VAR} is not valid hex. "
+                'Provide a hex-encoded key, e.g.: python -c "import secrets; print(secrets.token_hex(32))"'
+            ) from None
         if len(key) < 32:
             raise RuntimeError(
                 f"{_ENV_KEY_VAR} is too short ({len(key)} bytes). "
                 "A minimum of 32 bytes (64 hex chars) is required for HMAC-SHA256. "
-                "Generate a key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate a key with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return key
 
@@ -165,6 +171,89 @@ class PolicySigner:
 
         expected = hmac.new(self._key, content, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, stored_sig)
+
+    def sign_bytes(self, data: bytes) -> str:
+        """Return hex-encoded HMAC-SHA256 of arbitrary bytes.
+
+        Used for signing audit log entries and other raw byte payloads.
+
+        Args:
+            data: Raw bytes to sign.
+
+        Returns:
+            Hex-encoded HMAC-SHA256 digest string.
+        """
+        mac = hmac.new(self._key, data, hashlib.sha256)
+        return mac.hexdigest()
+
+    def sign_bundle(self, bundle: "PolicyBundle") -> str:  # noqa: F821
+        """Return hex-encoded HMAC-SHA256 of canonical bundle representation.
+
+        Signs a deterministic canonical string that includes both metadata
+        (policy_id, epoch, issuer) and the content hash (covering all rules).
+        This prevents an attacker from altering metadata fields while keeping
+        the same content hash and signature.
+
+        Import is deferred to method level to avoid circular imports.
+
+        Args:
+            bundle: The PolicyBundle to sign.
+
+        Returns:
+            Hex-encoded HMAC-SHA256 digest of the canonical bundle representation.
+        """
+        # Local import to avoid circular dependency between security and policy packages.
+        from veronica_core.policy.bundle import PolicyBundle  # noqa: F401
+
+        # H1: canonical representation includes all metadata + content hash.
+        # Require content_hash consistency before signing (fail-closed).
+        computed_hash = bundle.content_hash()
+        if bundle.metadata.content_hash and not bundle.verify_content_hash():
+            raise ValueError(
+                "sign_bundle: bundle.verify_content_hash() failed -- "
+                "declared content_hash does not match computed hash"
+            )
+        # H3: Reject newlines in string fields to prevent canonical form
+        # injection (attacker crafting policy_id="foo\nepoch=999" to collide).
+        for field_name, field_val in [
+            ("policy_id", bundle.metadata.policy_id),
+            ("issuer", bundle.metadata.issuer),
+            ("version", bundle.metadata.version),
+        ]:
+            if "\n" in str(field_val) or "\r" in str(field_val):
+                raise ValueError(
+                    f"sign_bundle: {field_name} contains newline characters "
+                    f"(canonical form injection)"
+                )
+        canonical = (
+            f"policy_id={bundle.metadata.policy_id}\n"
+            f"epoch={bundle.metadata.epoch}\n"
+            f"issuer={bundle.metadata.issuer}\n"
+            f"version={bundle.metadata.version}\n"
+            f"content_hash={computed_hash}\n"
+        )
+        mac = hmac.new(self._key, canonical.encode("utf-8"), hashlib.sha256)
+        return mac.hexdigest()
+
+    def verify_bundle(self, bundle: "PolicyBundle") -> bool:  # noqa: F821
+        """Return True if the bundle signature matches the computed HMAC.
+
+        Uses hmac.compare_digest for constant-time comparison to prevent
+        timing side-channel attacks.  Fail-closed: any error returns False.
+
+        Args:
+            bundle: The PolicyBundle to verify.
+
+        Returns:
+            True if the signature is valid, False otherwise (including on error).
+        """
+        try:
+            if not bundle.signature:
+                return False
+            expected = self.sign_bundle(bundle)
+            return hmac.compare_digest(expected, bundle.signature)
+        except Exception:
+            return False
 
 
 # ---------------------------------------------------------------------------

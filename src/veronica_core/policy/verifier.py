@@ -89,9 +89,7 @@ class PolicyVerifier:
         signer: Any = None,
     ) -> None:
         self._allowed = (
-            allowed_rule_types
-            if allowed_rule_types is not None
-            else _KNOWN_RULE_TYPES
+            allowed_rule_types if allowed_rule_types is not None else _KNOWN_RULE_TYPES
         )
         self._require_signature = require_signature
         self._signer = signer
@@ -169,7 +167,14 @@ class PolicyVerifier:
                 "require_signature=False; signature verification was skipped"
             )
 
-        # --- Check 6: Signature verification ---
+        # --- Check 6a: Signed bundle but no signer (fail-closed) ---
+        if bundle.is_signed and self._signer is None:
+            errors.append(
+                "Bundle is signed but no signer was provided to verify "
+                "the signature (fail-closed)"
+            )
+
+        # --- Check 6b: Signature verification ---
         if bundle.is_signed and self._signer is not None:
             verify_fn = getattr(self._signer, "verify_bundle", None)
             if callable(verify_fn):
@@ -178,13 +183,12 @@ class PolicyVerifier:
                         errors.append("Bundle signature verification failed")
                 except Exception as exc:
                     errors.append(
-                        f"Bundle signature verification raised "
-                        f"{type(exc).__name__}"
+                        f"Bundle signature verification raised {type(exc).__name__}"
                     )
             else:
-                warnings.append(
+                errors.append(
                     "Signer was provided but has no verify_bundle() method; "
-                    "signature was not verified"
+                    "signature cannot be verified (fail-closed)"
                 )
 
         valid = len(errors) == 0
@@ -194,3 +198,45 @@ class PolicyVerifier:
             warnings=tuple(warnings),
             verified_at=time.time(),
         )
+
+    @classmethod
+    def verify_or_halt(
+        cls,
+        bundle: "PolicyBundle",
+        signer: Any = None,
+    ) -> "VerificationResult":
+        """Production startup entry point -- fail-closed on any error.
+
+        Constructs a verifier with ``require_signature=True`` and verifies
+        the bundle.  Any exception raised during verification is caught and
+        returned as a failed VerificationResult rather than propagating.
+
+        When ``signer`` is None, the result is always invalid because
+        signature verification cannot be performed (fail-closed).
+
+        Args:
+            bundle: The PolicyBundle to validate.
+            signer: Signer with ``verify_bundle(bundle) -> bool``.
+                    When None, verification always fails (fail-closed).
+
+        Returns:
+            VerificationResult with valid=True only if all checks pass
+            including signature verification.  Always valid=False on error.
+        """
+        # C2: fail-closed -- cannot verify signature without a signer.
+        if signer is None:
+            return VerificationResult(
+                valid=False,
+                errors=(
+                    "verify_or_halt requires a signer for signature verification "
+                    "(fail-closed: signer=None is not allowed)",
+                ),
+            )
+        verifier = cls(require_signature=True, signer=signer)
+        try:
+            return verifier.verify(bundle)
+        except Exception as exc:
+            return VerificationResult(
+                valid=False,
+                errors=(f"Verification raised {type(exc).__name__}: {exc}",),
+            )

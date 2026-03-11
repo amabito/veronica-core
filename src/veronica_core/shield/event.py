@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from veronica_core.shield.types import Decision
+
+if TYPE_CHECKING:
+    from veronica_core.kernel.decision import DecisionEnvelope
 
 
 @dataclass(frozen=True)
@@ -35,3 +38,5 @@ class SafetyEvent:
     request_id: str | None = None
     ts: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Kernel attestation (v3.5.0) -- unified audit envelope, optional
+    envelope: DecisionEnvelope | None = None

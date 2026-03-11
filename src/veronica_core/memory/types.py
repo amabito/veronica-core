@@ -26,7 +26,10 @@ import time
 import types as _types
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from veronica_core.kernel.decision import DecisionEnvelope
 
 
 class MemoryAction(str, Enum):
@@ -124,13 +127,29 @@ class MemoryGovernanceDecision:
     so callers can still proceed while downstream systems track the verdict.
     """
 
+    # Fields that must not appear as audit_metadata keys (prevents overwrite in to_audit_dict).
+    _RESERVED_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {"verdict", "reason", "policy_id", "operation_action",
+         "operation_resource_id", "operation_agent_id", "operation_namespace",
+         "operation_provenance", "operation_content_size_bytes"}
+    )
+
     verdict: GovernanceVerdict
     reason: str = ""
     policy_id: str = ""
     operation: MemoryOperation | None = None
     audit_metadata: dict[str, Any] = field(default_factory=dict)
+    # Kernel attestation (v3.5.0) -- unified audit envelope, optional
+    envelope: "DecisionEnvelope | None" = None
 
     def __post_init__(self) -> None:
+        # C1: Reject audit_metadata keys that collide with core fields.
+        collisions = set(self.audit_metadata) & self._RESERVED_KEYS
+        if collisions:
+            raise ValueError(
+                f"MemoryGovernanceDecision.audit_metadata contains reserved keys: "
+                f"{sorted(collisions)}"
+            )
         # Freeze mutable audit_metadata to prevent post-construction mutation.
         object.__setattr__(
             self, "audit_metadata", _types.MappingProxyType(dict(self.audit_metadata))
@@ -151,7 +170,13 @@ class MemoryGovernanceDecision:
         return self.verdict is GovernanceVerdict.DENY
 
     def to_audit_dict(self) -> dict[str, Any]:
-        """Serialize to a flat dict suitable for audit log emission."""
+        """Serialize to a flat dict suitable for audit log emission.
+
+        When an envelope is present its fields are merged in under an
+        ``envelope_`` prefix so that audit consumers can access both the
+        memory-governance verdict and the unified attestation fields from a
+        single flat record.
+        """
         result: dict[str, Any] = {
             "verdict": self.verdict.value,
             "reason": self.reason,
@@ -165,4 +190,7 @@ class MemoryGovernanceDecision:
             result["operation_provenance"] = self.operation.provenance.value
             result["operation_content_size_bytes"] = self.operation.content_size_bytes
         result.update(self.audit_metadata)
+        if self.envelope is not None:
+            for key, value in self.envelope.to_audit_dict().items():
+                result[f"envelope_{key}"] = value
         return result

@@ -29,12 +29,15 @@ __all__ = [
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Optional
 import logging
 import threading
 import time
 
 from veronica_core.runtime_policy import PolicyContext, PolicyDecision
+
+if TYPE_CHECKING:
+    from veronica_core.kernel.ha import BreakerReflection
 
 # Type alias: predicate receives an exception and returns True if it should
 # count as a circuit-breaker failure, False to ignore.
@@ -78,8 +81,10 @@ class CircuitBreaker:
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)
 
     def __post_init__(self) -> None:
-        if isinstance(self.failure_threshold, bool) or not isinstance(self.failure_threshold, int) or math.isnan(
-            float(self.failure_threshold)
+        if (
+            isinstance(self.failure_threshold, bool)
+            or not isinstance(self.failure_threshold, int)
+            or math.isnan(float(self.failure_threshold))
         ):
             raise ValueError(
                 f"failure_threshold must be a finite integer >= 1, got {self.failure_threshold}"
@@ -265,6 +270,30 @@ class CircuitBreaker:
         ):
             self._state = CircuitState.HALF_OPEN
             logger.info("[VERONICA_CIRCUIT] Circuit half-open, allowing test request")
+
+    def reflect(self) -> "BreakerReflection":
+        """Read-only snapshot of breaker state for external observation.
+
+        Returns a frozen BreakerReflection containing a consistent view of
+        all observable fields captured atomically under the lock. The returned
+        snapshot is decoupled from the live breaker -- subsequent mutations
+        do not affect it.
+
+        Thread-safe: acquires self._lock for the duration of the read.
+        """
+        from veronica_core.kernel.ha import BreakerReflection
+
+        with self._lock:
+            return BreakerReflection(
+                breaker_id=self._owner_id or "",
+                state=self._state.value,
+                failure_count=self._failure_count,
+                success_count=self._success_count,
+                last_failure_ts=self._last_failure_time or 0.0,
+                last_success_ts=getattr(self, "_last_success_time", 0.0),
+                recovery_timeout=self.recovery_timeout,
+                failure_threshold=self.failure_threshold,
+            )
 
     def reset(self) -> None:
         """Reset circuit to CLOSED state."""

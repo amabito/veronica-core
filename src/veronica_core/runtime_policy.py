@@ -25,10 +25,13 @@ __all__ = [
 ]
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol, runtime_checkable
 import logging
 import threading
 import time
+
+if TYPE_CHECKING:
+    from veronica_core.kernel.decision import DecisionEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,8 @@ class PolicyDecision:
     )
     fallback_model: str | None = None
     rate_limit_ms: int = 0
+    # Kernel attestation (v3.5.0) -- unified audit envelope, optional
+    envelope: Optional["DecisionEnvelope"] = None
 
 
 @runtime_checkable

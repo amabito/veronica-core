@@ -395,8 +395,8 @@ class TestAdversarialPolicyVerifier:
         assert result.valid is False
         assert any("RuntimeError" in e or "exploded" in e for e in result.errors)
 
-    def test_signer_without_verify_bundle_method_emits_warning(self) -> None:
-        """signer without verify_bundle() must emit a warning, not an error."""
+    def test_signer_without_verify_bundle_method_fails_closed(self) -> None:
+        """signer without verify_bundle() must produce an error (fail-closed)."""
         class BadSigner:
             pass
 
@@ -406,16 +406,18 @@ class TestAdversarialPolicyVerifier:
         meta = PolicyMetadata(policy_id="p1", content_hash=h)
         bundle = PolicyBundle(metadata=meta, rules=(r,), signature="sig-value")
         result = PolicyVerifier(signer=BadSigner()).verify(bundle)
-        assert any("verify_bundle" in w.lower() or "not verified" in w.lower() for w in result.warnings)
+        assert result.valid is False
+        assert any("verify_bundle" in e.lower() for e in result.errors)
 
-    def test_signed_bundle_no_signer_passes_without_verification(self) -> None:
-        """Signed bundle with no signer provided must pass (signature is advisory)."""
+    def test_signed_bundle_no_signer_fails_closed(self) -> None:
+        """Signed bundle with no signer must fail-closed (cannot verify)."""
         bundle = _bundle_with_correct_hash(_rule("r1"))
         signed_bundle = PolicyBundle(
             metadata=bundle.metadata, rules=bundle.rules, signature="unverifiable"
         )
         result = PolicyVerifier(require_signature=False).verify(signed_bundle)
-        assert result.valid is True
+        assert result.valid is False
+        assert any("no signer" in e.lower() for e in result.errors)
 
     # -----------------------------------------------------------------------
     # Category 2: Duplicate rule_id attacks
