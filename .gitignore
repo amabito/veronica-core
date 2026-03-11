@@ -97,8 +97,20 @@ docs/plans/
 # Promo scripts (not part of core library)
 scripts/gen_diagrams.py
 
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.blg
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 # Architecture drafts (local only, not published)
 docs/V4_ARCHITECTURE.md
+
+# Internal audit docs (not for public)
+AG2_IMPLEMENTATION_AUDIT.md
 
 # SaaS app (local development only, not published)
 src/veronica_core/compliance/app/
