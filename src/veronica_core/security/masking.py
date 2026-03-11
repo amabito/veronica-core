@@ -133,17 +133,25 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 class SecretMasker:
     """Masks sensitive secrets in strings, dicts, and argument lists."""
 
+    def __init__(self) -> None:
+        # Pre-build (pattern, replacement_tag, has_group) tuples once so that
+        # mask() does not allocate closures or format strings on every call.
+        self._compiled: list[tuple[re.Pattern[str], str, bool]] = [
+            (pattern, f"[REDACTED:{label}]", pattern.groups > 0)
+            for label, pattern in _PATTERNS
+        ]
+
     def mask(self, text: str) -> str:
         """Replace detected secrets in *text* with ``[REDACTED:<type>]``."""
-        for label, pattern in _PATTERNS:
+        for pattern, redacted_tag, has_group in self._compiled:
 
-            def _replace(m: re.Match[str], _label: str = label) -> str:  # noqa: E731
+            def _replace(m: re.Match[str], _tag: str = redacted_tag, _has_group: bool = has_group) -> str:  # noqa: E731
                 # If the pattern has a capture group, replace only the group
-                if m.lastindex:
+                if _has_group and m.lastindex:
                     full = m.group(0)
                     captured = m.group(1)
-                    return full.replace(captured, f"[REDACTED:{_label}]", 1)
-                return f"[REDACTED:{_label}]"
+                    return full.replace(captured, _tag, 1)
+                return _tag
 
             text = pattern.sub(_replace, text)
         return text

@@ -16,16 +16,70 @@ import hashlib
 import json
 import logging
 import threading
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from veronica_core._utils import GENESIS_HASH  # noqa: E402
 from veronica_core.security.masking import SecretMasker  # noqa: E402
 
 
-_GENESIS_HASH = "0" * 64
+_CHUNK = 8192  # bytes per read when scanning backward through JSONL files
+
+
+def _scan_jsonl_reverse(path: Path) -> Iterator[dict[str, Any]]:
+    """Yield parsed JSON entries from *path* in reverse order (last line first).
+
+    Reads the file in backward chunks of ``_CHUNK`` bytes so that large logs
+    are never fully loaded into memory.  Corrupted lines are skipped with a
+    warning.  Stops cleanly at the beginning of the file.
+
+    Args:
+        path: Path to an existing JSONL file.
+
+    Yields:
+        Parsed ``dict`` for each non-empty line, from last to first.
+    """
+    with open(path, "rb") as f:
+        f.seek(0, 2)
+        file_size = f.tell()
+        remainder = b""
+        pos = file_size
+
+        while pos > 0:
+            read_size = min(_CHUNK, pos)
+            pos -= read_size
+            f.seek(pos)
+            chunk = f.read(read_size) + remainder
+            lines = chunk.split(b"\n")
+            # lines[0] may be an incomplete line at the chunk boundary; carry it back.
+            remainder = lines[0]
+            for raw in reversed(lines[1:]):
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    logger.warning(
+                        "audit_log: corrupted entry in %s -- skipping line: %s",
+                        path,
+                        exc,
+                    )
+
+        # Process the leftover bytes (the very first line of the file).
+        if remainder.strip():
+            try:
+                yield json.loads(remainder)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                logger.warning(
+                    "audit_log: corrupted entry in %s -- skipping line: %s",
+                    path,
+                    exc,
+                )
 
 
 class AuditLog:
@@ -69,6 +123,7 @@ class AuditLog:
         self._masker = masker
         self._signer = signer
         self._lock = threading.Lock()
+        self._dir_created: bool = False
         self._prev_hash = self._load_last_hash()
 
     # ------------------------------------------------------------------
@@ -94,7 +149,9 @@ class AuditLog:
                 entry_json = json.dumps(entry, sort_keys=True, separators=(",", ":"))
                 entry["hmac"] = self._signer.sign_bytes(entry_json.encode("utf-8"))
             line = json.dumps(entry, separators=(",", ":")) + "\n"
-            self._path.parent.mkdir(parents=True, exist_ok=True)
+            if not self._dir_created:
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                self._dir_created = True
             with self._path.open("a", encoding="utf-8") as fh:
                 fh.write(line)
             self._prev_hash = entry["hash"]
@@ -118,8 +175,8 @@ class AuditLog:
         RAM, making it safe for long-lived processes with millions of entries.
 
         Finds first:
-        - ``{"event": "policy_checkpoint", "max_policy_version": N}`` → return N
-        - ``{"event": "policy_version_accepted", "policy_version": N}`` → collect all, return max
+        - ``{"event": "policy_checkpoint", "max_policy_version": N}`` -- return N
+        - ``{"event": "policy_version_accepted", "policy_version": N}`` -- collect all, return max
 
         Returns:
             Last accepted policy version, or None if no policy version events found.
@@ -128,61 +185,17 @@ class AuditLog:
             return None
 
         max_accepted: int | None = None
-        _CHUNK = 8192  # bytes per read when scanning backward
 
         try:
-            with open(self._path, "rb") as f:
-                f.seek(0, 2)  # seek to EOF
-                file_size = f.tell()
-                remainder = b""
-                pos = file_size
-
-                while pos > 0:
-                    read_size = min(_CHUNK, pos)
-                    pos -= read_size
-                    f.seek(pos)
-                    chunk = f.read(read_size) + remainder
-                    lines = chunk.split(b"\n")
-                    # The first element may be an incomplete line; carry it back.
-                    remainder = lines[0]
-                    # Process complete lines in reverse order (skip first partial).
-                    for raw in reversed(lines[1:]):
-                        line = raw.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                            logger.warning(
-                                "audit_log: corrupted entry in %s — skipping line: %s",
-                                self._path,
-                                exc,
-                            )
-                            continue
-                        data = entry.get("data", entry)
-                        event = data.get("event") if isinstance(data, dict) else None
-                        if event == "policy_checkpoint":
-                            return int(data["max_policy_version"])
-                        if event == "policy_version_accepted":
-                            v = int(data.get("policy_version", 0))
-                            if max_accepted is None or v > max_accepted:
-                                max_accepted = v
-
-                # Process leftover (the very first line of the file).
-                if remainder.strip():
-                    try:
-                        entry = json.loads(remainder)
-                        data = entry.get("data", entry)
-                        event = data.get("event") if isinstance(data, dict) else None
-                        if event == "policy_checkpoint":
-                            return int(data["max_policy_version"])
-                        if event == "policy_version_accepted":
-                            v = int(data.get("policy_version", 0))
-                            if max_accepted is None or v > max_accepted:
-                                max_accepted = v
-                    except (json.JSONDecodeError, UnicodeDecodeError):
-                        pass
-
+            for entry in _scan_jsonl_reverse(self._path):
+                data = entry.get("data", entry)
+                event = data.get("event") if isinstance(data, dict) else None
+                if event == "policy_checkpoint":
+                    return int(data["max_policy_version"])
+                if event == "policy_version_accepted":
+                    v = int(data.get("policy_version", 0))
+                    if max_accepted is None or v > max_accepted:
+                        max_accepted = v
         except FileNotFoundError:
             return None
 
@@ -277,7 +290,7 @@ class AuditLog:
         if not self._path.exists():
             return True
 
-        prev = _GENESIS_HASH
+        prev = GENESIS_HASH
         with self._path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
@@ -386,7 +399,7 @@ class AuditLog:
         entry_without_hash = {
             k: v for k, v in entry.items() if k not in ("hash", "hmac")
         }
-        prev = entry_without_hash.get("prev_hash", _GENESIS_HASH)
+        prev = entry_without_hash.get("prev_hash", GENESIS_HASH)
         payload = prev + json.dumps(
             entry_without_hash, separators=(",", ":"), sort_keys=True
         )
@@ -395,65 +408,25 @@ class AuditLog:
     def _load_last_hash(self) -> str:
         """Read the last hash from an existing log, or return the genesis hash.
 
-        Uses backward chunk scanning to avoid O(n) forward scan for large logs.
-        Reads at most a few chunks from the end of the file.
+        Uses ``_scan_jsonl_reverse`` to avoid an O(n) forward scan for large logs.
         """
         if not self._path.exists():
-            return _GENESIS_HASH
+            return GENESIS_HASH
 
-        _CHUNK = 8192  # bytes per read when scanning backward
         try:
-            with open(self._path, "rb") as f:
-                f.seek(0, 2)
-                file_size = f.tell()
-                if file_size == 0:
-                    return _GENESIS_HASH
-                remainder = b""
-                pos = file_size
+            # Check for empty file before scanning.
+            if self._path.stat().st_size == 0:
+                return GENESIS_HASH
 
-                while pos > 0:
-                    read_size = min(_CHUNK, pos)
-                    pos -= read_size
-                    f.seek(pos)
-                    chunk = f.read(read_size) + remainder
-                    lines = chunk.split(b"\n")
-                    remainder = lines[0]
-                    # Scan from the end: find the last non-empty line with a "hash" key.
-                    for raw in reversed(lines[1:]):
-                        raw = raw.strip()
-                        if not raw:
-                            continue
-                        try:
-                            entry = json.loads(raw)
-                            h = entry.get("hash")
-                            if h and isinstance(h, str) and len(h) == 64:
-                                try:
-                                    int(h, 16)
-                                    return h
-                                except ValueError:
-                                    pass
-                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                            logger.warning(
-                                "audit_log: corrupted entry in %s — skipping line: %s",
-                                self._path,
-                                exc,
-                            )
-
-                # Check leftover (very first line of the file).
-                if remainder.strip():
+            for entry in _scan_jsonl_reverse(self._path):
+                h = entry.get("hash")
+                if h and isinstance(h, str) and len(h) == 64:
                     try:
-                        entry = json.loads(remainder)
-                        h = entry.get("hash")
-                        if h and isinstance(h, str) and len(h) == 64:
-                            try:
-                                int(h, 16)
-                                return h
-                            except ValueError:
-                                pass
-                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        int(h, 16)
+                        return h
+                    except ValueError:
                         pass
-
         except FileNotFoundError:
             pass
 
-        return _GENESIS_HASH
+        return GENESIS_HASH

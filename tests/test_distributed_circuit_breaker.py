@@ -104,16 +104,6 @@ class TestBasicStateTransitions:
         dcb.record_failure()
         assert dcb.failure_count == 1
 
-    def test_opens_after_threshold(self, dcb):
-        for _ in range(3):
-            dcb.record_failure()
-        assert dcb.state == CircuitState.OPEN
-
-    def test_not_open_before_threshold(self, dcb):
-        for _ in range(2):
-            dcb.record_failure()
-        assert dcb.state == CircuitState.CLOSED
-
     def test_half_open_after_recovery_timeout(self, fake_client):
         dcb = _make_dcb(fake_client, failure_threshold=2, recovery_timeout=0.0)
         dcb.record_failure()
@@ -210,18 +200,6 @@ class TestHalfOpenConcurrency:
 
 
 class TestRecordFailureOpensCircuit:
-    def test_threshold_exact(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5)
-        for i in range(5):
-            dcb.record_failure()
-        assert dcb.state == CircuitState.OPEN
-
-    def test_threshold_minus_one_stays_closed(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5)
-        for i in range(4):
-            dcb.record_failure()
-        assert dcb.state == CircuitState.CLOSED
-
     def test_failure_from_half_open_reopens(self, fake_client):
         dcb = _make_dcb(fake_client, failure_threshold=1, recovery_timeout=0.0)
         dcb.record_failure()
@@ -231,6 +209,27 @@ class TestRecordFailureOpensCircuit:
         # Should be OPEN (not HALF_OPEN or CLOSED)
         data = dcb._client.hgetall(dcb._key)
         assert data.get("state") == "OPEN"
+
+
+# ---------------------------------------------------------------------------
+# 4b. Threshold boundary: exact-at-threshold OPEN, one-below stays CLOSED
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "threshold,count,expected_state",
+    [
+        (3, 3, CircuitState.OPEN),
+        (3, 2, CircuitState.CLOSED),
+        (5, 5, CircuitState.OPEN),
+        (5, 4, CircuitState.CLOSED),
+    ],
+)
+def test_threshold_boundary(fake_client, threshold, count, expected_state):
+    dcb = _make_dcb(fake_client, failure_threshold=threshold)
+    for _ in range(count):
+        dcb.record_failure()
+    assert dcb.state == expected_state
 
 
 # ---------------------------------------------------------------------------
@@ -463,27 +462,25 @@ class TestReset:
 
 
 class TestTTL:
-    def test_ttl_set_on_record_failure(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5, ttl_seconds=7200)
-        dcb.record_failure()
-        ttl = fake_client.ttl(dcb._key)
-        assert ttl > 0
-
-    def test_ttl_set_on_check(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5, ttl_seconds=1800)
-        dcb.check(_ctx())
-        ttl = fake_client.ttl(dcb._key)
-        assert ttl > 0
-
-    def test_ttl_set_on_record_success(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5, ttl_seconds=3600)
-        dcb.record_success()
-        ttl = fake_client.ttl(dcb._key)
-        assert ttl > 0
-
-    def test_ttl_set_on_reset(self, fake_client):
-        dcb = _make_dcb(fake_client, failure_threshold=5, ttl_seconds=3600)
-        dcb.reset()
+    @pytest.mark.parametrize(
+        "operation,ttl_seconds",
+        [
+            ("record_failure", 7200),
+            ("check", 1800),
+            ("record_success", 3600),
+            ("reset", 900),
+        ],
+    )
+    def test_ttl_set_on_operation(self, fake_client, operation, ttl_seconds):
+        dcb = _make_dcb(fake_client, failure_threshold=5, ttl_seconds=ttl_seconds)
+        if operation == "record_failure":
+            dcb.record_failure()
+        elif operation == "check":
+            dcb.check(_ctx())
+        elif operation == "record_success":
+            dcb.record_success()
+        elif operation == "reset":
+            dcb.reset()
         ttl = fake_client.ttl(dcb._key)
         assert ttl > 0
 

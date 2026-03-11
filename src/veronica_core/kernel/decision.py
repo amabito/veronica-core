@@ -20,11 +20,12 @@ __all__ = [
 
 import re
 import time
-import types as _types
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ClassVar
+
+from veronica_core._utils import freeze_mapping
 
 # Regex for UUID4 format validation (8-4-4-4-12 hex).
 _UUID4_RE = re.compile(
@@ -145,9 +146,7 @@ class DecisionEnvelope:
                 f"DecisionEnvelope.metadata contains reserved keys: {sorted(collisions)}"
             )
         # Freeze mutable metadata to prevent post-construction mutation.
-        object.__setattr__(
-            self, "metadata", _types.MappingProxyType(dict(self.metadata))
-        )
+        freeze_mapping(self, "metadata")
 
     @property
     def allowed(self) -> bool:

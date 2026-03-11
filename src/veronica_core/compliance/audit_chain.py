@@ -37,8 +37,10 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from veronica_core._utils import GENESIS_HASH
 
-_GENESIS_HASH = "0" * 64
+# Backward-compat alias: internal callers (including existing tests) may use _GENESIS_HASH.
+_GENESIS_HASH = GENESIS_HASH
 
 
 @dataclass(frozen=True)
@@ -127,7 +129,7 @@ class AuditChain:
         """
         with self._lock:
             prev_hash = (
-                self._entries[-1].entry_hash if self._entries else _GENESIS_HASH
+                self._entries[-1].entry_hash if self._entries else GENESIS_HASH
             )
             seq = len(self._entries)
             ts = self._clock()
@@ -221,7 +223,7 @@ class AuditChain:
 
         # Check prev_hash linkage
         expected_prev = (
-            self._entries[index - 1].entry_hash if index > 0 else _GENESIS_HASH
+            self._entries[index - 1].entry_hash if index > 0 else GENESIS_HASH
         )
         if not hmac.compare_digest(entry.prev_hash, expected_prev):
             return False

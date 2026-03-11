@@ -12,6 +12,8 @@ from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.policy.verifier import PolicyVerifier
 from veronica_core.security.policy_signing import PolicySigner
 
+from .conftest import make_signed_bundle, make_test_bundle, make_test_signer
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -20,7 +22,7 @@ _TEST_KEY = hashlib.sha256(b"test-key-for-unit-tests").digest()
 
 
 def _make_signer(key: bytes = _TEST_KEY) -> PolicySigner:
-    return PolicySigner(key=key)
+    return make_test_signer(key_bytes=key)
 
 
 def _make_bundle(
@@ -28,37 +30,14 @@ def _make_bundle(
     signature: str = "",
     with_content_hash: bool = True,
 ) -> PolicyBundle:
-    content_hash = ""
-    # Build a temporary bundle to compute its hash.
-    tmp = PolicyBundle(
-        metadata=PolicyMetadata(policy_id="test-policy"),
-        rules=rules,
-    )
-    if with_content_hash:
-        content_hash = tmp.content_hash()
-
-    return PolicyBundle(
-        metadata=PolicyMetadata(
-            policy_id="test-policy",
-            content_hash=content_hash,
-        ),
-        rules=rules,
-        signature=signature,
-    )
+    return make_test_bundle(rules=rules, signature=signature, with_content_hash=with_content_hash)
 
 
 def _signed_bundle(
     signer: PolicySigner,
     rules: tuple[PolicyRule, ...] = (),
 ) -> PolicyBundle:
-    """Create a bundle and sign it with the given signer."""
-    unsigned = _make_bundle(rules=rules)
-    sig = signer.sign_bundle(unsigned)
-    return PolicyBundle(
-        metadata=unsigned.metadata,
-        rules=unsigned.rules,
-        signature=sig,
-    )
+    return make_signed_bundle(signer, rules=rules)
 
 
 _RULE = PolicyRule(rule_id="r1", rule_type="budget")

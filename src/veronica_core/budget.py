@@ -119,15 +119,10 @@ class BudgetEnforcer:
 
         Returns 1.0 (100% utilized) when ``limit_usd == 0`` -- a zero budget
         is immediately exhausted by definition, not infinitely exceeded.
-        Returns ``float('inf')`` when ``limit_usd < 0`` (negative limits are
-        invalid but kept for backward-compat; callers should guard with
-        ``math.isfinite(utilization)``).
         """
         with self._lock:
             if self.limit_usd == 0.0:
                 return 1.0  # 100% utilized: zero-budget is always exhausted
-            if self.limit_usd < 0:
-                return float("inf")
             return self._spent_usd / self.limit_usd
 
     def reset(self) -> None:

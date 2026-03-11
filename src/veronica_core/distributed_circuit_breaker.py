@@ -834,7 +834,12 @@ class DistributedCircuitBreaker:
         Prefer this over reading ``state``/``failure_count``/``success_count``
         individually when you need multiple fields (avoids N+1 Redis reads).
         """
-        if self._using_fallback or self._client is None:
+        # nogil: read _using_fallback under lock to prevent TOCTOU with
+        # _activate_fallback() flipping the flag concurrently.
+        with self._lock:
+            on_fallback = self._using_fallback or self._client is None
+            client = self._client
+        if on_fallback:
             with self._fallback._lock:
                 return CircuitSnapshot(
                     state=self._fallback._state,
@@ -845,7 +850,7 @@ class DistributedCircuitBreaker:
                     circuit_id=self._circuit_id,
                 )
         try:
-            data = self._client.hgetall(self._key)
+            data = client.hgetall(self._key)
             if not data:
                 return CircuitSnapshot(
                     state=CircuitState.CLOSED,

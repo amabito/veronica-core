@@ -115,6 +115,7 @@ NET_PATH_ALLOWLIST: dict[str, list[str]] = {
 
 _RE_BASE64 = re.compile(r"^[A-Za-z0-9+/]{20,}={0,2}$")
 _RE_HEX = re.compile(r"^[0-9a-fA-F]{32,}$")
+_COMBINED_SHORT_FLAG_RE = re.compile(r"^-[A-Za-z]{2,}$")
 
 GIT_DENY_SUBCMDS: frozenset[str] = frozenset({"push", "workflow", "release", "tag"})
 
@@ -164,6 +165,15 @@ SHELL_PKG_INSTALL_APPROVAL: tuple[tuple[str, frozenset[str]], ...] = (
 
 _UV_INSTALL_SUBCMDS: frozenset[str] = frozenset({"add", "pip"})
 _UV_PIP_INSTALL_SUBCMDS: frozenset[str] = frozenset({"install", "download"})
+
+# Options that consume the next token as a value (used when scanning uv args).
+_UV_OPTS_WITH_VALUE: frozenset[str] = frozenset({
+    "--project", "--directory", "--config-file", "--cache-dir",
+    "--python-preference", "--python-fetch", "--color",
+})
+
+# npm/pnpm subcommands that execute arbitrary packages.
+_NPM_EXEC_SUBCMDS: frozenset[str] = frozenset({"exec", "dlx", "x"})
 
 FILE_WRITE_LOCKFILE_PATTERNS: tuple[str, ...] = (
     "package-lock.json",
@@ -276,7 +286,7 @@ def _shannon_entropy(s: str) -> float:
 
 def _has_combined_short_flag(token: str, ch: str) -> bool:
     """Return True if *token* is a combined short-option cluster containing *ch*."""
-    return bool(re.match(r"^-[A-Za-z]{2,}$", token)) and (ch in token[1:])
+    return bool(_COMBINED_SHORT_FLAG_RE.match(token)) and (ch in token[1:])
 
 
 def _url_host(url: str) -> str:
@@ -378,8 +388,9 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
     # Detect -m flag including combined short flags like -Im, -mI, -Sm etc.
     for i, arg in enumerate(args[1:], start=1):
         if arg == "-m" or (arg.startswith("-") and not arg.startswith("--") and "m" in arg[1:]):
-            # The module name follows the -m flag (or the combined flag)
-            module_idx = i + 1 if arg == "-m" else i + 1
+            # The module name follows the -m flag; for combined flags the
+            # module may be embedded in the arg itself (see branches below).
+            module_idx = i + 1 if arg == "-m" else i
             # For combined flags where -m is not standalone, module is next arg
             if arg != "-m" and arg[1:].endswith("m"):
                 module_idx = i + 1
@@ -437,10 +448,6 @@ def _check_pkg_install(
 
     # DENY: uv run wrapping inline code execution or wrapped commands.
     # Skip global options (e.g. --project, --no-config) to find "run" subcommand.
-    _UV_OPTS_WITH_VALUE = frozenset({
-        "--project", "--directory", "--config-file", "--cache-dir",
-        "--python-preference", "--python-fetch", "--color",
-    })
     if argv0 == "uv":
         uv_subcmd = ""
         uv_subcmd_idx = -1
@@ -496,7 +503,6 @@ def _check_pkg_install(
     # REQUIRE_APPROVAL/DENY: npm/pnpm subcommand detection.
     # Conservative: all --long options (without =) are assumed value-taking
     # to prevent bypass via unknown options (fail-closed).
-    _NPM_EXEC_SUBCMDS = frozenset({"exec", "dlx", "x"})
     # Scan ALL non-option tokens for dangerous subcommands (position-independent).
     # This avoids option-parsing bypass where unknown flags hide the real subcommand.
     if argv0 in ("npm", "pnpm") or argv0 in {cmd for cmd, _ in SHELL_PKG_INSTALL_APPROVAL}:

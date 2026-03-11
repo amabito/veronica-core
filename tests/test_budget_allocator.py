@@ -47,6 +47,23 @@ def _assert_invariant(result: AllocationResult, total_budget: float) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Protocol conformance (all allocators must satisfy BudgetAllocator)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "allocator",
+    [
+        FairShareAllocator(),
+        WeightedAllocator({"a": 1.0}),
+        DynamicAllocator(),
+    ],
+)
+def test_conforms_to_protocol(allocator: BudgetAllocator) -> None:
+    assert isinstance(allocator, BudgetAllocator)
+
+
+# ---------------------------------------------------------------------------
 # AllocationResult
 # ---------------------------------------------------------------------------
 
@@ -130,9 +147,6 @@ class TestFairShareAllocator:
         for name in AGENTS:
             assert result.allocations[name] == pytest.approx(0.3)
 
-    def test_conforms_to_protocol(self) -> None:
-        assert isinstance(self.alloc, BudgetAllocator)
-
 
 # ---------------------------------------------------------------------------
 # WeightedAllocator
@@ -209,9 +223,6 @@ class TestWeightedAllocator:
     def test_negative_weight_raises(self) -> None:
         with pytest.raises(ValueError, match="non-negative"):
             WeightedAllocator({"a": -1.0})
-
-    def test_conforms_to_protocol(self) -> None:
-        assert isinstance(WeightedAllocator({"a": 1.0}), BudgetAllocator)
 
 
 # ---------------------------------------------------------------------------
@@ -297,9 +308,6 @@ class TestDynamicAllocator:
     def test_invalid_min_share_negative_raises(self) -> None:
         with pytest.raises(ValueError):
             DynamicAllocator(min_share=-0.1)
-
-    def test_conforms_to_protocol(self) -> None:
-        assert isinstance(DynamicAllocator(), BudgetAllocator)
 
     def test_negative_usage_clamped_to_zero(self) -> None:
         """Negative usage values (corrupted state) must not cause negative allocations."""

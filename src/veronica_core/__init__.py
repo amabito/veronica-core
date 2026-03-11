@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__version__ = "3.6.0"
+__version__ = "3.6.1"
 
 # ---------------------------------------------------------------------------
 # Eager imports -- minimal core types needed at import time
@@ -222,6 +222,22 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MemoryAccessRule": ("veronica_core.shield.memory_boundary", "MemoryAccessRule"),
     "MemoryBoundaryConfig": ("veronica_core.shield.memory_boundary", "MemoryBoundaryConfig"),
     "MemoryBoundaryHook": ("veronica_core.shield.memory_boundary", "MemoryBoundaryHook"),
+    # Kernel Decision Envelope (v3.2+, exported v3.7.0)
+    "DecisionEnvelope": ("veronica_core.kernel.decision", "DecisionEnvelope"),
+    "ReasonCode": ("veronica_core.kernel.decision", "ReasonCode"),
+    "make_envelope": ("veronica_core.kernel.decision", "make_envelope"),
+    # Kernel HA ABI (v3.5.0, exported v3.7.0)
+    "ReservationState": ("veronica_core.kernel.ha", "ReservationState"),
+    "PolicyEpochStamp": ("veronica_core.kernel.ha", "PolicyEpochStamp"),
+    "BreakerReflection": ("veronica_core.kernel.ha", "BreakerReflection"),
+    "Reservation": ("veronica_core.kernel.ha", "Reservation"),
+    "HeartbeatSnapshot": ("veronica_core.kernel.ha", "HeartbeatSnapshot"),
+    # Kernel Startup Guard (v3.7.0)
+    "verify_policy_or_halt": ("veronica_core.kernel.startup", "verify_policy_or_halt"),
+    "load_and_verify": ("veronica_core.kernel.startup", "load_and_verify"),
+    # Kernel Audit Bridge (v3.7.0)
+    "emit_governance_event": ("veronica_core.kernel.audit_bridge", "emit_governance_event"),
+    "should_emit": ("veronica_core.kernel.audit_bridge", "should_emit"),
     # Memory View / Execution Mode / DEGRADE (v3.6.0)
     "MemoryView": ("veronica_core.memory.types", "MemoryView"),
     "ExecutionMode": ("veronica_core.memory.types", "ExecutionMode"),

@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.6.1] -- 2026-03-11 -- Simplify + Test Dedup
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Dead-code conditional in `security/policy_rules.py`**: `module_idx = i + 1 if arg == "-m" else i + 1` -- both branches identical. Fixed to `i + 1 if arg == "-m" else i` so combined short flags (e.g. `-mI`) are parsed correctly.
+- **TOCTOU race in `distributed_circuit_breaker.py`**: `snapshot()` read `_using_fallback` outside `self._lock`, creating a race under nogil Python. Now reads under lock, matching all other properties.
+
+### Changed
+
+- **`_scan_jsonl_reverse()` extracted** (`audit/log.py`): ~80 lines of duplicated backward-chunk-scan logic consolidated into a single generator.
+- **`GENESIS_HASH` centralized** (`_utils.py`): Constant moved from 2 modules to `_utils.py`; both import from single source.
+- **`freeze_mapping()` helper** (`_utils.py`): 8 identical `object.__setattr__(..., MappingProxyType(...))` patterns across 5 files replaced with single helper.
+- **`SecretMasker` pre-built closures** (`security/masking.py`): Replacement tags and group flags computed once at `__init__` time instead of per `mask()` call.
+- **Module-level frozensets and regex** (`security/policy_rules.py`): `_UV_OPTS_WITH_VALUE`, `_NPM_EXEC_SUBCMDS`, `_COMBINED_SHORT_FLAG_RE` moved from function bodies to module scope.
+- **GIL-atomic bool read** (`otel.py`): Removed unnecessary lock acquisition for `_otel_enabled` early-exit check in `_emit_graph_event()`.
+- **`_last_success_time` as dataclass field** (`circuit_breaker.py`): Replaced `getattr` fallback with proper field; `reflect()` and `reset()` updated.
+- **Unreachable branch removed** (`budget.py`): `if self.limit_usd < 0: return float("inf")` in `utilization` -- constructor validates non-negative.
+- **`_dir_created` flag** (`audit/log.py`): Skips redundant `mkdir` calls after first write.
+- **Test helpers consolidated** (`tests/conftest.py`): 5 shared helpers (`make_test_signer`, `make_test_audit_log`, `read_jsonl`, `make_test_bundle`, `make_signed_bundle`) extracted from 6 kernel test files.
+- **Test parametrization**: 13 same-branch duplicate test functions consolidated via `@pytest.mark.parametrize` across 3 test files (execution_context, distributed_circuit_breaker, budget_allocator).
+
+---
+
 ## [3.6.0] -- 2026-03-11 -- Governed Memory Mediation
 
 **Breaking changes:** none

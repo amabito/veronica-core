@@ -16,9 +16,10 @@ import hashlib
 import hmac
 import json
 import time
-import types as _types
 from dataclasses import dataclass, field
 from typing import Any
+
+from veronica_core._utils import freeze_mapping
 
 
 @dataclass(frozen=True)
@@ -55,9 +56,7 @@ class PolicyMetadata:
                 f"PolicyMetadata.epoch must be a non-negative integer, got {self.epoch!r}"
             )
         # Freeze mutable tags to prevent post-construction mutation.
-        object.__setattr__(
-            self, "tags", _types.MappingProxyType(dict(self.tags))
-        )
+        freeze_mapping(self, "tags")
 
 
 @dataclass(frozen=True)
@@ -86,9 +85,7 @@ class PolicyRule:
             raise ValueError("PolicyRule.rule_type must be a non-empty string")
         # Freeze mutable parameters to prevent post-construction tampering
         # that would invalidate content_hash.
-        object.__setattr__(
-            self, "parameters", _types.MappingProxyType(dict(self.parameters))
-        )
+        freeze_mapping(self, "parameters")
 
 
 def _canonical_rules_json(rules: tuple[PolicyRule, ...]) -> str:

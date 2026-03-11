@@ -417,3 +417,183 @@ class TestCircuitBreakerReflect:
         for r in results:
             assert r.failure_count == 3
             assert r.state == "CLOSED"
+
+
+# ---------------------------------------------------------------------------
+# Reservation.commit()
+# ---------------------------------------------------------------------------
+
+
+class TestReservationCommit:
+    """Reservation.commit() state transitions."""
+
+    def _make(self, **overrides: object) -> Reservation:
+        defaults: dict = {
+            "reservation_id": "res-commit",
+            "resource_type": "tokens",
+            "amount": 50.0,
+        }
+        defaults.update(overrides)
+        return Reservation(**defaults)  # type: ignore[arg-type]
+
+    def test_commit_from_pending(self) -> None:
+        """PENDING -> COMMITTED is valid."""
+        r = self._make(state=ReservationState.PENDING)
+        committed = r.commit()
+        assert committed.state == ReservationState.COMMITTED
+
+    def test_commit_preserves_fields(self) -> None:
+        """All fields except state are preserved on commit."""
+        stamp = PolicyEpochStamp(epoch=1, policy_hash="abc")
+        r = self._make(
+            reservation_id="res-fields",
+            resource_type="budget",
+            amount=99.0,
+            epoch_stamp=stamp,
+            expires_at=time.time() + 3600,
+            metadata={"k": "v"},
+        )
+        committed = r.commit()
+        assert committed.reservation_id == r.reservation_id
+        assert committed.resource_type == r.resource_type
+        assert committed.amount == r.amount
+        assert committed.epoch_stamp is r.epoch_stamp
+        assert committed.created_at == r.created_at
+        assert committed.expires_at == r.expires_at
+        assert dict(committed.metadata) == dict(r.metadata)
+        assert committed.state == ReservationState.COMMITTED
+
+    def test_commit_from_committed_raises(self) -> None:
+        """COMMITTED -> COMMITTED is invalid."""
+        r = self._make(state=ReservationState.COMMITTED)
+        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+            r.commit()
+
+    def test_commit_from_rolled_back_raises(self) -> None:
+        """ROLLED_BACK -> COMMITTED is invalid."""
+        r = self._make(state=ReservationState.ROLLED_BACK)
+        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+            r.commit()
+
+    def test_commit_expired_raises(self) -> None:
+        """Cannot commit an expired reservation."""
+        r = self._make(state=ReservationState.PENDING, expires_at=time.time() - 1.0)
+        with pytest.raises(ValueError, match="Cannot commit expired reservation"):
+            r.commit()
+
+    def test_commit_returns_new_instance(self) -> None:
+        """commit() returns a NEW Reservation, not a mutation."""
+        r = self._make(state=ReservationState.PENDING)
+        committed = r.commit()
+        assert committed is not r
+        # Original must remain PENDING.
+        assert r.state == ReservationState.PENDING
+
+
+# ---------------------------------------------------------------------------
+# Reservation.rollback()
+# ---------------------------------------------------------------------------
+
+
+class TestReservationRollback:
+    """Reservation.rollback() state transitions."""
+
+    def _make(self, **overrides: object) -> Reservation:
+        defaults: dict = {
+            "reservation_id": "res-rollback",
+            "resource_type": "tokens",
+            "amount": 75.0,
+        }
+        defaults.update(overrides)
+        return Reservation(**defaults)  # type: ignore[arg-type]
+
+    def test_rollback_from_pending(self) -> None:
+        """PENDING -> ROLLED_BACK is valid."""
+        r = self._make(state=ReservationState.PENDING)
+        rolled = r.rollback()
+        assert rolled.state == ReservationState.ROLLED_BACK
+
+    def test_rollback_from_committed(self) -> None:
+        """COMMITTED -> ROLLED_BACK is valid."""
+        r = self._make(state=ReservationState.COMMITTED)
+        rolled = r.rollback()
+        assert rolled.state == ReservationState.ROLLED_BACK
+
+    def test_rollback_from_rolled_back_raises(self) -> None:
+        """ROLLED_BACK -> ROLLED_BACK is invalid (terminal)."""
+        r = self._make(state=ReservationState.ROLLED_BACK)
+        with pytest.raises(ValueError, match="already in a terminal state"):
+            r.rollback()
+
+    def test_rollback_preserves_fields(self) -> None:
+        """All fields except state are preserved on rollback."""
+        stamp = PolicyEpochStamp(epoch=2, policy_hash="def")
+        r = self._make(
+            reservation_id="res-rb-fields",
+            resource_type="capacity",
+            amount=10.0,
+            epoch_stamp=stamp,
+            expires_at=time.time() + 7200,
+            metadata={"tag": "test"},
+        )
+        rolled = r.rollback()
+        assert rolled.reservation_id == r.reservation_id
+        assert rolled.resource_type == r.resource_type
+        assert rolled.amount == r.amount
+        assert rolled.epoch_stamp is r.epoch_stamp
+        assert rolled.created_at == r.created_at
+        assert rolled.expires_at == r.expires_at
+        assert dict(rolled.metadata) == dict(r.metadata)
+        assert rolled.state == ReservationState.ROLLED_BACK
+
+
+# ---------------------------------------------------------------------------
+# HeartbeatSnapshot.capture()
+# ---------------------------------------------------------------------------
+
+
+class TestHeartbeatSnapshotCapture:
+    """HeartbeatSnapshot.capture() factory method."""
+
+    def _breaker(self, bid: str = "cb-1") -> BreakerReflection:
+        return BreakerReflection(
+            breaker_id=bid,
+            state="CLOSED",
+            failure_count=0,
+            success_count=0,
+            last_failure_ts=0.0,
+            last_success_ts=0.0,
+            recovery_timeout=60.0,
+            failure_threshold=5,
+        )
+
+    def test_capture_minimal(self) -> None:
+        """Capture with required args only."""
+        snap = HeartbeatSnapshot.capture(kernel_id="k-min", sequence=0)
+        assert snap.kernel_id == "k-min"
+        assert snap.sequence == 0
+        assert snap.epoch_stamp is None
+        assert snap.breakers == ()
+        assert snap.active_reservations == 0
+        assert snap.active_chains == 0
+        assert snap.total_decisions == 0
+        assert snap.uptime_seconds == 0.0
+        assert snap.metadata == {}
+
+    def test_capture_with_breakers(self) -> None:
+        """Capture includes breaker reflections."""
+        br = self._breaker("cb-cap")
+        snap = HeartbeatSnapshot.capture(
+            kernel_id="k-br",
+            sequence=3,
+            breakers=(br,),
+        )
+        assert len(snap.breakers) == 1
+        assert snap.breakers[0].breaker_id == "cb-cap"
+
+    def test_capture_timestamp_is_current(self) -> None:
+        """Timestamp is set at capture time."""
+        before = time.time()
+        snap = HeartbeatSnapshot.capture(kernel_id="k-ts", sequence=1)
+        after = time.time()
+        assert before <= snap.timestamp <= after

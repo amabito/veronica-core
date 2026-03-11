@@ -37,10 +37,11 @@ __all__ = [
 ]
 
 import time
-import types as _types
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar
+
+from veronica_core._utils import freeze_mapping
 
 if TYPE_CHECKING:
     from veronica_core.kernel.decision import DecisionEnvelope
@@ -140,9 +141,7 @@ class MemoryOperation:
                 f"got {self.content_size_bytes}"
             )
         # Freeze mutable metadata to prevent post-construction mutation.
-        object.__setattr__(
-            self, "metadata", _types.MappingProxyType(dict(self.metadata))
-        )
+        freeze_mapping(self, "metadata")
 
 
 @dataclass(frozen=True)
@@ -238,9 +237,7 @@ class MessageContext:
                 f"MessageContext.content_size_bytes must be >= 0, "
                 f"got {self.content_size_bytes}"
             )
-        object.__setattr__(
-            self, "metadata", _types.MappingProxyType(dict(self.metadata))
-        )
+        freeze_mapping(self, "metadata")
 
 
 @dataclass(frozen=True)
@@ -368,9 +365,7 @@ class MemoryGovernanceDecision:
                 f"{sorted(collisions)}"
             )
         # Freeze mutable audit_metadata to prevent post-construction mutation.
-        object.__setattr__(
-            self, "audit_metadata", _types.MappingProxyType(dict(self.audit_metadata))
-        )
+        freeze_mapping(self, "audit_metadata")
 
     @property
     def allowed(self) -> bool:

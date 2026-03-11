@@ -266,9 +266,8 @@ class OTelExecutionGraphObserver:
 
 def _emit_graph_event(name: str, attributes: dict[str, Any]) -> None:
     """Internal helper: add an event to the current OTel span."""
-    with _lock:
-        enabled = _otel_enabled
-    if not enabled:
+    # A plain bool read is GIL-atomic; no lock needed for the early-exit check.
+    if not _otel_enabled:
         return
     try:
         from opentelemetry import trace

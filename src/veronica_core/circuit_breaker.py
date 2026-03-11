@@ -100,6 +100,7 @@ class CircuitBreaker:
 
     _failure_count: int = field(default=0, init=False)
     _last_failure_time: Optional[float] = field(default=None, init=False)
+    _last_success_time: float = field(default=0.0, init=False)
     _success_count: int = field(default=0, init=False)
     _lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False
@@ -180,6 +181,7 @@ class CircuitBreaker:
         """
         with self._lock:
             self._success_count += 1
+            self._last_success_time = time.monotonic()
             self._half_open_in_flight = 0
 
             if self._state == CircuitState.HALF_OPEN:
@@ -290,7 +292,7 @@ class CircuitBreaker:
                 failure_count=self._failure_count,
                 success_count=self._success_count,
                 last_failure_ts=self._last_failure_time or 0.0,
-                last_success_ts=getattr(self, "_last_success_time", 0.0),
+                last_success_ts=self._last_success_time,
                 recovery_timeout=self.recovery_timeout,
                 failure_threshold=self.failure_threshold,
             )
@@ -301,6 +303,7 @@ class CircuitBreaker:
             self._state = CircuitState.CLOSED
             self._failure_count = 0
             self._last_failure_time = None
+            self._last_success_time = 0.0
             self._success_count = 0
             self._half_open_in_flight = 0
         logger.info("[VERONICA_CIRCUIT] Circuit reset")

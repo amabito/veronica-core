@@ -168,53 +168,28 @@ def test_local_cost_accumulation_independent_of_backend_total():
 class TestAdversarialExecutionConfig:
     """C1: ExecutionConfig NaN/Inf/negative input validation."""
 
-    def test_nan_max_cost_raises(self):
-        """NaN max_cost_usd must raise ValueError — bypasses all budget checks."""
-        import pytest
-
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_max_cost_raises(self, value: float) -> None:
+        """NaN/+Inf/-Inf max_cost_usd must raise ValueError -- bypasses budget checks."""
         with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(
-                max_cost_usd=float("nan"), max_steps=10, max_retries_total=3
-            )
-
-    def test_positive_inf_max_cost_raises(self):
-        """+Inf max_cost_usd must raise ValueError."""
-        import pytest
-
-        with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(
-                max_cost_usd=float("inf"), max_steps=10, max_retries_total=3
-            )
-
-    def test_negative_inf_max_cost_raises(self):
-        """-Inf max_cost_usd must raise ValueError."""
-        import pytest
-
-        with pytest.raises(ValueError, match="finite"):
-            ExecutionConfig(
-                max_cost_usd=float("-inf"), max_steps=10, max_retries_total=3
-            )
+            ExecutionConfig(max_cost_usd=value, max_steps=10, max_retries_total=3)
 
     def test_negative_max_cost_raises(self):
         """Negative max_cost_usd must raise ValueError."""
-        import pytest
-
         with pytest.raises(ValueError, match="non-negative"):
             ExecutionConfig(max_cost_usd=-1.0, max_steps=10, max_retries_total=3)
 
-    def test_negative_max_steps_raises(self):
-        """Negative max_steps must raise ValueError."""
-        import pytest
-
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"max_cost_usd": 1.0, "max_steps": -1, "max_retries_total": 3},
+            {"max_cost_usd": 1.0, "max_steps": 10, "max_retries_total": -1},
+        ],
+    )
+    def test_negative_non_cost_fields_raise(self, kwargs: dict) -> None:
+        """Negative max_steps or max_retries_total must raise ValueError."""
         with pytest.raises(ValueError, match="non-negative"):
-            ExecutionConfig(max_cost_usd=1.0, max_steps=-1, max_retries_total=3)
-
-    def test_negative_max_retries_raises(self):
-        """Negative max_retries_total must raise ValueError."""
-        import pytest
-
-        with pytest.raises(ValueError, match="non-negative"):
-            ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=-1)
+            ExecutionConfig(**kwargs)
 
     def test_zero_max_cost_allowed(self):
         """Zero max_cost_usd is valid (immediately halts on first call)."""
@@ -980,17 +955,11 @@ class TestSignalPropagation:
 class TestWrapOptionsNaNValidation:
     """1a: WrapOptions.cost_estimate_hint must reject NaN/Inf/negative."""
 
-    def test_nan_cost_estimate_raises(self):
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_cost_estimate_raises(self, value: float) -> None:
+        """NaN/+Inf/-Inf cost_estimate_hint must raise ValueError."""
         with pytest.raises(ValueError, match="finite"):
-            WrapOptions(cost_estimate_hint=float("nan"))
-
-    def test_pos_inf_cost_estimate_raises(self):
-        with pytest.raises(ValueError, match="finite"):
-            WrapOptions(cost_estimate_hint=float("inf"))
-
-    def test_neg_inf_cost_estimate_raises(self):
-        with pytest.raises(ValueError, match="finite"):
-            WrapOptions(cost_estimate_hint=float("-inf"))
+            WrapOptions(cost_estimate_hint=value)
 
     def test_negative_cost_estimate_raises(self):
         with pytest.raises(ValueError, match="non-negative"):

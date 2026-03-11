@@ -18,11 +18,13 @@ __all__ = [
     "HeartbeatSnapshot",
 ]
 
+import math
 import time
-import types as _types
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ClassVar
+
+from veronica_core._utils import freeze_mapping
 
 
 class ReservationState(str, Enum):
@@ -138,12 +140,10 @@ class Reservation:
             raise ValueError("Reservation.reservation_id must be non-empty")
         if not self.resource_type:
             raise ValueError("Reservation.resource_type must be non-empty")
-        if self.amount < 0:
+        if math.isnan(self.amount) or self.amount < 0:
             raise ValueError(f"Reservation.amount must be >= 0, got {self.amount}")
         # Freeze mutable metadata dict to prevent post-construction mutation.
-        object.__setattr__(
-            self, "metadata", _types.MappingProxyType(dict(self.metadata))
-        )
+        freeze_mapping(self, "metadata")
 
     @property
     def is_expired(self) -> bool:
@@ -162,6 +162,53 @@ class Reservation:
         if self.state not in (ReservationState.PENDING, ReservationState.COMMITTED):
             return False
         return not self.is_expired
+
+    def commit(self) -> "Reservation":
+        """Transition to COMMITTED state. Returns a new Reservation instance.
+
+        Only valid from PENDING state. Raises ValueError if current state
+        is not PENDING or if reservation is expired.
+        """
+        if self.state != ReservationState.PENDING:
+            raise ValueError(
+                f"Cannot commit reservation in {self.state.value} state; "
+                f"only PENDING reservations can be committed"
+            )
+        if self.is_expired:
+            raise ValueError("Cannot commit expired reservation")
+        return Reservation(
+            reservation_id=self.reservation_id,
+            resource_type=self.resource_type,
+            amount=self.amount,
+            state=ReservationState.COMMITTED,
+            epoch_stamp=self.epoch_stamp,
+            created_at=self.created_at,
+            expires_at=self.expires_at,
+            metadata=dict(self.metadata),
+        )
+
+    def rollback(self) -> "Reservation":
+        """Transition to ROLLED_BACK state. Returns a new Reservation instance.
+
+        Valid from PENDING or COMMITTED state. Raises ValueError if already
+        rolled back or expired (terminal states).
+        """
+        terminal = {ReservationState.ROLLED_BACK, ReservationState.EXPIRED}
+        if self.state in terminal:
+            raise ValueError(
+                f"Cannot rollback reservation in {self.state.value} state; "
+                f"reservation is already in a terminal state"
+            )
+        return Reservation(
+            reservation_id=self.reservation_id,
+            resource_type=self.resource_type,
+            amount=self.amount,
+            state=ReservationState.ROLLED_BACK,
+            epoch_stamp=self.epoch_stamp,
+            created_at=self.created_at,
+            expires_at=self.expires_at,
+            metadata=dict(self.metadata),
+        )
 
 
 @dataclass(frozen=True)
@@ -223,8 +270,38 @@ class HeartbeatSnapshot:
         if not isinstance(self.breakers, tuple):
             object.__setattr__(self, "breakers", tuple(self.breakers))
         # Freeze mutable metadata dict to prevent post-construction mutation.
-        object.__setattr__(
-            self, "metadata", _types.MappingProxyType(dict(self.metadata))
+        freeze_mapping(self, "metadata")
+
+    @classmethod
+    def capture(
+        cls,
+        kernel_id: str,
+        sequence: int,
+        epoch_stamp: PolicyEpochStamp | None = None,
+        breakers: tuple[BreakerReflection, ...] = (),
+        active_reservations: int = 0,
+        active_chains: int = 0,
+        total_decisions: int = 0,
+        uptime_seconds: float = 0.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> "HeartbeatSnapshot":
+        """Factory for HeartbeatSnapshot with current timestamp.
+
+        Used by HA components to capture kernel state at a point in time.
+        The snapshot is a best-effort observation; authoritative state is
+        always held externally.
+        """
+        return cls(
+            kernel_id=kernel_id,
+            sequence=sequence,
+            epoch_stamp=epoch_stamp,
+            breakers=breakers,
+            active_reservations=active_reservations,
+            active_chains=active_chains,
+            total_decisions=total_decisions,
+            uptime_seconds=uptime_seconds,
+            timestamp=time.time(),
+            metadata=metadata or {},
         )
 
     def to_audit_dict(self) -> dict[str, Any]:

@@ -15,6 +15,8 @@ import pytest
 from veronica_core.audit.log import AuditLog
 from veronica_core.security.policy_signing import PolicySigner
 
+from .conftest import make_test_signer
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -23,10 +25,11 @@ _TEST_KEY = hashlib.sha256(b"audit-test-key").digest()
 
 
 def _make_signer(key: bytes = _TEST_KEY) -> PolicySigner:
-    return PolicySigner(key=key)
+    return make_test_signer(key_bytes=key)
 
 
 def _read_entries(path: Path) -> list[dict[str, Any]]:
+    """Read JSONL entries from a raw file path (not from an AuditLog object)."""
     entries = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
