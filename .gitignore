@@ -109,6 +109,9 @@ scripts/gen_diagrams.py
 # Architecture drafts (local only, not published)
 docs/V4_ARCHITECTURE.md
 
+# Internal design memos (not for public)
+docs/internal/
+
 # Internal audit docs (not for public)
 AG2_IMPLEMENTATION_AUDIT.md
 
