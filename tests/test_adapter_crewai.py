@@ -686,3 +686,77 @@ class TestAdversarialCrewAI:
         event = _completed_event(response=ExplodingResponse())
         cost = _estimate_cost(event)
         assert cost == 0.0  # Fallback to 0.0
+
+
+# ---------------------------------------------------------------------------
+# DEGRADE wiring
+# ---------------------------------------------------------------------------
+
+
+class TestDegradeWiringCrewAI:
+    """handle_degrade() is called when a policy returns a degradation_action."""
+
+    def test_handle_degrade_called_from_event_bus_on_model_downgrade(self) -> None:
+        """on_llm_call_started: handle_degrade() called when decision has degradation_action."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import model_downgrade
+
+        listener = _make_listener(max_cost_usd=10.0, max_steps=5)
+        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="cost pressure")
+
+        calls: list[tuple[str, str]] = []
+        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+
+        with patch.object(listener._container, "check", return_value=degrade_decision):
+            _fake_event_bus.emit(None, FakeLLMCallStartedEvent(call_id="test"))
+
+        assert len(calls) == 1
+        assert "cost pressure" in calls[0][0]
+        assert calls[0][1] == "gpt-3.5-turbo"
+
+    def test_handle_degrade_called_from_check_or_raise(self) -> None:
+        """check_or_raise: handle_degrade() called when decision has degradation_action."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import model_downgrade
+
+        listener = _make_listener(max_cost_usd=10.0, max_steps=5)
+        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="budget low")
+
+        calls: list[tuple[str, str]] = []
+        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+
+        with patch.object(listener._container, "check", return_value=degrade_decision):
+            listener.check_or_raise()  # must not raise
+
+        assert len(calls) == 1
+        assert "budget low" in calls[0][0]
+        assert calls[0][1] == "gpt-3.5-turbo"
+
+    def test_handle_degrade_not_called_on_plain_allow(self) -> None:
+        """handle_degrade() NOT called when decision is plain ALLOW."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import allow
+
+        listener = _make_listener(max_cost_usd=10.0, max_steps=5)
+        calls: list[tuple[str, str]] = []
+        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+
+        with patch.object(listener._container, "check", return_value=allow("budget")):
+            _fake_event_bus.emit(None, FakeLLMCallStartedEvent(call_id="test"))
+
+        assert len(calls) == 0
+
+    def test_handle_degrade_default_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """handle_degrade() default implementation logs a warning without raising."""
+        import logging
+
+        listener = _make_listener(max_cost_usd=10.0)
+        with caplog.at_level(logging.WARNING):
+            listener.handle_degrade(reason="cost rising", suggestion="gpt-3.5-turbo")
+        assert "DEGRADE" in caplog.text
+        assert "gpt-3.5-turbo" in caplog.text

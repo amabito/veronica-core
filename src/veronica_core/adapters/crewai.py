@@ -201,6 +201,11 @@ class VeronicaCrewAIListener(BaseEventListener):
                 with self._halt_lock:
                     self._halt_pending = True
                     self._halt_reason = decision.reason
+            elif decision.degradation_action is not None:
+                self.handle_degrade(
+                    reason=decision.reason,
+                    suggestion=decision.fallback_model or decision.degradation_action,
+                )
 
         @bus.on(LLMCallCompletedEvent)
         def on_llm_call_completed(source: Any, event: LLMCallCompletedEvent) -> None:
@@ -257,12 +262,28 @@ class VeronicaCrewAIListener(BaseEventListener):
                 safe_emit(self._metrics, "record_decision", self._agent_id, "HALT")
                 raise VeronicaHalt(reason)
 
-        check_and_halt(
+        decision = check_and_halt(
             self._container,
             tag="[VERONICA_CREW]",
             _logger=logger,
             metrics=self._metrics,
             agent_id=self._agent_id,
+        )
+        if decision is not None and decision.degradation_action is not None:
+            self.handle_degrade(
+                reason=decision.reason,
+                suggestion=decision.fallback_model or decision.degradation_action,
+            )
+
+    def handle_degrade(self, reason: str, suggestion: str) -> None:
+        """Log a DEGRADE recommendation. Execution continues.
+
+        Args:
+            reason: Why degradation is recommended.
+            suggestion: Recommended degraded model or action.
+        """
+        logger.warning(
+            "[VERONICA_CREW] DEGRADE recommended: %s (suggestion: %s)", reason, suggestion
         )
 
     # ------------------------------------------------------------------

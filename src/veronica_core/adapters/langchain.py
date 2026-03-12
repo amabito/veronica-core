@@ -119,12 +119,32 @@ class VeronicaCallbackHandler(BaseCallbackHandler):
         Raises:
             VeronicaHalt: If any active policy (budget / step / retry) denies.
         """
-        check_and_halt(
+        decision = check_and_halt(
             self._container,
             tag="[VERONICA_LC]",
             _logger=logger,
             metrics=self._metrics,
             agent_id=self._agent_id,
+        )
+        if decision is not None and decision.degradation_action is not None:
+            self.handle_degrade(
+                reason=decision.reason,
+                suggestion=decision.fallback_model or decision.degradation_action,
+            )
+
+    def handle_degrade(self, reason: str, suggestion: str) -> None:
+        """Log a DEGRADE recommendation. Execution continues.
+
+        Called when a policy recommends model downgrade or context trim.
+        The caller may inspect ``reason`` and ``suggestion`` and act on them
+        (e.g. swap the underlying LLM), but this method does not halt execution.
+
+        Args:
+            reason: Why degradation is recommended.
+            suggestion: Recommended degraded model or action (e.g. ``"gpt-3.5-turbo"``).
+        """
+        logger.warning(
+            "[VERONICA_LC] DEGRADE recommended: %s (suggestion: %s)", reason, suggestion
         )
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:

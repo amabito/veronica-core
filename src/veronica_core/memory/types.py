@@ -36,13 +36,15 @@ __all__ = [
     "ThreatContext",
     "TRUST_RANK",
     "trust_rank",
+    "scoped_execution_mode",
 ]
 
 import time
 import types as _types
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generator
 
 from veronica_core._utils import freeze_mapping
 
@@ -456,3 +458,27 @@ class MemoryGovernanceDecision:
             if t.source_provenance:
                 result["threat_source_provenance"] = t.source_provenance
         return result
+
+
+@contextmanager
+def scoped_execution_mode(mode: ExecutionMode) -> Generator[MemoryPolicyContext, None, None]:
+    """Context manager that yields a MemoryPolicyContext for the given ExecutionMode.
+
+    Useful for temporarily switching execution mode when calling governor.evaluate().
+    The context object is freshly constructed on each call; no shared state is mutated.
+
+    Usage::
+
+        with scoped_execution_mode(ExecutionMode.REPLAY) as ctx:
+            decision = governor.evaluate(op, ctx)
+
+    Args:
+        mode: The ExecutionMode to activate for the scoped block.
+
+    Yields:
+        MemoryPolicyContext with the specified execution_mode set.
+    """
+    yield MemoryPolicyContext(
+        operation=MemoryOperation(action=MemoryAction.READ),
+        execution_mode=mode,
+    )

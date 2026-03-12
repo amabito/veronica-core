@@ -24,12 +24,14 @@ import threading
 from typing import Any
 
 from veronica_core.memory.hooks import MemoryGovernanceHook
+from veronica_core.memory.message_governance import MessageGovernanceHook
 from veronica_core.memory.types import (
     DegradeDirective,
     GovernanceVerdict,
     MemoryGovernanceDecision,
     MemoryOperation,
     MemoryPolicyContext,
+    MessageContext,
     ThreatContext,
 )
 
@@ -126,6 +128,7 @@ class MemoryGovernor:
                          If False, zero-hook evaluations return ALLOW.
         """
         self._hooks: list[MemoryGovernanceHook] = list(hooks or [])
+        self._message_hooks: list[MessageGovernanceHook] = []
         self._fail_closed = fail_closed
         self._lock = threading.Lock()
 
@@ -149,6 +152,155 @@ class MemoryGovernor:
                     "cannot add more hooks"
                 )
             self._hooks.append(hook)
+
+    def add_message_hook(self, hook: MessageGovernanceHook) -> None:
+        """Register a message governance hook.
+
+        Message hooks are evaluated by evaluate_message() in registration order.
+
+        Args:
+            hook: Any object satisfying the MessageGovernanceHook protocol.
+
+        Raises:
+            RuntimeError: When the hook count would exceed 100.
+        """
+        with self._lock:
+            if len(self._message_hooks) >= _MAX_HOOKS:
+                raise RuntimeError(
+                    f"MemoryGovernor message hook count capped at {_MAX_HOOKS}; "
+                    "cannot add more message hooks"
+                )
+            self._message_hooks.append(hook)
+
+    def evaluate_message(self, context: MessageContext) -> MemoryGovernanceDecision:
+        """Evaluate all message hooks and return an aggregated governance decision.
+
+        Hooks are evaluated in registration order. A DENY verdict from any
+        hook stops before_message evaluation immediately (fail-closed).
+        DEGRADE verdicts are accumulated; only DENY short-circuits.
+        after_message is called on every registered hook regardless of the
+        final verdict.
+
+        DegradeDirective instances from multiple DEGRADE hooks are merged using
+        the same merge semantics as evaluate() (stricter fields win).
+
+        Args:
+            context: The message context to evaluate.
+
+        Returns:
+            MemoryGovernanceDecision with the aggregated verdict.
+        """
+        with self._lock:
+            hooks_snapshot = tuple(self._message_hooks)
+
+        if not hooks_snapshot:
+            verdict = (
+                GovernanceVerdict.DENY if self._fail_closed else GovernanceVerdict.ALLOW
+            )
+            reason = (
+                "no message hooks registered (fail-closed)"
+                if self._fail_closed
+                else "no message hooks registered (fail-open)"
+            )
+            return MemoryGovernanceDecision(
+                verdict=verdict,
+                reason=reason,
+                policy_id="governor",
+            )
+
+        accumulated_verdict = GovernanceVerdict.ALLOW
+        accumulated_reason = ""
+        accumulated_policy_id = "governor"
+        accumulated_directive: DegradeDirective | None = None
+        accumulated_threat: ThreatContext | None = None
+        final_decision: MemoryGovernanceDecision | None = None
+
+        for hook in hooks_snapshot:
+            try:
+                decision = hook.before_message(context)
+                if decision is None:
+                    raise TypeError(
+                        f"hook {type(hook).__name__}.before_message() returned None"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "[memory.governor] message hook %s raised during before_message: %s",
+                    type(hook).__name__,
+                    exc,
+                )
+                final_decision = MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.DENY,
+                    reason=f"hook error: {type(exc).__name__}",
+                    policy_id=type(hook).__name__,
+                )
+                break
+
+            if decision.verdict is GovernanceVerdict.DENY:
+                final_decision = MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.DENY,
+                    reason=decision.reason,
+                    policy_id=decision.policy_id,
+                    audit_metadata=dict(decision.audit_metadata),
+                )
+                break
+
+            try:
+                hook_rank = _VERDICT_RANK[decision.verdict]
+            except KeyError:
+                logger.error(
+                    "[memory.governor] message hook %s returned unknown verdict %r; "
+                    "failing closed (DENY)",
+                    type(hook).__name__,
+                    decision.verdict,
+                )
+                final_decision = MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.DENY,
+                    reason=f"unknown verdict: {decision.verdict!r}",
+                    policy_id=type(hook).__name__,
+                )
+                break
+
+            current_rank = _VERDICT_RANK[accumulated_verdict]
+            if hook_rank > current_rank:
+                accumulated_verdict = decision.verdict
+                accumulated_reason = decision.reason
+                accumulated_policy_id = decision.policy_id
+                accumulated_threat = decision.threat_context
+
+            if (
+                decision.verdict is GovernanceVerdict.DEGRADE
+                and decision.degrade_directive is not None
+            ):
+                accumulated_directive = _merge_directives(
+                    accumulated_directive, decision.degrade_directive
+                )
+
+        # Call after_message on all hooks (fire-and-forget, never raises).
+        resolved = final_decision or MemoryGovernanceDecision(
+            verdict=accumulated_verdict,
+            reason=accumulated_reason,
+            policy_id=accumulated_policy_id,
+            degrade_directive=(
+                accumulated_directive
+                if accumulated_verdict is GovernanceVerdict.DEGRADE
+                else None
+            ),
+            threat_context=(
+                accumulated_threat
+                if accumulated_verdict is not GovernanceVerdict.ALLOW
+                else None
+            ),
+        )
+        for hook in hooks_snapshot:
+            try:
+                hook.after_message(context, resolved)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "[memory.governor] message hook %s raised during after_message: %s",
+                    type(hook).__name__,
+                    exc,
+                )
+        return resolved
 
     def evaluate(
         self,
@@ -310,6 +462,12 @@ class MemoryGovernor:
 
     @property
     def hook_count(self) -> int:
-        """Number of registered hooks."""
+        """Number of registered memory operation hooks."""
         with self._lock:
             return len(self._hooks)
+
+    @property
+    def message_hook_count(self) -> int:
+        """Number of registered message hooks."""
+        with self._lock:
+            return len(self._message_hooks)

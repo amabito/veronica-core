@@ -178,13 +178,18 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
                     safe_emit(self._metrics, "record_decision", self._agent_id, "HALT")
                     raise VeronicaHalt(cb_decision.reason, cb_decision)
 
-            check_and_halt(
+            _decision = check_and_halt(
                 self._container,
                 tag="[VERONICA_LI]",
                 _logger=logger,
                 metrics=self._metrics,
                 agent_id=self._agent_id,
             )
+            if _decision is not None and _decision.degradation_action is not None:
+                self.handle_degrade(
+                    reason=_decision.reason,
+                    suggestion=_decision.fallback_model or _decision.degradation_action,
+                )
 
         return event_id or str(uuid4())
 
@@ -234,6 +239,17 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         trace_map: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         """Called when a trace ends. No-op for VERONICA handler."""
+
+    def handle_degrade(self, reason: str, suggestion: str) -> None:
+        """Log a DEGRADE recommendation. Execution continues.
+
+        Args:
+            reason: Why degradation is recommended.
+            suggestion: Recommended degraded model or action.
+        """
+        logger.warning(
+            "[VERONICA_LI] DEGRADE recommended: %s (suggestion: %s)", reason, suggestion
+        )
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         """Error hook: log error and record circuit breaker failure."""

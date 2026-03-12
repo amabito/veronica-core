@@ -38,11 +38,15 @@ def check_and_halt(
     _logger: Optional[logging.Logger] = None,
     metrics: Optional[Any] = None,
     agent_id: str = "agent",
-) -> None:
+) -> Any:
     """Check container policies and raise VeronicaHalt if denied.
 
     Centralizes the ``container.check() -> raise VeronicaHalt`` pattern used
     by all framework adapters (ag2, crewai, langchain, langgraph, llamaindex).
+
+    Returns the PolicyDecision so callers can inspect degradation_action.
+    A DEGRADE decision has allowed=True and a non-None degradation_action;
+    callers should call handle_degrade() on the adapter when appropriate.
 
     Args:
         container: AIContainer or ExecutionContextContainerAdapter to check.
@@ -63,6 +67,7 @@ def check_and_halt(
         safe_emit(metrics, "record_decision", agent_id, "HALT")
         raise VeronicaHalt(decision.reason, decision)
     safe_emit(metrics, "record_decision", agent_id, "ALLOW")
+    return decision
 
 
 def build_container(config: Union[GuardConfig, ExecutionConfig]) -> AIContainer:

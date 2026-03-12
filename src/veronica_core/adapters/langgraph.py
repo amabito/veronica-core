@@ -176,12 +176,28 @@ class VeronicaLangGraphCallback:
         Raises:
             VeronicaHalt: If any active policy (budget / step / retry) denies.
         """
-        check_and_halt(
+        decision = check_and_halt(
             self._container,
             tag="[VERONICA_LG]",
             _logger=logger,
             metrics=self._metrics,
             agent_id=self._agent_id,
+        )
+        if decision is not None and decision.degradation_action is not None:
+            self.handle_degrade(
+                reason=decision.reason,
+                suggestion=decision.fallback_model or decision.degradation_action,
+            )
+
+    def handle_degrade(self, reason: str, suggestion: str) -> None:
+        """Log a DEGRADE recommendation. Execution continues.
+
+        Args:
+            reason: Why degradation is recommended.
+            suggestion: Recommended degraded model or action.
+        """
+        logger.warning(
+            "[VERONICA_LG] DEGRADE recommended: %s (suggestion: %s)", reason, suggestion
         )
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
@@ -279,13 +295,20 @@ def veronica_node_wrapper(
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Pre-node: policy check
-            check_and_halt(
+            _decision = check_and_halt(
                 _container,
                 tag="[VERONICA_LG]",
                 _logger=logger,
                 metrics=metrics,
                 agent_id=agent_id,
             )
+            if _decision is not None and _decision.degradation_action is not None:
+                logger.warning(
+                    "[VERONICA_LG] DEGRADE recommended for node '%s': %s (suggestion: %s)",
+                    fn.__name__,
+                    _decision.reason,
+                    _decision.fallback_model or _decision.degradation_action,
+                )
 
             # Execute the node
             result = fn(*args, **kwargs)

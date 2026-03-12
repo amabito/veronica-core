@@ -337,3 +337,61 @@ class TestExtractCostFromPayload:
         # Should not raise
         cost = self._extract(payload)
         assert isinstance(cost, float)
+
+
+# ---------------------------------------------------------------------------
+# DEGRADE wiring
+# ---------------------------------------------------------------------------
+
+
+class TestDegradeWiring:
+    """handle_degrade() is called when a policy returns a degradation_action."""
+
+    def _cbtype(self):
+        from llama_index.core.callbacks.schema import CBEventType
+
+        return CBEventType
+
+    def test_handle_degrade_called_on_model_downgrade(self) -> None:
+        """on_event_start: handle_degrade() called when decision has degradation_action."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import model_downgrade
+
+        handler = _make_handler(config=GuardConfig(max_cost_usd=10.0, max_steps=5))
+        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="budget pressure")
+        CBEventType = self._cbtype()
+
+        with patch.object(handler._container, "check", return_value=degrade_decision):
+            calls: list[tuple[str, str]] = []
+            handler.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            handler.on_event_start(CBEventType.LLM)
+            assert len(calls) == 1
+            assert "budget pressure" in calls[0][0]
+            assert calls[0][1] == "gpt-3.5-turbo"
+
+    def test_handle_degrade_not_called_on_allow(self) -> None:
+        """on_event_start: handle_degrade() NOT called for plain ALLOW decisions."""
+        from unittest.mock import patch
+
+        from veronica_core.runtime_policy import allow
+
+        handler = _make_handler(config=GuardConfig(max_cost_usd=10.0, max_steps=5))
+        allow_decision = allow("budget")
+        CBEventType = self._cbtype()
+
+        with patch.object(handler._container, "check", return_value=allow_decision):
+            calls: list[tuple[str, str]] = []
+            handler.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            handler.on_event_start(CBEventType.LLM)
+            assert len(calls) == 0
+
+    def test_handle_degrade_default_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """handle_degrade() default implementation logs a warning without raising."""
+        import logging
+
+        handler = _make_handler(config=GuardConfig(max_cost_usd=10.0))
+        with caplog.at_level(logging.WARNING):
+            handler.handle_degrade(reason="cost rising", suggestion="gpt-3.5-turbo")
+        assert "DEGRADE" in caplog.text
+        assert "gpt-3.5-turbo" in caplog.text

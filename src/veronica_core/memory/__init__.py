@@ -15,6 +15,12 @@ from veronica_core.memory.hooks import (
     DenyAllMemoryGovernanceHook,
     MemoryGovernanceHook,
 )
+from veronica_core.memory.message_governance import (
+    DefaultMessageGovernanceHook,
+    DenyOversizedMessageHook,
+    MessageBridgeHook,
+    MessageGovernanceHook,
+)
 from veronica_core.memory.types import (
     BridgePolicy,
     CompactnessConstraints,
@@ -29,6 +35,7 @@ from veronica_core.memory.types import (
     MemoryView,
     MessageContext,
     ThreatContext,
+    scoped_execution_mode,
 )
 from veronica_core.memory.lifecycle import (
     ProvenanceLifecycle,
@@ -57,4 +64,10 @@ __all__ = [
     # v3.7.0: lifecycle
     "ProvenanceLifecycle",
     "TransitionResult",
+    # v3.7.0: message governance
+    "MessageGovernanceHook",
+    "DefaultMessageGovernanceHook",
+    "DenyOversizedMessageHook",
+    "MessageBridgeHook",
+    "scoped_execution_mode",
 ]
