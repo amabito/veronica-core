@@ -2,11 +2,10 @@
 
 ## What This Demonstrates
 
-This PoC explores whether AG2.1 beta's middleware chain (#2439) can support
-runtime governance behaviors implemented as external middleware. The current
-draft focuses on three narrow scenarios using
-[veronica-core](https://github.com/amabito/veronica-core), a governance
-library, to validate the hook contract.
+Testing whether AG2.1 beta's middleware chain (#2439) works for plugging
+in runtime governance from outside. Three scenarios using
+[veronica-core](https://github.com/amabito/veronica-core) to poke at
+the hook contract.
 
 ## Quick Start
 
@@ -66,8 +65,8 @@ calling `call_next`. Denied tools return an error without execution.
 ```python
 from veronica_core.security.policy_engine import PolicyEngine
 
-policy = PolicyEngine()  # default rules deny rm, curl, powershell, etc.
-# on_tool_execution before: policy.evaluate_shell([tool_name, *args])
+policy = PolicyEngine()  # example policy configuration
+# on_tool_execution before: policy.evaluate(PolicyContext(action=tool_name))
 # if verdict == DENY -> return error, skip call_next
 ```
 
@@ -94,13 +93,13 @@ Event content extraction depends on the `BaseEvent` structure in #2439
 
 The following governance behaviors are excluded from the initial PoC:
 
-- Circuit breaker (failure-count state machine, HALF_OPEN gate)
-- Semantic loop detection (rolling-window similarity)
-- Safe mode / kill-switch (global halt)
-- GroupChat speaker selection governance
-- Fan-out budget allocation across agents
-- Distributed (Redis) backend for cross-process state
-- Integration with #2459 (AgentEligibilityPolicy)
+- Circuit breaker
+- Semantic loop detection
+- Safe mode / kill-switch
+- GroupChat speaker selection
+- Fan-out budget allocation
+- Distributed backend (Redis)
+- #2459 integration
 
 These are implementable on the same middleware chain, but the first cut
 prioritizes validating the hook contract with the three simplest scenarios
