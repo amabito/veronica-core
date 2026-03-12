@@ -105,22 +105,17 @@ These are implementable on the same middleware chain, but the first cut
 prioritizes validating the hook contract with the three simplest scenarios
 above.
 
-## Open Questions
+## Confirmed from #2439 Draft
 
-- **ModelResponse structure**: Constructor and fields are not yet confirmed.
-  Needed to determine how to return error responses when governance blocks
-  a call (vs raising an exception).
-- **ToolCall API**: How to extract tool name and arguments from the event
-  passed to `on_tool_execution`. Likely `event.name` but pending confirmation.
-- **Cost extraction**: How LLM token usage / cost is exposed in the response
-  or context after `call_next` returns. This determines budget accounting
-  accuracy.
-- **Error signaling**: Whether governance should raise an exception (e.g.
-  `VeronicaHalt`) or return an error `ModelResponse` / `ToolError` when
-  blocking a call. The former is simpler; the latter may compose better
-  with other middleware in the chain.
-- **BaseEvent content access**: How to read/modify prompt text within events
-  for secret redaction. Assuming a `.content` or similar attribute.
+- **ModelResponse**: `ModelResponse(message=ModelMessage(content="..."))`
+  for governance blocks. `usage: dict[str, float]` for cost tracking.
+- **ToolCall API**: `event.name` + `event.serialized_arguments` (dict).
+- **Cost extraction**: `response.usage` exposes token counts.
+- **Error signaling**: `ToolError(parent_id=..., name=..., error=...)`
+  composes with the chain without exceptions.
+- **BaseEvent content**: `ModelRequest.content` for prompt access.
+
+These are based on the current #2439 draft and may change before merge.
 
 ## Links
 
