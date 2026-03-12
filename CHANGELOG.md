@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.1] -- 2026-03-12 -- Message Hooks + Adapter DEGRADE Wiring
+
+**Breaking changes:** none
+
+### Added
+
+- `MemoryGovernor.evaluate_message()` -- message hook callpath. DENY short-circuits, DEGRADE accumulates across hooks, directives merge (stricter wins). `add_message_hook()` and `message_hook_count` property.
+- `scoped_execution_mode()` context manager -- switches `ExecutionMode` on a `MemoryPolicyContext` for the duration of a `with` block, restores on exit.
+- `handle_degrade()` on all 4 framework adapters (LangChain, LangGraph, LlamaIndex, CrewAI). Called when `check_and_halt()` returns a `PolicyDecision` with `degradation_action`. Default: logs a warning.
+- `MessageGovernanceHook`, `DefaultMessageGovernanceHook`, `DenyOversizedMessageHook`, `MessageBridgeHook` -- exported from `veronica_core.memory`.
+- `scoped_execution_mode` exported from top-level `veronica_core`.
+- 18 tests for `evaluate_message()` covering all 12 code branches + directive merge + concurrency.
+- 12 degrade wiring tests across 4 adapters (3 per adapter).
+
+### Fixed
+
+- `check_and_halt()` return type: was `None`, now returns `PolicyDecision | None` so callers can inspect `degradation_action`.
+- `evaluate_message()` docstring: said "non-ALLOW stops evaluation" but only DENY actually short-circuits. Corrected.
+
+### Stats
+
+5766 tests, 94% coverage, governor.py 64% -> 98%.
+
+---
+
 ## [3.7.0] -- 2026-03-12 -- Memory Governance Hardening
 
 **Breaking changes:** none
