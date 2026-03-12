@@ -1,4 +1,4 @@
-# veronica-core
+# VERONICA-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
 ![CI](https://img.shields.io/badge/tests-5672%20passing-brightgreen)
