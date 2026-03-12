@@ -1,7 +1,7 @@
 # veronica-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-5528%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-5672%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -159,7 +159,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Stats
 
-5670 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.7.0. Python 3.10+.
+5672 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.7.0. Python 3.10+.
 
 Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 
