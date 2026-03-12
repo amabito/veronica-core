@@ -758,7 +758,7 @@ class TestSyncPostCallTimeout:
         # Non-preemptive: fn runs to completion, then timeout is detected
         assert result.success is False
         assert result.error is not None
-        assert "TimeoutError" in result.error or "timeout" in result.error.lower()
+        assert "tool call failed" in result.error
 
     def test_timeout_error_path_increments_error_count(self) -> None:
         """Sync timeout error must increment error_count in stats."""

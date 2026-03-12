@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import threading
 
+import pytest
 
 from veronica_core.agent_guard import AgentStepGuard
 from veronica_core.runtime_policy import PolicyContext
@@ -218,3 +219,25 @@ class TestAgentStepCheckConcurrency:
             t.join()
 
         assert errors == []
+
+
+
+class TestAgentStepGuardValidation:
+    """Adversarial: __post_init__ rejects invalid max_steps."""
+
+    def test_bool_true_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="max_steps must be an int"):
+            AgentStepGuard(max_steps=True)
+
+    def test_bool_false_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="max_steps must be an int"):
+            AgentStepGuard(max_steps=False)
+
+    def test_negative_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            AgentStepGuard(max_steps=-1)
+
+    def test_zero_is_valid(self) -> None:
+        guard = AgentStepGuard(max_steps=0)
+        assert guard.max_steps == 0
+        assert guard.step() is False  # immediately at limit

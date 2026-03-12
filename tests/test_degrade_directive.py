@@ -469,17 +469,17 @@ class TestMergeDirectives:
         assert result.summary_required is False
         assert result.raw_replay_blocked is True
 
-    def test_int_fields_max(self) -> None:
+    def test_int_fields_stricter_wins(self) -> None:
         result = self._merge(
             DegradeDirective(max_packet_tokens=100, max_content_size_bytes=512),
             DegradeDirective(max_packet_tokens=200, max_content_size_bytes=256),
         )
         assert result is not None
-        assert result.max_packet_tokens == 200
-        assert result.max_content_size_bytes == 512
+        assert result.max_packet_tokens == 100  # stricter (smaller) wins
+        assert result.max_content_size_bytes == 256  # stricter (smaller) wins
 
     def test_int_zero_treated_as_no_limit(self) -> None:
-        # 0 = no limit; max(0, 500) = 500
+        # 0 = no limit; the positive value becomes the effective limit
         result = self._merge(
             DegradeDirective(max_packet_tokens=0),
             DegradeDirective(max_packet_tokens=500),
@@ -733,3 +733,39 @@ class TestGovernorDegradeDirectiveMerging:
         decision = gov.evaluate(op)
         assert decision.verdict == GovernanceVerdict.DEGRADE
         assert decision.threat_context is tc
+
+
+class TestMergeLimitEdgeCases:
+    """Adversarial: _merge_limit boundary conditions."""
+
+    def _merge(self, d1: DegradeDirective, d2: DegradeDirective) -> DegradeDirective | None:
+        from veronica_core.memory.governor import _merge_directives
+
+        return _merge_directives(d1, d2)
+
+    def test_both_zero_returns_zero(self) -> None:
+        """Both sides 0 (no limit) -> result is 0 (no limit)."""
+        result = self._merge(
+            DegradeDirective(max_packet_tokens=0),
+            DegradeDirective(max_packet_tokens=0),
+        )
+        assert result is not None
+        assert result.max_packet_tokens == 0
+
+    def test_both_zero_content_size(self) -> None:
+        """Both sides 0 for max_content_size_bytes -> 0."""
+        result = self._merge(
+            DegradeDirective(max_content_size_bytes=0),
+            DegradeDirective(max_content_size_bytes=0),
+        )
+        assert result is not None
+        assert result.max_content_size_bytes == 0
+
+    def test_zero_and_positive_returns_positive(self) -> None:
+        """0 (no limit) + positive -> positive (the effective limit)."""
+        result = self._merge(
+            DegradeDirective(max_content_size_bytes=0),
+            DegradeDirective(max_content_size_bytes=256),
+        )
+        assert result is not None
+        assert result.max_content_size_bytes == 256

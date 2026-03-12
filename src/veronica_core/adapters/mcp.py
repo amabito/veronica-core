@@ -160,8 +160,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         # Circuit breaker pre-check (per-server, before touching budget).
         halt_result = self._check_circuit_breaker(tool_name)
         if halt_result is not None:
-            with self._stats_lock:
-                self._stats[tool_name].call_count += 1
+            self._increment_call_count(tool_name)
             return halt_result
 
         # Determine cost estimate for this call.
@@ -198,8 +197,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         # or _execute ran but cost_estimate pushed total over the limit.
         if ec_decision == Decision.HALT:
             logger.debug("[MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name)
-            with self._stats_lock:
-                self._stats[tool_name].call_count += 1
+            self._increment_call_count(tool_name)
             return MCPToolResult(
                 success=False,
                 error="Budget limit exceeded",
@@ -217,13 +215,10 @@ class MCPContainmentAdapter(_MCPAdapterBase):
                 exc,
             )
             self._record_circuit_breaker_failure(exc)
-            with self._stats_lock:
-                stats = self._stats[tool_name]
-                stats.call_count += 1
-                stats.error_count += 1
+            self._increment_error_count(tool_name)
             return MCPToolResult(
                 success=False,
-                error=f"{type(exc).__name__}: {exc}",
+                error="tool call failed",
                 decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
@@ -231,10 +226,7 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         # Check if MCP tool itself reported an error via isError flag.
         result_value = call_result
         if getattr(result_value, "isError", False):
-            with self._stats_lock:
-                stats = self._stats[tool_name]
-                stats.call_count += 1
-                stats.error_count += 1
+            self._increment_error_count(tool_name)
             return MCPToolResult(
                 success=False,
                 result=result_value,
@@ -250,16 +242,17 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         self._record_circuit_breaker_success()
 
         with self._stats_lock:
-            stats = self._stats[tool_name]
-            stats.call_count += 1
-            stats.total_cost_usd += actual_cost
-            stats._total_duration_ms += call_duration_ms
-            successful_calls = stats.call_count - stats.error_count
-            stats.avg_duration_ms = (
-                stats._total_duration_ms / successful_calls
-                if successful_calls > 0
-                else 0.0
-            )
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+                stats.total_cost_usd += actual_cost
+                stats._total_duration_ms += call_duration_ms
+                successful_calls = stats.call_count - stats.error_count
+                stats.avg_duration_ms = (
+                    stats._total_duration_ms / successful_calls
+                    if successful_calls > 0
+                    else 0.0
+                )
 
         return MCPToolResult(
             success=True,
@@ -280,6 +273,21 @@ class MCPContainmentAdapter(_MCPAdapterBase):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _increment_call_count(self, tool_name: str) -> None:
+        """Safely increment call_count, tolerating missing stats entries."""
+        with self._stats_lock:
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+
+    def _increment_error_count(self, tool_name: str) -> None:
+        """Safely increment both call_count and error_count."""
+        with self._stats_lock:
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+                stats.error_count += 1
 
     def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""

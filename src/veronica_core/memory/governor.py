@@ -46,6 +46,20 @@ _VERDICT_RANK: dict[GovernanceVerdict, int] = {
 }
 
 
+def _merge_limit(a: int, b: int) -> int:
+    """Return the stricter (smaller positive) of two limit values.
+
+    0 means "no limit". If both are positive, the smaller wins (stricter).
+    If one is 0, the other (positive) value is the effective limit.
+    If both are 0, the result is 0 (no limit from either side).
+    """
+    if a == 0:
+        return b
+    if b == 0:
+        return a
+    return min(a, b)
+
+
 def _merge_directives(
     existing: DegradeDirective | None,
     new: DegradeDirective | None,
@@ -54,7 +68,7 @@ def _merge_directives(
 
     Merging rules per field type:
     - bool:  OR (True wins)
-    - int:   max of non-zero values (0 = no limit)
+    - int:   stricter of non-zero values (0 = no limit; min of positives)
     - float: min of non-1.0 values (stricter wins for ratios)
     - str:   new value if non-empty, else existing
     - tuple: union (sorted for determinism)
@@ -65,7 +79,7 @@ def _merge_directives(
         return new
     return DegradeDirective(
         mode=new.mode or existing.mode,
-        max_packet_tokens=max(existing.max_packet_tokens, new.max_packet_tokens),
+        max_packet_tokens=_merge_limit(existing.max_packet_tokens, new.max_packet_tokens),
         allowed_provenance=tuple(
             sorted(set(existing.allowed_provenance) | set(new.allowed_provenance))
         ),
@@ -76,7 +90,7 @@ def _merge_directives(
         redacted_fields=tuple(
             sorted(set(existing.redacted_fields) | set(new.redacted_fields))
         ),
-        max_content_size_bytes=max(
+        max_content_size_bytes=_merge_limit(
             existing.max_content_size_bytes, new.max_content_size_bytes
         ),
     )

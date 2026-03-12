@@ -115,7 +115,7 @@ class TestAdversarialAsyncSyncGuard:
         result = asyncio.run(run())
         assert result.success is False
         assert result.error is not None
-        assert "TypeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_sync_fn_error_has_allow_decision(self) -> None:
         """TypeError from sync fn is a tool-level error -- decision must be ALLOW."""
@@ -978,7 +978,7 @@ class TestAdversarialWrapMCPBrokenSession:
 
         result = asyncio.run(run())
         assert result.success is False
-        assert "RuntimeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_call_tool_raises_on_every_call(self) -> None:
         """Session that always raises must trip CB after threshold."""

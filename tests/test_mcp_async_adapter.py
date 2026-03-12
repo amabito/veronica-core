@@ -176,7 +176,7 @@ class TestBasicFailure:
 
         assert asyncio.run(run()) == "ALLOW"
 
-    def test_failure_error_contains_type(self) -> None:
+    def test_failure_error_is_generic(self) -> None:
         async def run() -> Optional[str]:
             adapter = _make_adapter()
             r = await adapter.wrap_tool_call("search", {}, _raise_fn)
@@ -184,7 +184,7 @@ class TestBasicFailure:
 
         error = asyncio.run(run())
         assert error is not None
-        assert "RuntimeError" in error
+        assert "tool call failed" in error
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +315,7 @@ class TestTimeout:
         result = asyncio.run(run())
         assert result.success is False
         assert result.error is not None
-        assert "TimeoutError" in result.error or "Timeout" in result.error
+        assert "tool call failed" in result.error
 
     def test_timeout_does_not_trip_cb_if_predicate_excludes(self) -> None:
         async def run() -> CircuitState:

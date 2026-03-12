@@ -97,6 +97,7 @@ class CircuitBreakerCapability:
         self._token_budget_hook = token_budget_hook
         self._breakers: Dict[str, CircuitBreaker] = {}
         self._originals: Dict[str, Any] = {}
+        self._agent_names: Dict[str, str] = {}  # agent_key -> display name
 
     # ------------------------------------------------------------------
     # Public API
@@ -136,22 +137,28 @@ class CircuitBreakerCapability:
         Returns:
             The ``CircuitBreaker`` instance bound to this agent.
         """
+        # Use a UUID tag stored on the agent to avoid id() GC-reuse collisions.
+        agent_key = getattr(agent, "_veronica_agent_key", None)
         name = getattr(agent, "name", repr(agent))
 
-        if name in self._breakers:
+        if agent_key is not None and agent_key in self._breakers:
             logger.warning(
                 "[VERONICA_CAP] add_to_agent called twice on '%s' -- skipping", name
             )
-            return self._breakers[name]
+            return self._breakers[agent_key]
+
+        agent_key = str(uuid4())
+        agent._veronica_agent_key = agent_key
 
         breaker = CircuitBreaker(
             failure_threshold=self._failure_threshold,
             recovery_timeout=self._recovery_timeout,
         )
-        self._breakers[name] = breaker
+        self._breakers[agent_key] = breaker
+        self._agent_names[agent_key] = name
 
         original_generate_reply = agent.generate_reply
-        self._originals[name] = original_generate_reply
+        self._originals[agent_key] = original_generate_reply
         cap = self  # explicit capture to avoid late-binding
 
         def _guarded_generate_reply(*args: Any, **kwargs: Any) -> Optional[Any]:
@@ -244,25 +251,49 @@ class CircuitBreakerCapability:
             agent: The agent from which to remove the circuit breaker.
                    Must be the same object that was passed to ``add_to_agent``.
         """
+        agent_key = getattr(agent, "_veronica_agent_key", None)
         name = getattr(agent, "name", repr(agent))
-        if name not in self._originals:
+        if agent_key is None or agent_key not in self._originals:
             logger.warning(
                 "[VERONICA_CAP] remove_from_agent called on unregistered agent '%s' -- skipping",
                 name,
             )
             return
-        agent.generate_reply = self._originals.pop(name)
-        del self._breakers[name]
+        agent.generate_reply = self._originals.pop(agent_key)
+        del self._breakers[agent_key]
+        self._agent_names.pop(agent_key, None)
+        try:
+            del agent._veronica_agent_key
+        except AttributeError:
+            pass
         logger.debug("[VERONICA_CAP] Circuit breaker removed from '%s'", name)
 
     def get_breaker(self, agent_name: str) -> Optional[CircuitBreaker]:
-        """Return the ``CircuitBreaker`` for *agent_name*, or ``None``."""
-        return self._breakers.get(agent_name)
+        """Return the ``CircuitBreaker`` for *agent_name*, or ``None``.
+
+        Searches by display name. If multiple agents share the same name
+        (which is valid since v3.5), the first match is returned.
+
+        Note: O(n) scan over registered agents -- acceptable because typical
+        agent count is small (< 100).
+        """
+        for agent_key, name in self._agent_names.items():
+            if name == agent_name:
+                return self._breakers.get(agent_key)
+        return None
 
     @property
     def breakers(self) -> Dict[str, CircuitBreaker]:
-        """Snapshot of all agent-name → CircuitBreaker mappings."""
-        return dict(self._breakers)
+        """Snapshot of all agent-name -> CircuitBreaker mappings.
+
+        Note: if multiple agents share a name, only the last one appears
+        in this dict. Use get_breaker() for name-based lookup.
+        """
+        return {
+            self._agent_names[k]: v
+            for k, v in self._breakers.items()
+            if k in self._agent_names
+        }
 
     def capabilities(self) -> "AdapterCapabilities":
         """Return the capability descriptor for this adapter."""

@@ -164,3 +164,35 @@ class TestCircuitBreakerConstructorValidation:
 
         with pytest.raises(ValueError, match="recovery_timeout"):
             CircuitBreaker(recovery_timeout=math.inf)
+
+
+class TestStaleSuccessInOpenState:
+    """Adversarial: stale success callback arriving while circuit is OPEN."""
+
+    def test_record_success_in_open_does_not_inflate_count(self) -> None:
+        """record_success() while OPEN must not increment success_count."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=60.0)
+        # Trip circuit to OPEN
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        initial_success = cb.reflect().success_count
+        # Stale success arrives
+        cb.record_success()
+        assert cb.reflect().success_count == initial_success
+        assert cb.state == CircuitState.OPEN  # still OPEN
+
+    def test_half_open_in_flight_reset_on_transition(self) -> None:
+        """OPEN -> HALF_OPEN transition must reset _half_open_in_flight."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.01)
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        # Stale success while OPEN (should be no-op)
+        cb.record_success()
+        # Wait for timeout to trigger OPEN -> HALF_OPEN
+        import time
+        time.sleep(0.05)
+        # check() triggers _maybe_half_open_locked
+        decision = cb.check(PolicyContext())
+        assert decision.allowed is True  # probe allowed (in_flight was reset)
+        assert cb.state == CircuitState.HALF_OPEN

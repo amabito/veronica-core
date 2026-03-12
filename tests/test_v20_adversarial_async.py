@@ -181,7 +181,7 @@ class TestAsyncMCPBudgetEnforcement:
         result = asyncio.run(run())
         assert result.success is False
         assert result.decision == Decision.ALLOW
-        assert "RuntimeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_exception_increments_error_count(self) -> None:
         """Exception in call_fn increments error_count in stats."""

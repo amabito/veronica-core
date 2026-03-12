@@ -264,7 +264,7 @@ class TestCallToolDelegation:
 
         result = asyncio.run(run())
         assert result.success is False
-        assert "RuntimeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_call_tool_decision_allow_on_success(self) -> None:
         async def run() -> str:
@@ -380,4 +380,4 @@ class TestTimeoutPassthrough:
         result = asyncio.run(run())
         assert result.success is False
         assert result.error is not None
-        assert "TimeoutError" in result.error or "Timeout" in result.error
+        assert "tool call failed" in result.error

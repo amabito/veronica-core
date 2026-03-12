@@ -892,15 +892,32 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     # against option-parsing gaps that could hide a blocked subcommand).
     denied_anywhere = {t.lower() for t in git_args if not t.startswith("-")} & GIT_DENY_SUBCMDS
     if subcmd in GIT_DENY_SUBCMDS or denied_anywhere:
-        matched = subcmd if subcmd in GIT_DENY_SUBCMDS else next(iter(denied_anywhere))
-        # DENY unless GIT_PUSH_APPROVAL capability is granted
+        # Prefer the primary subcmd for deterministic matching; fall back to
+        # the sorted set to avoid iteration-order non-determinism.
+        if subcmd in GIT_DENY_SUBCMDS:
+            matched = subcmd
+        else:
+            matched = min(denied_anywhere)
+        # GIT_PUSH_APPROVAL only covers "push"; other denied subcmds
+        # (workflow, release, tag) are always denied.
         from veronica_core.security.capabilities import has_cap
 
-        if not has_cap(ctx.caps, Capability.GIT_PUSH_APPROVAL):
+        if matched != "push" or not has_cap(ctx.caps, Capability.GIT_PUSH_APPROVAL):
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="GIT_DENY_SUBCMD",
-                reason=f"Git subcommand '{matched}' requires GIT_PUSH_APPROVAL capability",
+                reason=f"Git subcommand '{matched}' is denied",
+                risk_score_delta=7,
+            )
+        # "push" is approved via GIT_PUSH_APPROVAL, but other denied subcmds
+        # found in the args should still be blocked.
+        other_denied = denied_anywhere - {"push"}
+        if other_denied:
+            blocked = min(other_denied)
+            return PolicyDecision(
+                verdict="DENY",
+                rule_id="GIT_DENY_SUBCMD",
+                reason=f"Git subcommand '{blocked}' is denied",
                 risk_score_delta=7,
             )
 

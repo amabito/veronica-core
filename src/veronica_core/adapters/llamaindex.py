@@ -335,8 +335,12 @@ def _emit_payload_tokens(metrics: Any, agent_id: str, payload: Dict[str, Any]) -
         usage = payload.get("usage") or {}
         if not isinstance(usage, dict):
             return
-        prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
-        completion = usage.get("completion_tokens") or usage.get("output_tokens")
+        prompt = usage.get("prompt_tokens")
+        if prompt is None:
+            prompt = usage.get("input_tokens")
+        completion = usage.get("completion_tokens")
+        if completion is None:
+            completion = usage.get("output_tokens")
         if prompt is not None and completion is not None:
             safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
     except Exception:

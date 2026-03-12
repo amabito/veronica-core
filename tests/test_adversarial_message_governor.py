@@ -513,15 +513,15 @@ class TestAdversarialGovernorDegradeMerging:
         # directive must be None when verdict is not DEGRADE.
         assert decision.degrade_directive is None
 
-    def test_degrade_directive_max_content_size_bytes_max_wins(self) -> None:
-        """max_content_size_bytes merges with max() semantics."""
+    def test_degrade_directive_max_content_size_bytes_stricter_wins(self) -> None:
+        """max_content_size_bytes merges with min() semantics (stricter limit wins)."""
         d1 = DegradeDirective(max_content_size_bytes=500)
         d2 = DegradeDirective(max_content_size_bytes=1000)
 
         merged = _merge_directives(d1, d2)
 
         assert merged is not None
-        assert merged.max_content_size_bytes == 1000
+        assert merged.max_content_size_bytes == 500
 
     def test_degrade_directive_mode_new_wins_when_nonempty(self) -> None:
         """mode field: new value wins if non-empty, else existing is kept."""

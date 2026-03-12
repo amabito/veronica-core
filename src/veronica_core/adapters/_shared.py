@@ -383,8 +383,12 @@ def emit_llm_result_tokens(metrics: Optional[Any], agent_id: str, response: Any)
         llm_output = getattr(response, "llm_output", None) or {}
         if isinstance(llm_output, dict):
             usage = llm_output.get("token_usage") or llm_output.get("usage") or {}
-            prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
-            completion = usage.get("completion_tokens") or usage.get("output_tokens")
+            prompt = usage.get("prompt_tokens")
+            if prompt is None:
+                prompt = usage.get("input_tokens")
+            completion = usage.get("completion_tokens")
+            if completion is None:
+                completion = usage.get("output_tokens")
             if prompt is not None and completion is not None:
                 safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
     except Exception:

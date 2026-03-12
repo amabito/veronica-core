@@ -346,7 +346,7 @@ class TestAdversarial:
         # Errors from the tool are not budget halts; decision stays ALLOW
         assert result.decision == "ALLOW"
         assert result.success is False
-        assert "RuntimeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_call_fn_returns_none(self) -> None:
         adapter = _make_adapter()
@@ -372,7 +372,7 @@ class TestAdversarial:
     def test_error_message_contains_exception_type(self) -> None:
         adapter = _make_adapter()
         result = adapter.wrap_tool_call("search", {}, _raise_fn)
-        assert "RuntimeError" in result.error
+        assert "tool call failed" in result.error
 
     def test_exception_subclass_recorded(self) -> None:
         def value_error_fn(**kwargs: Any) -> Any:
@@ -380,7 +380,7 @@ class TestAdversarial:
 
         adapter = _make_adapter()
         result = adapter.wrap_tool_call("search", {}, value_error_fn)
-        assert "ValueError" in result.error
+        assert "tool call failed" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -742,7 +742,7 @@ class TestTimeout:
         )
         result = timed_adapter.wrap_tool_call("slow_tool", {}, slow_fn)
         assert result.success is False
-        assert "TimeoutError" in result.error or "timeout" in result.error.lower()
+        assert "tool call failed" in result.error
 
     def test_fast_fn_no_timeout(self) -> None:
         from veronica_core.adapters.mcp import MCPContainmentAdapter

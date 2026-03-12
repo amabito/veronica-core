@@ -178,8 +178,14 @@ class CircuitBreaker:
 
         Closes the circuit if currently half-open.
         Resets consecutive failure counter.
+        No-op when OPEN (no requests should succeed while OPEN).
         """
         with self._lock:
+            if self._state == CircuitState.OPEN:
+                # OPEN state: no requests are allowed, so a success here is
+                # spurious (stale callback from a pre-trip request). Do not
+                # inflate _success_count.
+                return
             self._success_count += 1
             self._last_success_time = time.monotonic()
             self._half_open_in_flight = 0
@@ -271,6 +277,7 @@ class CircuitBreaker:
             and time.monotonic() - self._last_failure_time >= self.recovery_timeout
         ):
             self._state = CircuitState.HALF_OPEN
+            self._half_open_in_flight = 0
             logger.info("[VERONICA_CIRCUIT] Circuit half-open, allowing test request")
 
     def reflect(self) -> "BreakerReflection":

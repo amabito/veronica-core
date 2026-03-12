@@ -198,8 +198,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Circuit breaker pre-check.
         halt_result = self._check_circuit_breaker(tool_name)
         if halt_result is not None:
-            async with self._stats_lock:
-                self._stats[tool_name].call_count += 1
+            await self._increment_call_count(tool_name)
             return halt_result
 
         # Determine cost estimate.
@@ -228,8 +227,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                     "[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT (reserve)",
                     tool_name,
                 )
-                async with self._stats_lock:
-                    self._stats[tool_name].call_count += 1
+                await self._increment_call_count(tool_name)
                 return MCPToolResult(
                     success=False,
                     error="Budget limit exceeded",
@@ -248,8 +246,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 logger.debug(
                     "[ASYNC_MCP_ADAPTER] tool=%s blocked by budget HALT", tool_name
                 )
-                async with self._stats_lock:
-                    self._stats[tool_name].call_count += 1
+                await self._increment_call_count(tool_name)
                 return MCPToolResult(
                     success=False,
                     error="Budget limit exceeded",
@@ -289,12 +286,10 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                 except Exception:  # noqa: BLE001
                     pass
             self._record_circuit_breaker_failure(call_error)
-            async with self._stats_lock:
-                self._stats[tool_name].call_count += 1
-                self._stats[tool_name].error_count += 1
+            await self._increment_error_count(tool_name)
             return MCPToolResult(
                 success=False,
-                error=f"{type(call_error).__name__}: {call_error}",
+                error="tool call failed",
                 decision=Decision.ALLOW,
                 cost_usd=cost_estimate,
             )
@@ -309,9 +304,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                         await _rb
                 except Exception:  # noqa: BLE001
                     pass
-            async with self._stats_lock:
-                self._stats[tool_name].call_count += 1
-                self._stats[tool_name].error_count += 1
+            await self._increment_error_count(tool_name)
             return MCPToolResult(
                 success=False,
                 result=result_value,
@@ -356,16 +349,17 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         self._record_circuit_breaker_success()
 
         async with self._stats_lock:
-            stats = self._stats[tool_name]
-            stats.call_count += 1
-            stats.total_cost_usd += actual_cost
-            stats._total_duration_ms += duration_ms
-            successful_calls = stats.call_count - stats.error_count
-            stats.avg_duration_ms = (
-                stats._total_duration_ms / successful_calls
-                if successful_calls > 0
-                else 0.0
-            )
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+                stats.total_cost_usd += actual_cost
+                stats._total_duration_ms += duration_ms
+                successful_calls = stats.call_count - stats.error_count
+                stats.avg_duration_ms = (
+                    stats._total_duration_ms / successful_calls
+                    if successful_calls > 0
+                    else 0.0
+                )
 
         return MCPToolResult(
             success=True,
@@ -387,6 +381,21 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _increment_call_count(self, tool_name: str) -> None:
+        """Safely increment call_count, tolerating missing stats entries."""
+        async with self._stats_lock:
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+
+    async def _increment_error_count(self, tool_name: str) -> None:
+        """Safely increment both call_count and error_count."""
+        async with self._stats_lock:
+            stats = self._stats.get(tool_name)
+            if stats is not None:
+                stats.call_count += 1
+                stats.error_count += 1
 
     async def _ensure_stats(self, tool_name: str) -> None:
         """Create a MCPToolStats entry for tool_name if it does not exist."""

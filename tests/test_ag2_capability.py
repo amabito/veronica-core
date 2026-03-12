@@ -382,6 +382,29 @@ class TestRemoveFromAgent:
         assert breaker is not None
         assert cap.get_breaker("rr") is breaker
 
+    def test_readd_gets_fresh_breaker(self) -> None:
+        """remove + readd must assign a new UUID and fresh breaker."""
+        agent = StubAgent("fresh")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        breaker_1 = cap.add_to_agent(agent)
+        key_1 = agent._veronica_agent_key
+        cap.remove_from_agent(agent)
+        assert not hasattr(agent, "_veronica_agent_key")
+        breaker_2 = cap.add_to_agent(agent)
+        key_2 = agent._veronica_agent_key
+        # New UUID and new breaker instance
+        assert key_1 != key_2
+        assert breaker_1 is not breaker_2
+
+    def test_same_name_agents_get_separate_breakers(self) -> None:
+        """Two agents with same name must each get their own breaker."""
+        agent_a = StubAgent("shared")
+        agent_b = StubAgent("shared")
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        breaker_a = cap.add_to_agent(agent_a)
+        breaker_b = cap.add_to_agent(agent_b)
+        assert breaker_a is not breaker_b
+
 
 # ---------------------------------------------------------------------------
 # Exception recording in circuit breaker

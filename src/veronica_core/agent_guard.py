@@ -32,6 +32,12 @@ class AgentStepGuard:
         default_factory=threading.Lock, init=False, repr=False
     )
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.max_steps, int) or isinstance(self.max_steps, bool):
+            raise TypeError(f"max_steps must be an int, got {type(self.max_steps).__name__}")
+        if self.max_steps < 0:
+            raise ValueError(f"max_steps must be non-negative, got {self.max_steps}")
+
     def step(self, result: Any = None) -> bool:
         """Record one agent step. Returns True if more steps allowed.
 

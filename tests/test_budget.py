@@ -485,3 +485,28 @@ class TestAdversarialBudgetEnvelope:
         after = time.time()
         assert decision.envelope is not None
         assert before <= decision.envelope.timestamp <= after
+
+
+class TestBudgetZeroLimitSpend:
+    """Adversarial: spend() on a zero-budget must always return False."""
+
+    def test_spend_zero_on_zero_budget_returns_false(self) -> None:
+        """spend(0.0) on limit_usd=0.0 must return False (deny all)."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        assert b.spend(0.0) is False
+        assert b.is_exceeded is True
+
+    def test_spend_nonzero_on_zero_budget_returns_false(self) -> None:
+        """spend(0.001) on limit_usd=0.0 must return False."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        assert b.spend(0.001) is False
+
+    def test_zero_budget_reset_clears_exceeded(self) -> None:
+        """reset() after spend on zero-budget restores initial state."""
+        b = BudgetEnforcer(limit_usd=0.0)
+        b.spend(0.0)
+        assert b.is_exceeded is True
+        b.reset()
+        assert b.is_exceeded is False
+        # After reset, spend should still deny (budget is still zero)
+        assert b.spend(0.0) is False

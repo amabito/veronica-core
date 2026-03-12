@@ -65,6 +65,14 @@ class BudgetEnforcer:
                 raise ValueError(f"amount must be a finite number, got {amount_usd}")
             if amount_usd < 0:
                 raise ValueError(f"amount must be non-negative, got {amount_usd}")
+            # Zero-budget: deny all spending (consistent with check()).
+            if self.limit_usd == 0.0:
+                if not self._exceeded:
+                    logger.warning(
+                        "[VERONICA_BUDGET] Budget is zero: no spending permitted"
+                    )
+                    self._exceeded = True
+                return False
             projected = self._spent_usd + amount_usd
             if projected > self.limit_usd:
                 logger.warning(
