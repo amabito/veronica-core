@@ -14,6 +14,7 @@ from veronica_core.memory.types import (
     MemoryPolicyContext,
     MemoryView,
     ThreatContext,
+    trust_rank as _trust_rank,
 )
 
 _POLICY_ID = "view_policy"
@@ -28,18 +29,6 @@ _WRITE_ACTIONS: frozenset[MemoryAction] = frozenset(
         MemoryAction.QUARANTINE,
     }
 )
-
-# Trust levels in ascending privilege order.
-_TRUST_RANK: dict[str, int] = {
-    "untrusted": 0,
-    "provisional": 1,
-    "trusted": 2,
-    "privileged": 3,
-}
-
-
-def _trust_rank(trust_level: str) -> int:
-    return _TRUST_RANK.get(trust_level.lower(), 0)
 
 
 def _is_write(action: MemoryAction) -> bool:

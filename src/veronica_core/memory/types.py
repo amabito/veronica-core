@@ -34,6 +34,8 @@ __all__ = [
     "MessageContext",
     "BridgePolicy",
     "ThreatContext",
+    "TRUST_RANK",
+    "trust_rank",
 ]
 
 import time
@@ -110,6 +112,21 @@ class ExecutionMode(str, Enum):
     SIMULATION = "simulation"
     CONSOLIDATION = "consolidation"
     AUDIT_REVIEW = "audit_review"
+
+
+# Trust levels in ascending privilege order.
+# Shared across view_policy, lifecycle, and memory_rules.
+TRUST_RANK: dict[str, int] = {
+    "untrusted": 0,
+    "provisional": 1,
+    "trusted": 2,
+    "privileged": 3,
+}
+
+
+def trust_rank(trust_level: str) -> int:
+    """Return numeric rank for *trust_level* (0 for unknown)."""
+    return TRUST_RANK.get(trust_level.lower(), 0)
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,10 @@ from veronica_core.memory.types import (
     MessageContext,
     ThreatContext,
 )
+from veronica_core.memory.lifecycle import (
+    ProvenanceLifecycle,
+    TransitionResult,
+)
 
 __all__ = [
     "MemoryAction",
@@ -50,4 +54,7 @@ __all__ = [
     "MessageContext",
     "BridgePolicy",
     "ThreatContext",
+    # v3.7.0: lifecycle
+    "ProvenanceLifecycle",
+    "TransitionResult",
 ]

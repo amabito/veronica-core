@@ -254,6 +254,16 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DefaultMessageGovernanceHook": ("veronica_core.memory.message_governance", "DefaultMessageGovernanceHook"),
     "DenyOversizedMessageHook": ("veronica_core.memory.message_governance", "DenyOversizedMessageHook"),
     "MessageBridgeHook": ("veronica_core.memory.message_governance", "MessageBridgeHook"),
+    # Memory Lifecycle (v3.7.0)
+    "ProvenanceLifecycle": ("veronica_core.memory.lifecycle", "ProvenanceLifecycle"),
+    "TransitionResult": ("veronica_core.memory.lifecycle", "TransitionResult"),
+    # Memory Policy Rules (v3.7.0)
+    "MemoryRuleCompiler": ("veronica_core.policy.memory_rules", "MemoryRuleCompiler"),
+    "CompiledMemoryRule": ("veronica_core.policy.memory_rules", "CompiledMemoryRule"),
+    "MemoryRuleEvaluator": ("veronica_core.policy.memory_rules", "MemoryRuleEvaluator"),
+    # Diagnostics (v3.7.0)
+    "MemoryGovernanceReadiness": ("veronica_core.diagnostics.readiness", "MemoryGovernanceReadiness"),
+    "ReadinessSnapshot": ("veronica_core.diagnostics.readiness", "ReadinessSnapshot"),
 }
 
 
