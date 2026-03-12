@@ -1,106 +1,131 @@
-# veronica-core x AG2.1 Beta -- Governance Middleware PoC
+# AG2.1 Beta Middleware -- Governance PoC
 
-This directory contains a proof-of-concept integration of veronica-core's
-runtime governance into AG2.1 beta's middleware chain (#2439).
+## What This Demonstrates
 
-## Overview
-
-veronica-core provides runtime governance primitives -- budget enforcement,
-circuit breaking, semantic loop detection, tool policy evaluation -- as
-AG2.1 middleware. The governance logic runs inside AG2.1's `on_turn`,
-`on_llm_call`, and `on_tool_execution` hooks without modifying AG2 internals.
-
-```
-Agent.ask()
-  -> VeronicaMiddleware.on_turn     (safe mode, circuit breaker, step guard)
-    -> VeronicaMiddleware.on_llm_call  (budget check/spend)
-      -> LLM provider
-    -> VeronicaMiddleware.on_tool_execution  (policy engine)
-      -> tool function
-```
+This PoC explores whether AG2.1 beta's middleware chain (#2439) can support
+runtime governance behaviors implemented as external middleware. The current
+draft focuses on three narrow scenarios using
+[veronica-core](https://github.com/amabito/veronica-core), a governance
+library, to validate the hook contract.
 
 ## Quick Start
 
 ```python
 from autogen.beta import Agent
-from veronica_core import BudgetEnforcer, CircuitBreaker, SemanticLoopGuard
+from veronica_core import BudgetEnforcer
 from veronica_core.adapters.ag2_beta import VeronicaMiddleware, VeronicaGovernanceConfig
 
-config = VeronicaGovernanceConfig(
-    budget=BudgetEnforcer(limit_usd=1.0),
-    circuit_breaker=CircuitBreaker(failure_threshold=3, recovery_timeout=60),
-    semantic_guard=SemanticLoopGuard(window=5, threshold=0.92),
-)
+budget = BudgetEnforcer(limit_usd=0.50)
 
 agent = Agent(
-    name="governed_agent",
-    middleware=[VeronicaMiddleware(config)],
+    name="worker",
+    middleware=[VeronicaMiddleware(VeronicaGovernanceConfig(budget=budget))],
 )
-
-reply = await agent.ask("Summarize the quarterly report")
+reply = await agent.ask("Summarize the report")
 ```
+
+## Middleware Hooks Used
+
+Based on the current #2439 draft, `BaseMiddleware` exposes three hooks:
+
+| Hook | Signature | Scope |
+|------|-----------|-------|
+| `on_turn` | `(call_next, event, context) -> ModelResponse` | Full agent turn including tool loop |
+| `on_llm_call` | `(call_next, events, context) -> ModelResponse` | Single LLM API call |
+| `on_tool_execution` | `(call_next, event, context) -> ToolResult` | Single tool invocation |
+
+Each hook wraps `call_next` -- the middleware can inspect inputs before the
+call, skip it entirely, or inspect the result after. Chains are built via
+`partial()` composition in `Agent._execute()`.
 
 ## PoC Scenarios
 
-1. **Budget exhaustion** -- agent stops when cumulative LLM cost exceeds limit
-2. **Loop detection** -- agent halts when output similarity exceeds threshold
-3. **Tool policy** -- dangerous shell/network commands blocked before execution
+### 1. Shared Budget Enforcement
 
-See `docs/design/ag2_1_middleware_adapter.md` for the full design document.
+`on_llm_call` checks remaining budget before the LLM call and records
+actual cost after. When cumulative spend exceeds the limit, subsequent
+calls are blocked without invoking `call_next`.
 
----
+```python
+from veronica_core import BudgetEnforcer
 
-## Why External Governance?
+budget = BudgetEnforcer(limit_usd=1.0)
+# on_llm_call before: budget.check(PolicyContext(cost_usd=estimated))
+# on_llm_call after:  budget.spend(actual_cost)
+# budget.is_exceeded -> skip call_next on next invocation
+```
 
-### The Gap in Agent Frameworks
+Cost extraction from the LLM response depends on how #2439 exposes
+token usage (pending confirmation -- see Open Questions).
 
-Existing agent frameworks, including those written in systems languages,
-implement permission control as static policy -- allow, ask, or reject at
-configuration time. Runtime governance that reacts to live execution state
-is absent: no circuit breaking when an LLM provider degrades, no detection
-of semantic loops where the agent repeats itself, no adaptive budget
-enforcement that adjusts to burn-rate anomalies. These are runtime concerns
-that require continuous observation and state-machine transitions during
-execution, not static policy declarations before it.
+### 2. Tool Policy Denial
 
-### Runtime Governance as a Separate Concern
+`on_tool_execution` evaluates the tool name against policy rules before
+calling `call_next`. Denied tools return an error without execution.
 
-Governance requires domain knowledge distinct from orchestration.
-Budget enforcement involves distributed state machines with atomic
-two-phase commit across processes. Circuit breaking requires failure
-counting with configurable predicates, recovery timeouts, and
-half-open single-request gates. Semantic loop detection uses
-rolling-window Jaccard similarity with tunable thresholds.
-Building these into a framework's core increases coupling and slows
-iteration on the framework's primary job -- agent orchestration.
-The middleware pattern separates these concerns cleanly.
+```python
+from veronica_core.security.policy_engine import PolicyEngine
 
-### AG2.1's Middleware Architecture Enables This
+policy = PolicyEngine()  # default rules deny rm, curl, powershell, etc.
+# on_tool_execution before: policy.evaluate_shell([tool_name, *args])
+# if verdict == DENY -> return error, skip call_next
+```
 
-AG2.1 beta's middleware chain provides three independent wrapping points
-(`on_turn`, `on_llm_call`, `on_tool_execution`) where external logic
-intercepts the execution flow via `call_next`. As Mark (msze) noted in
-the design discussion: "we explicitly considered your use-case" and
-"we made it extensible so that something like this could work."
-This architecture makes governance a pluggable layer rather than a
-fork-and-patch exercise.
+Argument extraction from `ToolCall` likely uses a `.name` attribute,
+pending confirmation of the #2439 API surface.
 
-### veronica-core as a Reference Implementation
+### 3. Secret Redaction
 
-veronica-core is a 33,000-line governance-only library with zero required
-dependencies. It provides adapters for 7 frameworks (AG2, CrewAI, LangChain,
-LangGraph, LlamaIndex, MCP, ROS2), a distributed circuit breaker backed by
-Redis with Lua-scripted atomic operations, adaptive budget enforcement with
-burn-rate anomaly detection, and semantic loop detection. The AG2.1 middleware
-adapter maps these primitives onto AG2.1's `BaseMiddleware` protocol, adding
-runtime governance to any AG2.1 agent with a single `middleware=[...]`
-parameter.
+`on_llm_call` masks secrets in prompts before the LLM call and in
+responses after. Uses pattern-based detection (API keys, tokens, credentials).
 
----
+```python
+from veronica_core.security.masking import SecretMasker
 
-## Related
+masker = SecretMasker()
+# on_llm_call before: mask prompt content via masker.mask(text)
+# on_llm_call after:  mask response content via masker.mask(text)
+```
 
-- [AG2.1 beta PR #2439](https://github.com/ag2ai/ag2/pull/2439) -- middleware chain design
-- [AgentEligibilityPolicy PR #2459](https://github.com/ag2ai/ag2/pull/2459) -- runtime GroupChat filtering
-- [CircuitBreakerCapability PR #2430](https://github.com/ag2ai/ag2/pull/2430) -- merged, current AG2 adapter
-- [Design document](../design/ag2_1_middleware_adapter.md) -- full middleware mapping
+Event content extraction depends on the `BaseEvent` structure in #2439
+(pending confirmation).
+
+## Intentionally Out of Scope (First Cut)
+
+The following governance behaviors are excluded from the initial PoC:
+
+- Circuit breaker (failure-count state machine, HALF_OPEN gate)
+- Semantic loop detection (rolling-window similarity)
+- Safe mode / kill-switch (global halt)
+- GroupChat speaker selection governance
+- Fan-out budget allocation across agents
+- Distributed (Redis) backend for cross-process state
+- Integration with #2459 (AgentEligibilityPolicy)
+
+These are implementable on the same middleware chain, but the first cut
+prioritizes validating the hook contract with the three simplest scenarios
+above.
+
+## Open Questions
+
+- **ModelResponse structure**: Constructor and fields are not yet confirmed.
+  Needed to determine how to return error responses when governance blocks
+  a call (vs raising an exception).
+- **ToolCall API**: How to extract tool name and arguments from the event
+  passed to `on_tool_execution`. Likely `event.name` but pending confirmation.
+- **Cost extraction**: How LLM token usage / cost is exposed in the response
+  or context after `call_next` returns. This determines budget accounting
+  accuracy.
+- **Error signaling**: Whether governance should raise an exception (e.g.
+  `VeronicaHalt`) or return an error `ModelResponse` / `ToolError` when
+  blocking a call. The former is simpler; the latter may compose better
+  with other middleware in the chain.
+- **BaseEvent content access**: How to read/modify prompt text within events
+  for secret redaction. Assuming a `.content` or similar attribute.
+
+## Links
+
+- [AG2.1 beta #2439](https://github.com/ag2ai/ag2/pull/2439) -- middleware chain design
+- [AgentEligibilityPolicy #2459](https://github.com/ag2ai/ag2/pull/2459)
+- [CircuitBreakerCapability #2430](https://github.com/ag2ai/ag2/pull/2430) -- merged
+- [veronica-core](https://github.com/amabito/veronica-core)
