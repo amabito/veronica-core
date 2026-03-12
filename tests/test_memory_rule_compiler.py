@@ -696,3 +696,54 @@ class TestAdversarialEvaluatorRound2:
         assert decision.threat_context is None, (
             "ALLOW verdict must not produce a ThreatContext (no false threat alarms)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Round 1 F.R.I.D.A.Y. review -- missing branch coverage
+# ---------------------------------------------------------------------------
+
+
+class TestMissingBranchCoverage:
+    """Tests for branches identified as uncovered by F.R.I.D.A.Y. security review."""
+
+    def test_verified_only_filter_rejects_non_verified(self) -> None:
+        """Rule with verified_only=True must not match operations
+        with provenance != VERIFIED.
+        """
+        compiled = MemoryRuleCompiler().compile(
+            _rule(verified_only=True, verdict="allow"),
+        )
+        evaluator = MemoryRuleEvaluator((compiled,))
+        # UNKNOWN provenance -> verified_only check fails -> no match -> deny
+        decision = evaluator.before_op(
+            _op(provenance=MemoryProvenance.UNKNOWN), None,
+        )
+        assert decision.denied, (
+            "verified_only=True must deny non-VERIFIED provenance"
+        )
+
+    def test_verified_only_filter_allows_verified(self) -> None:
+        """Rule with verified_only=True must match VERIFIED provenance."""
+        compiled = MemoryRuleCompiler().compile(
+            _rule(verified_only=True, verdict="allow"),
+        )
+        evaluator = MemoryRuleEvaluator((compiled,))
+        decision = evaluator.before_op(
+            _op(provenance=MemoryProvenance.VERIFIED), None,
+        )
+        assert decision.allowed
+
+    def test_parse_string_set_plural_wrong_type_int(self) -> None:
+        """actions=123 (int, not list/str) must raise TypeError."""
+        with pytest.raises(TypeError, match="actions must be a string or list"):
+            MemoryRuleCompiler().compile(_rule(actions=123))
+
+    def test_parse_string_set_singular_wrong_type_int(self) -> None:
+        """action=123 (int, not str) must raise TypeError."""
+        with pytest.raises(TypeError, match="action must be a string"):
+            MemoryRuleCompiler().compile(_rule(action=123))
+
+    def test_parse_float_string_value_rejected(self) -> None:
+        """max_raw_replay_ratio='0.5' (str, not number) must raise TypeError."""
+        with pytest.raises(TypeError, match="must be a number"):
+            MemoryRuleCompiler().compile(_rule(max_raw_replay_ratio="0.5"))

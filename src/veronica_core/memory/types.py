@@ -39,6 +39,7 @@ __all__ = [
 ]
 
 import time
+import types as _types
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -116,12 +117,13 @@ class ExecutionMode(str, Enum):
 
 # Trust levels in ascending privilege order.
 # Shared across view_policy, lifecycle, and memory_rules.
-TRUST_RANK: dict[str, int] = {
+# Frozen via MappingProxyType to prevent external mutation.
+TRUST_RANK: _types.MappingProxyType[str, int] = _types.MappingProxyType({
     "untrusted": 0,
     "provisional": 1,
     "trusted": 2,
     "privileged": 3,
-}
+})
 
 
 def trust_rank(trust_level: str) -> int:

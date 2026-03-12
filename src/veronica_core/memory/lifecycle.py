@@ -177,6 +177,10 @@ class ProvenanceLifecycle:
             )
 
         # Check trust level requirement.
+        if trust_level is not None and not isinstance(trust_level, str):
+            raise TypeError(
+                f"trust_level must be a string or None, got {type(trust_level).__name__}"
+            )
         trust = trust_level.lower().strip() if trust_level else "untrusted"
         if trust not in _TRUST_RANK:
             # Unknown trust level -> deny (fail-closed).

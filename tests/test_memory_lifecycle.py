@@ -641,20 +641,30 @@ class TestAdversarialLifecycleRound2:
                 trust_level="trusted",
             )
 
-    def test_integer_trust_level_denied(
+    def test_integer_trust_level_raises_type_error(
         self, lifecycle: ProvenanceLifecycle
     ) -> None:
-        """Integer trust_level (e.g. 3 for 'privileged') must fail-closed.
+        """Integer trust_level (e.g. 3 for 'privileged') must raise TypeError.
 
-        The method signature accepts str; passing an int triggers AttributeError
-        on .lower() -- verify the caller gets a clean failure, not a crash
-        that leaks internal state.
+        The method signature accepts str; passing an int must produce a clean
+        TypeError -- not AttributeError from .lower() leaking internals.
         """
-        with pytest.raises((AttributeError, TypeError)):
+        with pytest.raises(TypeError, match="trust_level must be a string or None"):
             lifecycle.validate_transition(
                 MemoryProvenance.UNVERIFIED,
                 MemoryProvenance.VERIFIED,
                 trust_level=3,  # type: ignore[arg-type]
+            )
+
+    def test_list_trust_level_raises_type_error(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        """List trust_level must raise TypeError (not AttributeError)."""
+        with pytest.raises(TypeError, match="trust_level must be a string or None"):
+            lifecycle.validate_transition(
+                MemoryProvenance.UNVERIFIED,
+                MemoryProvenance.VERIFIED,
+                trust_level=["trusted"],  # type: ignore[arg-type]
             )
 
     def test_none_as_current_in_degrade_provenance_raises(
@@ -674,3 +684,10 @@ class TestAdversarialLifecycleRound2:
                 MemoryProvenance.UNVERIFIED,
                 trust_level="trusted",
             )
+
+    def test_trust_rank_is_immutable(self) -> None:
+        """TRUST_RANK must not be mutatable by external code."""
+        from veronica_core.memory.types import TRUST_RANK
+
+        with pytest.raises(TypeError):
+            TRUST_RANK["evil"] = 99  # type: ignore[index]

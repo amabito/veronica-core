@@ -6,6 +6,31 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.0] -- 2026-03-12 -- Memory Governance Hardening
+
+**Breaking changes:** none
+
+### Added
+
+- **TRUST_RANK immutable constant** (`memory/types.py`): Shared trust rank mapping frozen via `MappingProxyType` to prevent external mutation. Exported `trust_rank()` helper for safe lookups.
+- **MemoryRuleCompiler/MemoryRuleEvaluator** (`policy/memory_rules.py`): Compiles `PolicyRule(rule_type="memory")` into pre-validated `CompiledMemoryRule`. Evaluates rules in priority order with fail-closed semantics (first match wins, no match = DENY).
+- **ReadinessSnapshot** (`diagnostics/readiness.py`): Side-effect-free diagnostics for control plane health endpoints. Reports hook inventory, evaluator presence, supported views/modes, lifecycle availability.
+- **142 new tests** across 3 test files covering compiler validation, evaluator determinism, adversarial inputs (12 categories), and missing branch coverage.
+
+### Fixed
+
+- **Fail-open bypass in view/mode filters** (`memory_rules.py`): Rules with `allowed_views`/`allowed_modes` constraints previously matched when context was `None`, allowing unscoped operations. Now fail-closed.
+- **trust_level type guard** (`lifecycle.py`): Non-str `trust_level` (int, list, etc.) now raises `TypeError` instead of `AttributeError` from `.lower()`.
+- **TRUST_RANK shared constant** (`types.py`, `lifecycle.py`, `view_policy.py`): Eliminated duplicate `_TRUST_RANK` dicts; single source of truth with immutable proxy.
+
+### Changed
+
+- **Readiness diagnostics optimized** (`readiness.py`): Cached `set(hook_names)` (1x instead of 5x), module-level `_SUPPORTED_VIEWS`/`_SUPPORTED_MODES` tuples.
+- **`_parse_bool` unified** (`memory_rules.py`): Merged `_parse_bool`/`_parse_optional_bool` into single method with `default: bool | None`.
+- **`_VALID_VERDICTS` derived** (`memory_rules.py`): DRY -- derived from `_VERDICT_MAP` instead of separate frozenset.
+
+---
+
 ## [3.6.1] -- 2026-03-11 -- Simplify + Test Dedup
 
 **Breaking changes:** none

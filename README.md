@@ -159,7 +159,7 @@ Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) 
 
 ## Stats
 
-5528 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.6.1. Python 3.10+.
+5670 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.7.0. Python 3.10+.
 
 Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 
@@ -192,7 +192,7 @@ pytest
 
 ## Roadmap
 
-v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.6.1.
+v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.7.0.
 
 Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 
