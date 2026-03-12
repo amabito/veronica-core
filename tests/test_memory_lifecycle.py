@@ -691,3 +691,15 @@ class TestAdversarialLifecycleRound2:
 
         with pytest.raises(TypeError):
             TRUST_RANK["evil"] = 99  # type: ignore[index]
+
+    def test_validate_transition_with_none_trust_level(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        """trust_level=None must short-circuit to 'untrusted' default."""
+        result = lifecycle.validate_transition(
+            MemoryProvenance.UNKNOWN,
+            MemoryProvenance.QUARANTINED,
+            trust_level=None,
+        )
+        # UNKNOWN -> QUARANTINED requires "untrusted" trust; None defaults to "untrusted"
+        assert result.allowed

@@ -747,3 +747,8 @@ class TestMissingBranchCoverage:
         """max_raw_replay_ratio='0.5' (str, not number) must raise TypeError."""
         with pytest.raises(TypeError, match="must be a number"):
             MemoryRuleCompiler().compile(_rule(max_raw_replay_ratio="0.5"))
+
+    def test_max_raw_replay_ratio_negative_rejected(self) -> None:
+        """max_raw_replay_ratio=-0.1 (below 0.0 minimum) must raise ValueError."""
+        with pytest.raises(ValueError, match=r"max_raw_replay_ratio must be in \[0.0, 1.0\]"):
+            MemoryRuleCompiler().compile(_rule(max_raw_replay_ratio=-0.1))
