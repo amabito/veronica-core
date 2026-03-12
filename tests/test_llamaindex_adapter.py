@@ -130,7 +130,7 @@ class TestInstantiation:
             if "llamaindex" in key and "veronica" in key:
                 del sys.modules[key]
 
-        # Now import adapter (llama_index unavailable) — should raise at instantiation
+        # Now import adapter (llama_index unavailable) -- should raise at instantiation
         from veronica_core.adapters.llamaindex import VeronicaLlamaIndexHandler
 
         with pytest.raises(ImportError, match="llama-index-core"):
@@ -138,7 +138,7 @@ class TestInstantiation:
 
 
 # ---------------------------------------------------------------------------
-# on_event_start — LLM events
+# on_event_start -- LLM events
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +207,7 @@ class TestOnEventStart:
 
 
 # ---------------------------------------------------------------------------
-# on_event_end — step counting and cost recording
+# on_event_end -- step counting and cost recording
 # ---------------------------------------------------------------------------
 
 

@@ -197,14 +197,14 @@ if state == 'HALF_OPEN' then
         -- C2: Use explicit nil/empty guard before tonumber to handle garbage values.
         -- Lua's `or '0'` only substitutes for falsy (nil/false); empty string '' is
         -- truthy in Lua, so tonumber('') returns nil instead of 0, causing the
-        -- stale-slot release to silently skip — a permanent lockout bug.
+        -- stale-slot release to silently skip -- a permanent lockout bug.
         local raw_claimed_at = redis.call('HGET', key, 'half_open_claimed_at')
         local claimed_at = (raw_claimed_at ~= nil and raw_claimed_at ~= '') and tonumber(raw_claimed_at) or nil
         if claimed_at ~= nil and claimed_at > 0 and (now - claimed_at) >= half_open_slot_timeout then
             old_in_flight = 0
             redis.call('HSET', key, 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
         elseif claimed_at == nil and old_in_flight == 1 then
-            -- Garbage/empty claimed_at with slot held: fail-safe — release the stale slot
+            -- Garbage/empty claimed_at with slot held: fail-safe -- release the stale slot
             -- to prevent permanent lockout from corrupted state.
             old_in_flight = 0
             redis.call('HSET', key, 'half_open_in_flight', 0, 'half_open_claimed_at', 0)
@@ -367,7 +367,7 @@ class DistributedCircuitBreaker:
         """Read current Redis state and sync the local fallback CircuitBreaker.
 
         Called while Redis is still live (just before transition to fallback).
-        Safe to skip on error — fallback starts in CLOSED state which is
+        Safe to skip on error -- fallback starts in CLOSED state which is
         permissive but not crash-inducing.
         """
         try:
@@ -400,7 +400,7 @@ class DistributedCircuitBreaker:
             )
         except Exception as exc:
             logger.warning(
-                "DistributedCircuitBreaker: could not seed fallback from Redis (%s) — "
+                "DistributedCircuitBreaker: could not seed fallback from Redis (%s) -- "
                 "fallback starts in CLOSED state.",
                 _redact_exc(exc),
             )
@@ -449,7 +449,7 @@ class DistributedCircuitBreaker:
             return True
         except Exception as exc:
             logger.error(
-                "DistributedCircuitBreaker: reconciliation failed (%s) — "
+                "DistributedCircuitBreaker: reconciliation failed (%s) -- "
                 "fallback state preserved.",
                 _redact_exc(exc),
             )
@@ -469,7 +469,7 @@ class DistributedCircuitBreaker:
         Therefore ``_last_reconnect_attempt`` accesses are serialised by the caller's
         lock. The benign TOCTOU in ``_attempt_reconnect_if_on_fallback()``'s outer
         ``if self._using_fallback`` check (before lock acquisition) only risks an
-        unnecessary lock acquisition — it is not a data race on ``_last_reconnect_attempt``.
+        unnecessary lock acquisition -- it is not a data race on ``_last_reconnect_attempt``.
         """
         now = time.monotonic()
         if now - self._last_reconnect_attempt < self._RECONNECT_INTERVAL:
@@ -484,14 +484,14 @@ class DistributedCircuitBreaker:
         if self._using_fallback:
             return False
 
-        # Connected — stay on fallback until reconcile succeeds.
+        # Connected -- stay on fallback until reconcile succeeds.
         self._using_fallback = True
         reconciled = self._reconcile_on_reconnect()
         if reconciled:
             self._using_fallback = False
             logger.info("DistributedCircuitBreaker: reconnected to Redis successfully.")
             return True
-        # Reconcile failed — stay on fallback.
+        # Reconcile failed -- stay on fallback.
         return False
 
     # ------------------------------------------------------------------
@@ -521,7 +521,7 @@ class DistributedCircuitBreaker:
             method_name: Name of the calling method (for the log message).
         """
         logger.error(
-            "DistributedCircuitBreaker.%s failed: %s — using local fallback",
+            "DistributedCircuitBreaker.%s failed: %s -- using local fallback",
             method_name,
             _redact_exc(exc),
         )
@@ -567,7 +567,7 @@ class DistributedCircuitBreaker:
         return "circuit_breaker"
 
     def bind_to_context(self, ctx_id: str) -> None:
-        """No-op for distributed breaker — multiple contexts share this instance."""
+        """No-op for distributed breaker -- multiple contexts share this instance."""
         pass
 
     @property

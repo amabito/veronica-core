@@ -350,7 +350,7 @@ class TestCancellationTokenAdversarial:
         assert not token.is_cancelled
         token.cancel()
         assert token.is_cancelled
-        # Call cancel() again — must remain True
+        # Call cancel() again -- must remain True
         token.cancel()
         assert token.is_cancelled
 
@@ -552,7 +552,7 @@ class TestMetricsHaltOnReserveOverflow:
         """When local _cost_usd_accumulated exceeds ceiling, metrics must record HALT.
 
         Note: _check_budget_estimate uses _cost_usd_accumulated (local), not
-        backend.get(). This is by design — the local accumulator tracks what
+        backend.get(). This is by design -- the local accumulator tracks what
         THIS context has spent. External backend spend by other contexts does
         not block new calls via _check_budget_estimate.
         """

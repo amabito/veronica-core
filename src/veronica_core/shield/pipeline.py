@@ -169,7 +169,7 @@ class ShieldPipeline:
                         ctx.request_id,
                     )
                 return result
-            # Hook deferred (returned None) — explicit no-opinion means allow.
+            # Hook deferred (returned None) -- explicit no-opinion means allow.
             return Decision.ALLOW
         # No retry hook: apply the configured policy (default: HALT, fail-closed).
         # Record the decision so SafetyEvent logging is symmetric with other paths.

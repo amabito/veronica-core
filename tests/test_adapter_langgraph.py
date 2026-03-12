@@ -1,4 +1,4 @@
-"""Tests for veronica_core.adapters.langgraph — LangGraph node wrapper and callback.
+"""Tests for veronica_core.adapters.langgraph -- LangGraph node wrapper and callback.
 
 Uses fake langgraph stubs injected into sys.modules so langgraph does not
 need to be installed.
@@ -96,7 +96,7 @@ def _make_node(return_value: dict | None = None) -> Callable[[dict], dict]:
 
 
 # ---------------------------------------------------------------------------
-# VeronicaLangGraphCallback — Allow path
+# VeronicaLangGraphCallback -- Allow path
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ class TestAllowPath:
 
 
 # ---------------------------------------------------------------------------
-# VeronicaLangGraphCallback — Deny path
+# VeronicaLangGraphCallback -- Deny path
 # ---------------------------------------------------------------------------
 
 
@@ -212,7 +212,7 @@ class TestConfigAcceptance:
 
 
 # ---------------------------------------------------------------------------
-# Node wrapper — allow path
+# Node wrapper -- allow path
 # ---------------------------------------------------------------------------
 
 
@@ -338,12 +338,12 @@ class TestImportError:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — corrupted input, concurrent access, boundary abuse
+# Adversarial tests -- corrupted input, concurrent access, boundary abuse
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialLangGraph:
-    """Adversarial tests for LangGraph adapter — attacker mindset."""
+    """Adversarial tests for LangGraph adapter -- attacker mindset."""
 
     # -- Corrupted input: garbage LLMResult objects --
 
@@ -444,7 +444,7 @@ class TestAdversarialLangGraph:
     # -- Concurrent access: multiple threads through callback --
 
     def test_concurrent_on_llm_start_near_step_limit(self) -> None:
-        """on_llm_start: concurrent calls at step limit — all should deny or allow consistently."""
+        """on_llm_start: concurrent calls at step limit -- all should deny or allow consistently."""
         import threading
 
         cb = VeronicaLangGraphCallback(GuardConfig(max_steps=1))

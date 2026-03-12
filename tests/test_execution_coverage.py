@@ -86,7 +86,7 @@ def test_context_manager_done_after_exit():
     ctx = ExecutionContext(config=config)
     with ctx:
         pass
-    # After exit, the context is done — further wrap calls must HALT.
+    # After exit, the context is done -- further wrap calls must HALT.
     decision = ctx.wrap_llm_call(fn=lambda: None)
     assert decision == Decision.HALT
 

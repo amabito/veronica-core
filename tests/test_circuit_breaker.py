@@ -1,4 +1,4 @@
-"""Tests for CircuitBreaker — including HALF_OPEN concurrency guard."""
+"""Tests for CircuitBreaker -- including HALF_OPEN concurrency guard."""
 
 from __future__ import annotations
 

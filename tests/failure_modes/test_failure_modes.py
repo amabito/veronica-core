@@ -3,12 +3,12 @@
 Covers 8 specific failure scenarios:
 1. Double commit rejected (KeyError)
 2. Rollback after commit is a no-op (KeyError)
-3. Redis disconnect during commit — state not corrupted
-4. Lua atomicity failure — budget state unchanged on error
-5. Reserve then rollback — clean state after escrow release
-6. WebSocket step limit — close code 1008 on step exhaustion
-7. CancellationToken cascade — parent cancel propagates to children
-8. SharedTimeoutPool exhaustion — single daemon thread under load
+3. Redis disconnect during commit -- state not corrupted
+4. Lua atomicity failure -- budget state unchanged on error
+5. Reserve then rollback -- clean state after escrow release
+6. WebSocket step limit -- close code 1008 on step exhaustion
+7. CancellationToken cascade -- parent cancel propagates to children
+8. SharedTimeoutPool exhaustion -- single daemon thread under load
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def test_rollback_after_commit_no_effect() -> None:
     """Rollback on an already-committed reservation raises KeyError.
 
     Committed reservations are removed from the escrow table.
-    A subsequent rollback must not corrupt committed state — it must
+    A subsequent rollback must not corrupt committed state -- it must
     raise KeyError and leave the committed total unchanged.
     """
     b = LocalBudgetBackend()
@@ -157,11 +157,11 @@ def test_lua_atomicity_failure() -> None:
         try:
             b.reserve(0.5, ceiling=1.0)
         except Exception:
-            pass  # reserve may raise or fall back — both are acceptable
+            pass  # reserve may raise or fall back -- both are acceptable
     finally:
         fake_client.eval = original_eval
 
-    # Regardless of reserve outcome, committed total must be 0 — no phantom charge.
+    # Regardless of reserve outcome, committed total must be 0 -- no phantom charge.
     # Check both the backend accessor (which reads fallback if active) AND
     # the raw Redis key to ensure no partial mutation leaked through.
     assert b.get() == 0.0
@@ -189,7 +189,7 @@ def test_reserve_rollback_clean_state() -> None:
     # Simulate interruption before commit completes by rolling back instead.
     b.rollback(rid)
 
-    # State must be fully clean — no dangling reservations, no phantom charges.
+    # State must be fully clean -- no dangling reservations, no phantom charges.
     assert b.get() == 0.0
     assert b.get_reserved() == 0.0
 
@@ -200,7 +200,7 @@ def test_reserve_rollback_clean_state() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 6: WebSocket step limit — close code 1008
+# Test 6: WebSocket step limit -- close code 1008
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +316,7 @@ def test_cancellation_token_cascade() -> None:
         f"wrap_llm_call on aborted parent must return HALT, got {parent_result}"
     )
 
-    # Child context is independent — its own token is NOT cancelled by parent abort.
+    # Child context is independent -- its own token is NOT cancelled by parent abort.
     # This is the current design: upward propagation only.
     assert not child._cancellation_token.is_cancelled, (
         "Child token must remain independent (upward propagation only)"
@@ -324,7 +324,7 @@ def test_cancellation_token_cascade() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 8: SharedTimeoutPool exhaustion — single daemon thread
+# Test 8: SharedTimeoutPool exhaustion -- single daemon thread
 # ---------------------------------------------------------------------------
 
 

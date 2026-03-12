@@ -204,7 +204,7 @@ class CircuitBreaker:
         M4 WARNING: ``failure_predicate`` is evaluated OUTSIDE ``self._lock``.
         The predicate MUST NOT call any method on this CircuitBreaker instance
         (e.g. ``check()``, ``record_success()``, ``state``) or access ``self._lock``
-        in any way — doing so will deadlock because ``record_failure()`` re-acquires
+        in any way -- doing so will deadlock because ``record_failure()`` re-acquires
         ``self._lock`` after predicate evaluation. The predicate should only inspect
         the exception itself (its type, message, or attributes).
 

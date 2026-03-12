@@ -316,7 +316,7 @@ class TestMonotonicBackwards:
         ts = time.monotonic()
         for _ in range(10):
             est.record(1.0, timestamp=ts)
-        # _ema_rate may be None or some value — must not be NaN/Inf
+        # _ema_rate may be None or some value -- must not be NaN/Inf
         with est._lock:
             if est._ema_rate is not None:
                 assert math.isfinite(est._ema_rate)
@@ -397,7 +397,7 @@ class TestAnomalyDetectorEdgeCases:
     def test_negative_cost_in_burn_rate(self):
         """Negative cost values should still be recorded (they are finite)."""
         est = BurnRateEstimator()
-        # Negative costs are unusual but finite — record should not crash
+        # Negative costs are unusual but finite -- record should not crash
         now = time.monotonic()
         est.record(-1.0, timestamp=now - 60)
         est.record(2.0, timestamp=now)

@@ -3,7 +3,7 @@
 Measures WebSocket runaway agent message sending.
 Simulates an agent sending unlimited messages vs one constrained by veronica step limits.
 
-Uses ExecutionContext directly (no ASGI server required — self-contained).
+Uses ExecutionContext directly (no ASGI server required -- self-contained).
 
 Usage:
     python benchmarks/bench_websocket_runaway.py
@@ -60,7 +60,7 @@ class StubWebSocketSession:
 # ---------------------------------------------------------------------------
 
 def baseline_websocket_runaway(target_messages: int = 50) -> dict[str, Any]:
-    """No containment — agent sends target_messages unconditionally."""
+    """No containment -- agent sends target_messages unconditionally."""
     ws = StubWebSocketSession()
     payload = "Hello from agent! " * 10  # ~180 bytes per message
 

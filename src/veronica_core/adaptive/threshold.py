@@ -1,4 +1,4 @@
-"""AdaptiveThresholdPolicy — Predictive budget exhaustion policy.
+"""AdaptiveThresholdPolicy -- Predictive budget exhaustion policy.
 
 Implements RuntimePolicy protocol.  Evaluates time-to-exhaustion from
 BurnRateEstimator and escalates decisions: ALLOW → WARN → DEGRADE → HALT.

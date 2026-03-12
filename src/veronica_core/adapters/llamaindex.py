@@ -1,4 +1,4 @@
-"""veronica_core.adapters.llamaindex — LlamaIndex callback handler.
+"""veronica_core.adapters.llamaindex -- LlamaIndex callback handler.
 
 Integrates VERONICA policy enforcement into LlamaIndex pipelines via the
 standard BaseCallbackHandler interface. Requires llama-index-core or
@@ -10,7 +10,7 @@ optional dependency. An ImportError is raised at class instantiation time
 the rest of veronica_core to import cleanly in environments without LlamaIndex.
 
 Public API:
-    VeronicaLlamaIndexHandler — BaseCallbackHandler subclass enforcing
+    VeronicaLlamaIndexHandler -- BaseCallbackHandler subclass enforcing
         budget, step count, circuit breaker, and retry limits on every
         LLM call event.
 
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["VeronicaLlamaIndexHandler"]
 
 # ---------------------------------------------------------------------------
-# Optional llama_index import — deferred to instantiation time
+# Optional llama_index import -- deferred to instantiation time
 # ---------------------------------------------------------------------------
 
 _LLAMA_INDEX_AVAILABLE: bool = False
@@ -73,7 +73,7 @@ except ImportError:
         _BaseCallbackHandler = _LI_CBH
         _LLAMA_INDEX_AVAILABLE = True
     except ImportError:
-        # Neither package installed — define a minimal stub so that
+        # Neither package installed -- define a minimal stub so that
         # VeronicaLlamaIndexHandler can be defined at module level without error.
         # Attempting to instantiate it will raise ImportError.
         CBEventType = None  # type: ignore[assignment]

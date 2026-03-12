@@ -1,4 +1,4 @@
-"""Adversarial audit — v2.0 async MCP + WebSocket + middleware (Area 2).
+"""Adversarial audit -- v2.0 async MCP + WebSocket + middleware (Area 2).
 
 Attacker mindset: try to break budget enforcement, Decision enum contract,
 and concurrent request isolation.
@@ -8,14 +8,14 @@ Current state of HEAD:
   through unchanged (no WS containment in HEAD).
 - mcp_async.py: Async tool call wrapping with budget check (legacy probe).
   No reserve/commit/rollback (that's a v2.0 target, not yet in HEAD).
-- CancelledError is NOT caught by 'except Exception' — it propagates.
+- CancelledError is NOT caught by 'except Exception' -- it propagates.
 
 Attack vectors tested:
 1.  Async MCP concurrent calls: budget ceiling enforced
 2.  Exception in call_fn: success=False, error_count++
 3.  isError result: success=False, error_count++
 4.  Timeout: success=False (TimeoutError caught by except Exception)
-5.  CancelledError: propagates out (not swallowed) — CRITICAL
+5.  CancelledError: propagates out (not swallowed) -- CRITICAL
 6.  HTTP middleware pre-flight halt: 429 returned
 7.  HTTP middleware post-flight halt: 429 returned
 8.  HTTP middleware pass-through for non-halted request: 200 returned
@@ -251,7 +251,7 @@ class TestAsyncMCPBudgetEnforcement:
         """CancelledError must propagate out of wrap_tool_call.
 
         CancelledError is BaseException (not Exception). The adapter's
-        'except Exception' must NOT swallow it — cooperative cancellation
+        'except Exception' must NOT swallow it -- cooperative cancellation
         depends on this.
         """
 

@@ -134,8 +134,7 @@ delta = local_fallback.get() - fallback_seed_base
 ```
 
 `fallback_seed_base` is the Redis total at the moment of failover, captured
-before the transition. This ensures the base already present in Redis is not
-counted twice.
+before the transition, so the base already present in Redis is not counted twice.
 
 ---
 

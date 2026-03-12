@@ -158,7 +158,7 @@ class TestExtractTokenCountEdgeCases:
         # bool is subclass of int in Python; True == 1, False == 0
         # This documents current behavior: bool IS int
         result = _extract_token_count({"token_count": True})
-        # isinstance(True, int) is True in Python — current behavior returns 1
+        # isinstance(True, int) is True in Python -- current behavior returns 1
         assert result in (0, 1)  # accept either: True may or may not be treated as 1
 
     def test_dict_usage_key_with_dict_value_returns_zero(self) -> None:
@@ -531,7 +531,7 @@ class TestAsyncEnsureStatsLocking:
 
         The dict membership check (`tool_name in self._stats`) is safe without
         the lock because dict reads under CPython's GIL are atomic, and the
-        fast-path only returns early — it never mutates.
+        fast-path only returns early -- it never mutates.
         """
         adapter = _make_async()
 
@@ -788,7 +788,7 @@ class TestAdversarialCircuitBreakerMidCall:
             result = adapter.wrap_tool_call("tool", {}, failing_fn)
             assert result.success is False
 
-        # Circuit should now be open — next call must be blocked
+        # Circuit should now be open -- next call must be blocked
         blocked = adapter.wrap_tool_call("tool", {}, lambda **kw: "ok")
         assert blocked.success is False
         assert "Circuit breaker" in (blocked.error or "")
@@ -807,7 +807,7 @@ class TestAdversarialCircuitBreakerMidCall:
             },
         )
 
-        # Result with negative token_count — _extract_token_count returns 0
+        # Result with negative token_count -- _extract_token_count returns 0
         result_with_negative = {"token_count": -100, "data": "ok"}
         cost = adapter._compute_actual_cost("tool", result_with_negative)
         # Must be exactly the base cost (0.01), not negative

@@ -1,4 +1,4 @@
-"""LangChain + VERONICA Core — Budget & Step Enforcement via Callback Handler.
+"""LangChain + VERONICA Core -- Budget & Step Enforcement via Callback Handler.
 
 Shows how VeronicaCallbackHandler plugs into any LangChain LLM to enforce:
   - hard cost ceiling ($1.00 per session)
@@ -7,7 +7,7 @@ Shows how VeronicaCallbackHandler plugs into any LangChain LLM to enforce:
 
 Requirements:
     pip install langchain-core
-    (openai is NOT required — demo uses a stub LLM)
+    (openai is NOT required -- demo uses a stub LLM)
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ class _StubLLM:
 
 
 # ---------------------------------------------------------------------------
-# Demo 1: normal operation — calls succeed until step limit
+# Demo 1: normal operation -- calls succeed until step limit
 # ---------------------------------------------------------------------------
 
 def demo_step_limit() -> None:
@@ -80,7 +80,7 @@ def demo_step_limit() -> None:
         "Summarize the VERONICA paper",
         "List the key safety features",
         "Give a one-sentence TL;DR",
-        "What are the limitations?",  # step 4 — should be blocked
+        "What are the limitations?",  # step 4 -- should be blocked
     ]
 
     for i, prompt in enumerate(prompts, 1):
@@ -94,7 +94,7 @@ def demo_step_limit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 2: budget enforcement — small cost cap triggers halt
+# Demo 2: budget enforcement -- small cost cap triggers halt
 # ---------------------------------------------------------------------------
 
 def demo_budget_limit() -> None:

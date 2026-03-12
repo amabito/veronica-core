@@ -82,7 +82,7 @@ def test_cost_rate_deduped() -> None:
     events1 = graph.drain_divergence_events()
     first_count = sum(1 for e in events1 if e["event_type"] == "COST_RATE_EXCEEDED")
 
-    # Second call also above threshold — should NOT emit again.
+    # Second call also above threshold -- should NOT emit again.
     _add_success_node(graph, root_id, cost_usd=1.0)
     events2 = graph.drain_divergence_events()
     second_count = sum(1 for e in events2 if e["event_type"] == "COST_RATE_EXCEEDED")

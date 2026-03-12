@@ -182,7 +182,7 @@ def test_close_warns_on_non_terminal_nodes(caplog: pytest.LogCaptureFixture):
     ctx = _make_ctx()
 
     # Create a node via the graph API and advance it to "running" state,
-    # but do NOT call mark_success/mark_failure/mark_halt — leaving it
+    # but do NOT call mark_success/mark_failure/mark_halt -- leaving it
     # in a non-terminal state to trigger the warning.
     node_id = ctx._graph.begin_node(
         parent_id=ctx._root_node_id,
@@ -190,7 +190,7 @@ def test_close_warns_on_non_terminal_nodes(caplog: pytest.LogCaptureFixture):
         name="test_op",
     )
     ctx._graph.mark_running(node_id)
-    # node is now in "running" status — non-terminal
+    # node is now in "running" status -- non-terminal
 
     with caplog.at_level(
         logging.WARNING, logger="veronica_core.containment.execution_context"

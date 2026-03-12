@@ -1,8 +1,8 @@
 """Adversarial concurrency tests for veronica-core v0.10.4.
 
 Tests:
-- Part 7: Context isolation — each BudgetEnforcer/container is independent
-- Part 8: Adversarial harness — 50-100 concurrent threads, race conditions
+- Part 7: Context isolation -- each BudgetEnforcer/container is independent
+- Part 8: Adversarial harness -- 50-100 concurrent threads, race conditions
 """
 
 from __future__ import annotations
@@ -35,14 +35,14 @@ def test_budget_enforcer_per_thread_isolation() -> None:
         budget = BudgetEnforcer(limit_usd=LIMIT)
         barrier.wait()
 
-        # First spend: 0.04 — should be allowed
+        # First spend: 0.04 -- should be allowed
         ok1 = budget.spend(0.04)
         if not ok1:
             with errors_lock:
                 errors.append(f"Thread {tid}: first spend (0.04) denied unexpectedly")
             return
 
-        # Second spend: 0.02 — 0.04 + 0.02 = 0.06 > 0.05, must be denied
+        # Second spend: 0.02 -- 0.04 + 0.02 = 0.06 > 0.05, must be denied
         ok2 = budget.spend(0.02)
         if ok2:
             with errors_lock:
@@ -116,7 +116,7 @@ def test_veronica_guard_fresh_container_per_call() -> None:
     """veronica_guard creates a fresh container per invocation.
 
     max_steps=1: first call succeeds, but each thread's second call (if any)
-    would be to a *new* invocation with a fresh container — so all 50 first
+    would be to a *new* invocation with a fresh container -- so all 50 first
     calls succeed and no cross-thread contamination.
     """
     NUM_THREADS = 50
@@ -185,7 +185,7 @@ def test_veronica_guard_step_limit_per_invocation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 4: BudgetEnforcer concurrent spend race — total spent <= limit
+# Test 4: BudgetEnforcer concurrent spend race -- total spent <= limit
 # ---------------------------------------------------------------------------
 
 
@@ -213,7 +213,7 @@ def test_budget_enforcer_concurrent_spend_race() -> None:
         f"Race condition: total spent ${total_spent:.4f} exceeds limit ${LIMIT:.4f}"
     )
 
-    # With 100 threads each spending 0.01 and limit 0.5 — exactly 50 should succeed
+    # With 100 threads each spending 0.01 and limit 0.5 -- exactly 50 should succeed
     expected_successes = int(LIMIT / SPEND_AMOUNT)  # 50
     # Allow 1 off due to floating point edge cases
     actual_successes = round(total_spent / SPEND_AMOUNT)

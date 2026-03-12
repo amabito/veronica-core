@@ -1,12 +1,12 @@
-"""veronica_core.semantic — Semantic loop detection guard.
+"""veronica_core.semantic -- Semantic loop detection guard.
 
 Detects when an LLM produces semantically repetitive outputs by computing
 pairwise Jaccard similarity over a rolling window of recent outputs.
 
-No heavy dependencies — pure Python only.
+No heavy dependencies -- pure Python only.
 
 Public API:
-    SemanticLoopGuard — RuntimePolicy that detects semantic loops
+    SemanticLoopGuard -- RuntimePolicy that detects semantic loops
 """
 
 from __future__ import annotations

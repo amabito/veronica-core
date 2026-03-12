@@ -138,7 +138,7 @@ class TestAdversarialHmacOracle:
         """),
             encoding="utf-8",
         )
-        # Wrong signature — triggers tamper detection
+        # Wrong signature -- triggers tamper detection
         sig_path.write_text("deadbeef" * 8, encoding="utf-8")
         return policy_path, sig_path
 
@@ -161,12 +161,12 @@ class TestAdversarialHmacOracle:
 
         # The expected HMAC must NEVER appear in the audit log.
         assert payload.get("expected") == "<redacted>", (
-            f"Expected '<redacted>' but got {payload.get('expected')!r} — "
+            f"Expected '<redacted>' but got {payload.get('expected')!r} -- "
             "HMAC oracle still present!"
         )
         # The actual (attacker-supplied) sig must also be redacted.
         assert payload.get("actual") == "<redacted>", (
-            f"Expected '<redacted>' but got {payload.get('actual')!r} — "
+            f"Expected '<redacted>' but got {payload.get('actual')!r} -- "
             "attacker can enumerate valid HMAC prefix lengths via actual field"
         )
 
@@ -238,7 +238,7 @@ class TestAdversarialSymlinkTraversal:
         ctx = _ctx("file_read", [str(link)])
         decision = engine.evaluate(ctx)
 
-        # After realpath resolution, the path becomes .ssh/id_rsa — must be DENIED.
+        # After realpath resolution, the path becomes .ssh/id_rsa -- must be DENIED.
         assert decision.verdict == "DENY", (
             f"Expected DENY for symlink -> .ssh/id_rsa, got {decision.verdict!r} "
             f"(rule={decision.rule_id!r}, path resolved to real target)"
@@ -287,7 +287,7 @@ class TestAdversarialSymlinkTraversal:
         ctx = _ctx("file_write", [str(link)])
         decision = engine.evaluate(ctx)
 
-        # .pem is a sensitive file pattern — read is DENIED. Write goes through
+        # .pem is a sensitive file pattern -- read is DENIED. Write goes through
         # REQUIRE_APPROVAL or ALLOW depending on write patterns; at minimum it
         # must NOT bypass realpath resolution and hit the wrong branch.
         # The test asserts that the realpath was used (i.e., the decision was made

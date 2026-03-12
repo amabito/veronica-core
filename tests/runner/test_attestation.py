@@ -130,5 +130,5 @@ class TestAttestationCheckerAnomalyDetection:
 
     def test_no_audit_log_anomaly_still_returns_false(self) -> None:
         checker = self._checker_with_forced_baseline({"cwd": "/definitely/not/real"})
-        # No audit log — should still return False without raising
+        # No audit log -- should still return False without raising
         assert checker.check() is False

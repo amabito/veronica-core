@@ -76,7 +76,7 @@ class TestBase64QueryDetection:
         assert decision.risk_score_delta == 9
 
     def test_short_base64_like_value_is_not_denied_on_base64_rule(self) -> None:
-        # Under 20 chars — regex requires {20,}
+        # Under 20 chars -- regex requires {20,}
         url = "https://pypi.org/pypi/requests/json?v=aGVsbG8="
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.base64_in_query"
@@ -102,7 +102,7 @@ class TestHexQueryDetection:
         assert decision.risk_score_delta == 9
 
     def test_short_hex_not_denied_on_hex_rule(self) -> None:
-        # Under 32 hex chars — regex requires {32,}
+        # Under 32 hex chars -- regex requires {32,}
         url = "https://pypi.org/pypi/requests/json?id=deadbeef"
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.hex_in_query"
@@ -127,13 +127,13 @@ class TestHighEntropyQueryDetection:
         assert decision.risk_score_delta == 9
 
     def test_low_entropy_value_is_not_denied_on_entropy_rule(self) -> None:
-        # "version=1.2.3" — very low entropy
+        # "version=1.2.3" -- very low entropy
         url = "https://pypi.org/pypi/requests/json?version=1.2.3"
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.high_entropy_query"
 
     def test_short_high_entropy_value_is_not_denied(self) -> None:
-        # Under 20 chars — entropy check skipped
+        # Under 20 chars -- entropy check skipped
         url = "https://pypi.org/pypi/requests/json?k=aB3xZ!qW"
         decision = engine.evaluate(_net_ctx(url))
         assert decision.rule_id != "net.high_entropy_query"

@@ -12,8 +12,8 @@ Usage:
     python tools/release_sign_policy.py --key-file /path/to/private_key.pem --dry-run
 
 Exit codes:
-    0 — success (or dry-run success)
-    1 — error (missing key, signing failure, etc.)
+    0 -- success (or dry-run success)
+    1 -- error (missing key, signing failure, etc.)
 """
 
 from __future__ import annotations

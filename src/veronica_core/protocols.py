@@ -158,7 +158,7 @@ class PlannerProtocol(Protocol):
 
     The Planner proposes policies based on chain metadata and prior safety
     events. The veronica-core kernel enforces those policies. Planners do
-    NOT enforce anything themselves — they only propose.
+    NOT enforce anything themselves -- they only propose.
 
     This separation allows policy logic to be tested independently of
     enforcement and swapped at runtime without changing the enforcement layer.

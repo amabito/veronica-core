@@ -296,7 +296,7 @@ def demo_token_budget() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 5: CircuitBreakerCapability — circuit breaker
+# Demo 5: CircuitBreakerCapability -- circuit breaker
 # ---------------------------------------------------------------------------
 
 def demo_capability_circuit_breaker() -> None:
@@ -337,7 +337,7 @@ def demo_capability_circuit_breaker() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 6: CircuitBreakerCapability — SAFE_MODE
+# Demo 6: CircuitBreakerCapability -- SAFE_MODE
 # ---------------------------------------------------------------------------
 
 def demo_capability_safe_mode() -> None:
@@ -399,7 +399,7 @@ def demo_capability_safe_mode() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 7: CircuitBreakerCapability — per-agent independent tracking
+# Demo 7: CircuitBreakerCapability -- per-agent independent tracking
 # ---------------------------------------------------------------------------
 
 def demo_capability_per_agent() -> None:

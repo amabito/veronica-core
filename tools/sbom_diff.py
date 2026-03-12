@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SBOM Diff Gate — detect changes between two SBOM snapshots.
+"""SBOM Diff Gate -- detect changes between two SBOM snapshots.
 
 Compares a baseline SBOM against a current SBOM, ignoring ``generated_at``
 so that timestamp-only regenerations produce no diff.
@@ -8,9 +8,9 @@ Usage:
     python tools/sbom_diff.py baseline.json current.json [--secret <HMAC secret>]
 
 Exit codes:
-    0  — No differences (SBOMs are equivalent)
-    1  — Differences found (caller should gate/approve)
-    2  — Usage error (bad arguments, missing files, parse error)
+    0  -- No differences (SBOMs are equivalent)
+    1  -- Differences found (caller should gate/approve)
+    2  -- Usage error (bad arguments, missing files, parse error)
 """
 from __future__ import annotations
 
@@ -207,9 +207,9 @@ def main() -> None:
     Parses sys.argv, computes the diff, and exits with an appropriate code.
 
     Exit codes:
-        0  — No differences
-        1  — Differences found
-        2  — Usage / parse error
+        0  -- No differences
+        1  -- Differences found
+        2  -- Usage / parse error
     """
     args = sys.argv[1:]
 
@@ -247,7 +247,7 @@ def main() -> None:
     if diff.is_clean:
         sys.exit(0)
 
-    # Differences found — check for pre-approved token
+    # Differences found -- check for pre-approved token
     if secret and token:
         if verify_approval_token(diff, token, secret):
             print("[OK] Diff approved by valid token.")

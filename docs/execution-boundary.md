@@ -21,9 +21,9 @@ Observability records what happened. The Execution Boundary decides whether it h
 
 ---
 
-## Why This Matters
+## Failure Modes Observability Cannot Prevent
 
-Three failure modes that observability cannot prevent:
+Three cases:
 
 **Retry cascade**: An agent encounters a transient error and retries with the same arguments.
 Without an enforcement boundary, the retry loop continues indefinitely.

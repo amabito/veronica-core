@@ -62,7 +62,7 @@ class StubExecutor:
 # ---------------------------------------------------------------------------
 
 def baseline_multi_agent_loop(max_iterations: int = 30) -> dict[str, Any]:
-    """Simulated infinite loop — critic never approves, runs to max_iterations."""
+    """Simulated infinite loop -- critic never approves, runs to max_iterations."""
     planner = StubPlanner()
     critic = StubCritic(approve_after=999)  # Never approves
     executor = StubExecutor()

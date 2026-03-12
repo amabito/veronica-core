@@ -1,4 +1,4 @@
-"""Tests for veronica_core.adapters.langchain — LangChain callback handler.
+"""Tests for veronica_core.adapters.langchain -- LangChain callback handler.
 
 Uses fake langchain stubs injected into sys.modules so neither langchain-core
 nor langchain need to be installed.
@@ -183,7 +183,7 @@ class TestConfigAcceptance:
 
 
 # ---------------------------------------------------------------------------
-# LangChain cost boundary — small / edge-case token counts
+# LangChain cost boundary -- small / edge-case token counts
 # ---------------------------------------------------------------------------
 
 

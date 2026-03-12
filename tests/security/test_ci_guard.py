@@ -1,4 +1,4 @@
-"""Tests for CIGuard — CI-specific secret leak detection (Task #2)."""
+"""Tests for CIGuard -- CI-specific secret leak detection (Task #2)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def masker() -> SecretMasker:
 
 
 # ---------------------------------------------------------------------------
-# TestFinding — dataclass contract
+# TestFinding -- dataclass contract
 # ---------------------------------------------------------------------------
 
 
@@ -65,7 +65,7 @@ class TestFinding:
 
 
 # ---------------------------------------------------------------------------
-# TestCIGuardScan — core detection
+# TestCIGuardScan -- core detection
 # ---------------------------------------------------------------------------
 
 
@@ -182,7 +182,7 @@ class TestCIGuardScan:
 
 
 # ---------------------------------------------------------------------------
-# TestCIGuardScanFile — file scanning
+# TestCIGuardScanFile -- file scanning
 # ---------------------------------------------------------------------------
 
 
@@ -216,7 +216,7 @@ class TestCIGuardScanFile:
     def test_scan_file_with_unicode_content(
         self, guard: CIGuard, tmp_path: Path
     ) -> None:
-        # File with unicode chars mixed in — should not raise
+        # File with unicode chars mixed in -- should not raise
         unicode_file = tmp_path / "unicode.txt"
         unicode_file.write_text("日本語テスト\nNo secrets\n", encoding="utf-8")
         findings = guard.scan_file(unicode_file)
@@ -225,7 +225,7 @@ class TestCIGuardScanFile:
     def test_scan_file_invalid_utf8_does_not_crash(
         self, guard: CIGuard, tmp_path: Path
     ) -> None:
-        # Invalid UTF-8 bytes — errors="replace" should handle gracefully
+        # Invalid UTF-8 bytes -- errors="replace" should handle gracefully
         binary_file = tmp_path / "binary.bin"
         binary_file.write_bytes(b"\xff\xfe invalid utf8 bytes\n")
         # Must not raise
@@ -234,7 +234,7 @@ class TestCIGuardScanFile:
 
 
 # ---------------------------------------------------------------------------
-# TestCIGuardProtectOutput — masking
+# TestCIGuardProtectOutput -- masking
 # ---------------------------------------------------------------------------
 
 
@@ -295,7 +295,7 @@ class TestCIGuardProtectOutput:
 
 
 # ---------------------------------------------------------------------------
-# TestCIGuardIsCI — environment detection
+# TestCIGuardIsCI -- environment detection
 # ---------------------------------------------------------------------------
 
 
@@ -323,7 +323,7 @@ class TestCIGuardIsCI:
 
 
 # ---------------------------------------------------------------------------
-# TestAdversarial — adversarial / edge cases
+# TestAdversarial -- adversarial / edge cases
 # ---------------------------------------------------------------------------
 
 
@@ -331,7 +331,7 @@ class TestAdversarialCIGuard:
     """Adversarial tests: large inputs, binary data, unicode bypass attempts."""
 
     def test_large_input_completes_within_5_seconds(self, guard: CIGuard) -> None:
-        # 10,000 clean lines — performance check
+        # 10,000 clean lines -- performance check
         text = "\n".join(
             [f"log line {i}: all clear, no secrets here" for i in range(10_000)]
         )
@@ -360,7 +360,7 @@ class TestAdversarialCIGuard:
 
     def test_unicode_nfkc_bypass_attempt_does_not_leak(self, guard: CIGuard) -> None:
         # Attacker uses lookalike Unicode chars to bypass regex detection.
-        # The guard uses standard re patterns — Unicode lookalikes won't match
+        # The guard uses standard re patterns -- Unicode lookalikes won't match
         # the ASCII pattern, so they should NOT be detected. This test verifies
         # the guard doesn't crash and that real tokens on the same text are still caught.
         # Real token alongside unicode confusables
@@ -385,7 +385,7 @@ class TestAdversarialCIGuard:
         assert guard.scan(text) == []
 
     def test_scan_very_long_single_line(self, guard: CIGuard) -> None:
-        # Single line with 100K chars — no secret
+        # Single line with 100K chars -- no secret
         text = "x" * 100_000
         start = time.monotonic()
         findings = guard.scan(text)

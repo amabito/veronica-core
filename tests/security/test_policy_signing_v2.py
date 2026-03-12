@@ -1,4 +1,4 @@
-"""Tests for Policy Signing v2 — ed25519 asymmetric signing."""
+"""Tests for Policy Signing v2 -- ed25519 asymmetric signing."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def tmp_policy(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def dev_keypair() -> tuple[bytes, bytes]:
-    """Return (priv_pem, pub_pem) — skips if cryptography not available."""
+    """Return (priv_pem, pub_pem) -- skips if cryptography not available."""
     if not _ED25519_AVAILABLE:
         pytest.skip("cryptography not installed")
     return PolicySignerV2.generate_dev_keypair()
@@ -157,7 +157,7 @@ def test_wrong_key_fails_verification(tmp_policy: Path, tmp_path: Path) -> None:
     signer_a.sign(tmp_policy, priv_a)
     sig_path = Path(str(tmp_policy) + ".sig.v2")
 
-    # Verify with key B — must fail
+    # Verify with key B -- must fail
     assert signer_b.verify(tmp_policy, sig_path) is False
 
 

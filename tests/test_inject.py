@@ -1,4 +1,4 @@
-"""Tests for veronica_core.inject — decorator-based execution boundary."""
+"""Tests for veronica_core.inject -- decorator-based execution boundary."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for runner/sandbox_windows.py — Windows Sandbox hardening."""
+"""Tests for runner/sandbox_windows.py -- Windows Sandbox hardening."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def runner(repo_root: str, mock_executor: MagicMock) -> WindowsSandboxRunner:
 
 
 # ---------------------------------------------------------------------------
-# read_path_blocked — platform-independent tests
+# read_path_blocked -- platform-independent tests
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +112,7 @@ class TestReadPathBlocked:
 
 
 # ---------------------------------------------------------------------------
-# run_in_sandbox — path validation
+# run_in_sandbox -- path validation
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +188,7 @@ class TestContextManager:
         )
         with WindowsSandboxRunner(config, mock_executor):
             pass
-        # tmp_path was provided externally — must still exist
+        # tmp_path was provided externally -- must still exist
         assert tmp_path.exists()
 
 

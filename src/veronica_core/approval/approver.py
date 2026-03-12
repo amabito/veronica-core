@@ -49,9 +49,9 @@ class ApprovalToken:
         request_id, rule_id, action, args_hash, timestamp, signature
 
     v2 additional fields (empty string = v1 token, no v2 checks):
-        expiry  — ISO8601 expiry timestamp (timestamp + 5 min)
-        nonce   — uuid4 hex; single-use (empty = v1 token)
-        scope   — f"{action}:{args_hash}" (empty = v1 token)
+        expiry  -- ISO8601 expiry timestamp (timestamp + 5 min)
+        nonce   -- uuid4 hex; single-use (empty = v1 token)
+        scope   -- f"{action}:{args_hash}" (empty = v1 token)
     """
 
     request_id: str
@@ -60,14 +60,14 @@ class ApprovalToken:
     args_hash: str
     timestamp: str
     signature: str  # HMAC-SHA256 payload (v1 or v2, see below)
-    # v2 fields — default to empty string for backward compatibility
+    # v2 fields -- default to empty string for backward compatibility
     expiry: str = ""
     nonce: str = ""
     scope: str = ""
 
 
 # ---------------------------------------------------------------------------
-# NonceRegistry — thread-safe single-use nonce tracker
+# NonceRegistry -- thread-safe single-use nonce tracker
 # ---------------------------------------------------------------------------
 
 _DEFAULT_NONCE_REGISTRY_MAX_SIZE = 10_000

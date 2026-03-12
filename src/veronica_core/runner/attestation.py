@@ -98,11 +98,11 @@ class SandboxProbe:
 
     Two probes are available:
 
-    * :meth:`probe_read` — attempts to stat a protected path; expects
+    * :meth:`probe_read` -- attempts to stat a protected path; expects
       ``PermissionError`` or ``OSError`` (access denied) to be raised,
       indicating that the sandbox is blocking filesystem access.
 
-    * :meth:`probe_net` — attempts a network request; expects a connection
+    * :meth:`probe_net` -- attempts a network request; expects a connection
       error, indicating that the sandbox is blocking outbound network access.
 
     :meth:`run_all` aggregates all probes.  In sandbox mode, any failure
@@ -147,7 +147,7 @@ class SandboxProbe:
         expected = "BLOCKED"
         try:
             Path(self._read_target).stat()
-            # Stat succeeded — sandbox did NOT block the access.
+            # Stat succeeded -- sandbox did NOT block the access.
             actual = "ALLOWED"
             passed = False
         except PermissionError:
@@ -158,7 +158,7 @@ class SandboxProbe:
                 actual = "BLOCKED"
                 passed = True
             else:
-                # Different OSError (e.g. file not found) — not a sandbox
+                # Different OSError (e.g. file not found) -- not a sandbox
                 # block; treat as inconclusive / not blocking.
                 actual = f"ERROR:{exc}"
                 passed = False
@@ -179,7 +179,7 @@ class SandboxProbe:
         expected = "BLOCKED"
         try:
             urllib.request.urlopen(self._net_target, timeout=0.5)
-            # Got a response — sandbox did NOT block network access.
+            # Got a response -- sandbox did NOT block network access.
             actual = "ALLOWED"
             passed = False
         except ConnectionRefusedError:
@@ -203,7 +203,7 @@ class SandboxProbe:
         """Run all probes and return results.
 
         In *dev mode* (``sandbox_mode=False``), failed probes are only
-        logged as informational — they do **not** indicate a security
+        logged as informational -- they do **not** indicate a security
         violation because the sandbox is not expected to be active.
 
         In *sandbox mode* (``sandbox_mode=True``), any probe that returns

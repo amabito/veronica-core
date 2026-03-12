@@ -1,4 +1,4 @@
-"""Adversarial tests for God Class Split (Step 2) — veronica-core v3.0.0.
+"""Adversarial tests for God Class Split (Step 2) -- veronica-core v3.0.0.
 
 Verifies that all public symbols remain importable from the original paths
 after the three-file split:
@@ -134,7 +134,7 @@ class TestDistributedCircularImport:
     """
 
     def test_import_distributed_first_does_not_crash(self) -> None:
-        """Import distributed.py first — triggers dcb import which back-imports distributed."""
+        """Import distributed.py first -- triggers dcb import which back-imports distributed."""
         # Clear cache to test clean-slate import
         mods_to_drop = [k for k in sys.modules if "veronica_core.distributed" in k]
         for k in mods_to_drop:
@@ -488,7 +488,7 @@ class TestCrossReferenceIntegrity:
         assert CircuitBreaker is not None
 
     def test_policy_rules_uses_capabilities_correctly(self) -> None:
-        """policy_rules.py imports Capability and CapabilitySet — must not be broken."""
+        """policy_rules.py imports Capability and CapabilitySet -- must not be broken."""
         from veronica_core.security.policy_rules import _eval_git
         from veronica_core.security.capabilities import CapabilitySet
         from veronica_core.security.policy_rules import PolicyContext
@@ -517,7 +517,7 @@ class TestCrossReferenceIntegrity:
             ec_cls = getattr(ec, name)
             assert t_cls is ec_cls, (
                 f"{name} re-exported in execution_context is a different object "
-                f"from types.py — may indicate a redefinition bug"
+                f"from types.py -- may indicate a redefinition bug"
             )
 
     def test_policy_engine_evaluator_dict_uses_rules_functions(self) -> None:

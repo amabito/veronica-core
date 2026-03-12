@@ -80,7 +80,7 @@ class TestAIContainerAsExecutionContext:
         ExecutionContextContainerAdapter without crashing."""
         container = AIContainer()
         config = GuardConfig(max_cost_usd=1.0, max_steps=10)
-        # AIContainer has no _budget_backend / _step_count — proxy must handle gracefully
+        # AIContainer has no _budget_backend / _step_count -- proxy must handle gracefully
         adapter = build_adapter_container(config, execution_context=container)
         assert isinstance(adapter, ExecutionContextContainerAdapter)
 
@@ -470,7 +470,7 @@ class TestSharedUtilsExtractLlmResultCost:
                 "token_usage": {"total_tokens": float("nan")},
             }
         )
-        # int(nan) raises ValueError — should be caught and return 0.0
+        # int(nan) raises ValueError -- should be caught and return 0.0
         assert result == 0.0
 
     def test_dict_with_prompt_and_completion_tokens(self) -> None:

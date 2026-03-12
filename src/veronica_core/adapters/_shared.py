@@ -195,7 +195,7 @@ class _BudgetProxy:
 
     @property
     def spent_usd(self) -> float:
-        # When a backend.get callable is available, use it — the backend holds
+        # When a backend.get callable is available, use it -- the backend holds
         # the authoritative cost total (e.g. LocalBudgetBackend, Redis).
         # Otherwise fall back to get_snapshot() which reads _cost_usd_accumulated
         # under a lock (the canonical public API for ExecutionContext).

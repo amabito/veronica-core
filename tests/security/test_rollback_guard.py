@@ -41,7 +41,7 @@ class TestRollbackGuardBasic:
         guard = RollbackGuard(audit_log=log)
         guard.check(1)  # Accept version 1
         guard2 = RollbackGuard(audit_log=log)
-        guard2.check(2)  # Upgrade to version 2 — should pass
+        guard2.check(2)  # Upgrade to version 2 -- should pass
 
     def test_rollback_raises_runtime_error(self, tmp_path: Path) -> None:
         """Rollback from version 2 to version 1 must raise RuntimeError."""
@@ -59,7 +59,7 @@ class TestRollbackGuardBasic:
         guard = RollbackGuard(audit_log=log)
         guard.check(1)
         guard2 = RollbackGuard(audit_log=log)
-        guard2.check(1)  # Same version — should pass
+        guard2.check(1)  # Same version -- should pass
 
     def test_rollback_logs_policy_rollback_event(self, tmp_path: Path) -> None:
         """A rollback attempt must write a policy_rollback event to the audit log."""
@@ -130,7 +130,7 @@ class TestRollbackGuardEngineVersion:
     def test_no_audit_log_engine_version_check_still_works(self) -> None:
         """Engine version check must work even without an audit_log."""
         guard = RollbackGuard(audit_log=None)
-        # No audit log — rollback skipped, but engine check still applies
+        # No audit log -- rollback skipped, but engine check still applies
         with pytest.raises(RuntimeError, match="Engine"):
             guard.check(1, min_engine_version="99.0.0")
 

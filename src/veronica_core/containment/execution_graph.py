@@ -1,4 +1,4 @@
-"""ExecutionGraph — directed acyclic graph of one agent chain's call nodes.
+"""ExecutionGraph -- directed acyclic graph of one agent chain's call nodes.
 
 Tracks the parent-child relationships, timing, cost, and token counts for
 every LLM and tool call made within a single chain (agent run or request).
@@ -41,8 +41,8 @@ Usage::
 #   - Incremental depth tracking
 #   - Aggregate counters updated atomically on status transitions
 #   - snapshot() returns deep-copied JSON-serializable dict
-# v0.11 — cost-rate and token-velocity divergence heuristics added.
-# v0.12 — max_nodes LRU pruning added (oldest completed node evicted first).
+# v0.11 -- cost-rate and token-velocity divergence heuristics added.
+# v0.12 -- max_nodes LRU pruning added (oldest completed node evicted first).
 # ---------------------------------------------------------------------------
 
 from __future__ import annotations

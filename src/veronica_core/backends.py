@@ -114,7 +114,7 @@ class JSONBackend(PersistenceBackend):
             logger.error(f"[JSONBackend] Load failed: {e}")
             return None
 
-        # M2: Basic schema check — data must be a dict with expected keys.
+        # M2: Basic schema check -- data must be a dict with expected keys.
         if not isinstance(data, dict):
             logger.error(
                 "[JSONBackend] Load failed: expected a JSON object, got %s",

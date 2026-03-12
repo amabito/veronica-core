@@ -44,7 +44,7 @@ def _ctx(
 
 
 # ---------------------------------------------------------------------------
-# file_read — new credential file deny patterns
+# file_read -- new credential file deny patterns
 # ---------------------------------------------------------------------------
 
 
@@ -75,7 +75,7 @@ class TestFileReadCredentialPatterns:
 
 
 # ---------------------------------------------------------------------------
-# shell — credential sub-command deny rules
+# shell -- credential sub-command deny rules
 # ---------------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ class TestShellCredentialSubcommands:
 
 
 # ---------------------------------------------------------------------------
-# masking — new patterns
+# masking -- new patterns
 # ---------------------------------------------------------------------------
 
 

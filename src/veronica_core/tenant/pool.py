@@ -67,7 +67,7 @@ class BudgetPool:
         # Running total of all active allocations (avoids O(n) sum on each allocate).
         self._total_allocated: float = 0.0
         self._lock = threading.Lock()
-        # Cache reservable check at construction — avoids repeated isinstance/import.
+        # Cache reservable check at construction -- avoids repeated isinstance/import.
         self._is_reservable: bool = self._check_reservable(backend)
 
     @staticmethod

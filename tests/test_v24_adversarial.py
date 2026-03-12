@@ -1,11 +1,11 @@
-"""Adversarial tests for v2.4.0 changes — attacker mindset.
+"""Adversarial tests for v2.4.0 changes -- attacker mindset.
 
 Categories covered:
-  1. Corrupted input — broken backends, garbage contexts
-  2. Concurrent access — parallel close(), wrap-during-close races
-  3. State corruption — closed/aborted context reuse, graph tampering
-  4. Boundary abuse — zero limits, negative costs
-  5. Serialization — Decision enum backward compatibility
+  1. Corrupted input -- broken backends, garbage contexts
+  2. Concurrent access -- parallel close(), wrap-during-close races
+  3. State corruption -- closed/aborted context reuse, graph tampering
+  4. Boundary abuse -- zero limits, negative costs
+  5. Serialization -- Decision enum backward compatibility
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class TestAdversarialTryRollback:
     """_try_rollback must never raise, even with broken backends."""
 
     def test_rollback_with_exploding_backend(self) -> None:
-        """Backend.rollback() raises — must be swallowed."""
+        """Backend.rollback() raises -- must be swallowed."""
         ctx = _make_ctx()
         ctx._budget_backend.rollback = MagicMock(
             side_effect=RuntimeError("disk on fire")
@@ -73,7 +73,7 @@ class TestAdversarialClose:
     """close() must be resilient to corruption and concurrency."""
 
     def test_concurrent_close_no_double_cleanup(self) -> None:
-        """10 threads calling close() — budget_backend.close() called exactly once."""
+        """10 threads calling close() -- budget_backend.close() called exactly once."""
         ctx = _make_ctx()
         close_count = [0]
         original_close = ctx._budget_backend.close
@@ -98,7 +98,7 @@ class TestAdversarialClose:
         ctx = _make_ctx()
         # Inject a node with an unexpected status value
         ctx._graph._nodes["fake-node"] = MagicMock(status="EXPLODING")
-        # Must not raise — the non-terminal warning code handles it
+        # Must not raise -- the non-terminal warning code handles it
         ctx.close()
         assert ctx._closed is True
 

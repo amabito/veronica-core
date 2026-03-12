@@ -1,4 +1,4 @@
-"""Tests for veronica_core.simulation — Policy Simulation (Phase F).
+"""Tests for veronica_core.simulation -- Policy Simulation (Phase F).
 
 Covers ExecutionLogEntry, ExecutionLog, PolicySimulator, SimulationReport,
 and OTel span conversion.

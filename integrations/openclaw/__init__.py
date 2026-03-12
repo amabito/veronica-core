@@ -16,9 +16,9 @@
     stable public API (``AIcontainer``, ``ExecutionContext``, ``VeronicaGuard``, etc.).
 
 See also:
-    ``integrations/openclaw/README.md`` — full usage guide and examples.
-    ``integrations/openclaw/adapter.py`` — ``SafeOpenClawExecutor`` implementation.
-    ``integrations/openclaw/demo.py`` — end-to-end demonstration script.
+    ``integrations/openclaw/README.md`` -- full usage guide and examples.
+    ``integrations/openclaw/adapter.py`` -- ``SafeOpenClawExecutor`` implementation.
+    ``integrations/openclaw/demo.py`` -- end-to-end demonstration script.
 """
 
 import warnings

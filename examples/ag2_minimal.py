@@ -1,4 +1,4 @@
-"""AG2 minimal — Policy enforcement via VeronicaConversableAgent.
+"""AG2 minimal -- Policy enforcement via VeronicaConversableAgent.
 
 VeronicaConversableAgent is a drop-in replacement for autogen.ConversableAgent.
 It enforces budget and step limits before every generate_reply() call.
@@ -96,7 +96,7 @@ def main() -> None:
 
     messages = [{"role": "user", "content": "Hello"}]
 
-    # 2. Call generate_reply as normal — limits enforced transparently
+    # 2. Call generate_reply as normal -- limits enforced transparently
     for i in range(1, 6):
         print(f"Call {i}:")
         try:

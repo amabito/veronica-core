@@ -1,4 +1,4 @@
-"""veronica_core.adapters.langchain — LangChain callback handler.
+"""veronica_core.adapters.langchain -- LangChain callback handler.
 
 Integrates VERONICA policy enforcement into LangChain pipelines via the
 standard BaseCallbackHandler interface. Requires langchain-core or langchain.
@@ -6,7 +6,7 @@ standard BaseCallbackHandler interface. Requires langchain-core or langchain.
 This module raises ImportError on import if neither package is installed.
 
 Public API:
-    VeronicaCallbackHandler — BaseCallbackHandler subclass enforcing
+    VeronicaCallbackHandler -- BaseCallbackHandler subclass enforcing
         budget, step count, and retry limits on every LLM call.
 
 Usage::

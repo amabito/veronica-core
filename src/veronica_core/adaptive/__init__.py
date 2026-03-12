@@ -1,10 +1,10 @@
-"""veronica_core.adaptive — Predictive adaptive policy mechanisms.
+"""veronica_core.adaptive -- Predictive adaptive policy mechanisms.
 
 Public API:
-  BurnRateEstimator       — Sliding-window cost burn rate (burn_rate.py)
-  AdaptiveThresholdPolicy — RuntimePolicy: ALLOW/WARN/DEGRADE/HALT based on TTE
-  AdaptiveConfig          — Configuration dataclass for AdaptiveThresholdPolicy
-  AnomalyDetector         — Per-metric Z-score anomaly detection (Welford's alg)
+  BurnRateEstimator       -- Sliding-window cost burn rate (burn_rate.py)
+  AdaptiveThresholdPolicy -- RuntimePolicy: ALLOW/WARN/DEGRADE/HALT based on TTE
+  AdaptiveConfig          -- Configuration dataclass for AdaptiveThresholdPolicy
+  AnomalyDetector         -- Per-metric Z-score anomaly detection (Welford's alg)
 """
 
 from veronica_core.adaptive.burn_rate import BurnRateEstimator

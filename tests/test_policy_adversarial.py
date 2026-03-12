@@ -1,4 +1,4 @@
-"""Adversarial tests for veronica_core.policy — attacker mindset."""
+"""Adversarial tests for veronica_core.policy -- attacker mindset."""
 
 from __future__ import annotations
 
@@ -278,14 +278,14 @@ name: bomb
 rules: []
 """
         # yaml.safe_load (used by loader) does NOT expand anchors recursively
-        # in a way that causes OOM — it builds the structure but limits depth.
+        # in a way that causes OOM -- it builds the structure but limits depth.
         # The test verifies the loader does not hang or crash the process.
         # If it raises any exception that's also acceptable.
 
         def _timeout_handler(signum, frame):  # type: ignore[type-arg]
             raise TimeoutError("YAML bomb caused hang")
 
-        # On Windows signal.SIGALRM is unavailable — use threading.Timer instead.
+        # On Windows signal.SIGALRM is unavailable -- use threading.Timer instead.
 
         def _bomb_thread() -> None:
             try:
@@ -296,7 +296,7 @@ rules: []
         t = threading.Thread(target=_bomb_thread, daemon=True)
         t.start()
         t.join(timeout=5.0)
-        # If the thread is still alive after 5s the YAML bomb hung — fail test.
+        # If the thread is still alive after 5s the YAML bomb hung -- fail test.
         assert not t.is_alive(), "YAML bomb caused loader to hang (>5s)"
 
     def test_yaml_duplicate_keys(self) -> None:
@@ -392,7 +392,7 @@ class TestAdversarialTypeConfusion:
             }
         )
         # PolicySchema.from_dict uses str(data.get("version")) so this converts
-        # to "[1, 0]" which is a non-empty string — currently accepted.
+        # to "[1, 0]" which is a non-empty string -- currently accepted.
         # Verify it does not crash silently in an unexpected way.
         try:
             loader.load_from_string(data, format="json")
@@ -409,7 +409,7 @@ class TestAdversarialTypeConfusion:
                 "rules": [],
             }
         )
-        # from_dict uses str() conversion — should produce "12345" name.
+        # from_dict uses str() conversion -- should produce "12345" name.
         try:
             pipeline = loader.load_from_string(data, format="json")
             assert isinstance(pipeline, LoadedPolicy)
@@ -569,7 +569,7 @@ class TestAdversarialPathTraversal:
 
     def test_load_traversal_to_etc_passwd(self) -> None:
         """load('../../etc/passwd') must raise FileNotFoundError or
-        PolicyValidationError — must never silently return parsed content
+        PolicyValidationError -- must never silently return parsed content
         that leaks sensitive file data as a policy."""
         loader = PolicyLoader()
         traversal_paths = [
@@ -583,7 +583,7 @@ class TestAdversarialPathTraversal:
                 result = loader.load(path)
                 # If load() somehow succeeded (file exists and is valid JSON),
                 # verify it didn't silently return a useful pipeline from
-                # arbitrary system files — it must have raised or the result
+                # arbitrary system files -- it must have raised or the result
                 # must be a ShieldPipeline (not leaked raw file bytes).
                 assert isinstance(result, LoadedPolicy), (
                     f"load({path!r}) returned non-pipeline: {result!r}"
@@ -591,7 +591,7 @@ class TestAdversarialPathTraversal:
             except (FileNotFoundError, OSError, PolicyValidationError, ValueError):
                 pass  # Expected: path doesn't exist or content is not valid policy.
             except Exception as exc:
-                # Any other exception is fine too — just must not return
+                # Any other exception is fine too -- just must not return
                 # raw file bytes silently.
                 assert not isinstance(exc, AttributeError), (
                     f"load({path!r}) raised AttributeError: {exc}"
@@ -625,7 +625,7 @@ class TestAdversarialPathTraversal:
                         f"Error message leaks raw file content from {path!r}"
                     )
             except (OSError, FileNotFoundError, ValueError):
-                pass  # File unreadable or wrong format — fine.
+                pass  # File unreadable or wrong format -- fine.
             break
         if not checked:
             pytest.skip("No candidate system file found to test content leakage")
@@ -638,7 +638,7 @@ class TestAdversarialMissingParamsTypeConfusion:
         """List value in rule.type field must raise PolicyValidationError."""
         loader = PolicyLoader()
         # JSON encodes list; from_dict passes it to RuleSchema.from_dict which
-        # calls str() on it — resulting in "[...]" which is an unknown type.
+        # calls str() on it -- resulting in "[...]" which is an unknown type.
         data = json.dumps(
             {
                 "version": "1.0",
@@ -686,7 +686,7 @@ class TestAdversarialMissingParamsTypeConfusion:
                 ],
             }
         )
-        # RuleSchema.from_dict does dict(params or {}) — dict(list) raises TypeError.
+        # RuleSchema.from_dict does dict(params or {}) -- dict(list) raises TypeError.
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
         assert not isinstance(exc_info.value, AttributeError)
@@ -707,7 +707,7 @@ class TestAdversarialMissingParamsTypeConfusion:
                 ],
             }
         )
-        # int(None) raises TypeError — factory should raise, not hang.
+        # int(None) raises TypeError -- factory should raise, not hang.
         with pytest.raises(Exception) as exc_info:
             loader.load_from_string(data, format="json")
         assert not isinstance(exc_info.value, AttributeError)
@@ -775,7 +775,7 @@ class TestAdversarialEmptyAndNullFields:
         loader = PolicyLoader()
         data = json.dumps({"version": "   ", "name": "Test", "rules": []})
         # "   " is a non-empty string so __post_init__ passes; this documents
-        # current behaviour — whitespace is accepted as version.
+        # current behaviour -- whitespace is accepted as version.
         # If stricter validation is added later, update this test.
         try:
             loader.load_from_string(data, format="json")

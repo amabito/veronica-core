@@ -4,7 +4,7 @@ Covers:
 1. Basic scheduling and callback firing
 2. Cancellation before deadline
 3. Multiple concurrent deadlines (priority ordering)
-4. Fallback path when pool raises (conceptual — tested via shutdown)
+4. Fallback path when pool raises (conceptual -- tested via shutdown)
 5. Adversarial: double-cancel is a no-op
 6. Adversarial: callback exception does not crash the pool
 7. Adversarial: schedule after shutdown raises
@@ -168,7 +168,7 @@ def test_schedule_after_shutdown_raises() -> None:
 
 
 def test_concurrent_schedules_no_deadlock() -> None:
-    """50 threads each scheduling one callback — no deadlock or crash."""
+    """50 threads each scheduling one callback -- no deadlock or crash."""
     pool = _pool()
     fired: list[int] = []
     lock = threading.Lock()
@@ -220,7 +220,7 @@ def test_execution_context_pool_cancel_on_exit_prevents_callback() -> None:
         max_cost_usd=100.0,
         max_steps=50,
         max_retries_total=5,
-        timeout_ms=500,  # 500ms — long enough to not fire during test
+        timeout_ms=500,  # 500ms -- long enough to not fire during test
     )
     # Exit context immediately (well before timeout)
     with ExecutionContext(config=config) as ctx:

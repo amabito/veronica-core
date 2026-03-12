@@ -1,4 +1,4 @@
-"""VERONICA Runner — sandboxed command execution."""
+"""VERONICA Runner -- sandboxed command execution."""
 
 from veronica_core.runner.sandbox import SandboxConfig, SandboxRunner
 

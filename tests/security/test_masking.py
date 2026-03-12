@@ -1,4 +1,4 @@
-"""Tests for SecretMasker — expanded secret classification (Phase E-2)."""
+"""Tests for SecretMasker -- expanded secret classification (Phase E-2)."""
 
 from __future__ import annotations
 
@@ -139,10 +139,10 @@ class TestTwilioMasking:
         assert "REDACTED:TWILIO_SID" in result
 
     def test_twilio_auth_token_is_masked(self, masker: SecretMasker) -> None:
-        # TWILIO_TOKEN pattern matches "twilio...token=value" — value gets masked
+        # TWILIO_TOKEN pattern matches "twilio...token=value" -- value gets masked
         result = masker.mask("twilio_token=secret_auth_token_value_here")
         assert "secret_auth_token_value_here" not in result
-        # Either TWILIO_TOKEN or PASSWORD_KV will catch it — either is correct
+        # Either TWILIO_TOKEN or PASSWORD_KV will catch it -- either is correct
         assert "REDACTED" in result
 
 
@@ -386,7 +386,7 @@ class TestMaskDictDepthLimit:
         """
         max_depth = masker._MAX_DEPTH
         # Build a dict nested exactly _MAX_DEPTH-1 levels; the leaf is a string
-        # that would normally be masked (plain text, no secrets here — just verify
+        # that would normally be masked (plain text, no secrets here -- just verify
         # the traversal reaches it and returns a string, not the bare value).
         leaf = "leaf_plain"
         d: dict = {"key": leaf}
@@ -398,7 +398,7 @@ class TestMaskDictDepthLimit:
         assert result is not None
 
         # Verify that a leaf exactly at the cutoff depth is returned unchanged
-        # (no crash, no masking error — pass-through is the safe behavior).
+        # (no crash, no masking error -- pass-through is the safe behavior).
         deep_leaf_dict: dict = {"secret_key": "skipped_at_limit"}
         for _ in range(max_depth):
             deep_leaf_dict = {"nested": deep_leaf_dict}
@@ -407,16 +407,16 @@ class TestMaskDictDepthLimit:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — attacker mindset
+# Adversarial tests -- attacker mindset
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialMasking:
-    """Adversarial tests for SecretMasker — type variation, concurrency, and
+    """Adversarial tests for SecretMasker -- type variation, concurrency, and
     self-referential containers that could crash or leak secrets."""
 
     # ------------------------------------------------------------------
-    # Gap #1: type variation — non-str values in mask_dict
+    # Gap #1: type variation -- non-str values in mask_dict
     # ------------------------------------------------------------------
 
     def test_int_value_under_sensitive_key_passes_through(
@@ -426,7 +426,7 @@ class TestAdversarialMasking:
 
         NOTE: The current implementation passes non-str/bytes/dict/list/tuple
         values through unchanged (_mask_value returns `value` as-is for 'other'
-        types). An int under a sensitive key like 'api_key' is NOT masked —
+        types). An int under a sensitive key like 'api_key' is NOT masked --
         this is the documented pass-through behavior.
         """
         d = {"api_key": 12345678}
@@ -454,7 +454,7 @@ class TestAdversarialMasking:
         secret_bytes = b"sk-" + b"T" * 48
         d = {"api_key": secret_bytes}
         result = masker.mask_dict(d)
-        # Implementation decodes bytes then runs mask() — secret must be redacted
+        # Implementation decodes bytes then runs mask() -- secret must be redacted
         result_str = str(result)
         assert secret_bytes.decode() not in result_str
         assert "REDACTED" in result_str
@@ -483,11 +483,11 @@ class TestAdversarialMasking:
         """Nested dicts mixing str and non-str values must not crash."""
         d = {
             "outer": {
-                "api_key": "sk-" + "T" * 48,  # str — must be masked
-                "count": 42,  # int — passes through
-                "ratio": 0.75,  # float — passes through
-                "active": True,  # bool — passes through
-                "tag": None,  # None — passes through
+                "api_key": "sk-" + "T" * 48,  # str -- must be masked
+                "count": 42,  # int -- passes through
+                "ratio": 0.75,  # float -- passes through
+                "active": True,  # bool -- passes through
+                "tag": None,  # None -- passes through
             }
         }
         result = masker.mask_dict(d)

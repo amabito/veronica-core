@@ -1,8 +1,8 @@
 """Fault injection tests (S-6).
 
 Verifies graceful handling of:
-1. JSONBackend with corrupted JSON file — must not crash, must return None.
-2. ShieldPipeline hook that raises an exception — pipeline must not silently swallow it.
+1. JSONBackend with corrupted JSON file -- must not crash, must return None.
+2. ShieldPipeline hook that raises an exception -- pipeline must not silently swallow it.
 """
 
 from __future__ import annotations

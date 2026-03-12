@@ -1,4 +1,4 @@
-"""SharedTimeoutPool — shared daemon-thread timeout scheduler.
+"""SharedTimeoutPool -- shared daemon-thread timeout scheduler.
 
 Replaces per-context threading.Thread with a single shared heap-based
 scheduler.  One daemon thread wakes up at the earliest deadline and fires
@@ -87,7 +87,7 @@ class SharedTimeoutPool:
     def cancel(self, handle: _Handle) -> None:
         """Cancel a previously scheduled callback.
 
-        Idempotent — safe to call multiple times or after the callback
+        Idempotent -- safe to call multiple times or after the callback
         has already fired (in which case cancel() is a no-op).
 
         C2 NOTE: If ``cancel()`` is called for a handle that has ALREADY fired

@@ -91,7 +91,7 @@ def _parse_to_schema(path: str | Path) -> PolicySchema:
 
 
 # ---------------------------------------------------------------------------
-# LoadedPolicy — wraps ShieldPipeline + schema + hooks (fix #3)
+# LoadedPolicy -- wraps ShieldPipeline + schema + hooks (fix #3)
 # ---------------------------------------------------------------------------
 
 
@@ -156,7 +156,7 @@ def _build_pipeline(
 
 
 # ---------------------------------------------------------------------------
-# WatchHandle — cancellable hot-reload handle (fix #5)
+# WatchHandle -- cancellable hot-reload handle (fix #5)
 # ---------------------------------------------------------------------------
 
 
@@ -283,7 +283,7 @@ class PolicyLoader:
             poll_interval: Polling interval in seconds (default 5.0).
 
         Returns:
-            WatchHandle — call handle.cancel() to stop watching.
+            WatchHandle -- call handle.cancel() to stop watching.
         """
         file_path = Path(path)
         handle = WatchHandle()

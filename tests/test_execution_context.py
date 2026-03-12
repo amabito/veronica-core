@@ -262,12 +262,12 @@ class TestAdversarialH3BackendOutsideLock:
         # full 0.3s. The test can't guarantee timing perfectly, but at least
         # verifies no deadlock / exception occurred.
         assert other_thread_got_snapshot.is_set(), (
-            "snapshot_thread never completed — possible lock held during backend IO"
+            "snapshot_thread never completed -- possible lock held during backend IO"
         )
 
 
 class TestAdversarialM4DedupPerformance:
-    """M4: _emit_chain_event O(1) dedup — should not degrade with 900+ events."""
+    """M4: _emit_chain_event O(1) dedup -- should not degrade with 900+ events."""
 
     def test_emit_chain_event_dedup_with_many_events(self):
         """Dedup must work correctly even near the _MAX_CHAIN_EVENTS cap."""
@@ -301,7 +301,7 @@ class TestAdversarialM4DedupPerformance:
         ctx.wrap_llm_call(
             fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
         )
-        # Third call: same budget exceeded event — must be deduped.
+        # Third call: same budget exceeded event -- must be deduped.
         ctx.wrap_llm_call(
             fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.001)
         )
@@ -580,7 +580,7 @@ class TestAdversarialExecutionContext:
         )
 
     def test_concurrent_step_limit_event_dedup(self):
-        """10 threads hit step limit simultaneously — CHAIN_STEP_LIMIT_EXCEEDED at most once."""
+        """10 threads hit step limit simultaneously -- CHAIN_STEP_LIMIT_EXCEEDED at most once."""
         config = ExecutionConfig(
             max_cost_usd=100.0, max_steps=1, max_retries_total=1000
         )
@@ -737,7 +737,7 @@ class TestAdversarialExecutionContext:
         )
         ctx = ExecutionContext(config=config)
 
-        # First call: backend.add() raises — context should handle gracefully
+        # First call: backend.add() raises -- context should handle gracefully
         # (implementation may swallow or propagate; we verify no corrupt state)
         try:
             ctx.wrap_llm_call(
@@ -750,7 +750,7 @@ class TestAdversarialExecutionContext:
         d2 = ctx.wrap_llm_call(
             fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.02)
         )
-        # At minimum, no exception — ALLOW or HALT are both acceptable outcomes
+        # At minimum, no exception -- ALLOW or HALT are both acceptable outcomes
         assert d2 in (Decision.ALLOW, Decision.HALT), f"Unexpected decision: {d2}"
 
         snap = ctx.get_snapshot()
@@ -985,7 +985,7 @@ class TestWrapFinallyStackCleanup:
         """A hook that raises unexpectedly must not leave the stack in a dirty state."""
 
         class BombPipeline:
-            """Pipeline hook that raises on before_llm_call — simulates unexpected error."""
+            """Pipeline hook that raises on before_llm_call -- simulates unexpected error."""
 
             def before_llm_call(self, ctx):
                 raise RuntimeError("unexpected hook bomb")
@@ -1081,7 +1081,7 @@ class TestNodesCap:
         snap = ctx.get_snapshot()
         assert len(snap.nodes) == _MAX_NODES
 
-        # Push 10 more beyond cap — must not grow list
+        # Push 10 more beyond cap -- must not grow list
         for _ in range(10):
             ctx.wrap_llm_call(
                 fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
@@ -1140,7 +1140,7 @@ class TestSilentExceptsLogged:
 
         class BrokenBreaker:
             def check(self, ctx):
-                # Return a permissive result — we just want the close to fail
+                # Return a permissive result -- we just want the close to fail
                 class Perm:
                     allowed = True
                     reason = ""
@@ -1420,7 +1420,7 @@ class TestComputeActualCostEventCap:
 
 
 class TestWrapBaseExceptionDoubleStackCheck:
-    """Bug fix: _wrap BaseException handler had redundant 'and stack' — verify cleanup."""
+    """Bug fix: _wrap BaseException handler had redundant 'and stack' -- verify cleanup."""
 
     def test_base_exception_cleans_stack_after_begin_graph_node(self):
         """When a hook raises after _begin_graph_node, the graph stack must be cleaned."""

@@ -1,4 +1,4 @@
-"""veronica_core.adapters.crewai — CrewAI event listener adapter.
+"""veronica_core.adapters.crewai -- CrewAI event listener adapter.
 
 Integrates VERONICA policy enforcement into CrewAI pipelines via the
 standard BaseEventListener / crewai_event_bus interface. Requires crewai.
@@ -6,7 +6,7 @@ standard BaseEventListener / crewai_event_bus interface. Requires crewai.
 This module raises ImportError on import if crewai is not installed.
 
 Public API:
-    VeronicaCrewAIListener — BaseEventListener subclass that:
+    VeronicaCrewAIListener -- BaseEventListener subclass that:
         - Monitors LLM call events to increment step counters and record costs.
         - Exposes ``check_or_raise()`` for explicit pre-call policy enforcement
           in CrewAI ``step_callback`` / ``task_callback`` integrations.
@@ -20,7 +20,7 @@ Public API:
 
     When ``execution_context`` is provided, the adapter enforces chain-level
     limits. The event bus handler (``on_llm_call_started``) still cannot raise
-    due to CrewAI swallowing handler exceptions — use ``check_or_raise()`` as
+    due to CrewAI swallowing handler exceptions -- use ``check_or_raise()`` as
     the ``step_callback`` for HALT enforcement.
 
 Usage (step_callback with ExecutionContext)::
@@ -311,7 +311,7 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
         if usage is None:
             return 0.0
 
-        # Extract token counts — support both attribute access and dict access
+        # Extract token counts -- support both attribute access and dict access
         prompt_tokens = get_field(usage, "prompt_tokens", "input_tokens")
         completion_tokens = get_field(usage, "completion_tokens", "output_tokens")
 

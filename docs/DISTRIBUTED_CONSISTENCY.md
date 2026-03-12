@@ -108,8 +108,7 @@ the rationale.
 ### TTL
 
 After each `INCRBYFLOAT`, the committed key TTL is reset via `EXPIRE` inside
-`lua_commit`. The default is 3600 seconds. This ensures that keys for completed chains
-expire automatically and do not accumulate indefinitely.
+`lua_commit`. The default is 3600 seconds. Keys for completed chains expire automatically and do not accumulate indefinitely.
 
 ---
 

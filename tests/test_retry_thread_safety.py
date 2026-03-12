@@ -194,7 +194,7 @@ class TestRetryLockReleasedDuringSleep:
         # check() must return in << 0.05s (the sleep duration).
         # Allow 30ms for scheduling jitter.
         assert check_elapsed[0] < 0.03, (
-            f"check() took {check_elapsed[0]:.3f}s — lock was held during sleep"
+            f"check() took {check_elapsed[0]:.3f}s -- lock was held during sleep"
         )
 
     def test_reset_not_blocked_during_retry_sleep(self):
@@ -225,5 +225,5 @@ class TestRetryLockReleasedDuringSleep:
         t.join()
 
         assert reset_elapsed[0] < 0.03, (
-            f"reset() took {reset_elapsed[0]:.3f}s — lock was held during sleep"
+            f"reset() took {reset_elapsed[0]:.3f}s -- lock was held during sleep"
         )

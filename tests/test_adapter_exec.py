@@ -163,7 +163,7 @@ class TestExecuteShellPolicy:
         exe, _ = _make_executor(engine=_allow_engine())
         mock_result = MagicMock(returncode=0, stdout="token=ABCD1234SECRET", stderr="")
         with patch("subprocess.run", return_value=mock_result):
-            # Just confirm execute_shell doesn't crash — masking is tested separately
+            # Just confirm execute_shell doesn't crash -- masking is tested separately
             rc, out, err = exe.execute_shell(["pytest"])
         assert rc == 0
 
@@ -172,7 +172,7 @@ class TestExecuteShellPathTraversal:
     """Path traversal via shell injection patterns must be blocked by policy."""
 
     def test_shell_operator_semicolon_denied(self) -> None:
-        """Semicolons are shell operators — policy must block them."""
+        """Semicolons are shell operators -- policy must block them."""
         engine = PolicyEngine()
         with tempfile.TemporaryDirectory() as root:
             cfg = AdapterConfig(
@@ -181,14 +181,14 @@ class TestExecuteShellPathTraversal:
                 caps=_make_caps(Capability.SHELL_BASIC),
             )
             exe = SecureExecutor(cfg)
-            # "cd /tmp && cat /etc/passwd" split as argv — pytest is allowed, but
+            # "cd /tmp && cat /etc/passwd" split as argv -- pytest is allowed, but
             # ";" as a standalone arg triggers SHELL_DENY_OPERATOR
-            # The real risk: argv=["sh", "-c", "..."] — sh is in DENY list
+            # The real risk: argv=["sh", "-c", "..."] -- sh is in DENY list
             with pytest.raises(SecurePermissionError):
                 exe.execute_shell(["sh", "-c", "cd /tmp && cat /etc/passwd"])
 
     def test_bash_exec_denied(self) -> None:
-        """bash is not in SHELL_ALLOW_COMMANDS — must be DENYed."""
+        """bash is not in SHELL_ALLOW_COMMANDS -- must be DENYed."""
         engine = PolicyEngine()
         with tempfile.TemporaryDirectory() as root:
             cfg = AdapterConfig(
@@ -201,7 +201,7 @@ class TestExecuteShellPathTraversal:
                 exe.execute_shell(["bash", "-c", "cat /etc/passwd"])
 
     def test_python_minus_c_denied(self) -> None:
-        """python -c <code> enables arbitrary execution — must be DENYed."""
+        """python -c <code> enables arbitrary execution -- must be DENYed."""
         engine = PolicyEngine()
         with tempfile.TemporaryDirectory() as root:
             cfg = AdapterConfig(
@@ -214,7 +214,7 @@ class TestExecuteShellPathTraversal:
                 exe.execute_shell(["python", "-c", "import os; os.system('id')"])
 
     def test_rm_rf_denied(self) -> None:
-        """rm is not in SHELL_ALLOW_COMMANDS — must be DENYed."""
+        """rm is not in SHELL_ALLOW_COMMANDS -- must be DENYed."""
         engine = PolicyEngine()
         with tempfile.TemporaryDirectory() as root:
             cfg = AdapterConfig(
@@ -227,7 +227,7 @@ class TestExecuteShellPathTraversal:
                 exe.execute_shell(["rm", "-rf", "/"])
 
     def test_curl_not_in_allowlist_denied(self) -> None:
-        """curl is not in SHELL_ALLOW_COMMANDS — must be DENYed."""
+        """curl is not in SHELL_ALLOW_COMMANDS -- must be DENYed."""
         engine = PolicyEngine()
         with tempfile.TemporaryDirectory() as root:
             cfg = AdapterConfig(
@@ -523,7 +523,7 @@ class TestWriteFile:
 
 
 class TestAdversarialExec:
-    """Adversarial tests — attacker mindset."""
+    """Adversarial tests -- attacker mindset."""
 
     def test_secure_permission_error_message_contains_rule_id(self) -> None:
         """SecurePermissionError str must include rule_id for auditability."""

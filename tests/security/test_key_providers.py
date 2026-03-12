@@ -213,7 +213,7 @@ class TestVaultKeyProvider:
 
 
 # ---------------------------------------------------------------------------
-# TestKeyProviderProtocol — custom class satisfies Protocol
+# TestKeyProviderProtocol -- custom class satisfies Protocol
 # ---------------------------------------------------------------------------
 
 
@@ -303,7 +303,7 @@ class TestPolicySignerV2WithKeyProvider:
         signer.sign(tmp_policy, priv_pem)
         sig_path = Path(str(tmp_policy) + ".sig.v2")
 
-        # Wrong file path but correct key_provider — should verify OK
+        # Wrong file path but correct key_provider -- should verify OK
         wrong_path = tmp_path / "wrong.pem"
         wrong_path.write_bytes(b"not_a_real_key")
         correct_provider = FileKeyProvider(pub_path)
@@ -387,12 +387,12 @@ class TestPolicyEngineWithKeyProvider:
 
 
 # ---------------------------------------------------------------------------
-# TestAdversarialKeyProvider — attacker mindset
+# TestAdversarialKeyProvider -- attacker mindset
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialKeyProvider:
-    """Adversarial tests for KeyProvider — corrupted input, concurrency, boundary abuse."""
+    """Adversarial tests for KeyProvider -- corrupted input, concurrency, boundary abuse."""
 
     # -- Corrupted input --
 
@@ -665,12 +665,12 @@ class TestAdversarialKeyProvider:
         # ConnectionError is subclass of OSError, so it's caught.
         # KeyError, TypeError, AttributeError are NOT caught by (OSError, RuntimeError).
         # UnicodeDecodeError is subclass of ValueError, caught by the ValueError handler.
-        # This test verifies actual behavior — if it crashes, we need to fix the code.
+        # This test verifies actual behavior -- if it crashes, we need to fix the code.
         try:
             result = weird_signer.verify(tmp_policy, sig_path)
             assert result is False
         except Exception:
-            # If it raises, the except clause is too narrow — flag for fix
+            # If it raises, the except clause is too narrow -- flag for fix
             pytest.fail(
                 f"verify() crashed when key_provider raised {exc_type.__name__}. "
                 "The except clause at policy_signing.py:289 needs broadening."

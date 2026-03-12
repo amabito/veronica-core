@@ -53,7 +53,7 @@ from veronica_core.adapters._mcp_base import (
     MCPToolStats,
     _MCPAdapterBase,
     _STATS_WARN_LIMIT,
-    _extract_token_count,  # noqa: F401 — re-exported for backward compatibility
+    _extract_token_count,  # noqa: F401 -- re-exported for backward compatibility
 )
 from veronica_core.circuit_breaker import CircuitBreaker, FailurePredicate
 from veronica_core.containment.execution_context import ExecutionContext
@@ -121,7 +121,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         # Cache backend reserve capability once (doesn't change after init).
         # True when the backend exposes reserve/commit/rollback (sync or async).
         # At call time we use inspect.isawaitable() on the return value to
-        # decide whether to await — this handles both async def and sync
+        # decide whether to await -- this handles both async def and sync
         # functions that return awaitables.
         _backend = getattr(self._ctx, "_budget_backend", None)
         self._backend_supports_reserve: bool = _backend is not None and hasattr(
@@ -148,7 +148,7 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
             }
 
     def get_tool_stats(self) -> dict[str, MCPToolStats]:
-        """Synchronous snapshot — safe only when called from a non-async context.
+        """Synchronous snapshot -- safe only when called from a non-async context.
 
         Callers inside an asyncio event loop should use ``get_tool_stats_async()``
         instead.  This override avoids attempting to acquire an asyncio.Lock from
@@ -331,10 +331,10 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                     await _cm
             except Exception as _commit_exc:  # noqa: BLE001
                 # Commit failed (expired, already committed, or backend error).
-                # Do NOT call add() — that would double-charge the budget if the
+                # Do NOT call add() -- that would double-charge the budget if the
                 # reservation was already flushed.  Accept the under-count and log.
                 logger.warning(
-                    "[ASYNC_MCP_ADAPTER] tool=%s commit(%s) failed: %s — cost may be untracked",
+                    "[ASYNC_MCP_ADAPTER] tool=%s commit(%s) failed: %s -- cost may be untracked",
                     tool_name,
                     _reservation_id,
                     _commit_exc,

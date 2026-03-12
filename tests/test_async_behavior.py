@@ -115,7 +115,7 @@ def test_async_each_call_gets_independent_container():
 
     async def _run():
         results = []
-        # Call 5 times — if containers were shared, steps=2 would block after 2 calls
+        # Call 5 times -- if containers were shared, steps=2 would block after 2 calls
         for _ in range(5):
             r = await _fn_with_step_limit()
             results.append(r)

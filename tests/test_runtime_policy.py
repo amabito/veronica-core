@@ -99,7 +99,7 @@ class TestPolicyDecision:
         assert d.partial_result == {"output": "partial"}
 
 
-# --- BudgetEnforcer policy — parametrized table ---
+# --- BudgetEnforcer policy -- parametrized table ---
 
 
 @pytest.mark.parametrize(
@@ -243,7 +243,7 @@ class TestRetryContainerPolicy:
         assert RetryContainer().policy_type == "retry_budget"
 
 
-# --- CircuitBreaker state transitions — parametrized table ---
+# --- CircuitBreaker state transitions -- parametrized table ---
 
 
 @pytest.mark.parametrize(

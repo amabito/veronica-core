@@ -84,7 +84,7 @@ class TestAsyncBudgetAtomicity:
             adapter, backend = make_adapter()
             result = await adapter.wrap_tool_call("test_tool", {}, error_fn)
             assert result.success is False
-            # No cost committed — reservation was rolled back
+            # No cost committed -- reservation was rolled back
             assert backend.get() == 0.0
             assert backend.get_reserved() == 0.0
 

@@ -1,4 +1,4 @@
-"""LoggingContainmentMetrics — reference implementation of ContainmentMetricsProtocol.
+"""LoggingContainmentMetrics -- reference implementation of ContainmentMetricsProtocol.
 
 Forwards all containment telemetry to Python's logging module using structured
 log records. Useful as a default when no external metrics backend is available,

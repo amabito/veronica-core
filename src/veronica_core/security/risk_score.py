@@ -166,7 +166,7 @@ class RiskAwareShieldFactory:
         """Create a wired ShieldPipeline with risk score tracking.
 
         Returns:
-            (pipeline, accumulator) — callers can check accumulator.is_safe_mode.
+            (pipeline, accumulator) -- callers can check accumulator.is_safe_mode.
         """
         from veronica_core.security.policy_engine import PolicyHook
         from veronica_core.shield.pipeline import ShieldPipeline

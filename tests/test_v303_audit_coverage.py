@@ -100,7 +100,7 @@ class TestExfilBackslashUserinfo:
     """Backslash in userinfo must not confuse hostname resolution."""
 
     def test_backslash_at_in_url_does_not_bypass(self) -> None:
-        """https://evil.com\\@pypi.org/... — ensure exfil check still runs."""
+        """https://evil.com\\@pypi.org/... -- ensure exfil check still runs."""
         b64 = base64.b64encode(b"SUPERSECRETAPIKEY123456").decode()
         # Even if hostname resolves to pypi.org, userinfo contains exfil data
         url = f"https://{b64}@example.com/path"

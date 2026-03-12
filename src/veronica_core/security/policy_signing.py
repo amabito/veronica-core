@@ -1,7 +1,7 @@
 """Policy tamper resistance via HMAC-SHA256 signing (v1) and ed25519 signing (v2).
 
-PolicySigner  — HMAC-SHA256 using stdlib only (zero extra dependencies).
-PolicySignerV2 — ed25519 using the 'cryptography' package (conditional import).
+PolicySigner  -- HMAC-SHA256 using stdlib only (zero extra dependencies).
+PolicySignerV2 -- ed25519 using the 'cryptography' package (conditional import).
 
 If 'cryptography' is not installed, _ED25519_AVAILABLE is False and
 PolicySignerV2 raises RuntimeError on any operation that requires the key.
@@ -101,7 +101,7 @@ def _load_key() -> bytes:
 
     logger.warning(
         "policy_signing: %s is not set; falling back to built-in development "
-        "key. This key is publicly known — set the env var before deploying.",
+        "key. This key is publicly known -- set the env var before deploying.",
         _ENV_KEY_VAR,
     )
     return _derive_test_key()
@@ -257,7 +257,7 @@ class PolicySigner:
 
 
 # ---------------------------------------------------------------------------
-# PolicySignerV2 — ed25519 asymmetric signing
+# PolicySignerV2 -- ed25519 asymmetric signing
 # ---------------------------------------------------------------------------
 
 _DEFAULT_PUBLIC_KEY_PATH = Path(__file__).parents[4] / "policies" / "public_key.pem"

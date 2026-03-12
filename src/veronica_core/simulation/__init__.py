@@ -1,14 +1,14 @@
-"""veronica_core.simulation — Policy simulation and what-if analysis.
+"""veronica_core.simulation -- Policy simulation and what-if analysis.
 
 Replay historical execution logs against policy configurations to answer
 "what would have happened if this policy had been active?" questions.
 
 Public API:
-    ExecutionLogEntry — single recorded action (LLM call, tool call, etc.)
-    ExecutionLog      — collection of log entries with OTel import support
-    PolicySimulator   — replays a log against a ShieldPipeline
-    SimulationReport  — summary of simulation results
-    SimulationEvent   — individual policy decision during simulation
+    ExecutionLogEntry -- single recorded action (LLM call, tool call, etc.)
+    ExecutionLog      -- collection of log entries with OTel import support
+    PolicySimulator   -- replays a log against a ShieldPipeline
+    SimulationReport  -- summary of simulation results
+    SimulationEvent   -- individual policy decision during simulation
 
 Usage::
 

@@ -1,4 +1,4 @@
-"""Tests for G-2: Supply Chain Guard — pip/npm REQUIRE_APPROVAL + SBOM."""
+"""Tests for G-2: Supply Chain Guard -- pip/npm REQUIRE_APPROVAL + SBOM."""
 
 from __future__ import annotations
 

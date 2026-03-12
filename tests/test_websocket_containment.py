@@ -45,7 +45,7 @@ def _make_config(*, max_steps: int = 100) -> ExecutionConfig:
 
 
 def _halting_config() -> ExecutionConfig:
-    """Config with max_cost_usd=0.0 — halts on pre-flight."""
+    """Config with max_cost_usd=0.0 -- halts on pre-flight."""
     return ExecutionConfig(
         max_cost_usd=0.0,
         max_steps=100,

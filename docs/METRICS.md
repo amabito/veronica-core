@@ -60,7 +60,7 @@ timestamp,event_type,entity_id,status,signal
 1771200001.0,recovery,system,success,state_restored
 ```
 
-**Why it matters**: Real-world systems crash. VERONICA's atomic persistence ensures zero data loss even after hard kills.
+**Why it matters**: Real-world systems crash. VERONICA's atomic persistence targets zero data loss even after hard kills.
 
 **Example**:
 ```
@@ -328,11 +328,11 @@ signal.signal(signal.SIGINT, log_crash)
 
 ## Conclusion
 
-VERONICA Core's metrics are **transparent, reproducible, and verifiable**:
-- ✅ All metrics computable from CSV logs (stdlib only)
-- ✅ Clear definitions and formulas
-- ✅ Sample log format provided
-- ✅ Production baseline reference included
+VERONICA Core's metrics are transparent, reproducible, and verifiable:
+- All metrics computable from CSV logs (stdlib only)
+- Clear definitions and formulas
+- Sample log format provided
+- Production baseline reference included
 
 **For metric aggregation**: See `scripts/metrics_aggregate.py`
 

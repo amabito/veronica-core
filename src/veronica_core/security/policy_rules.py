@@ -883,7 +883,7 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
             skip_next = True
             continue
         if token.startswith("-"):
-            # Handle --option=value (e.g. --git-dir=/tmp) — single token
+            # Handle --option=value (e.g. --git-dir=/tmp) -- single token
             continue
         subcmd = token.lower()
         break

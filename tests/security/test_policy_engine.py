@@ -320,7 +320,7 @@ class TestV0102SecurityFixes:
         """python -c '...' must be DENY (inline code execution, no file needed).
 
         The test payload intentionally avoids shell operators (;, $, etc.) to
-        confirm that SHELL_DENY_INLINE_EXEC fires — not SHELL_DENY_OPERATOR.
+        confirm that SHELL_DENY_INLINE_EXEC fires -- not SHELL_DENY_OPERATOR.
         """
         engine = _engine()
         ctx = _ctx("shell", ["python", "-c", "print('pwned')"])
@@ -567,7 +567,7 @@ class TestV0103SecurityFixes:
 
 
 # ---------------------------------------------------------------------------
-# v0.10.4 Security Regression Tests — go run/generate shell injection (R-6)
+# v0.10.4 Security Regression Tests -- go run/generate shell injection (R-6)
 # ---------------------------------------------------------------------------
 
 
@@ -632,7 +632,7 @@ class TestV0104GoShellInjection:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — other-language inline exec + SSRF prevention (attacker mindset)
+# Adversarial tests -- other-language inline exec + SSRF prevention (attacker mindset)
 # ---------------------------------------------------------------------------
 
 

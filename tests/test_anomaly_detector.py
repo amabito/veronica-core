@@ -88,7 +88,7 @@ class TestWelfordNumericalStability:
 
     def test_welford_matches_expected_mean_std(self):
         """Verify Welford's mean and std on a simple known dataset."""
-        # Dataset: [1, 2, 3, 4, 5] — mean=3, sample_std=sqrt(2.5)≈1.581
+        # Dataset: [1, 2, 3, 4, 5] -- mean=3, sample_std=sqrt(2.5)≈1.581
         detector = AnomalyDetector(min_samples=5)
         for v in [1.0, 2.0, 3.0, 4.0, 5.0]:
             detector.record("known", v)

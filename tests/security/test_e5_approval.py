@@ -342,7 +342,7 @@ class TestNonceRegistry:
         assert registry.consume("n2") is True
         # n3 rejected (fail-closed): registry full with live nonces
         assert registry.consume("n3") is False
-        # n1 still tracked — replay also rejected
+        # n1 still tracked -- replay also rejected
         assert registry.consume("n1") is False
 
     def test_thread_safety(self) -> None:
@@ -369,7 +369,7 @@ class TestNonceRegistry:
 
 
 # ---------------------------------------------------------------------------
-# Backward compatibility — v1 sign still works
+# Backward compatibility -- v1 sign still works
 # ---------------------------------------------------------------------------
 
 

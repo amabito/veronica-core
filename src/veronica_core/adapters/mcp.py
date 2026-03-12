@@ -48,7 +48,7 @@ from veronica_core.adapters._mcp_base import (
     MCPToolStats,
     _MCPAdapterBase,
     _STATS_WARN_LIMIT,
-    _extract_token_count,  # noqa: F401 — re-exported for backward compatibility
+    _extract_token_count,  # noqa: F401 -- re-exported for backward compatibility
 )
 from veronica_core.circuit_breaker import FailurePredicate
 from veronica_core.containment.execution_context import ExecutionContext

@@ -101,7 +101,7 @@ class SecureExecutor:
     ) -> tuple[int, str, str]:
         """Execute *argv* as a subprocess with policy enforcement.
 
-        Never accepts a string command — shell=False is enforced to
+        Never accepts a string command -- shell=False is enforced to
         prevent command injection.
 
         Args:

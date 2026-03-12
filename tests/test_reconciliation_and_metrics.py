@@ -165,7 +165,7 @@ def test_reconciliation_callback_wrap_tool_call_also_triggers() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Item 3b: MetricsProtocol connection — record_tokens
+# Item 3b: MetricsProtocol connection -- record_tokens
 # ---------------------------------------------------------------------------
 
 
@@ -240,7 +240,7 @@ def test_record_tokens_exception_swallowed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Item 3b: MetricsProtocol connection — record_circuit_state
+# Item 3b: MetricsProtocol connection -- record_circuit_state
 # ---------------------------------------------------------------------------
 
 

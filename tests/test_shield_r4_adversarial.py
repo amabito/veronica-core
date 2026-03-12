@@ -40,7 +40,7 @@ def _degrade_event(event_type: str = "BUDGET_WINDOW_EXCEEDED") -> SafetyEvent:
 
 
 # ---------------------------------------------------------------------------
-# S1: HALT appends timestamp — subsequent calls still see saturated window
+# S1: HALT appends timestamp -- subsequent calls still see saturated window
 # ---------------------------------------------------------------------------
 
 

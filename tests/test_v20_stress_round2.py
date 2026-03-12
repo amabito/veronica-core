@@ -210,7 +210,7 @@ class TestTimeoutWithSlowFn:
 
     def test_wrap_returns_halt_after_timeout(self) -> None:
         """After timeout, wrap_llm_call must return HALT without calling fn."""
-        config = _make_config(timeout_ms=1)  # 1ms — fires almost immediately
+        config = _make_config(timeout_ms=1)  # 1ms -- fires almost immediately
         ctx = ExecutionContext(config=config)
 
         # Wait for timeout to fire
@@ -247,7 +247,7 @@ class TestTimeoutWithSlowFn:
         interrupted = threading.Event()
 
         def slow_fn_that_checks_cancellation() -> None:
-            # Poll cancellation token — cooperative cancel
+            # Poll cancellation token -- cooperative cancel
             for _ in range(200):
                 if ctx._cancellation_token.is_cancelled:
                     interrupted.set()
@@ -364,7 +364,7 @@ class TestParentChildConcurrentWrap:
 
 
 # ---------------------------------------------------------------------------
-# Test 4: SharedTimeoutPool — schedule 100, cancel 50, verify 50 fire
+# Test 4: SharedTimeoutPool -- schedule 100, cancel 50, verify 50 fire
 # ---------------------------------------------------------------------------
 
 
@@ -411,7 +411,7 @@ class TestSharedTimeoutPoolCancelAccuracy:
         assert len(set(fired)) == 50, "No duplicate callbacks"
 
     def test_rapid_schedule_1000_items(self) -> None:
-        """Schedule 1000 items rapidly then shut down — no crash or hang."""
+        """Schedule 1000 items rapidly then shut down -- no crash or hang."""
         pool = SharedTimeoutPool()
         far_future = time.monotonic() + 3600.0  # Never fires during test
 
@@ -425,7 +425,7 @@ class TestSharedTimeoutPoolCancelAccuracy:
             pool.cancel(h)
 
         pool.shutdown()
-        # No assertion needed — just must not crash or deadlock
+        # No assertion needed -- just must not crash or deadlock
 
     def test_cancel_after_fire_is_noop(self) -> None:
         """Cancelling an already-fired handle must not raise."""
@@ -436,13 +436,13 @@ class TestSharedTimeoutPoolCancelAccuracy:
         time.sleep(0.2)
         assert fired, "Callback must have fired"
 
-        # Cancel after fire — must be a no-op
+        # Cancel after fire -- must be a no-op
         pool.cancel(h)  # Should not raise
         pool.shutdown()
 
 
 # ---------------------------------------------------------------------------
-# Test 5: LocalBudgetBackend — 50 threads reserve+commit or reserve+rollback
+# Test 5: LocalBudgetBackend -- 50 threads reserve+commit or reserve+rollback
 # ---------------------------------------------------------------------------
 
 
@@ -515,7 +515,7 @@ class TestLocalBudgetBackendConcurrency:
                 rid = backend.reserve(amount, ceiling)
             except OverflowError:
                 return
-            # Always commit or rollback — never leave dangling
+            # Always commit or rollback -- never leave dangling
             if random.random() < 0.5:
                 try:
                     backend.commit(rid)

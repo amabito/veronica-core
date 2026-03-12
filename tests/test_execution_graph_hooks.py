@@ -55,7 +55,7 @@ def _add_llm_node(g: ExecutionGraph) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — happy path
+# Unit tests -- happy path
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +112,7 @@ def test_add_observer_dedup() -> None:
     g = _make_graph()
     obs = _RecordingObserver()
     g.add_observer(obs)
-    g.add_observer(obs)  # duplicate — should be no-op
+    g.add_observer(obs)  # duplicate -- should be no-op
 
     nid = _add_llm_node(g)
     g.mark_running(nid)
@@ -399,7 +399,7 @@ def test_add_observer_during_notification() -> None:
         def on_node_complete(self, node_id, cost_usd, duration_ms):
             if not self._added:
                 self._added = True
-                # Adding an observer during notification — must not deadlock
+                # Adding an observer during notification -- must not deadlock
                 self._graph.add_observer(self._inner)
 
         def on_node_failed(self, *args):
@@ -488,7 +488,7 @@ def test_subscriber_dedup_same_callback() -> None:
     events: list[NodeEvent] = []
     cb = events.append
     g.add_subscriber(cb)
-    g.add_subscriber(cb)  # duplicate — should be no-op
+    g.add_subscriber(cb)  # duplicate -- should be no-op
 
     nid = _add_llm_node(g)
     g.mark_success(nid, cost_usd=0.0)
@@ -500,7 +500,7 @@ def test_remove_subscriber_identity_semantics() -> None:
     """remove_subscriber uses identity (is), not equality (__eq__) (F3 fix)."""
 
     class _EqAlways:
-        """Callable whose __eq__ always returns True — would confuse != based removal."""
+        """Callable whose __eq__ always returns True -- would confuse != based removal."""
 
         def __call__(self, ev: NodeEvent) -> None:
             pass
@@ -516,7 +516,7 @@ def test_remove_subscriber_identity_semantics() -> None:
     b = _EqAlways()
     g.add_subscriber(a)
     g.add_subscriber(b)
-    # Remove b by identity — a must survive despite a == b being True
+    # Remove b by identity -- a must survive despite a == b being True
     g.remove_subscriber(b)
 
     # Verify a is still in subscriber list after removing b

@@ -179,7 +179,7 @@ def test_redis_backend_reconciles_fallback_delta_on_reconnect():
     backend.add(0.10)
     assert abs(backend.get() - 0.10) < 1e-9
 
-    # Step 2: simulate Redis outage — force fallback, accumulate locally
+    # Step 2: simulate Redis outage -- force fallback, accumulate locally
     backend._using_fallback = True
     backend._fallback.add(0.20)
 
@@ -300,7 +300,7 @@ def test_try_reconnect_failure_preserves_using_fallback():
 
 
 def test_seeded_failover_reconcile_does_not_double_count():
-    """After seeded failover, reconcile must flush only the delta — not the full total.
+    """After seeded failover, reconcile must flush only the delta -- not the full total.
 
     Scenario:
     1. Redis has 10.0 USD accumulated.
@@ -576,7 +576,7 @@ class TestRedactExc:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — H1 redact, H4 TOCTOU, M1 reconnect race
+# Adversarial tests -- H1 redact, H4 TOCTOU, M1 reconnect race
 # ---------------------------------------------------------------------------
 
 
@@ -584,7 +584,7 @@ class TestAdversarialRedactExcInLogs:
     """H1: All Redis exception log calls must use _redact_exc, never raw exc.
 
     Attacker mindset: an exception message can contain
-    'redis://user:password@host/db' — verifies that credential strings
+    'redis://user:password@host/db' -- verifies that credential strings
     never appear in log output.
     """
 
@@ -821,7 +821,7 @@ class TestAdversarialM1ReconnectRaceUnderConcurrency:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — DistributedCircuitBreaker TOCTOU, fallback flip, reconnect race
+# Adversarial tests -- DistributedCircuitBreaker TOCTOU, fallback flip, reconnect race
 # ---------------------------------------------------------------------------
 
 
@@ -867,7 +867,7 @@ class TestAdversarialDistributedCBTOCTOU:
 
     Attacker mindset: 10 threads all see HALF_OPEN simultaneously and race to
     claim the single test slot.  The Lua script atomicity must ensure exactly
-    one wins — no split-brain where 0 or 2+ threads are allowed through.
+    one wins -- no split-brain where 0 or 2+ threads are allowed through.
     """
 
     def test_adversarial_half_open_slot_exactly_one_claimant_under_concurrency(
@@ -931,7 +931,7 @@ class TestAdversarialDistributedCBTOCTOU:
 
         If the process that claimed the slot crashes (slot held indefinitely),
         the half_open_slot_timeout releases it automatically.  The next caller
-        should then claim the slot — not be blocked forever.
+        should then claim the slot -- not be blocked forever.
         """
         from veronica_core.runtime_policy import PolicyContext
 
@@ -961,7 +961,7 @@ class TestAdversarialDistributedCBTOCTOU:
         fake_client.expire(dcb._key, 3600)
 
         ctx = PolicyContext()
-        # The slot is stale — check() should auto-release and allow this caller.
+        # The slot is stale -- check() should auto-release and allow this caller.
         decision = dcb.check(ctx)
         assert decision.allowed, (
             "check() must allow the caller when the stale HALF_OPEN slot is auto-released "
@@ -1073,7 +1073,7 @@ class TestAdversarialDistributedCBConcurrentFallbackFlip:
             t.join()
 
         assert len(decisions) == 10, "All threads must complete"
-        # In fallback (local CircuitBreaker), CLOSED state — all should be allowed.
+        # In fallback (local CircuitBreaker), CLOSED state -- all should be allowed.
         assert all(decisions), (
             f"All check() calls on fallback CLOSED circuit must be allowed, "
             f"but got: {decisions}"
@@ -1187,7 +1187,7 @@ class TestAdversarialDistributedCBReconnectRace:
             dcb._fallback._state = CircuitState.CLOSED
             dcb._fallback._last_failure_time = time.time()
 
-        # Step 4: simulate reconnect — call _reconcile_on_reconnect directly.
+        # Step 4: simulate reconnect -- call _reconcile_on_reconnect directly.
         # At this point dcb._using_fallback is False (not in fallback mode) and
         # dcb._client is fake_client (working), so reconcile should succeed.
         reconciled = dcb._reconcile_on_reconnect()
@@ -1210,7 +1210,7 @@ class TestAdversarialDistributedCBReconnectRace:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — RedisBudgetBackend: add/get race, reset, reconcile
+# Adversarial tests -- RedisBudgetBackend: add/get race, reset, reconcile
 # ---------------------------------------------------------------------------
 
 
@@ -1257,7 +1257,7 @@ class TestAdversarialRedisBudgetAddGetRace:
         assert len(add_results) == 5, "All 5 add() threads must complete"
         assert len(get_results) == 5, "All 5 get() threads must complete"
 
-        # Final total must reflect all 5 add(1.0) calls — no lost increments.
+        # Final total must reflect all 5 add(1.0) calls -- no lost increments.
         final = backend.get()
         assert abs(final - 5.0) < 1e-6, (
             f"Final total must be 5.0 (5 x 1.0 added), got {final}; "
@@ -1398,7 +1398,7 @@ class TestAdversarialRedisBudgetResetConcurrency:
             )
 
         # Verify final state is consistent: get() must match the last add() return
-        # (within tolerance — concurrent nature means brief windows of mismatch).
+        # (within tolerance -- concurrent nature means brief windows of mismatch).
         final_2 = backend.get()
         assert abs(final_2 - final) < 1e-3 or final_2 >= final, (
             f"get() must be stable or monotonic after threads finish, "
@@ -1411,7 +1411,7 @@ class TestAdversarialRedisBudgetReconcileConnectionFailure:
 
     _reconcile_on_reconnect() reads the local delta and attempts INCRBYFLOAT.
     If the connection drops during execute(), the delta must remain in the
-    local fallback — it must not be silently discarded.
+    local fallback -- it must not be silently discarded.
 
     This is a regression test for the 'undercount on partial reconcile' pattern:
     if the delta were cleared before confirming the write, a connection drop
@@ -1460,7 +1460,7 @@ class TestAdversarialRedisBudgetReconcileConnectionFailure:
         assert result is False, (
             "_reconcile_on_reconnect must return False when connection drops"
         )
-        # The delta must still be in the fallback — not discarded.
+        # The delta must still be in the fallback -- not discarded.
         remaining_delta = backend._fallback.get() - backend._fallback_seed_base
         assert abs(remaining_delta - 0.75) < 1e-9, (
             f"Delta must be preserved after failed reconcile; "
@@ -1513,7 +1513,7 @@ class TestAdversarialRedisBudgetReconcileConnectionFailure:
 
 
 class TestAdversarialGetTOCTOU:
-    """H2: Verify get() TOCTOU fix — client reference captured under lock.
+    """H2: Verify get() TOCTOU fix -- client reference captured under lock.
 
     Before the fix, _using_fallback could flip between the check (L290) and
     the Redis read (L293), causing get() to read from a stale/closed client.

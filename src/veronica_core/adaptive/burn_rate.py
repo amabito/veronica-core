@@ -1,4 +1,4 @@
-"""BurnRateEstimator — Sliding-window cost burn rate for predictive budget control.
+"""BurnRateEstimator -- Sliding-window cost burn rate for predictive budget control.
 
 Tracks a sliding window of cost events and provides:
   - current_rate(): cost per second within the window
@@ -176,7 +176,7 @@ class BurnRateEstimator:
             self._ema_rate = None
             return
         # Use the span of all recorded events for the instantaneous rate.
-        # _total_cost is maintained incrementally — no O(n) sum() needed.
+        # _total_cost is maintained incrementally -- no O(n) sum() needed.
         oldest_ts = self._events[0][0]
         newest_ts = self._events[-1][0]
         span = newest_ts - oldest_ts

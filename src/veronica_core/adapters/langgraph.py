@@ -1,21 +1,21 @@
-"""veronica_core.adapters.langgraph — LangGraph node wrapper and callback handler.
+"""veronica_core.adapters.langgraph -- LangGraph node wrapper and callback handler.
 
 Integrates VERONICA policy enforcement into LangGraph pipelines via two
 complementary approaches:
 
-1. VeronicaLangGraphCallback — mirrors the VeronicaCallbackHandler interface
+1. VeronicaLangGraphCallback -- mirrors the VeronicaCallbackHandler interface
    for use in LangGraph's callback system (LangGraph uses the same LangChain
    callback interface internally).
 
-2. veronica_node_wrapper() — a decorator that wraps any LangGraph node
+2. veronica_node_wrapper() -- a decorator that wraps any LangGraph node
    function with VERONICA policy enforcement (pre-node check + post-node
    step/cost recording).
 
 This module raises ImportError on import if langgraph is not installed.
 
 Public API:
-    VeronicaLangGraphCallback — callback handler for LangGraph pipelines.
-    veronica_node_wrapper     — node decorator for direct LangGraph integration.
+    VeronicaLangGraphCallback -- callback handler for LangGraph pipelines.
+    veronica_node_wrapper     -- node decorator for direct LangGraph integration.
 
 Usage::
 
@@ -37,7 +37,7 @@ Usage::
 from __future__ import annotations
 
 try:
-    import langgraph  # noqa: F401 — presence check only
+    import langgraph  # noqa: F401 -- presence check only
 except ImportError as _exc:
     raise ImportError(
         "veronica_core.adapters.langgraph requires langgraph. "

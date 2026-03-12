@@ -12,8 +12,8 @@ Usage:
     python tools/verify_release.py --policy policies/default.yaml
 
 Exit codes:
-    0 — all checks passed
-    1 — one or more checks failed
+    0 -- all checks passed
+    1 -- one or more checks failed
 """
 
 from __future__ import annotations

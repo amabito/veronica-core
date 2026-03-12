@@ -1,4 +1,4 @@
-"""MetricsDrivenPolicy — OTel metrics-based runtime policy for VERONICA.
+"""MetricsDrivenPolicy -- OTel metrics-based runtime policy for VERONICA.
 
 Evaluates per-agent metrics (cost, tokens, latency, errors) against
 declarative MetricRule thresholds and returns PolicyDecision.
@@ -299,7 +299,7 @@ class MetricsDrivenPolicy:
             context: PolicyContext (entity_id used as fallback agent_id).
 
         Returns:
-            PolicyDecision — first triggered rule, or allow-all if none.
+            PolicyDecision -- first triggered rule, or allow-all if none.
         """
         ingester = self._ingester or get_default_ingester()
 
@@ -411,7 +411,7 @@ class MetricsDrivenPolicy:
             return ingester.get_metrics(agent_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "MetricsDrivenPolicy: ingester.get_agent_metrics(%r) failed: %s — rules skipped for this agent",
+                "MetricsDrivenPolicy: ingester.get_agent_metrics(%r) failed: %s -- rules skipped for this agent",
                 agent_id,
                 exc,
             )

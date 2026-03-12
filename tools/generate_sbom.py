@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Software Bill of Materials (SBOM) using stdlib importlib.metadata.
 
-Zero external dependencies — uses only the Python standard library.
+Zero external dependencies -- uses only the Python standard library.
 
 Usage:
     python tools/generate_sbom.py [output.json]

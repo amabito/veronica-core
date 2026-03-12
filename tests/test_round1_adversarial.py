@@ -170,7 +170,7 @@ class TestCrewAIEstimateCostExotic:
         assert _estimate_cost(ev) == 0.0
 
     def test_string_token_counts_return_zero(self) -> None:
-        """String token values (not int) must not crash — caught by ValueError."""
+        """String token values (not int) must not crash -- caught by ValueError."""
         usage = SimpleNamespace(prompt_tokens="abc", completion_tokens="xyz")
         ev = _make_event(response=SimpleNamespace(usage=usage))
         assert _estimate_cost(ev) == 0.0
@@ -180,7 +180,7 @@ class TestCrewAIEstimateCostExotic:
         usage = SimpleNamespace(prompt_tokens=-100, completion_tokens=-50)
         ev = _make_event(response=SimpleNamespace(usage=usage))
         result = _estimate_cost(ev)
-        # May return a (small) negative cost from pricing formula — just must not crash
+        # May return a (small) negative cost from pricing formula -- just must not crash
         assert isinstance(result, float)
 
     def test_nan_token_total_returns_zero(self) -> None:

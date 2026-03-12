@@ -753,7 +753,7 @@ none
 
 ### Added
 
-- `docs/V2_DEFERRED.md`: Comprehensive list of v2.0 deferred architectural items.
+- `docs/V2_DEFERRED.md`: Full list of v2.0 deferred architectural items.
 
 ---
 

@@ -219,7 +219,7 @@ class TestBudgetToDictConsistency:
 
 
 # ---------------------------------------------------------------------------
-# Constructor validation — NaN / Inf / negative limit_usd
+# Constructor validation -- NaN / Inf / negative limit_usd
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""BudgetAllocator — multi-agent budget distribution for ExecutionContext.
+"""BudgetAllocator -- multi-agent budget distribution for ExecutionContext.
 
 Provides a Protocol and concrete implementations for distributing a parent
 budget across named child agents. Integrates with ExecutionContext.create_child()
@@ -169,7 +169,7 @@ class WeightedAllocator:
         total_weight = sum(relevant.values())
 
         if total_weight == 0.0:
-            # All weights zero — fall back to equal split.
+            # All weights zero -- fall back to equal split.
             share = total_budget / len(agent_names)
             allocations = {name: share for name in agent_names}
             total_allocated = share * len(agent_names)
@@ -234,7 +234,7 @@ class DynamicAllocator:
         total_usage = sum(usage.values())
 
         if total_usage < 1e-12:
-            # No meaningful usage signal (zero or near-zero float noise) — equal split.
+            # No meaningful usage signal (zero or near-zero float noise) -- equal split.
             share = total_budget / n
             allocations = {name: share for name in agent_names}
         else:

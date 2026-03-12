@@ -1,5 +1,5 @@
 # Refactored: limit-checking extracted to _limit_checker.py, event-log to _chain_event_log.py
-"""ExecutionContext — chain-level containment for VERONICA agent runs.
+"""ExecutionContext -- chain-level containment for VERONICA agent runs.
 
 Provides a lifespan-scoped container that enforces chain-wide limits
 (cost ceiling, step limit, retry budget, timeout) across all LLM and
@@ -34,7 +34,7 @@ Usage::
 #   - CircuitBreaker.check() wired before fn() dispatch (breaker_check stage)
 #   - pipeline.before_charge() wired after cost computed, before accumulation
 #   - kind="tool" routes to pipeline.before_tool_call(); before_charge skipped
-# v0.11 — WrapOptions.partial_buffer field; _current_partial_buffer ContextVar;
+# v0.11 -- WrapOptions.partial_buffer field; _current_partial_buffer ContextVar;
 #          get_current_partial_buffer(); ExecutionContext.get_partial_result().
 # ---------------------------------------------------------------------------
 
@@ -794,7 +794,7 @@ class ExecutionContext:
         depth = self._nesting_depth_var.get()
         stack: list[str] | None = self._node_stack_var.get()
         if depth == 0 or stack is None:
-            # First wrap in this context — start with a fresh list regardless of
+            # First wrap in this context -- start with a fresh list regardless of
             # any inherited non-None reference (fixes asyncio context-copy sharing).
             stack = []
             self._node_stack_var.set(stack)
@@ -1303,7 +1303,7 @@ class ExecutionContext:
                         exc_info=True,
                     )
 
-        # H3: Move backend.add()/commit() outside lock — backend has its own internal
+        # H3: Move backend.add()/commit() outside lock -- backend has its own internal
         # locking and may perform blocking Redis IO. Holding _lock during that
         # call would stall all other threads for the full round-trip latency.
         if reservation_id is not None:

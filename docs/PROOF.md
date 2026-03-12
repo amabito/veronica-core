@@ -20,7 +20,7 @@ VERONICA Core has been battle-tested in a production autonomous trading bot hand
 
 **Purpose**: Verify that emergency SAFE_MODE state persists across process restarts.
 
-### Why This Matters
+### Context
 In autonomous systems, SAFE_MODE is the last line of defense. If an operator manually halts all operations (e.g., detected runaway behavior), the system MUST remain halted even after accidental restart. Failing this test means the system could resume dangerous operations without human approval.
 
 ### Reproduction Steps
@@ -97,8 +97,8 @@ assert veronica_new.state.current_state == VeronicaState.SAFE_MODE
 
 **Purpose**: Verify cooldown persistence across SIGKILL (untrappable kill signal).
 
-### Why This Matters
-SIGKILL cannot be caught by signal handlers. If the process is killed mid-operation (e.g., system OOM killer, admin `kill -9`), the last persisted state MUST be recoverable. This prevents cooldown loss and ensures circuit breaker protection survives crashes.
+### Context
+SIGKILL cannot be caught by signal handlers. If the process is killed mid-operation (e.g., system OOM killer, admin `kill -9`), the last persisted state MUST be recoverable. This prevents cooldown loss; circuit breaker protection must survive crashes.
 
 ### Reproduction Steps
 
@@ -177,8 +177,8 @@ assert veronica_new.get_cooldown_remaining("task_alpha") > 590  # Allow 10s drif
 
 **Purpose**: Verify that SIGINT (Ctrl+C) triggers emergency state save before exit.
 
-### Why This Matters
-When an operator interrupts the process (Ctrl+C), in-progress operations should be preserved. VERONICA's 3-tier exit handler (GRACEFUL/EMERGENCY/FORCE) ensures state is saved before termination, preventing data loss.
+### Context
+When an operator interrupts the process (Ctrl+C), in-progress operations should be preserved. VERONICA's 3-tier exit handler (GRACEFUL/EMERGENCY/FORCE) saves state before termination, preventing data loss.
 
 ### Reproduction Steps
 

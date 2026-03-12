@@ -1,4 +1,4 @@
-"""CrewAI + VERONICA Core — Circuit Breaker & Safe Mode via VeronicaIntegration.
+"""CrewAI + VERONICA Core -- Circuit Breaker & Safe Mode via VeronicaIntegration.
 
 Shows how VeronicaIntegration wraps a CrewAI crew.kickoff() call to enforce:
   - circuit breaker: auto-halt after consecutive crew failures
@@ -6,8 +6,8 @@ Shows how VeronicaIntegration wraps a CrewAI crew.kickoff() call to enforce:
   - manual reset: clear circuit and resume normal operation
 
 Requirements:
-    No extra packages needed — demo uses a stub Crew.
-    (crewai is NOT required — stub simulates success/failure)
+    No extra packages needed -- demo uses a stub Crew.
+    (crewai is NOT required -- stub simulates success/failure)
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from veronica_core import (
 )
 
 # ---------------------------------------------------------------------------
-# Minimal stub Crew — simulates CrewAI without a real API key
+# Minimal stub Crew -- simulates CrewAI without a real API key
 # ---------------------------------------------------------------------------
 
 RESULT_SUCCESS = "success"
@@ -86,9 +86,9 @@ def run_crew(
     """Execute crew.kickoff() with VERONICA protection.
 
     Checks:
-    1. SAFE_MODE — hard halt, crew never starts.
-    2. Circuit breaker OPEN — halt until recovery timeout elapses.
-    3. Cooldown — per-entity backoff after repeated failures.
+    1. SAFE_MODE -- hard halt, crew never starts.
+    2. Circuit breaker OPEN -- halt until recovery timeout elapses.
+    3. Cooldown -- per-entity backoff after repeated failures.
 
     Returns the crew result on success, or None if blocked.
     """
@@ -193,7 +193,7 @@ def demo_safe_mode_halt() -> None:
     print("\nNormal run (before SAFE_MODE):")
     run_crew(crew, veronica, breaker, inputs)
 
-    # Activate SAFE_MODE — simulates operator emergency stop
+    # Activate SAFE_MODE -- simulates operator emergency stop
     veronica.state.transition(VeronicaState.SAFE_MODE, "operator emergency stop")
     print(f"\nSAFE_MODE activated. State: {veronica.state.current_state.value}")
 

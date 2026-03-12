@@ -44,7 +44,7 @@ class RecursiveToolAgent:
 # ---------------------------------------------------------------------------
 
 def baseline_recursive_tools(target_depth: int = 20) -> dict[str, Any]:
-    """No containment — runs to target_depth unconditionally."""
+    """No containment -- runs to target_depth unconditionally."""
     agent = RecursiveToolAgent()
 
     start = time.perf_counter()
@@ -72,7 +72,7 @@ def veronica_recursive_tools(
     target_depth: int = 20,
     cost_per_call: float = 0.005,
 ) -> dict[str, Any]:
-    """ExecutionContext enforces max_steps — stops recursive chain early."""
+    """ExecutionContext enforces max_steps -- stops recursive chain early."""
     agent = RecursiveToolAgent()
 
     config = ExecutionConfig(

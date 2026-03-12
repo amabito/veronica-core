@@ -70,7 +70,7 @@ def demo_basic() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 2: SAFE_MODE — system-wide halt
+# Demo 2: SAFE_MODE -- system-wide halt
 # ---------------------------------------------------------------------------
 
 def demo_safe_mode() -> None:

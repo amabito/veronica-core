@@ -137,7 +137,7 @@ class TestFairShareAllocator:
         _assert_invariant(result, 0.0)
 
     def test_ignores_current_usage(self) -> None:
-        # FairShare ignores usage — always equal split.
+        # FairShare ignores usage -- always equal split.
         usage = {"planner": 0.8, "executor": 0.0, "validator": 0.0}
         result = self.alloc.allocate(
             total_budget=0.9,

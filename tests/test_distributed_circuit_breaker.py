@@ -1,4 +1,4 @@
-"""Tests for DistributedCircuitBreaker — Redis-backed distributed circuit breaker."""
+"""Tests for DistributedCircuitBreaker -- Redis-backed distributed circuit breaker."""
 
 from __future__ import annotations
 
@@ -729,7 +729,7 @@ class TestAdversarialRedisCorruption:
     """Test that DistributedCircuitBreaker survives corrupted Redis data."""
 
     def test_invalid_state_string_in_redis(self, fake_client):
-        """state field contains garbage — must not crash, should default to CLOSED."""
+        """state field contains garbage -- must not crash, should default to CLOSED."""
         dcb = _make_dcb(fake_client, failure_threshold=3)
         fake_client.hset(
             dcb._key,
@@ -745,7 +745,7 @@ class TestAdversarialRedisCorruption:
         assert dcb.state == CircuitState.CLOSED
 
     def test_non_numeric_failure_count_in_redis(self, fake_client):
-        """failure_count contains non-numeric string — must not crash."""
+        """failure_count contains non-numeric string -- must not crash."""
         dcb = _make_dcb(fake_client, failure_threshold=3)
         fake_client.hset(
             dcb._key,
@@ -763,10 +763,10 @@ class TestAdversarialRedisCorruption:
             # If no exception, should be some default (0 from fallback or parsed)
             assert isinstance(count, int)
         except ValueError:
-            pass  # acceptable — fails loudly, doesn't silently corrupt
+            pass  # acceptable -- fails loudly, doesn't silently corrupt
 
     def test_non_numeric_last_failure_time_in_redis(self, fake_client):
-        """last_failure_time contains garbage — state must not crash."""
+        """last_failure_time contains garbage -- state must not crash."""
         dcb = _make_dcb(fake_client, failure_threshold=1)
         fake_client.hset(
             dcb._key,
@@ -784,7 +784,7 @@ class TestAdversarialRedisCorruption:
         assert state == CircuitState.OPEN
 
     def test_missing_fields_in_redis_hash(self, fake_client):
-        """Redis hash exists but has only partial fields — must not crash."""
+        """Redis hash exists but has only partial fields -- must not crash."""
         dcb = _make_dcb(fake_client, failure_threshold=3)
         # Only set state, nothing else
         fake_client.hset(dcb._key, "state", "CLOSED")
@@ -1112,7 +1112,7 @@ class TestAdversarialSeedCorruption:
                 "half_open_in_flight": "0",
             },
         )
-        # Should either catch ValueError internally or propagate —
+        # Should either catch ValueError internally or propagate --
         # but must not leave fallback in a corrupted state
         try:
             dcb._seed_fallback_from_redis()
@@ -1127,7 +1127,7 @@ class TestAdversarialSeedCorruption:
 
 
 class TestSnapshot:
-    """Test CircuitSnapshot — single-RTT state retrieval."""
+    """Test CircuitSnapshot -- single-RTT state retrieval."""
 
     def test_snapshot_returns_all_fields(self, fake_client):
         dcb = _make_dcb(fake_client, failure_threshold=3)
@@ -1255,7 +1255,7 @@ class TestHalfOpenSlotTimeout:
         dcb.record_failure()
         dcb.check(_ctx())  # claim slot
 
-        # Immediately try — should still be held (10s timeout)
+        # Immediately try -- should still be held (10s timeout)
         dcb2 = _make_dcb(
             fake_client,
             circuit_id="test",
@@ -1338,7 +1338,7 @@ class TestAdversarialSlotTimeout:
         # tonumber("GARBAGE") returns nil in Lua -> claimed_at = 0
         # (now - 0) >= 0.01 is true, so slot IS released.
         # This is acceptable: epoch-0 is clearly stale.
-        # Either behavior (deny or release) is valid — just must not crash.
+        # Either behavior (deny or release) is valid -- just must not crash.
         assert isinstance(decision.allowed, bool)
 
     def test_corrupted_claimed_at_negative(self, fake_client):
@@ -1746,7 +1746,7 @@ class TestAdversarialSnapshot:
                 "half_open_claimed_at": "0",
             },
         )
-        # Should either raise ValueError or fallback — must not return garbage
+        # Should either raise ValueError or fallback -- must not return garbage
         try:
             snap = dcb.snapshot()
             # If it succeeds, counts should be valid integers
@@ -2054,7 +2054,7 @@ class TestAdversarialLuaArgvNilGuard:
     def test_check_malformed_slot_timeout_defaults_to_zero(self, fake_client):
         """_LUA_CHECK with ARGV[4]='' falls back to 0 (disabled), must not crash."""
         script = fake_client.register_script(_import_lua("_LUA_CHECK"))
-        # Should succeed (no error) — half_open_slot_timeout defaults to 0
+        # Should succeed (no error) -- half_open_slot_timeout defaults to 0
         result = script(
             keys=["veronica:circuit:h6test2"], args=["60", str(time.time()), "3600", ""]
         )
@@ -2136,7 +2136,7 @@ class TestAdversarialLuaClaimedAtNilGuard:
             recovery_timeout=0.0,
             half_open_slot_timeout=0.01,
         )
-        # Must not raise — previously would crash in real Redis with nil arithmetic
+        # Must not raise -- previously would crash in real Redis with nil arithmetic
         decision = dcb2.check(_ctx())
         assert isinstance(decision.allowed, bool)
 
@@ -2216,7 +2216,7 @@ class TestDistributedCircuitBreakerClose:
 
 
 # ---------------------------------------------------------------------------
-# Constructor validation — DistributedCircuitBreaker
+# Constructor validation -- DistributedCircuitBreaker
 # ---------------------------------------------------------------------------
 
 

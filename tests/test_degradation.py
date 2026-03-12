@@ -33,7 +33,7 @@ def _ladder_with_map(model_map: dict | None = None) -> DegradationLadder:
 
 
 # ---------------------------------------------------------------------------
-# DegradationLadder tier transitions — parametrized table
+# DegradationLadder tier transitions -- parametrized table
 # ---------------------------------------------------------------------------
 #
 # Given: a DegradationLadder configured with model_map={"gpt-4o": "gpt-4o-mini"}

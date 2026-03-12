@@ -122,21 +122,21 @@ class TestMetricRuleValidation:
             MetricRule("total_cost_usd", "gt", "bad", "halt")  # type: ignore[arg-type]
 
     def test_nan_threshold_raises(self) -> None:
-        """NaN threshold silently disables all comparisons — must be rejected."""
+        """NaN threshold silently disables all comparisons -- must be rejected."""
         import math
 
         with pytest.raises(ValueError, match="finite"):
             MetricRule("total_cost_usd", "gt", math.nan, "halt")
 
     def test_pos_inf_threshold_raises(self) -> None:
-        """+inf threshold with 'lt' causes always-trigger DoS — must be rejected."""
+        """+inf threshold with 'lt' causes always-trigger DoS -- must be rejected."""
         import math
 
         with pytest.raises(ValueError, match="finite"):
             MetricRule("error_rate", "lt", math.inf, "halt")
 
     def test_neg_inf_threshold_raises(self) -> None:
-        """-inf threshold with 'gt' causes always-trigger DoS — must be rejected."""
+        """-inf threshold with 'gt' causes always-trigger DoS -- must be rejected."""
         import math
 
         with pytest.raises(ValueError, match="finite"):
@@ -182,7 +182,7 @@ class TestMakeDecision:
 
 
 # ---------------------------------------------------------------------------
-# MetricsDrivenPolicy — core logic tests
+# MetricsDrivenPolicy -- core logic tests
 # ---------------------------------------------------------------------------
 
 
@@ -469,7 +469,7 @@ class TestDefaultIngester:
         set_default_ingester(ingester)
 
         rule = MetricRule("total_cost_usd", "gt", 1.0, "halt", agent_id="agent-x")
-        # No explicit ingester — uses module default
+        # No explicit ingester -- uses module default
         policy = MetricsDrivenPolicy(rules=[rule])
         d = policy.check(_ctx())
         assert d.allowed is False

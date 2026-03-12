@@ -1,4 +1,4 @@
-"""v0.10.4 regression tests — Fix 6-B, Fix 4-G, Fix 3-A.
+"""v0.10.4 regression tests -- Fix 6-B, Fix 4-G, Fix 3-A.
 
 Test matrix:
   - Fix 6-B: veronica_guard creates a fresh container per call (state isolation)
@@ -41,7 +41,7 @@ class TestVeronicaGuardPerCallContainer:
 
         assert len(containers) == 2
         assert containers[0] is not containers[1], (
-            "Each call must receive its own container — state must not be shared"
+            "Each call must receive its own container -- state must not be shared"
         )
 
     def test_budget_state_not_shared_across_calls(self) -> None:
@@ -62,7 +62,7 @@ class TestVeronicaGuardPerCallContainer:
 
         assert len(spent) == 2
         assert spent[0] == pytest.approx(0.99)
-        # Second call starts from 0 and spends 0.99 — not cumulative
+        # Second call starts from 0 and spends 0.99 -- not cumulative
         assert spent[1] == pytest.approx(0.99)
 
     def test_guard_raises_halt_when_denied(self) -> None:
@@ -95,7 +95,7 @@ class TestVeronicaGuardPerCallContainer:
         assert result.allowed is False
 
     def test_wrapper_has_no_container_attribute(self) -> None:
-        """wrapper._container must not exist — per-call design removes it."""
+        """wrapper._container must not exist -- per-call design removes it."""
 
         @veronica_guard(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
         def fn() -> None:
@@ -186,7 +186,7 @@ class TestAIContainerLock:
         container = AIContainer(budget=BudgetEnforcer(limit_usd=1.0))
         container.reset()
         after = container._pipeline
-        # Pipeline is rebuilt — it may be a new object
+        # Pipeline is rebuilt -- it may be a new object
         assert after is not None
         assert container.check().allowed
 
@@ -263,7 +263,7 @@ class TestMarkSuccessDivergence:
             graph.mark_success(nid, cost_usd=0.0)
         first_batch = graph.drain_divergence_events()
 
-        # Additional calls — must NOT produce more events for same signature
+        # Additional calls -- must NOT produce more events for same signature
         for _ in range(4):
             nid = graph.begin_node(parent_id=root_id, kind="tool", name="search")
             graph.mark_running(nid)

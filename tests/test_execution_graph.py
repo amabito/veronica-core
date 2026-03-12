@@ -427,7 +427,7 @@ def test_divergence_context_forwards_event_to_snapshot():
 
 
 # ---------------------------------------------------------------------------
-# Test 14: Divergence — llm threshold 5x consecutive
+# Test 14: Divergence -- llm threshold 5x consecutive
 # ---------------------------------------------------------------------------
 
 
@@ -452,7 +452,7 @@ def test_divergence_llm_5x():
 
 
 # ---------------------------------------------------------------------------
-# Test 15: Divergence — alternating pattern does not trigger
+# Test 15: Divergence -- alternating pattern does not trigger
 # ---------------------------------------------------------------------------
 
 
@@ -473,7 +473,7 @@ def test_divergence_mixed_no_trigger():
 
 
 # ---------------------------------------------------------------------------
-# Test 17: Divergence — does not halt ExecutionContext
+# Test 17: Divergence -- does not halt ExecutionContext
 # ---------------------------------------------------------------------------
 
 
@@ -504,7 +504,7 @@ def test_divergence_does_not_halt():
 
 
 # ---------------------------------------------------------------------------
-# Test 18: Frequency divergence — alternating pattern A,B,A,B,...
+# Test 18: Frequency divergence -- alternating pattern A,B,A,B,...
 # ---------------------------------------------------------------------------
 
 
@@ -528,7 +528,7 @@ def test_frequency_divergence_alternating_pattern():
         graph.mark_success(node_id, cost_usd=0.0)
         all_events.extend(graph.drain_divergence_events())
 
-    # Pattern: AAABAAAB — 3 A then 1 B, repeated twice
+    # Pattern: AAABAAAB -- 3 A then 1 B, repeated twice
     for _ in range(2):
         run_tool("tool_A")
         run_tool("tool_A")
@@ -546,7 +546,7 @@ def test_frequency_divergence_alternating_pattern():
 
 
 # ---------------------------------------------------------------------------
-# Test 19: Frequency divergence — does not spam (fires at most once per sig)
+# Test 19: Frequency divergence -- does not spam (fires at most once per sig)
 # ---------------------------------------------------------------------------
 
 

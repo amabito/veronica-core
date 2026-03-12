@@ -5,7 +5,7 @@ This has two observable effects:
 1. After timeout elapses, NEW wrap calls return Decision.HALT immediately.
 2. If fn() raises an exception while the token is set, the call returns Decision.HALT.
 
-No private attribute access — only public API used: wrap_llm_call, get_snapshot.
+No private attribute access -- only public API used: wrap_llm_call, get_snapshot.
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def test_timeout_fn_exception_during_timeout_returns_halt():
         # Wait for timeout to elapse first
         time.sleep(0.25)
 
-        # Now call with an fn that raises — timeout token is already set
+        # Now call with an fn that raises -- timeout token is already set
         decision = ctx.wrap_llm_call(
             fn=lambda: (_ for _ in ()).throw(RuntimeError("deliberate"))
         )

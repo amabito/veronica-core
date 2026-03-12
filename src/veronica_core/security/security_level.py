@@ -33,9 +33,9 @@ _ENV_VAR = "VERONICA_SECURITY_LEVEL"
 class SecurityLevel(Enum):
     """Operational security tier.
 
-    DEV  — local development; relaxed enforcement.
-    CI   — continuous integration; strict enforcement.
-    PROD — production; strict enforcement.
+    DEV  -- local development; relaxed enforcement.
+    CI   -- continuous integration; strict enforcement.
+    PROD -- production; strict enforcement.
     """
 
     DEV = auto()

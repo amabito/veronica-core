@@ -1,4 +1,4 @@
-"""OTel Feedback — Ingest OpenTelemetry spans and derive per-agent metrics.
+"""OTel Feedback -- Ingest OpenTelemetry spans and derive per-agent metrics.
 
 Provides:
 - AgentMetrics: dataclass tracking per-agent cost/token/latency/error stats

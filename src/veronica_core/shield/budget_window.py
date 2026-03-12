@@ -47,7 +47,7 @@ class BudgetWindowHook:
         self._window_seconds = window_seconds
         self._degrade_threshold = degrade_threshold
         # H3: Use a generous maxlen (max_calls * 10) instead of the old
-        # max_calls * 2, which was too small for burst traffic — deque eviction
+        # max_calls * 2, which was too small for burst traffic -- deque eviction
         # silently dropped timestamps and undercounted active calls.  We keep a
         # finite cap to bound memory under sustained overload (e.g. long windows
         # with very high call rates).  Timestamps are also pruned explicitly in

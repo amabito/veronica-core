@@ -3,13 +3,13 @@
 Attacker mindset: "How do I break this?"
 
 Categories covered:
-1. Corrupted input — garbage values, wrong types, NaN, Inf, negative
-2. Concurrent access — race conditions, TOCTOU under contention
-3. Partial failure — ingester dies mid-check, missing fields
-4. State corruption — invalid state, missing attributes on metrics object
-5. Resource exhaustion — very large rule sets, 0 thresholds
-6. Boundary abuse — exact threshold, off-by-one, MAX_FLOAT, zero
-7. OTelMetricsIngester adversarial — malformed spans, concurrent ingest
+1. Corrupted input -- garbage values, wrong types, NaN, Inf, negative
+2. Concurrent access -- race conditions, TOCTOU under contention
+3. Partial failure -- ingester dies mid-check, missing fields
+4. State corruption -- invalid state, missing attributes on metrics object
+5. Resource exhaustion -- very large rule sets, 0 thresholds
+6. Boundary abuse -- exact threshold, off-by-one, MAX_FLOAT, zero
+7. OTelMetricsIngester adversarial -- malformed spans, concurrent ingest
 """
 
 from __future__ import annotations
@@ -88,12 +88,12 @@ class SlowIngester:
 
 
 # ---------------------------------------------------------------------------
-# Category 1: Corrupted input — garbage metric values
+# Category 1: Corrupted input -- garbage metric values
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialCorruptedMetrics:
-    """Corrupted metric values must not crash the policy — fail-safe: allow."""
+    """Corrupted metric values must not crash the policy -- fail-safe: allow."""
 
     def _policy(
         self, ingester: Any, metric: str, op: str, threshold: float, action: str
@@ -110,7 +110,7 @@ class TestAdversarialCorruptedMetrics:
         assert d.allowed is True
 
     def test_inf_metric_value_is_skipped(self) -> None:
-        """Non-finite observed values (inf) are filtered out — rule is skipped."""
+        """Non-finite observed values (inf) are filtered out -- rule is skipped."""
         bad = BadMetrics(error_rate=float("inf"))
         ingester = type("I", (), {"get_agent_metrics": lambda self, aid: bad})()
         policy = self._policy(ingester, "error_rate", "gt", 0.0, "halt")
@@ -156,7 +156,7 @@ class TestAdversarialCorruptedMetrics:
 
 
 # ---------------------------------------------------------------------------
-# Category 2: Concurrent access — race conditions
+# Category 2: Concurrent access -- race conditions
 # ---------------------------------------------------------------------------
 
 
@@ -238,7 +238,7 @@ class TestAdversarialConcurrent:
             t.join()
 
         assert not errors
-        # Halt must dominate — no thread should get allowed=True
+        # Halt must dominate -- no thread should get allowed=True
         assert all(r is False for r in results), f"Some threads got allow: {results}"
 
     def test_toctou_ingester_changes_between_checks(self) -> None:
@@ -272,7 +272,7 @@ class TestAdversarialConcurrent:
 
 
 # ---------------------------------------------------------------------------
-# Category 3: Partial failure — ingester dies mid-operation
+# Category 3: Partial failure -- ingester dies mid-operation
 # ---------------------------------------------------------------------------
 
 
@@ -343,7 +343,7 @@ class TestAdversarialStateCorruption:
 
 
 # ---------------------------------------------------------------------------
-# Category 5: Boundary abuse — exact threshold, zero, MAX_FLOAT
+# Category 5: Boundary abuse -- exact threshold, zero, MAX_FLOAT
 # ---------------------------------------------------------------------------
 
 
@@ -380,7 +380,7 @@ class TestAdversarialBoundary:
         assert p.check(_ctx(entity_id="bot")).allowed is True
 
     def test_max_float_threshold_never_triggers(self) -> None:
-        # Use the largest finite float (1e308) rather than inf — inf is now rejected
+        # Use the largest finite float (1e308) rather than inf -- inf is now rejected
         # by MetricRule validation (non-finite threshold is a configuration error).
         p = self._policy(1e300, "gt", 1e308)
         assert p.check(_ctx(entity_id="bot")).allowed is True
@@ -391,7 +391,7 @@ class TestAdversarialBoundary:
         assert p.check(_ctx(entity_id="bot")).allowed is False
 
     def test_inf_observed_value_is_skipped(self) -> None:
-        """Non-finite observed values (inf) are filtered — rule skipped, allow."""
+        """Non-finite observed values (inf) are filtered -- rule skipped, allow."""
         p = self._policy(math.inf, "gt", 1000.0)
         assert p.check(_ctx(entity_id="bot")).allowed is True
 
@@ -750,7 +750,7 @@ class TestAdversarialAgentIdEdgeCases:
         assert m.call_count == 1
 
     def test_null_byte_in_agent_id(self) -> None:
-        """Null bytes in agent_id — must not crash."""
+        """Null bytes in agent_id -- must not crash."""
         ing = OTelMetricsIngester()
         agent_id = "bot\x00null"
         ing.ingest_span(
@@ -785,7 +785,7 @@ class TestAdversarialAgentIdEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# Category 9: Memory pressure — thousands of unique agent_ids
+# Category 9: Memory pressure -- thousands of unique agent_ids
 # ---------------------------------------------------------------------------
 
 
@@ -808,7 +808,7 @@ class TestAdversarialMemoryPressure:
             assert metrics.call_count == 1
 
     def test_rapid_fire_10k_spans_single_agent(self) -> None:
-        """10K spans for one agent in a tight loop — no crash, correct count."""
+        """10K spans for one agent in a tight loop -- no crash, correct count."""
         ing = OTelMetricsIngester()
         n = 10_000
         for i in range(n):
@@ -855,7 +855,7 @@ class TestAdversarialWindowEdgeCases:
             OTelMetricsIngester(window_sec=-1.0)
 
     def test_very_small_window_sec(self) -> None:
-        """window_sec=0.001 (1ms) — spans older than 1ms pruned from window."""
+        """window_sec=0.001 (1ms) -- spans older than 1ms pruned from window."""
         ing = OTelMetricsIngester(window_sec=0.001)
         ing.ingest_span(
             {
@@ -864,12 +864,12 @@ class TestAdversarialWindowEdgeCases:
             }
         )
         m = ing.get_agent_metrics("bot")
-        # call_count and total_cost are NOT windowed — they accumulate
+        # call_count and total_cost are NOT windowed -- they accumulate
         assert m.call_count == 1
         assert m.total_cost == pytest.approx(1.0)
 
     def test_extremely_large_window_sec(self) -> None:
-        """window_sec=1e9 — effectively infinite window."""
+        """window_sec=1e9 -- effectively infinite window."""
         ing = OTelMetricsIngester(window_sec=1e9)
         for _ in range(5):
             ing.ingest_span(
@@ -889,7 +889,7 @@ class TestAdversarialWindowEdgeCases:
 
 class TestAdversarialExtremeValues:
     def test_extremely_large_cost(self) -> None:
-        """1e308 cost ingested — must not crash."""
+        """1e308 cost ingested -- must not crash."""
         ing = OTelMetricsIngester()
         ing.ingest_span(
             {
@@ -901,7 +901,7 @@ class TestAdversarialExtremeValues:
         assert m.total_cost == pytest.approx(1e308)
 
     def test_inf_cost_is_rejected(self) -> None:
-        """inf cost (not finite) — must be rejected (cost stays 0)."""
+        """inf cost (not finite) -- must be rejected (cost stays 0)."""
         ing = OTelMetricsIngester()
         ing.ingest_span(
             {
@@ -947,7 +947,7 @@ class TestAdversarialExtremeValues:
 
 
 # ---------------------------------------------------------------------------
-# Category 12: TOCTOU — ingest between check() calls
+# Category 12: TOCTOU -- ingest between check() calls
 # ---------------------------------------------------------------------------
 
 
@@ -981,7 +981,7 @@ class TestAdversarialTOCTOU:
         assert d2.allowed is False
 
     def test_concurrent_ingest_toctou_race(self) -> None:
-        """10 threads ingesting while 10 threads checking — no state corruption."""
+        """10 threads ingesting while 10 threads checking -- no state corruption."""
         from veronica_core.policy.metrics_policy import (
             MetricRule,
             MetricsDrivenPolicy,
@@ -1088,7 +1088,7 @@ class TestAdversarialErrorCountSnapshot:
         assert m._error_count == 0
 
     def test_error_count_concurrent_correctness(self) -> None:
-        """Concurrent error span ingestion — final _error_count must be exact."""
+        """Concurrent error span ingestion -- final _error_count must be exact."""
         ing = OTelMetricsIngester()
         errors: list[Exception] = []
 
@@ -1120,7 +1120,7 @@ class TestAdversarialPropertyException:
     """Properties that raise non-standard exceptions must not crash the policy.
 
     Regression for the bug where _extract_metric only caught
-    (TypeError, ValueError, AttributeError) — allowing ZeroDivisionError,
+    (TypeError, ValueError, AttributeError) -- allowing ZeroDivisionError,
     RuntimeError, etc. to propagate out of policy.check().
     """
 
@@ -1185,7 +1185,7 @@ class TestAdversarialNonFiniteThreshold:
     silently bypassing all cost/error/latency limits.
 
     Impact of ±inf threshold: 'value < inf' is always True (constant halt),
-    and 'value > -inf' is always True (constant halt) — both cause unexpected
+    and 'value > -inf' is always True (constant halt) -- both cause unexpected
     DoS-style policy behaviour that is almost certainly a configuration error.
     """
 
@@ -1249,7 +1249,7 @@ class TestAdversarialNonFiniteThreshold:
 
 
 # ---------------------------------------------------------------------------
-# Category 16: F.R.I.D.A.Y. R4 findings — factory validation, agent limit,
+# Category 16: F.R.I.D.A.Y. R4 findings -- factory validation, agent limit,
 #              non-finite observed values
 # ---------------------------------------------------------------------------
 
@@ -1349,7 +1349,7 @@ class TestR5AuditFixes:
     """
 
     # ------------------------------------------------------------------
-    # Fix 1: cost_window maxlen — deque must not grow unbounded
+    # Fix 1: cost_window maxlen -- deque must not grow unbounded
     # ------------------------------------------------------------------
 
     def test_r5_cost_window_maxlen_not_exceeded(self) -> None:
@@ -1391,7 +1391,7 @@ class TestR5AuditFixes:
             assert len(state.cost_window) <= default_max
 
     # ------------------------------------------------------------------
-    # Fix 2: reset() lock ordering — no deadlock under concurrent access
+    # Fix 2: reset() lock ordering -- no deadlock under concurrent access
     # ------------------------------------------------------------------
 
     def test_r5_reset_lock_ordering_no_deadlock(self) -> None:
@@ -1433,7 +1433,7 @@ class TestR5AuditFixes:
 
         # All threads must have finished (no deadlock)
         for t in threads:
-            assert not t.is_alive(), "thread still alive — possible deadlock"
+            assert not t.is_alive(), "thread still alive -- possible deadlock"
         assert not errors, f"exceptions in threads: {errors}"
 
     def test_r5_reset_single_agent_concurrent_ingest(self) -> None:
@@ -1475,7 +1475,7 @@ class TestR5AuditFixes:
         assert not errors, f"exceptions: {errors}"
 
     # ------------------------------------------------------------------
-    # Fix 3: ingest_span logging — malformed span triggers logger.debug
+    # Fix 3: ingest_span logging -- malformed span triggers logger.debug
     # ------------------------------------------------------------------
 
     def test_r5_ingest_span_logging_on_internal_exception(self, caplog: Any) -> None:
@@ -1499,7 +1499,7 @@ class TestR5AuditFixes:
         assert debug_records, "expected logger.debug call on ingest_span failure"
 
     def test_r5_ingest_span_never_raises_on_malformed(self) -> None:
-        """ingest_span must silently absorb all exceptions — never propagate."""
+        """ingest_span must silently absorb all exceptions -- never propagate."""
         ing = OTelMetricsIngester()
         # Various malformed inputs
         malformed_inputs = [
@@ -1518,7 +1518,7 @@ class TestR5AuditFixes:
                 pytest.fail(f"ingest_span raised for {bad!r}: {exc}")
 
     # ------------------------------------------------------------------
-    # Fix 4: _get_metrics fail warning — fail-open with logger.warning
+    # Fix 4: _get_metrics fail warning -- fail-open with logger.warning
     # ------------------------------------------------------------------
 
     def test_r5_get_metrics_fail_open_returns_none(self) -> None:

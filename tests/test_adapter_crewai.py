@@ -1,4 +1,4 @@
-"""Tests for veronica_core.adapters.crewai — CrewAI event listener adapter.
+"""Tests for veronica_core.adapters.crewai -- CrewAI event listener adapter.
 
 Uses fake crewai stubs injected into sys.modules so crewai does not need to
 be installed in the test environment. The real adapter code is re-imported
@@ -237,7 +237,7 @@ def _response_with_prompt_completion(prompt: int, completion: int) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Allow path — event bus fires, state is recorded
+# Allow path -- event bus fires, state is recorded
 # ---------------------------------------------------------------------------
 
 
@@ -245,7 +245,7 @@ class TestAllowPath:
     def test_llm_call_started_within_limits_does_not_raise(self) -> None:
         """LLMCallStartedEvent within policy limits: no exception raised."""
         _make_listener()  # registers handlers on fake bus
-        # Emit via fake bus — should not raise
+        # Emit via fake bus -- should not raise
         _fake_event_bus.emit(None, _started_event())
 
     def test_llm_call_completed_increments_step_counter(self) -> None:
@@ -299,7 +299,7 @@ class TestAllowPath:
 
 
 # ---------------------------------------------------------------------------
-# Deny path — check_or_raise() must raise VeronicaHalt
+# Deny path -- check_or_raise() must raise VeronicaHalt
 # ---------------------------------------------------------------------------
 
 
@@ -368,7 +368,7 @@ class TestConfigAcceptance:
         # Exhaust steps via step_guard proxy
         listener.container.step_guard.step()
         listener.container.step_guard.step()
-        # Now at limit — check_or_raise must raise
+        # Now at limit -- check_or_raise must raise
         with pytest.raises(VeronicaHalt):
             listener.check_or_raise()
 
@@ -382,7 +382,7 @@ class TestConfigAcceptance:
 
 
 # ---------------------------------------------------------------------------
-# Cost estimation — _estimate_cost()
+# Cost estimation -- _estimate_cost()
 # ---------------------------------------------------------------------------
 
 
@@ -469,12 +469,12 @@ class TestImportError:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial tests — corrupted input, concurrent access, boundary abuse
+# Adversarial tests -- corrupted input, concurrent access, boundary abuse
 # ---------------------------------------------------------------------------
 
 
 class TestAdversarialCrewAI:
-    """Adversarial tests for CrewAI adapter — attacker mindset."""
+    """Adversarial tests for CrewAI adapter -- attacker mindset."""
 
     # -- Corrupted input: garbage response objects --
 
@@ -504,7 +504,7 @@ class TestAdversarialCrewAI:
 
         event = _completed_event(response=NaNResponse())
         result = _estimate_cost(event)
-        # Must not be NaN — either 0.0 or a finite number
+        # Must not be NaN -- either 0.0 or a finite number
         assert not math.isnan(result)
 
     def test_corrupted_usage_with_negative_tokens(self) -> None:
@@ -556,7 +556,7 @@ class TestAdversarialCrewAI:
     # -- Concurrent access: multiple threads calling check_or_raise --
 
     def test_concurrent_check_or_raise_exactly_one_denied(self) -> None:
-        """check_or_raise: concurrent calls near step limit — exactly N-limit allowed."""
+        """check_or_raise: concurrent calls near step limit -- exactly N-limit allowed."""
         import threading
 
         listener = _make_listener(max_steps=5)
@@ -655,7 +655,7 @@ class TestAdversarialCrewAI:
         listener.container.budget.spend(1.0)
         assert listener.container.budget.is_exceeded
 
-        # Emit completed event — step should still increment
+        # Emit completed event -- step should still increment
         _fake_event_bus.emit(None, _completed_event())
         assert listener.container.step_guard.current_step == 1
 

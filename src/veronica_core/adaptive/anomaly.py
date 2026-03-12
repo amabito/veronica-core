@@ -1,10 +1,10 @@
-"""AnomalyDetector — Per-metric Z-score anomaly detection.
+"""AnomalyDetector -- Per-metric Z-score anomaly detection.
 
 Uses Welford's online algorithm for numerically stable running mean
 and variance.  No NumPy, no external dependencies.
 
 Can be used as a PreDispatchHook in ShieldPipeline by wrapping check()
-calls — or directly via record() / is_anomalous().
+calls -- or directly via record() / is_anomalous().
 
 Thread-safe: one Lock per metric, created lazily.
 """
@@ -27,7 +27,7 @@ class _MetricState:
         self.lock: threading.Lock = threading.Lock()
 
     def update(self, value: float) -> None:
-        """Welford online update — call with self.lock held or externally."""
+        """Welford online update -- call with self.lock held or externally."""
         self.n += 1
         delta = value - self.mean
         self.mean += delta / self.n

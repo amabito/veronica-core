@@ -1,4 +1,4 @@
-"""Tests for tools/lint_no_raw_exec.py — AST-based forbidden exec linter."""
+"""Tests for tools/lint_no_raw_exec.py -- AST-based forbidden exec linter."""
 
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ class TestAliasedImportDetection:
     def test_socket_based_dns_exfiltration_pattern_is_flagged(
         self, tmp_path: Path
     ) -> None:
-        # socket with TXT query used for DNS exfiltration — exec call pattern
+        # socket with TXT query used for DNS exfiltration -- exec call pattern
         f = _write(
             tmp_path,
             "dns_exfil.py",
@@ -280,4 +280,4 @@ class TestMain:
         src = Path(__file__).resolve().parents[2] / "src"
         if src.exists():
             rc = main([str(src)])
-            assert rc == 0, "Real src/ tree has raw exec violations — fix them first"
+            assert rc == 0, "Real src/ tree has raw exec violations -- fix them first"

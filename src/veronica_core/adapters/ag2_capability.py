@@ -1,7 +1,7 @@
-"""CircuitBreakerCapability — AG2 AgentCapability-compatible circuit breaker.
+"""CircuitBreakerCapability -- AG2 AgentCapability-compatible circuit breaker.
 
 Follows AG2's AgentCapability.add_to_agent() pattern.
-Does NOT require ag2 to be installed — works with any object that has
+Does NOT require ag2 to be installed -- works with any object that has
 a generate_reply() method (autogen.ConversableAgent, stub agents, etc.).
 
 Public API:
@@ -53,7 +53,7 @@ class CircuitBreakerCapability:
 
     Follows AG2's AgentCapability pattern: call ``add_to_agent(agent)``
     once per agent.  Subsequent calls to ``agent.generate_reply()`` go
-    through the circuit breaker transparently — no changes needed at the
+    through the circuit breaker transparently -- no changes needed at the
     call site.
 
     Each agent gets its own independent ``CircuitBreaker`` instance.
@@ -76,7 +76,7 @@ class CircuitBreakerCapability:
         cap.add_to_agent(planner)
         cap.add_to_agent(executor)
 
-        # Ordinary call — circuit breaker is transparent:
+        # Ordinary call -- circuit breaker is transparent:
         reply = planner.generate_reply(messages)
 
         # Inspect circuit state:

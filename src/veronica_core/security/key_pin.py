@@ -136,11 +136,11 @@ class KeyPinChecker:
             level = get_security_level()
             if level in (SecurityLevel.CI, SecurityLevel.PROD):
                 raise RuntimeError(
-                    f"Key pin mismatch in {level.name} environment — "
+                    f"Key pin mismatch in {level.name} environment -- "
                     "public key has changed unexpectedly. "
                     "See docs/KEY_ROTATION.md for rotation steps."
                 )
-            logger.warning("key_pin_mismatch in DEV mode — not raising")
+            logger.warning("key_pin_mismatch in DEV mode -- not raising")
 
     # ------------------------------------------------------------------
     # Internal helpers

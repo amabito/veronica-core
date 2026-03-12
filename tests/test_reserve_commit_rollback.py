@@ -62,7 +62,7 @@ class TestLocalReserveCommitRollback:
         b = LocalBudgetBackend()
         rid = b.reserve(0.5, ceiling=1.0)
         assert rid is not None
-        # Committed total unchanged — only escrowed
+        # Committed total unchanged -- only escrowed
         assert b.get() == 0.0
         assert b.get_reserved() == pytest.approx(0.5)
 

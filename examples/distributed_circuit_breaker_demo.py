@@ -138,7 +138,7 @@ def run_demo() -> None:
     print(f"\nStep 5 -- Waiting {breaker_a._recovery_timeout}s for recovery timeout...")
     time.sleep(breaker_a._recovery_timeout + 0.1)
 
-    # Agent B is the first to check after timeout — it claims the HALF_OPEN slot.
+    # Agent B is the first to check after timeout -- it claims the HALF_OPEN slot.
     decision_b2 = breaker_b.check(ctx)
     print(
         f"  Agent B after timeout: allowed={decision_b2.allowed}, "
@@ -147,13 +147,13 @@ def run_demo() -> None:
     assert decision_b2.allowed, "Agent B must be allowed to probe in HALF_OPEN"
     assert breaker_b.state == CircuitState.HALF_OPEN
 
-    # Agent C tries immediately after — slot is already taken.
+    # Agent C tries immediately after -- slot is already taken.
     decision_c = breaker_c.check(ctx)
     print(
         f"  Agent C (slot taken): allowed={decision_c.allowed}, "
         f"state={breaker_c.state.value}"
     )
-    assert not decision_c.allowed, "Agent C must be denied — HALF_OPEN slot is taken"
+    assert not decision_c.allowed, "Agent C must be denied -- HALF_OPEN slot is taken"
 
     # ------------------------------------------------------------------
     # Step 6: Agent B's probe succeeds → circuit closes for everyone

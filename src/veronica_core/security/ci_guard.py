@@ -77,7 +77,7 @@ class CIGuard:
     """CI-specific secret leak detection and protection.
 
     Combines SecretMasker's 28 patterns with 7 CI-specific patterns
-    for comprehensive secret leak detection in CI environments.
+    for secret leak detection in CI environments.
     """
 
     def __init__(self, masker: SecretMasker | None = None) -> None:

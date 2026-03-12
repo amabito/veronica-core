@@ -1,4 +1,4 @@
-"""VERONICA Audit — tamper-evident append-only log."""
+"""VERONICA Audit -- tamper-evident append-only log."""
 
 from veronica_core.audit.log import AuditLog
 

@@ -323,7 +323,7 @@ class TestWatchHandle:
 
         handle = loader.watch(tmp_path, callback, poll_interval=0.1)
         handle.cancel()  # Cancel immediately before first poll fires.
-        # Modify file after cancel — callback must not be triggered.
+        # Modify file after cancel -- callback must not be triggered.
         tmp_path.write_text(
             json.dumps({"version": "1.0", "name": "Post-cancel", "rules": []}),
             encoding="utf-8",

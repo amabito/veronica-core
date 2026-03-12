@@ -85,10 +85,10 @@ class TestSemanticLoopGuard:
         guard.record(a)  # buffer: [a]
         guard.record(b)  # buffer: [a, b]  (window=2, so a will drop on next)
         # Now a drops
-        result = guard.feed(a)  # buffer: [b, a] — b and a are different, OK
+        result = guard.feed(a)  # buffer: [b, a] -- b and a are different, OK
         # b vs a: different enough
         # Since window=2, only last 2 entries are kept
-        # entries are [b, a] now (a re-added) — but b vs a is different text
+        # entries are [b, a] now (a re-added) -- but b vs a is different text
         # Should allow as b and a are not similar
         # (a similar to a but since window=2, the first 'a' was dropped)
         # Let's be lenient here and just verify it doesn't crash

@@ -124,7 +124,7 @@ class TestAgentMetricsDefaults:
 
 
 # ---------------------------------------------------------------------------
-# 2. ingest_span() — AG2 span types
+# 2. ingest_span() -- AG2 span types
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +188,7 @@ class TestIngestSpanAG2Formats:
 
 
 # ---------------------------------------------------------------------------
-# 3. ingest_span() — generic OTel spans
+# 3. ingest_span() -- generic OTel spans
 # ---------------------------------------------------------------------------
 
 
@@ -446,7 +446,7 @@ class TestSlidingWindow:
 
 class TestThreadSafety:
     def test_concurrent_ingest_from_multiple_threads(self):
-        """100 threads each ingest 10 spans for the same agent — no crash, count consistent."""
+        """100 threads each ingest 10 spans for the same agent -- no crash, count consistent."""
         ingester = OTelMetricsIngester()
         errors: list[Exception] = []
 
@@ -469,7 +469,7 @@ class TestThreadSafety:
         assert m.total_cost == pytest.approx(1.0, abs=1e-6)
 
     def test_concurrent_ingest_different_agents(self):
-        """50 threads each ingesting to a unique agent_id — no data corruption."""
+        """50 threads each ingesting to a unique agent_id -- no data corruption."""
         ingester = OTelMetricsIngester()
         errors: list[Exception] = []
 

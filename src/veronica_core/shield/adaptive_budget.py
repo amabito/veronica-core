@@ -179,7 +179,7 @@ class AdaptiveBudgetHook:
 
             _logging.getLogger(__name__).warning(
                 "anomaly_recent_seconds (%s) > window_seconds (%s); "
-                "clamping to window_seconds — spike detection will be effectively disabled",
+                "clamping to window_seconds -- spike detection will be effectively disabled",
                 anomaly_recent_seconds,
                 window_seconds,
             )

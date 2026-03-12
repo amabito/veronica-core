@@ -245,8 +245,8 @@ class RedisBudgetBackend:
         """Reconcile locally accumulated spend into Redis after reconnection.
 
         During fallback, costs accumulate in the local backend.  When Redis
-        becomes reachable again we flush the **delta** — the amount accumulated
-        *since* failover — with INCRBYFLOAT.  The seed base (Redis total at the
+        becomes reachable again we flush the **delta** -- the amount accumulated
+        *since* failover -- with INCRBYFLOAT.  The seed base (Redis total at the
         moment of failover) is already in Redis and must NOT be counted again.
 
         Formula:
@@ -283,7 +283,7 @@ class RedisBudgetBackend:
             )
         except Exception as exc:
             logger.error(
-                "RedisBudgetBackend: reconciliation failed (%s) — fallback delta preserved.",
+                "RedisBudgetBackend: reconciliation failed (%s) -- fallback delta preserved.",
                 _redact_exc(exc),
             )
             return False
@@ -296,7 +296,7 @@ class RedisBudgetBackend:
 
         ``_using_fallback`` is only cleared after a successful reconciliation so
         that a reconcile failure leaves the backend on fallback with its delta
-        intact — preventing undercount of accumulated spend.
+        intact -- preventing undercount of accumulated spend.
 
         Reconnect attempts are rate-limited via ``_last_reconnect_attempt`` to
         avoid hot-loop log storms during extended Redis outages.
@@ -304,7 +304,7 @@ class RedisBudgetBackend:
         **Must be called with ``self._lock`` already held by the caller.**
         ``add()`` acquires the lock for the entire check-and-dispatch block
         (H4 TOCTOU fix), so ``_last_reconnect_attempt`` reads/writes here are
-        automatically serialised — no additional lock acquisition needed.
+        automatically serialised -- no additional lock acquisition needed.
         """
         now = time.monotonic()
         last = getattr(self, "_last_reconnect_attempt", 0.0)
@@ -331,7 +331,7 @@ class RedisBudgetBackend:
             self._using_fallback = False
             logger.info("RedisBudgetBackend: reconnected to Redis successfully.")
             return True
-        # Reconcile failed — stay on fallback.
+        # Reconcile failed -- stay on fallback.
         return False
 
     def _seed_fallback_from_redis(self) -> None:
@@ -349,7 +349,7 @@ class RedisBudgetBackend:
         total already present in Redis.
 
         Called while the Redis connection is still live (just before transition).
-        Safe to skip on error — worst case is slightly permissive enforcement,
+        Safe to skip on error -- worst case is slightly permissive enforcement,
         not a crash.
         """
         try:
@@ -368,7 +368,7 @@ class RedisBudgetBackend:
         except Exception as exc:
             self._fallback_seed_base = 0.0
             logger.warning(
-                "RedisBudgetBackend: could not seed fallback from Redis (%s) — "
+                "RedisBudgetBackend: could not seed fallback from Redis (%s) -- "
                 "budget enforcement may be permissive during outage.",
                 _redact_exc(exc),
             )
@@ -401,7 +401,7 @@ class RedisBudgetBackend:
         except Exception as exc:
             if self._fallback_on_error:
                 logger.error(
-                    "RedisBudgetBackend.add failed: %s — using local fallback",
+                    "RedisBudgetBackend.add failed: %s -- using local fallback",
                     _redact_exc(exc),
                 )
                 # Seed fallback with last known Redis total and switch atomically.
@@ -564,7 +564,7 @@ return 1
                 ) from exc
             if self._fallback_on_error:
                 logger.error(
-                    "RedisBudgetBackend.reserve failed: %s — using local fallback",
+                    "RedisBudgetBackend.reserve failed: %s -- using local fallback",
                     _redact_exc(exc),
                 )
                 with self._lock:
@@ -628,7 +628,7 @@ return tostring(new_total)
                 raise KeyError(f"Reservation {reservation_id!r} not found") from exc
             if self._fallback_on_error:
                 logger.error(
-                    "RedisBudgetBackend.commit failed: %s — using local fallback",
+                    "RedisBudgetBackend.commit failed: %s -- using local fallback",
                     _redact_exc(exc),
                 )
                 with self._lock:
@@ -678,7 +678,7 @@ return 1
                 raise KeyError(f"Reservation {reservation_id!r} not found") from exc
             if self._fallback_on_error:
                 logger.error(
-                    "RedisBudgetBackend.rollback failed: %s — using local fallback",
+                    "RedisBudgetBackend.rollback failed: %s -- using local fallback",
                     _redact_exc(exc),
                 )
                 with self._lock:

@@ -79,7 +79,7 @@ def resolve_model_pricing(model: str) -> Pricing:
     """
     if not model:
         logger.warning(
-            "[VERONICA_PRICING] Empty model name — using fallback pricing "
+            "[VERONICA_PRICING] Empty model name -- using fallback pricing "
             "(input=$%.4f/1K, output=$%.4f/1K). "
             "Add this model to PRICING_TABLE for accurate cost estimation.",
             _UNKNOWN_MODEL_FALLBACK.input_per_1k,
@@ -91,14 +91,14 @@ def resolve_model_pricing(model: str) -> Pricing:
     if model in PRICING_TABLE:
         return PRICING_TABLE[model]
 
-    # 2. Prefix match — find the longest key that is a prefix of model
+    # 2. Prefix match -- find the longest key that is a prefix of model
     prefix_matches = [key for key in PRICING_TABLE if model.startswith(key)]
     if prefix_matches:
         best = max(prefix_matches, key=len)
         return PRICING_TABLE[best]
 
     logger.warning(
-        "[VERONICA_PRICING] Unknown model %r — using fallback pricing "
+        "[VERONICA_PRICING] Unknown model %r -- using fallback pricing "
         "(input=$%.4f/1K, output=$%.4f/1K). "
         "Add this model to PRICING_TABLE for accurate cost estimation.",
         model,

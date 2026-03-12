@@ -1,4 +1,4 @@
-"""Round 3 stress tests — concurrent + async + resource exhaustion + ContextVar edge cases.
+"""Round 3 stress tests -- concurrent + async + resource exhaustion + ContextVar edge cases.
 
 Targets:
 1. Concurrent stress: 20 threads on same ExecutionContext, 10 asyncio tasks on veronica_guard
@@ -169,7 +169,7 @@ class TestConcurrentWrap:
         assert abs(snap.cost_usd_accumulated - 20 * cost_per_call) < 1e-9
 
     def test_concurrent_wrap_with_exception_no_lock_leak(self) -> None:
-        """When fn() raises, no lock is left held — subsequent calls proceed."""
+        """When fn() raises, no lock is left held -- subsequent calls proceed."""
         ctx = _make_ctx()
         errors = 0
         allows = 0
@@ -198,7 +198,7 @@ class TestConcurrentWrap:
 
         # All calls complete (no deadlock)
         assert allows + errors == 20
-        # Context is not corrupted — a new wrap succeeds
+        # Context is not corrupted -- a new wrap succeeds
         d = ctx.wrap_llm_call(fn=lambda: None)
         assert d in (Decision.ALLOW, Decision.RETRY, Decision.HALT)
 
@@ -259,7 +259,7 @@ class TestAsyncConcurrentGuard:
 
         @veronica_guard(max_cost_usd=10.0)
         async def outer() -> None:
-            # create_task copies context — child sees is_guard_active() == True
+            # create_task copies context -- child sees is_guard_active() == True
             async def inner() -> None:
                 child_result.append(is_guard_active())
 
@@ -336,13 +336,13 @@ class TestResourceExhaustion:
     def test_budget_exhaustion_halts_all_subsequent(self) -> None:
         """After budget consumed, every subsequent call returns HALT."""
         ctx = _make_ctx(max_cost_usd=0.10, max_steps=1000)
-        # Each call costs $0.05 — two calls exhaust the budget
+        # Each call costs $0.05 -- two calls exhaust the budget
         for _ in range(2):
             ctx.wrap_llm_call(
                 fn=lambda: None,
                 options=WrapOptions(cost_estimate_hint=0.05),
             )
-        # Budget exhausted — all subsequent calls must HALT
+        # Budget exhausted -- all subsequent calls must HALT
         for _ in range(5):
             d = ctx.wrap_llm_call(
                 fn=lambda: None,
@@ -357,7 +357,7 @@ class TestResourceExhaustion:
             fn=lambda: None,
             options=WrapOptions(cost_estimate_hint=0.05),
         )
-        # Budget at ceiling — next call with cost=0 should still HALT if
+        # Budget at ceiling -- next call with cost=0 should still HALT if
         # cost_usd_accumulated >= max_cost_usd
         d = ctx.wrap_llm_call(
             fn=lambda: None,
@@ -376,7 +376,7 @@ class TestResourceExhaustion:
                 options=WrapOptions(partial_buffer=buf),
             )
 
-        # One more partial buffer — should log warning and NOT be tracked
+        # One more partial buffer -- should log warning and NOT be tracked
         extra_buf = PartialResultBuffer()
         ctx.wrap_llm_call(
             fn=lambda: None,
@@ -387,7 +387,7 @@ class TestResourceExhaustion:
             assert len(ctx._partial_buffers) == _MAX_PARTIAL_BUFFERS
 
     def test_step_limit_zero_halts_immediately(self) -> None:
-        """max_steps=0 means no steps allowed — every call returns HALT."""
+        """max_steps=0 means no steps allowed -- every call returns HALT."""
         ctx = _make_ctx(max_steps=0)
         for _ in range(5):
             d = ctx.wrap_llm_call(fn=lambda: None)
@@ -428,7 +428,7 @@ class TestErrorCascade:
         assert snap.step_count == 0
         assert snap.retries_used == retry_count
 
-        # Context is not corrupted — a success call works
+        # Context is not corrupted -- a success call works
         d = ctx.wrap_llm_call(fn=lambda: None)
         assert d == Decision.ALLOW
 
@@ -484,7 +484,7 @@ class TestErrorCascade:
         assert d == Decision.ALLOW
 
     def test_exception_during_concurrent_calls_no_deadlock(self) -> None:
-        """20 threads, half raise exceptions — no deadlock within 10 seconds."""
+        """20 threads, half raise exceptions -- no deadlock within 10 seconds."""
         ctx = _make_ctx(max_steps=100, max_retries_total=100)
         results: list[Any] = []
         lock = threading.Lock()
@@ -557,7 +557,7 @@ class TestContextVarEdgeCases:
         assert is_guard_active() is False
 
     def test_create_task_contextvar_isolation(self) -> None:
-        """asyncio.create_task creates a COPY of context — mutations in child don't
+        """asyncio.create_task creates a COPY of context -- mutations in child don't
         affect parent's ContextVar."""
         parent_state_after: list[bool] = []
 
@@ -693,5 +693,5 @@ class TestContextVarEdgeCases:
 
         # All 40 inside-guard reads should be True
         assert all(s is True for s in inside_states), f"inside_states: {inside_states}"
-        # The checker thread has its own context — guard is False there
+        # The checker thread has its own context -- guard is False there
         assert outside_states == [False]

@@ -1,4 +1,4 @@
-"""Tests for veronica_core.adapters.ag2 — AG2 ConversableAgent adapter.
+"""Tests for veronica_core.adapters.ag2 -- AG2 ConversableAgent adapter.
 
 Uses fake ag2 stubs injected into sys.modules so ag2 does not need to
 be installed.

@@ -1,4 +1,4 @@
-"""Tests for G-1: Policy Tamper Resistance — HMAC-SHA256 signing."""
+"""Tests for G-1: Policy Tamper Resistance -- HMAC-SHA256 signing."""
 
 from __future__ import annotations
 

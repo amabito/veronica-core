@@ -1,4 +1,4 @@
-"""PolicySimulator — replay execution logs against a ShieldPipeline.
+"""PolicySimulator -- replay execution logs against a ShieldPipeline.
 
 Processes each log entry chronologically, evaluating the pipeline's
 before_llm_call / before_tool_call / before_charge hooks as appropriate.

@@ -1,4 +1,4 @@
-"""veronica_core.patch — Optional SDK client patching for automatic injection.
+"""veronica_core.patch -- Optional SDK client patching for automatic injection.
 
 Provides opt-in monkey-patching of OpenAI and Anthropic SDK calls so that
 they are automatically checked against the active veronica_guard policy
@@ -8,9 +8,9 @@ NOT applied on import. Must be explicitly activated via patch_openai() /
 patch_anthropic(). Safe to call when the SDK is not installed.
 
 Public API:
-    patch_openai()    — patch OpenAI chat.completions and legacy ChatCompletion
-    patch_anthropic() — patch Anthropic Messages.create
-    unpatch_all()     — restore all original methods
+    patch_openai()    -- patch OpenAI chat.completions and legacy ChatCompletion
+    patch_anthropic() -- patch Anthropic Messages.create
+    unpatch_all()     -- restore all original methods
 """
 
 from __future__ import annotations

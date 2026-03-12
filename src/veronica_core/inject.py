@@ -1,10 +1,10 @@
-"""veronica_core.inject — Decorator-based execution boundary injection.
+"""veronica_core.inject -- Decorator-based execution boundary injection.
 
 Public API:
-    veronica_guard  — decorator that wraps a callable in a policy-enforced boundary
-    GuardConfig     — dataclass for documentation/IDE autocomplete (unused at runtime)
-    VeronicaHalt    — exception raised when a policy denies execution
-    is_guard_active — returns True when called from inside a guard boundary
+    veronica_guard  -- decorator that wraps a callable in a policy-enforced boundary
+    GuardConfig     -- dataclass for documentation/IDE autocomplete (unused at runtime)
+    VeronicaHalt    -- exception raised when a policy denies execution
+    is_guard_active -- returns True when called from inside a guard boundary
 """
 
 from __future__ import annotations

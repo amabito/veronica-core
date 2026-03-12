@@ -1,4 +1,4 @@
-"""veronica_core.quickstart — 2-line setup API for AI cost containment.
+"""veronica_core.quickstart -- 2-line setup API for AI cost containment.
 
 Provides a minimal entry point that wraps the full ExecutionContext + patch
 machinery behind a single ``init()`` call, competing with AgentBudget-style
@@ -128,9 +128,9 @@ def init(
         max_retries_total: Chain-wide retry budget. Defaults to 50.
         timeout_ms: Wall-clock timeout in milliseconds. 0 disables the timeout.
         on_halt: Action taken when a HALT decision is returned by a wrap call.
-            ``"raise"``  — raises :class:`~veronica_core.inject.VeronicaHalt`.
-            ``"warn"``   — logs a warning and continues.
-            ``"silent"`` — does nothing (caller must inspect the Decision).
+            ``"raise"``  -- raises :class:`~veronica_core.inject.VeronicaHalt`.
+            ``"warn"``   -- logs a warning and continues.
+            ``"silent"`` -- does nothing (caller must inspect the Decision).
         patch_openai: If True, monkey-patch the OpenAI SDK so that calls to
             ``chat.completions.create`` are automatically intercepted.
         patch_anthropic: If True, monkey-patch the Anthropic SDK so that
@@ -280,7 +280,7 @@ def shutdown() -> None:
                 "[VERONICA] Exception during ExecutionContext cleanup", exc_info=True
             )
 
-    # Remove SDK patches (idempotent — no-op if nothing was patched).
+    # Remove SDK patches (idempotent -- no-op if nothing was patched).
     try:
         from veronica_core.patch import unpatch_all
 

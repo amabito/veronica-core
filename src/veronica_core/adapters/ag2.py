@@ -1,4 +1,4 @@
-"""veronica_core.adapters.ag2 — AG2 (AutoGen2) ConversableAgent adapter.
+"""veronica_core.adapters.ag2 -- AG2 (AutoGen2) ConversableAgent adapter.
 
 Integrates VERONICA policy enforcement into AG2 pipelines via two
 complementary approaches: subclassing and hook-based registration.
@@ -6,9 +6,9 @@ complementary approaches: subclassing and hook-based registration.
 This module raises ImportError on import if ag2 is not installed.
 
 Public API:
-    VeronicaConversableAgent — ConversableAgent subclass that enforces
+    VeronicaConversableAgent -- ConversableAgent subclass that enforces
         budget, step count, and retry limits on every generate_reply() call.
-    register_veronica_hook — Function-based alternative; registers a reply
+    register_veronica_hook -- Function-based alternative; registers a reply
         function via ag2's register_reply() for users who prefer composition
         over inheritance.
 
@@ -154,7 +154,7 @@ class VeronicaConversableAgent(ConversableAgent):
         reply = super().generate_reply(messages=messages, sender=sender, **kwargs)
 
         # Increment step counter only when a reply was produced.
-        # None means the agent declined to reply — no LLM call was made.
+        # None means the agent declined to reply -- no LLM call was made.
         if reply is not None and self._container.step_guard is not None:
             self._container.step_guard.step()
 

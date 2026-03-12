@@ -44,7 +44,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"(?i)bitbank[_\-. ]?(?:api[_\-. ]?)?(?:key|secret)\s*[=:]\s*([^\s,;\"']{20,})"
         ),
     ),
-    # Anthropic API keys — must come BEFORE OPENAI_KEY (sk-ant- is a subset of sk-)
+    # Anthropic API keys -- must come BEFORE OPENAI_KEY (sk-ant- is a subset of sk-)
     ("ANTHROPIC_KEY", re.compile(r"\b(sk-ant-[A-Za-z0-9\-_]{20,})\b")),
     # OpenAI API keys (sk-proj-* and legacy sk-*)
     ("OPENAI_KEY", re.compile(r"\b(sk-(?:proj-)?[A-Za-z0-9\-_]{20,})\b")),
@@ -88,7 +88,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         "SSH_PRIVATE_KEY",
         re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"),
     ),
-    # .netrc password field — "password <value>" on its own line or inline
+    # .netrc password field -- "password <value>" on its own line or inline
     ("NETRC_PASSWORD", re.compile(r"(?i)\bpassword\s+([^\s\r\n]{4,})")),
     # npm tokens
     ("NPM_TOKEN", re.compile(r"\b(npm_[A-Za-z0-9]{36,})\b")),
@@ -215,7 +215,7 @@ class SecretMasker:
             # Reconstruct as the same concrete type where possible.
             # namedtuples and custom sequence subclasses may not accept a
             # single-iterable constructor (TypeError) or may raise other
-            # exceptions — fall back to plain list/tuple in all error cases.
+            # exceptions -- fall back to plain list/tuple in all error cases.
             try:
                 return type(value)(masked)
             except Exception:

@@ -317,7 +317,7 @@ class TestFromDictCorruptedStateHistory:
 
 
 class TestAdversarialStateMachine:
-    """Adversarial tests for VeronicaStateMachine — attacker mindset (M5 fix)."""
+    """Adversarial tests for VeronicaStateMachine -- attacker mindset (M5 fix)."""
 
     def test_fail_counts_reset_on_cooldown_trigger(self):
         """M5: fail_counts must reset to 0 when cooldown is triggered.

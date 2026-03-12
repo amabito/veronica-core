@@ -205,7 +205,7 @@ class TestVeronicaIntegration:
         assert len(veronica.state.cooldowns) == 0
 
     def test_get_stats(self):
-        """Test get_stats returns comprehensive data."""
+        """Test get_stats returns complete data."""
         backend = MemoryBackend()
         veronica = VeronicaIntegration(backend=backend)
 
@@ -220,7 +220,7 @@ class TestVeronicaIntegration:
 
 
 # ---------------------------------------------------------------------------
-# TOCTOU fix regression tests — record_fail() lock correctness (v0.10.4)
+# TOCTOU fix regression tests -- record_fail() lock correctness (v0.10.4)
 # ---------------------------------------------------------------------------
 
 
@@ -260,7 +260,7 @@ class TestRecordFailLockCorrectness:
         t.join(timeout=2.0)
 
         assert lock_was_free_after_call.is_set(), (
-            "_op_lock was not released after record_fail() returned — potential deadlock"
+            "_op_lock was not released after record_fail() returned -- potential deadlock"
         )
 
     def test_concurrent_record_fail_does_not_double_activate_cooldown(self) -> None:
@@ -305,7 +305,7 @@ class TestRecordFailLockCorrectness:
 
         backend = MemoryBackend()
         veronica = VeronicaIntegration(
-            cooldown_fails=100,  # high threshold — guard triggers before normal path
+            cooldown_fails=100,  # high threshold -- guard triggers before normal path
             cooldown_seconds=60,
             backend=backend,
             guard=ImmediateGuard(),
@@ -358,7 +358,7 @@ class TestMaybeAutoSaveThreadSafety:
         assert not errors, f"Unexpected exceptions: {errors}"
 
     def test_maybe_auto_save_resets_operation_count_exactly_once(self) -> None:
-        """operation_count must be reset atomically — not double-reset under concurrency."""
+        """operation_count must be reset atomically -- not double-reset under concurrency."""
         backend = MemoryBackend()
         veronica = VeronicaIntegration(
             auto_save_interval=10,

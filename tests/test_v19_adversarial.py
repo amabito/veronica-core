@@ -28,7 +28,7 @@ from veronica_core.shield.types import Decision
 
 
 # ---------------------------------------------------------------------------
-# 1a: WrapOptions NaN — adversarial bypass attempts
+# 1a: WrapOptions NaN -- adversarial bypass attempts
 # ---------------------------------------------------------------------------
 
 
@@ -64,7 +64,7 @@ class TestAdversarialWrapOptionsNaN:
 
 
 # ---------------------------------------------------------------------------
-# 1b: _wrap() finally — adversarial stack leak scenarios
+# 1b: _wrap() finally -- adversarial stack leak scenarios
 # ---------------------------------------------------------------------------
 
 
@@ -120,7 +120,7 @@ class TestAdversarialWrapStackLeak:
 
 
 # ---------------------------------------------------------------------------
-# 1f: _MAX_NODES cap — race condition under threading
+# 1f: _MAX_NODES cap -- race condition under threading
 # ---------------------------------------------------------------------------
 
 

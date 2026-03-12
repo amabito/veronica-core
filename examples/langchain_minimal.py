@@ -1,8 +1,8 @@
-"""LangChain minimal — Budget enforcement via VeronicaCallbackHandler.
+"""LangChain minimal -- Budget enforcement via VeronicaCallbackHandler.
 
 Attach VeronicaCallbackHandler to any LangChain LLM to enforce a hard
 cost ceiling and step count limit on every invocation. No real API key
-required — this example uses a stub that fires the callback hooks directly.
+required -- this example uses a stub that fires the callback hooks directly.
 
 Install:
     pip install veronica-core langchain-core
@@ -55,7 +55,7 @@ def main() -> None:
     # 2. Attach handler to your LLM
     llm = _StubLLM(callbacks=[handler])
 
-    # 3. Call as normal — handler enforces limits transparently
+    # 3. Call as normal -- handler enforces limits transparently
     prompts = [
         "Summarize VERONICA",
         "List key features",

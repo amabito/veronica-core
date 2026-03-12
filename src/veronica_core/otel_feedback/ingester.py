@@ -1,4 +1,4 @@
-"""OTelMetricsIngester — Parse OTel spans and accumulate per-agent metrics.
+"""OTelMetricsIngester -- Parse OTel spans and accumulate per-agent metrics.
 
 Supported span attribute namespaces:
   AG2 native:       span_type in {conversation, agent, llm, tool, code_execution}
@@ -62,7 +62,7 @@ class AgentMetrics:
     last_active: float = 0.0
     call_count: int = 0
 
-    # Internal accumulators — not part of the public API but stored on the
+    # Internal accumulators -- not part of the public API but stored on the
     # dataclass to avoid a parallel dict.
     _error_count: int = field(default=0, repr=False, compare=False)
     _latency_sum_ms: float = field(default=0.0, repr=False, compare=False)
@@ -310,7 +310,7 @@ class OTelMetricsIngester:
         try:
             self._ingest_span_internal(span)
         except Exception:
-            # Never propagate — metrics collection must not crash the caller
+            # Never propagate -- metrics collection must not crash the caller
             logger.debug(
                 "OTelMetricsIngester: ingest_span failed for span %r",
                 span.get("name", "?"),
@@ -393,7 +393,7 @@ class OTelMetricsIngester:
         # Filter to supported span types for AG2 spans
         span_type = span.get("span_type") or attrs.get("span_type") or ""
         if span_type and span_type not in _AG2_SPAN_TYPES:
-            # Unknown AG2 span type — skip
+            # Unknown AG2 span type -- skip
             return
 
         agent_id = _resolve_agent_id(span, attrs)

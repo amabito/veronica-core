@@ -3,7 +3,7 @@
 Prevents sandbox processes from reading host user profile paths by
 intercepting and validating all file path arguments before execution.
 
-No external dependencies required — stdlib only.
+No external dependencies required -- stdlib only.
 """
 
 from __future__ import annotations

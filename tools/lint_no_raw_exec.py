@@ -18,7 +18,7 @@ from typing import NamedTuple
 
 
 # ---------------------------------------------------------------------------
-# Allowlist — files that are permitted to contain raw exec calls
+# Allowlist -- files that are permitted to contain raw exec calls
 # ---------------------------------------------------------------------------
 
 _ALLOWLIST: frozenset[str] = frozenset(
@@ -231,7 +231,7 @@ def format_violation(v: Violation) -> str:
     """Format a Violation as a lint message."""
     return (
         f"{v.file}:{v.line}:{v.col}: [VERONICA-E001] "
-        f"Forbidden raw exec: {v.pattern} — use SecureExecutor"
+        f"Forbidden raw exec: {v.pattern} -- use SecureExecutor"
     )
 
 

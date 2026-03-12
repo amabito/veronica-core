@@ -1,7 +1,7 @@
 """OpenClaw Integration Demo - Strategy Engine + Safety Layer.
 
 Demonstrates how VERONICA Core provides a failsafe execution layer
-on top of powerful strategy engines like OpenClaw.
+on top of strategy engines like OpenClaw.
 
 OpenClaw: High-performance autonomous agent framework
 VERONICA: Execution safety layer (circuit breakers, SAFE_MODE, persistence)
@@ -27,7 +27,7 @@ import random
 class StrategyEngine:
     """Simulates a high-frequency strategy engine (OpenClaw-style).
 
-    This represents ANY powerful strategy engine that makes autonomous decisions.
+    This represents ANY strategy engine that makes autonomous decisions.
     VERONICA sits ABOVE this layer to provide execution safety.
     """
 

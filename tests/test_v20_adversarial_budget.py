@@ -94,7 +94,7 @@ class TestAdversarialConcurrentReserve:
     """Concurrent reserve() calls must not collectively exceed the ceiling."""
 
     def test_local_concurrent_reserve_no_overflow(self):
-        """10 threads each reserving 0.15 against ceiling 1.0 — at most 6 succeed."""
+        """10 threads each reserving 0.15 against ceiling 1.0 -- at most 6 succeed."""
         backend = make_local_backend()
         ceiling = 1.0
         amount = 0.15
@@ -342,7 +342,7 @@ class TestAdversarialSharedTimeoutPool:
     """SharedTimeoutPool must handle callback exceptions and concurrency safely."""
 
     def test_callback_exception_does_not_crash_pool(self):
-        """Callback exception must be swallowed — pool continues running."""
+        """Callback exception must be swallowed -- pool continues running."""
         pool = SharedTimeoutPool()
         fired_after: list[bool] = []
         event = threading.Event()
@@ -614,7 +614,7 @@ class TestAdversarialEpsilonBoundary:
     def test_reserve_at_exact_ceiling_uses_epsilon(self):
         """Reserving exactly ceiling must succeed (epsilon tolerance)."""
         backend = make_local_backend()
-        # Reserve exactly ceiling — should succeed with epsilon
+        # Reserve exactly ceiling -- should succeed with epsilon
         rid = backend.reserve(1.0, 1.0)
         assert rid is not None
 
@@ -709,7 +709,7 @@ class TestAdversarialExecutionContextBudget:
         assert backend.get_reserved() == 0.0
 
     def test_failed_call_rolls_back_reservation(self):
-        """fn() raising must roll back reservation — no budget charged."""
+        """fn() raising must roll back reservation -- no budget charged."""
         backend = make_local_backend()
         ctx = make_ctx(max_cost=1.0, budget_backend=backend)
 
@@ -724,7 +724,7 @@ class TestAdversarialExecutionContextBudget:
         assert backend.get_reserved() == 0.0
 
     def test_exception_in_wrap_rolls_back_reservation(self):
-        """Exception in fn() must roll back reservation — no budget charged.
+        """Exception in fn() must roll back reservation -- no budget charged.
 
         Note: BaseException (non KeyboardInterrupt/SystemExit) is converted to
         Decision.RETRY by _handle_fn_error and does NOT propagate. The key
@@ -741,7 +741,7 @@ class TestAdversarialExecutionContextBudget:
         decision = ctx.wrap_llm_call(fn=raise_runtime, options=opts)
         assert decision == Decision.RETRY
 
-        # Reservation must be rolled back — no cost charged
+        # Reservation must be rolled back -- no cost charged
         assert backend.get_reserved() == 0.0
         assert abs(backend.get() - 0.0) < 1e-9
 
@@ -822,7 +822,7 @@ class TestAdversarialRedisLuaAtomicity:
     """Redis Lua scripts must be atomic and prevent double-spend."""
 
     def test_concurrent_redis_reserve_does_not_overflow(self):
-        """20 concurrent threads reserving 0.06 against ceiling 1.0 — max 16 succeed."""
+        """20 concurrent threads reserving 0.06 against ceiling 1.0 -- max 16 succeed."""
         fake_client = fakeredis.FakeRedis(decode_responses=True)
 
         # Use separate backends in same fake Redis (shared via same client)
@@ -847,7 +847,7 @@ class TestAdversarialRedisLuaAtomicity:
         for t in threads:
             t.join()
 
-        # 20 * 0.06 = 1.2 > 1.0 — some must fail
+        # 20 * 0.06 = 1.2 > 1.0 -- some must fail
         assert len(errors) > 0, "Some reservations must fail to prevent overflow"
         # Total reserved in Redis must not exceed ceiling
         backend_check = make_redis_backend(fake_client, chain_id="concurrent-lua")

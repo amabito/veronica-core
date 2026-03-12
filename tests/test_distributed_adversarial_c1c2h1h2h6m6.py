@@ -74,7 +74,7 @@ class TestAdversarialC2ClaimedAtGarbage:
     def test_c2_empty_string_claimed_at_releases_stale_slot(self):
         """C2: Empty string half_open_claimed_at must release stale HALF_OPEN slot.
 
-        Old Lua code: `tonumber(... or '0')` — empty string '' is truthy in Lua,
+        Old Lua code: `tonumber(... or '0')` -- empty string '' is truthy in Lua,
         so `'' or '0'` evaluates to '' and tonumber('') returns nil.
         The condition `claimed_at > 0` with nil raises a Lua error or silently
         skips the release, causing permanent lockout.
@@ -95,7 +95,7 @@ class TestAdversarialC2ClaimedAtGarbage:
                 "success_count": 0,
                 "last_failure_time": str(time.time() - 120),
                 "half_open_in_flight": 1,
-                "half_open_claimed_at": "",  # empty string — garbage
+                "half_open_claimed_at": "",  # empty string -- garbage
             },
         )
         fake_client.expire(dcb._key, 3600)
@@ -245,7 +245,7 @@ class TestAdversarialH6LuaArgvNilGuard:
             # If it didn't raise, result must be a valid 3-element list.
             assert len(result) == 3
         except Exception:
-            # If it does raise (different Lua behavior), that is also acceptable —
+            # If it does raise (different Lua behavior), that is also acceptable --
             # the test verifies the fix handles nil gracefully either via default or error.
             pass
 
@@ -283,7 +283,7 @@ class TestAdversarialH1BudgetEpsilon:
 
 
 # ---------------------------------------------------------------------------
-# H2: get() TOCTOU — client reference captured under lock
+# H2: get() TOCTOU -- client reference captured under lock
 # ---------------------------------------------------------------------------
 
 

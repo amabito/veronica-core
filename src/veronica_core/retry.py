@@ -29,7 +29,7 @@ class RetryContainer:
     ``execute()`` calls on the same instance. ``_attempt_count`` and
     ``_total_retries`` are instance-level state; concurrent callers will race
     on these counters and produce incorrect values. Each call chain should use
-    its own ``RetryContainer`` instance. This is by design — the container
+    its own ``RetryContainer`` instance. This is by design -- the container
     tracks per-chain retry budget, not per-thread.
 
     Example:

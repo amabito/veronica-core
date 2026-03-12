@@ -1,4 +1,4 @@
-"""LangGraph minimal — Node-level enforcement via veronica_node_wrapper.
+"""LangGraph minimal -- Node-level enforcement via veronica_node_wrapper.
 
 Wrap any LangGraph node function with veronica_node_wrapper to enforce
 budget and step count limits before the node executes.
@@ -18,7 +18,7 @@ from veronica_core.inject import VeronicaHalt
 
 
 # ---------------------------------------------------------------------------
-# Shared config — one container per node for independent limit tracking,
+# Shared config -- one container per node for independent limit tracking,
 # or pass container=... to share limits across nodes.
 # ---------------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ def main() -> None:
     # Initial graph state
     state: dict = {"messages": []}
 
-    # Run the graph multiple times — each node has its own container with
+    # Run the graph multiple times -- each node has its own container with
     # max_steps=2, so each node can run twice before halting.
     for run in range(1, 4):
         print(f"Run {run}:")

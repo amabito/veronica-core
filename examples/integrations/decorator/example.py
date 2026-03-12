@@ -1,14 +1,14 @@
-"""@veronica_guard decorator — Execution boundary injection for any callable.
+"""@veronica_guard decorator -- Execution boundary injection for any callable.
 
 The simplest integration path: add one decorator and VERONICA enforces
-budget, step count, and retry limits on every call — no external framework
+budget, step count, and retry limits on every call -- no external framework
 required.
 
 Covered scenarios:
-  1. Basic guard — limits enforced across multiple calls
-  2. Nested guards — each function has its own independent boundary
-  3. Introspection — read live spend / step metrics via _container
-  4. Graceful denial — return_decision=True avoids exception-based flow
+  1. Basic guard -- limits enforced across multiple calls
+  2. Nested guards -- each function has its own independent boundary
+  3. Introspection -- read live spend / step metrics via _container
+  4. Graceful denial -- return_decision=True avoids exception-based flow
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _fake_spend(container: Any, tokens: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 1: Basic guard — three calls, then halted on fourth
+# Demo 1: Basic guard -- three calls, then halted on fourth
 # ---------------------------------------------------------------------------
 
 def demo_basic_guard() -> None:
@@ -60,7 +60,7 @@ def demo_basic_guard() -> None:
         "What is VERONICA?",
         "Why use a containment layer?",
         "What is a BudgetWindowHook?",
-        "Are there examples?",  # step 4 — blocked
+        "Are there examples?",  # step 4 -- blocked
     ]
 
     for q in questions:
@@ -72,7 +72,7 @@ def demo_basic_guard() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Demo 2: Nested guards — independent limits per function
+# Demo 2: Nested guards -- independent limits per function
 # ---------------------------------------------------------------------------
 
 def demo_nested_guards() -> None:

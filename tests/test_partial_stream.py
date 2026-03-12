@@ -278,7 +278,7 @@ def test_node_record_stores_partial_buffer():
 
 
 # ---------------------------------------------------------------------------
-# Test 13: attach_partial_buffer guard — overwrite prevention
+# Test 13: attach_partial_buffer guard -- overwrite prevention
 # ---------------------------------------------------------------------------
 
 
@@ -330,7 +330,7 @@ def test_wrap_after_exit_returns_halt():
         decision = ctx.wrap_llm_call(fn=lambda: "ok")
         assert decision.name == "ALLOW"
 
-    # Context is now exited — subsequent calls must be rejected.
+    # Context is now exited -- subsequent calls must be rejected.
     decision = ctx.wrap_llm_call(fn=lambda: "should_not_run")
     assert decision.name == "HALT"
 

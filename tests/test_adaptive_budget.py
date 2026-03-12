@@ -1905,7 +1905,7 @@ class TestAdversarialAdaptiveBudget:
 
 
 # ---------------------------------------------------------------------------
-# State restore — corrupted last_action
+# State restore -- corrupted last_action
 # ---------------------------------------------------------------------------
 
 

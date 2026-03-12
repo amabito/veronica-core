@@ -1255,7 +1255,7 @@ class TestAdversarialAttach:
         # It should be in the new _attached list, not lost
         # This is a known TOCTOU -- drain clears list, then iterates old copy
         # New attach goes to the new (empty) list, which is correct behavior
-        # _attached stores (weakref.ref, metadata) tuples — verify one entry exists
+        # _attached stores (weakref.ref, metadata) tuples -- verify one entry exists
         assert len(exporter._attached) == 1, (
             "FastCtx attached during drain must be retained in _attached, not silently dropped"
         )

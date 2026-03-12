@@ -208,5 +208,5 @@ class PolicyRegistry:
             return sorted(self._factories)
 
 
-# Module-level default singleton — created after the class definition.
+# Module-level default singleton -- created after the class definition.
 _DEFAULT_REGISTRY = PolicyRegistry()
