@@ -301,8 +301,21 @@ class MemoryBoundaryHook:
         """Return (allowed, reason) for the given access request.
 
         Evaluation proceeds in two stages:
-        1. Trust-level check (if trust_tracker and trusted_namespaces are configured).
-        2. Explicit rule check (if rules are configured).
+
+        Stage 1 -- Trust-level isolation (if trust_tracker and trusted_namespaces
+        are configured). UNTRUSTED agents are always denied here and never reach
+        Stage 2 -- explicit rules cannot grant UNTRUSTED agents access to trusted
+        namespaces. PROVISIONAL agents are denied write access but fall through
+        to Stage 2 for read access, meaning a misconfigured allow-write rule will
+        not be reached by PROVISIONAL agents on trusted namespaces. TRUSTED and
+        PRIVILEGED agents fall through to Stage 2 unconditionally.
+
+        Stage 2 -- Explicit rule check using MemoryAccessRule entries. Only
+        reached when Stage 1 does not produce a definitive verdict.
+
+        This two-stage design is intentional: trust-level guarantees take
+        precedence over explicit rules for trusted namespaces, preventing
+        over-permissive rules from unintentionally elevating low-trust agents.
 
         Args:
             agent_id: Requesting agent identifier.
@@ -420,6 +433,8 @@ class MemoryBoundaryHook:
             return (False, "default deny (no rules configured)")
 
         # Find the most-specific matching rule.
+        # Tiebreak: deny-wins (security-conservative) when multiple rules share
+        # the same specificity score for the same (agent_id, namespace) pattern.
         best: MemoryAccessRule | None = None
         best_score = -1
 
@@ -430,6 +445,17 @@ class MemoryBoundaryHook:
             if score > best_score:
                 best = rule
                 best_score = score
+            elif score == best_score and best is not None:
+                # Prefer the more restrictive rule at equal specificity.
+                # A rule is more restrictive if it denies the requested operation.
+                rule_denies = (is_write and not rule.allow_write) or (
+                    not is_write and not rule.allow_read
+                )
+                best_denies = (is_write and not best.allow_write) or (
+                    not is_write and not best.allow_read
+                )
+                if rule_denies and not best_denies:
+                    best = rule
 
         if best is None:
             if self._config.default_allow:

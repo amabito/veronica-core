@@ -6,6 +6,26 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.3] -- 2026-03-13 -- Tri-Memory Mathematical Consistency
+
+**Breaking changes:** none
+
+### Fixed
+
+- **governor**: `evaluate_message()` now preserves `degrade_directive` on QUARANTINE verdict (mirroring `evaluate()` fix from v3.7.2)
+- **compactness**: `raw_replay_ratio` float conversion now guarded with try/except for corrupted metadata (fail-closed to `inf`)
+- **message_governance**: `allowed_message_types=frozenset()` now correctly denies all types instead of silently allowing all (falsy check fixed to `is not None`)
+- **message_governance**: `_degrade_at` clamped to `max(1, ...)` to prevent zero-threshold edge case
+- **policy/memory_rules**: `_parse_float` now rejects NaN/Inf values with `math.isfinite()` guard
+- **types**: `MessageContext.content_size_bytes` now validates `isinstance(int)` to prevent NaN bypass
+- **types**: `MemoryOperation.content_size_bytes` now validates `isinstance(int)` for consistency
+
+### Tests
+
+- Updated 8 test assertions to match corrected behavior (QUARANTINE directive preservation, fail-closed compactness, frozenset type filter, degrade_threshold validation, notify_after symmetry)
+
+---
+
 ## [3.7.2] -- 2026-03-13 -- Security & Correctness Hardening
 
 **Breaking changes:** none

@@ -184,26 +184,15 @@ class TestAdversarialDenyOversizedMessageHook:
 
         assert decision.verdict is GovernanceVerdict.DENY
 
-    def test_degrade_threshold_one_no_degrade_zone(self) -> None:
-        """degrade_threshold=1.0 -- degrade_at == max_bytes.
+    def test_degrade_threshold_one_rejected(self) -> None:
+        """degrade_threshold=1.0 -- rejected by validation.
 
-        Condition: size > degrade_at AND size < max_bytes.
-        With degrade_at == max_bytes that range is empty: no DEGRADE possible.
+        Bug #3 fix: degrade_threshold=1.0 creates an empty DEGRADE zone
+        (degrade_at == max_bytes). This is now invalid: must be < 1.0.
         """
         max_bytes = 1000
-        hook = DenyOversizedMessageHook(max_bytes=max_bytes, degrade_threshold=1.0)
-
-        # Just below max -- degrade_at == max_bytes, so size > degrade_at is False.
-        below = _ctx(size=max_bytes - 1)
-        assert hook.before_message(below).verdict is GovernanceVerdict.ALLOW
-
-        # At max -- DENY (boundary-inclusive).
-        at_max = _ctx(size=max_bytes)
-        assert hook.before_message(at_max).verdict is GovernanceVerdict.DENY
-
-        # Above max -- DENY.
-        above = _ctx(size=max_bytes + 1)
-        assert hook.before_message(above).verdict is GovernanceVerdict.DENY
+        with pytest.raises(ValueError, match="degrade_threshold must be in"):
+            DenyOversizedMessageHook(max_bytes=max_bytes, degrade_threshold=1.0)
 
     def test_degrade_threshold_very_small_almost_all_degrade(self) -> None:
         """degrade_threshold=0.001 -- degrade_at is nearly 0.
@@ -281,12 +270,11 @@ class TestAdversarialMessageBridgeHook:
 
         assert decision.verdict is GovernanceVerdict.DENY
 
-    def test_empty_allowed_types_frozenset_skips_type_check(self) -> None:
-        """frozenset() is falsy in Python; the allowed_types guard is skipped.
+    def test_empty_allowed_types_frozenset_denies_all(self) -> None:
+        """frozenset() means 'no types allowed' -- must DENY all messages.
 
-        Implementation: `if self._allowed_types and ...` -- empty frozenset
-        evaluates to False, so the check is bypassed entirely.
-        This means an empty allowed_types behaves as 'allow all types'.
+        Fix: `if self._allowed_types is not None` distinguishes None (skip
+        filter) from empty frozenset (deny all).
         """
         hook = MessageBridgeHook(
             policy=BridgePolicy(allow_archive=True, quarantine_untrusted=False),
@@ -296,8 +284,8 @@ class TestAdversarialMessageBridgeHook:
 
         decision = hook.before_message(ctx)
 
-        # The type check is skipped because frozenset() is falsy.
-        assert decision.verdict is GovernanceVerdict.ALLOW
+        # Empty frozenset means no types are allowed -- DENY.
+        assert decision.verdict is GovernanceVerdict.DENY
 
     def test_deny_archive_takes_priority_over_allowed_types(self) -> None:
         """allow_archive=False must DENY before allowed_types is even checked."""
@@ -509,8 +497,9 @@ class TestAdversarialGovernorDegradeMerging:
         decision = governor.evaluate(_op())
 
         assert decision.verdict is GovernanceVerdict.QUARANTINE
-        # directive must be None when verdict is not DEGRADE.
-        assert decision.degrade_directive is None
+        # Bug #9 fix: QUARANTINE preserves the degrade directive from earlier
+        # hooks so enforcement can apply degradation even at QUARANTINE level.
+        assert decision.degrade_directive is not None
 
     def test_degrade_directive_max_content_size_bytes_stricter_wins(self) -> None:
         """max_content_size_bytes merges with min() semantics (stricter limit wins)."""

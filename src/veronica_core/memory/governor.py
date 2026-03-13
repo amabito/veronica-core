@@ -47,11 +47,25 @@ _VERDICT_RANK: dict[GovernanceVerdict, int] = {
     # DENY is handled separately (short-circuit) and not ranked here.
 }
 
+# Bug #8: mode merge -- deterministic, commutative strictness order.
+# Higher index = more restrictive; unknown modes treated as most restrictive.
+_MODE_RANK: dict[str, int] = {
+    "compact": 0,
+    "truncate": 1,
+    "redact": 2,
+    "downscope": 3,
+}
+
 
 def _merge_limit(a: int, b: int) -> int:
     """Return the stricter (smaller positive) of two limit values.
 
-    0 means "no limit". If both are positive, the smaller wins (stricter).
+    Semantics: 0 means "no limit" (unlimited). A literal limit of exactly
+    zero tokens/bytes is not representable via this function -- callers that
+    need to express "allow nothing" should use a positive sentinel (e.g. 1)
+    or a separate boolean flag, not a zero limit value.
+
+    If both are positive, the smaller wins (stricter).
     If one is 0, the other (positive) value is the effective limit.
     If both are 0, the result is 0 (no limit from either side).
     """
@@ -79,8 +93,31 @@ def _merge_directives(
         return existing
     if existing is None:
         return new
+    # Bug #8: mode -- commutative merge by strictness rank (higher = more restrictive).
+    # If both are non-empty, pick the stricter one; unknown modes rank highest (most
+    # restrictive). If one is empty, the non-empty value wins.
+    if existing.mode and new.mode:
+        existing_rank = _MODE_RANK.get(existing.mode, len(_MODE_RANK))
+        new_rank = _MODE_RANK.get(new.mode, len(_MODE_RANK))
+        merged_mode = existing.mode if existing_rank >= new_rank else new.mode
+    else:
+        merged_mode = existing.mode or new.mode
+
+    # Bug #8: namespace_downscoped_to -- commutative merge.
+    # If both are non-empty, prefer the longer (more specific) path; that typically
+    # restricts access to a narrower subtree. Tie-break lexicographically for full
+    # determinism regardless of registration order.
+    if existing.namespace_downscoped_to and new.namespace_downscoped_to:
+        a, b = existing.namespace_downscoped_to, new.namespace_downscoped_to
+        if len(a) != len(b):
+            merged_ns = a if len(a) > len(b) else b
+        else:
+            merged_ns = min(a, b)  # lexicographic tie-break
+    else:
+        merged_ns = existing.namespace_downscoped_to or new.namespace_downscoped_to
+
     return DegradeDirective(
-        mode=new.mode or existing.mode,
+        mode=merged_mode,
         max_packet_tokens=_merge_limit(existing.max_packet_tokens, new.max_packet_tokens),
         allowed_provenance=tuple(
             sorted(set(existing.allowed_provenance) | set(new.allowed_provenance))
@@ -88,7 +125,7 @@ def _merge_directives(
         verified_only=existing.verified_only or new.verified_only,
         summary_required=existing.summary_required or new.summary_required,
         raw_replay_blocked=existing.raw_replay_blocked or new.raw_replay_blocked,
-        namespace_downscoped_to=new.namespace_downscoped_to or existing.namespace_downscoped_to,
+        namespace_downscoped_to=merged_ns,
         redacted_fields=tuple(
             sorted(set(existing.redacted_fields) | set(new.redacted_fields))
         ),
@@ -282,7 +319,10 @@ class MemoryGovernor:
             policy_id=accumulated_policy_id,
             degrade_directive=(
                 accumulated_directive
-                if accumulated_verdict is GovernanceVerdict.DEGRADE
+                if accumulated_verdict in (
+                    GovernanceVerdict.DEGRADE,
+                    GovernanceVerdict.QUARANTINE,
+                )
                 else None
             ),
             threat_context=(
@@ -348,6 +388,10 @@ class MemoryGovernor:
         accumulated_directive: DegradeDirective | None = None
         accumulated_threat: ThreatContext | None = None
 
+        # Bug #10: use a sentinel so early exits (exception, DENY, unknown verdict)
+        # can still call notify_after before returning.
+        early_exit_decision: MemoryGovernanceDecision | None = None
+
         for hook in hooks_snapshot:
             try:
                 decision = hook.before_op(operation, context)
@@ -361,22 +405,24 @@ class MemoryGovernor:
                     type(hook).__name__,
                     exc,
                 )
-                return MemoryGovernanceDecision(
+                early_exit_decision = MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
                     reason=f"hook error: {type(exc).__name__}",
                     policy_id=type(hook).__name__,
                     operation=operation,
                 )
+                break
 
             if decision.verdict is GovernanceVerdict.DENY:
                 # Fail-closed: first DENY stops evaluation immediately.
-                return MemoryGovernanceDecision(
+                early_exit_decision = MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
                     reason=decision.reason,
                     policy_id=decision.policy_id,
                     operation=operation,
                     audit_metadata=dict(decision.audit_metadata),
                 )
+                break
 
             # Track worst non-DENY verdict.  Fail-closed: unknown verdicts
             # are treated as DENY to prevent silent degradation.
@@ -389,12 +435,14 @@ class MemoryGovernor:
                     type(hook).__name__,
                     decision.verdict,
                 )
-                return MemoryGovernanceDecision(
+                early_exit_decision = MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
                     reason=f"unknown verdict: {decision.verdict!r}",
                     policy_id=type(hook).__name__,
                     operation=operation,
                 )
+                break
+
             current_rank = _VERDICT_RANK[accumulated_verdict]
             if hook_rank > current_rank:
                 accumulated_verdict = decision.verdict
@@ -409,10 +457,20 @@ class MemoryGovernor:
                     accumulated_directive, decision.degrade_directive
                 )
 
-        # Only attach directive/threat if the final verdict is DEGRADE.
+        if early_exit_decision is not None:
+            # Bug #10: notify_after must be called even on early-exit paths.
+            self.notify_after(operation, early_exit_decision)
+            return early_exit_decision
+
+        # Bug #9: preserve accumulated DEGRADE directive when the final verdict
+        # is QUARANTINE (a later hook may have escalated from DEGRADE). The
+        # directive still carries valid content-transformation instructions.
         final_directive = (
             accumulated_directive
-            if accumulated_verdict is GovernanceVerdict.DEGRADE
+            if accumulated_verdict in (
+                GovernanceVerdict.DEGRADE,
+                GovernanceVerdict.QUARANTINE,
+            )
             else None
         )
         final_threat = (

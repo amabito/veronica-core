@@ -106,33 +106,33 @@ class TestAdversarialCorruptedInputs:
         decision = ev.before_op(op, _ctx(constraints))
         assert decision is not None
 
-    def test_garbage_string_as_packet_tokens_raises_value_error(self) -> None:
-        """Non-numeric string for packet_tokens: int('garbage') raises ValueError.
+    def test_garbage_string_as_packet_tokens_fail_closed(self) -> None:
+        """Non-numeric string for packet_tokens: fail-closed DEGRADE.
 
-        The evaluator does not catch this -- callers must provide valid metadata.
-        This test documents the behavior: ValueError propagates.
+        Bug #13 fix: corrupted metadata must not crash -- fail-closed
+        sentinel (2**62) exceeds any reasonable limit, triggering DEGRADE.
         """
         constraints = CompactnessConstraints(max_packet_tokens=100)
         ev = CompactnessEvaluator()
         op = _op(metadata={"packet_tokens": "garbage"})
-        with pytest.raises((ValueError, TypeError)):
-            ev.before_op(op, _ctx(constraints))
+        decision = ev.before_op(op, _ctx(constraints))
+        assert decision.verdict is GovernanceVerdict.DEGRADE
 
-    def test_empty_string_as_packet_tokens_raises(self) -> None:
-        """Empty string for packet_tokens: int('') must raise ValueError."""
+    def test_empty_string_as_packet_tokens_fail_closed(self) -> None:
+        """Empty string for packet_tokens: fail-closed DEGRADE."""
         constraints = CompactnessConstraints(max_packet_tokens=100)
         ev = CompactnessEvaluator()
         op = _op(metadata={"packet_tokens": ""})
-        with pytest.raises((ValueError, TypeError)):
-            ev.before_op(op, _ctx(constraints))
+        decision = ev.before_op(op, _ctx(constraints))
+        assert decision.verdict is GovernanceVerdict.DEGRADE
 
-    def test_none_as_attribute_count_raises(self) -> None:
-        """None for attribute_count: int(None) must raise TypeError."""
+    def test_none_as_attribute_count_fail_closed(self) -> None:
+        """None for attribute_count: fail-closed DEGRADE."""
         constraints = CompactnessConstraints(max_attributes_per_packet=5)
         ev = CompactnessEvaluator()
         op = _op(metadata={"attribute_count": None})
-        with pytest.raises((ValueError, TypeError)):
-            ev.before_op(op, _ctx(constraints))
+        decision = ev.before_op(op, _ctx(constraints))
+        assert decision.verdict is GovernanceVerdict.DEGRADE
 
     def test_negative_packet_tokens_in_metadata_allows(self) -> None:
         """Negative packet_tokens is below any positive limit -- must ALLOW."""

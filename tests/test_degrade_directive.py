@@ -243,7 +243,7 @@ class TestBridgePolicy:
         bp = BridgePolicy()
         assert bp.allow_archive is False
         assert bp.require_signature is False
-        assert bp.max_promotion_level == "provisional"
+        assert bp.max_promotion_level == "provisional_archive"
         assert bp.quarantine_untrusted is True
         assert bp.write_once_scratch is True
 

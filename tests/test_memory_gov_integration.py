@@ -226,8 +226,10 @@ def test_execution_context_notify_after_not_called_on_deny():
 
     ctx.wrap_llm_call(fn=lambda: None)
 
-    # DENY halts before _finalize_success, so notify_after must not be called.
-    assert after_calls == [], "notify_after must not fire when governor DENYs"
+    # Bug #10 fix: notify_after is now called symmetrically even on DENY,
+    # matching evaluate_message() behavior. Hooks need after-notification
+    # for cleanup regardless of verdict.
+    assert after_calls == ["called"], "notify_after must fire even when governor DENYs"
 
 
 def test_execution_context_notify_after_called_for_tool_call_success():

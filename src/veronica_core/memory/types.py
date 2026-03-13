@@ -156,6 +156,11 @@ class MemoryOperation:
             raise TypeError(
                 f"MemoryOperation.action must be a MemoryAction, got {type(self.action)!r}"
             )
+        if not isinstance(self.content_size_bytes, int):
+            raise TypeError(
+                f"MemoryOperation.content_size_bytes must be int, "
+                f"got {type(self.content_size_bytes).__name__}"
+            )
         if self.content_size_bytes < 0:
             raise ValueError(
                 f"MemoryOperation.content_size_bytes must be >= 0, "
@@ -202,6 +207,17 @@ class DegradeDirective:
 
     max_content_size_bytes: int = 0
     """Maximum byte size for the content payload. 0 = no limit."""
+
+    def __post_init__(self) -> None:
+        # Bug #7: verified_only=True with allowed_provenance that excludes
+        # "verified" creates an empty intersection -- nothing can ever pass.
+        if self.verified_only and self.allowed_provenance:
+            if "verified" not in self.allowed_provenance:
+                raise ValueError(
+                    "DegradeDirective: verified_only=True but allowed_provenance "
+                    f"{self.allowed_provenance!r} contains no 'verified' entry -- "
+                    "the intersection is empty and no content can pass"
+                )
 
 
 @dataclass(frozen=True)
@@ -253,6 +269,11 @@ class MessageContext:
     timestamp: float = field(default_factory=time.time)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.content_size_bytes, int):
+            raise TypeError(
+                f"MessageContext.content_size_bytes must be int, "
+                f"got {type(self.content_size_bytes).__name__}"
+            )
         if self.content_size_bytes < 0:
             raise ValueError(
                 f"MessageContext.content_size_bytes must be >= 0, "
@@ -275,7 +296,7 @@ class BridgePolicy:
     require_signature: bool = False
     """Require cryptographic signature for archive eligibility."""
 
-    max_promotion_level: str = "provisional"
+    max_promotion_level: str = "provisional_archive"
     """Highest memory view the message can promote to.
     One of: 'provisional_archive', 'verified_archive', 'session_state'."""
 

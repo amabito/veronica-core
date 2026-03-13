@@ -3,6 +3,7 @@ from __future__ import annotations
 
 __all__ = ["CompactnessEvaluator"]
 
+import math
 from typing import Any
 
 from veronica_core.memory.types import (
@@ -97,10 +98,28 @@ class CompactnessEvaluator:
         max_packet_tokens = 0
         over_any_limit = False
 
-        packet_tokens: int = int(operation.metadata.get("packet_tokens", 0))
-        attribute_count: int = int(operation.metadata.get("attribute_count", 0))
-        raw_replay_ratio: float = float(
-            operation.metadata.get("raw_replay_ratio", 0.0)
+        # Fail-closed for corrupted metadata: non-convertible packet_tokens
+        # are treated as exceeding any positive limit (use sys.maxsize sentinel).
+        try:
+            packet_tokens: int = int(operation.metadata.get("packet_tokens", 0))
+        except (TypeError, ValueError):
+            packet_tokens = 2**62  # sentinel: exceeds any realistic limit
+
+        try:
+            attribute_count: int = int(operation.metadata.get("attribute_count", 0))
+        except (TypeError, ValueError):
+            attribute_count = 2**62
+
+        try:
+            raw_replay_ratio_raw = float(
+                operation.metadata.get("raw_replay_ratio", 0.0)
+            )
+        except (TypeError, ValueError):
+            raw_replay_ratio_raw = float("inf")
+        # Fail-closed for NaN/Inf: non-finite ratio is treated as maximum
+        # (triggers DEGRADE rather than silently passing all comparisons).
+        raw_replay_ratio: float = (
+            raw_replay_ratio_raw if math.isfinite(raw_replay_ratio_raw) else float("inf")
         )
 
         if constraints.max_packet_tokens > 0 and packet_tokens > constraints.max_packet_tokens:

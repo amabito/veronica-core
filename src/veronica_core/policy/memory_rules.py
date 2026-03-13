@@ -18,6 +18,7 @@ __all__ = [
     "MemoryRuleEvaluator",
 ]
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -205,7 +206,18 @@ class MemoryRuleCompiler:
             if rule.rule_type != "memory" or not rule.enabled:
                 continue
             compiled.append(self.compile(rule))
-        compiled.sort(key=lambda r: (r.priority, r.rule_id))
+        # Sort by priority (ascending), then deny-first at equal priority so
+        # restrictive rules always win ties (security-conservative tiebreak).
+        # Within the same priority and deny/allow tier, rule_id provides a stable
+        # lexicographic order so output is deterministic across Python versions.
+        def _sort_key(r: CompiledMemoryRule) -> tuple[int, int, str]:
+            # 0 = denies (DENY/QUARANTINE), 1 = allows (ALLOW/DEGRADE)
+            is_permissive = 0 if r.verdict in (
+                GovernanceVerdict.DENY, GovernanceVerdict.QUARANTINE
+            ) else 1
+            return (r.priority, is_permissive, r.rule_id)
+
+        compiled.sort(key=_sort_key)
         return tuple(compiled)
 
     # ------------------------------------------------------------------
@@ -297,6 +309,8 @@ class MemoryRuleCompiler:
         if not isinstance(val, (int, float)):
             raise TypeError(f"{key} must be a number, got {type(val).__name__}")
         val = float(val)
+        if not math.isfinite(val):
+            raise ValueError(f"{key} must be finite, got {val}")
         if val < minimum or val > maximum:
             raise ValueError(f"{key} must be in [{minimum}, {maximum}], got {val}")
         return val
