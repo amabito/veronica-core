@@ -68,7 +68,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ### Stats
 
-5766 tests, 94% coverage, governor.py 64% -> 98%.
+6123 tests, 94% coverage, governor.py 64% -> 98%.
 
 ---
 
