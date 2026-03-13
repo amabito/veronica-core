@@ -96,6 +96,12 @@ class TestA2AIdentityProvenance:
 
 
 class TestProvenanceRoundTrip:
+    @pytest.mark.parametrize("bad_value", [1, 0, "yes", None, "true"])
+    def test_non_bool_card_verified_rejected(self, bad_value: object) -> None:
+        """__post_init__ must reject non-bool card_verified (Rule 18)."""
+        with pytest.raises(TypeError, match="card_verified must be bool"):
+            A2AIdentityProvenance(card_verified=bad_value)  # type: ignore[arg-type]
+
     def test_asdict_round_trip(self) -> None:
         from dataclasses import asdict
 

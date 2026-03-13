@@ -524,6 +524,15 @@ class TestExtractTokenCount:
 
         assert _extract_token_count(Resp()) == 42
 
+    def test_bool_attr_token_count_rejected(self) -> None:
+        """Bool via attribute path must also be rejected (Rule 19 guard scope)."""
+        from veronica_core.adapters.a2a_client import _extract_token_count
+
+        class Resp:
+            token_count = True  # type: ignore[assignment]
+
+        assert _extract_token_count(Resp()) == 0
+
     @pytest.mark.parametrize("key", ["tokens", "total_tokens"])
     def test_flat_alternative_token_keys(self, key: str) -> None:
         """Flat 'tokens' and 'total_tokens' keys must be extracted."""

@@ -434,9 +434,17 @@ class TestClientConfigStreamStatsValidation:
         with pytest.raises(ValueError):
             A2AClientConfig(max_stream_chunks=0)
 
+    def test_zero_max_stream_bytes_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            A2AClientConfig(max_stream_bytes=0)
+
     def test_negative_max_stream_bytes_rejected(self) -> None:
         with pytest.raises(ValueError):
             A2AClientConfig(max_stream_bytes=-1)
+
+    def test_positive_max_stream_bytes_accepted(self) -> None:
+        cfg = A2AClientConfig(max_stream_bytes=1)
+        assert cfg.max_stream_bytes == 1
 
     def test_zero_max_stream_duration_rejected(self) -> None:
         with pytest.raises(ValueError):
