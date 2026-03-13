@@ -14,6 +14,7 @@ Test setup: PolicyEngine with CapabilitySet.dev(), fake repo_root=/tmp/testrepo.
 
 from __future__ import annotations
 
+import pytest
 
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.policy_engine import (
@@ -28,8 +29,18 @@ from veronica_core.security.policy_engine import (
 
 FAKE_REPO_ROOT = "/tmp/testrepo"
 
-_engine = PolicyEngine()
+try:
+    _engine = PolicyEngine()
+except RuntimeError:
+    # cryptography not available (e.g. free-threaded Python 3.13t)
+    _engine = None  # type: ignore[assignment]
+
 _caps = CapabilitySet.dev()
+
+pytestmark = pytest.mark.skipif(
+    _engine is None,
+    reason="PolicyEngine requires cryptography (unavailable on 3.13t)",
+)
 
 
 def _ctx(

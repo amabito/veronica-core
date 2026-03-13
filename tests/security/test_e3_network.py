@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import pytest
 
 from veronica_core.security.capabilities import CapabilitySet
 from veronica_core.security.policy_engine import PolicyContext, PolicyEngine
@@ -33,7 +34,15 @@ def _net_ctx(url: str, method: str = "GET") -> PolicyContext:
     )
 
 
-engine = PolicyEngine()
+try:
+    engine = PolicyEngine()
+except RuntimeError:
+    engine = None  # type: ignore[assignment]
+
+pytestmark = pytest.mark.skipif(
+    engine is None,
+    reason="PolicyEngine requires cryptography (unavailable on 3.13t)",
+)
 
 
 # ---------------------------------------------------------------------------
