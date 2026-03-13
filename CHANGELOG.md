@@ -6,6 +6,32 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.5] -- 2026-03-14 -- Adapter Unification + nogil CI
+
+**Breaking changes:** `veronica_core.adapter` removed (deprecated since v3.4.0, DeprecationWarning emitted on import). Replace:
+```python
+from veronica_core.adapter import SecureExecutor       # old
+from veronica_core.adapter.exec import SecureExecutor  # old
+```
+with:
+```python
+from veronica_core.adapters.exec import SecureExecutor  # new
+```
+Same for `AdapterConfig`, `ApprovalRequiredError`, `SecurePermissionError`.
+
+### Changed
+
+- **adapter/ removed**: Backward-compat shim deleted. All imports unified to `veronica_core.adapters.exec`. 9 files updated, 60 lines removed.
+- **CI: Python 3.13 + free-threaded**: Standard matrix expanded to 3.10-3.13. New `test-nogil` job runs full suite under Python 3.13t with `PYTHON_GIL=0`.
+- **pyproject.toml**: Added `Programming Language :: Python :: 3.13` classifier.
+- **Lint allowlist**: Removed stale `adapter/exec.py` entry from `tools/lint_no_raw_exec.py`.
+
+### Stats
+
+6125 tests, 94% coverage.
+
+---
+
 ## [3.7.4] -- 2026-03-13 -- A2A Containment Adapters
 
 **Breaking changes:** none

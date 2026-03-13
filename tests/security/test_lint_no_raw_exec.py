@@ -171,8 +171,8 @@ class TestAliasedImportDetection:
 
 class TestAllowlist:
     def test_allowlisted_exec_py(self, tmp_path: Path) -> None:
-        """src/veronica_core/adapter/exec.py must not be flagged."""
-        target = tmp_path / "src" / "veronica_core" / "adapter"
+        """src/veronica_core/adapters/exec.py must not be flagged."""
+        target = tmp_path / "src" / "veronica_core" / "adapters"
         target.mkdir(parents=True)
         f = target / "exec.py"
         f.write_text("import subprocess\nsubprocess.run(['ls'])\n", encoding="utf-8")

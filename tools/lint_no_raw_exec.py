@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import ast
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -23,7 +22,6 @@ from typing import NamedTuple
 
 _ALLOWLIST: frozenset[str] = frozenset(
     {
-        "src/veronica_core/adapter/exec.py",
         "src/veronica_core/adapters/exec.py",
         "src/veronica_core/runner/sandbox.py",
         "src/veronica_core/runner/sandbox_windows.py",

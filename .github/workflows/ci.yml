@@ -44,6 +44,7 @@ jobs:
           pytest --cov=veronica_core --cov-report=xml --cov-report=term-missing --cov-fail-under=90 -v
 
   test-nogil:
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,10 +61,11 @@ jobs:
 
       - name: Verify free-threaded build
         run: |
-          python -c "import sys; gil = sys._is_gil_enabled(); print(f'GIL enabled: {gil}'); assert not gil, 'Expected GIL disabled'"
+          python -c "import sys; gil = sys._is_gil_enabled(); print(f'GIL enabled: {gil}'); assert not gil, f'Expected GIL disabled (3.13t build), but _is_gil_enabled()={gil}. Check that setup-python provisioned 3.13t, not 3.13.'"
 
-      - name: Run tests with PYTHON_GIL=0
+      - name: Run tests (nogil smoke -- no coverage threshold)
         env:
+          # PYTHON_GIL=0 is redundant with 3.13t but documents intent explicitly
           PYTHON_GIL: "0"
         run: |
           pytest -v --timeout=120

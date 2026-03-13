@@ -216,7 +216,7 @@ def main() -> int:
 
     if not policy_path.exists():
         result.fail(f"Policy file not found: {policy_path}")
-        print(f"\nResults: 0 passed, 1 failed")
+        print("\nResults: 0 passed, 1 failed")
         return 1
 
     print("\n--- Check 1: Signature file ---")

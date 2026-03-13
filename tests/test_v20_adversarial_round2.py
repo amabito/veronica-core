@@ -672,3 +672,20 @@ class TestRemovedDeprecatedApis:
 
         with pytest.raises(AttributeError):
             _ = c.UnknownAttribute99999  # noqa: F821
+
+    def test_old_adapter_shim_raises_module_not_found(self) -> None:
+        """veronica_core.adapter (removed v3.7.5) must raise ModuleNotFoundError."""
+        import sys
+
+        sys.modules.pop("veronica_core.adapter", None)
+        with pytest.raises(ModuleNotFoundError):
+            import veronica_core.adapter  # noqa: F401
+
+    def test_old_adapter_exec_raises_module_not_found(self) -> None:
+        """veronica_core.adapter.exec (removed v3.7.5) must raise ModuleNotFoundError."""
+        import sys
+
+        sys.modules.pop("veronica_core.adapter", None)
+        sys.modules.pop("veronica_core.adapter.exec", None)
+        with pytest.raises(ModuleNotFoundError):
+            import veronica_core.adapter.exec  # noqa: F401
