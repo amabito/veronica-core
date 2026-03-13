@@ -12,9 +12,15 @@ Tests:
 from __future__ import annotations
 
 import random
+import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from conftest import wait_for
 
 from veronica_core.containment.execution_context import (
     CancellationToken,
@@ -201,11 +207,10 @@ class TestTimeoutWithSlowFn:
         config = _make_config(timeout_ms=50)  # 50ms timeout
         ctx = ExecutionContext(config=config)
 
-        # Wait longer than the timeout for the pool to fire
-        time.sleep(0.2)
-
-        assert ctx._cancellation_token.is_cancelled, (
-            "CancellationToken must be cancelled after timeout"
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="CancellationToken must be cancelled after timeout",
         )
 
     def test_wrap_returns_halt_after_timeout(self) -> None:
@@ -214,7 +219,11 @@ class TestTimeoutWithSlowFn:
         ctx = ExecutionContext(config=config)
 
         # Wait for timeout to fire
-        time.sleep(0.1)
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="Timeout did not fire within 2s",
+        )
 
         called: list[bool] = []
         decision = ctx.wrap_llm_call(
@@ -228,7 +237,11 @@ class TestTimeoutWithSlowFn:
         # First context: timeout
         config1 = _make_config(timeout_ms=1)
         ctx1 = ExecutionContext(config=config1)
-        time.sleep(0.1)
+        wait_for(
+            lambda: ctx1._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="First context timeout did not fire within 2s",
+        )
         assert ctx1._cancellation_token.is_cancelled
 
         # Second context: no timeout, should work fine
@@ -248,15 +261,16 @@ class TestTimeoutWithSlowFn:
 
         def slow_fn_that_checks_cancellation() -> None:
             # Poll cancellation token -- cooperative cancel
-            for _ in range(200):
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
                 if ctx._cancellation_token.is_cancelled:
                     interrupted.set()
                     return
-                time.sleep(0.001)
+                time.sleep(0.005)
 
         t = threading.Thread(target=slow_fn_that_checks_cancellation)
         t.start()
-        t.join(timeout=2.0)
+        t.join(timeout=3.0)
 
         assert interrupted.is_set(), "Slow fn must detect cancellation via token"
 
@@ -397,8 +411,12 @@ class TestSharedTimeoutPoolCancelAccuracy:
         for h in handles[:50]:
             pool.cancel(h)
 
-        # Wait for deadline + buffer
-        time.sleep(0.3)
+        # Wait for all non-cancelled callbacks to fire
+        wait_for(
+            lambda: len(fired) == 50,
+            timeout=2.0,
+            msg=f"Expected exactly 50 callbacks to fire, got {len(fired)}",
+        )
 
         pool.shutdown()
 
@@ -433,8 +451,7 @@ class TestSharedTimeoutPoolCancelAccuracy:
         fired: list[bool] = []
 
         h = pool.schedule(time.monotonic() + 0.05, lambda: fired.append(True))
-        time.sleep(0.2)
-        assert fired, "Callback must have fired"
+        wait_for(lambda: bool(fired), timeout=2.0, msg="Callback must have fired")
 
         # Cancel after fire -- must be a no-op
         pool.cancel(h)  # Should not raise

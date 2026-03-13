@@ -11,10 +11,12 @@ No private attribute access -- only public API used: wrap_llm_call, get_snapshot
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from conftest import wait_for
 
 from veronica_core.containment import ExecutionConfig, ExecutionContext
 from veronica_core.shield.types import Decision
@@ -35,8 +37,12 @@ def test_timeout_blocks_calls_made_after_timeout_elapses():
     )
 
     with ExecutionContext(config=config) as ctx:
-        # Wait for timeout to elapse
-        time.sleep(0.35)
+        # Wait for timeout to fire
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="Timeout did not fire within 2s",
+        )
 
         # Call after timeout elapsed
         fn_called = []
@@ -99,8 +105,12 @@ def test_timeout_subsequent_calls_after_timeout_also_halt():
     )
 
     with ExecutionContext(config=config) as ctx:
-        # Wait for timeout to elapse
-        time.sleep(0.25)
+        # Wait for timeout to fire
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="Timeout did not fire within 2s",
+        )
 
         # First call after timeout
         d1 = ctx.wrap_llm_call(fn=lambda: None)
@@ -126,8 +136,12 @@ def test_timeout_snapshot_shows_events_after_timeout():
     )
 
     with ExecutionContext(config=config) as ctx:
-        # Wait for timeout to elapse
-        time.sleep(0.25)
+        # Wait for timeout to fire
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="Timeout did not fire within 2s",
+        )
         # Make a call to trigger the check (which records the event)
         ctx.wrap_llm_call(fn=lambda: None)
         snap = ctx.get_snapshot()
@@ -153,8 +167,12 @@ def test_timeout_fn_exception_during_timeout_returns_halt():
     )
 
     with ExecutionContext(config=config) as ctx:
-        # Wait for timeout to elapse first
-        time.sleep(0.25)
+        # Wait for timeout to fire first
+        wait_for(
+            lambda: ctx._cancellation_token.is_cancelled,
+            timeout=2.0,
+            msg="Timeout did not fire within 2s",
+        )
 
         # Now call with an fn that raises -- timeout token is already set
         decision = ctx.wrap_llm_call(

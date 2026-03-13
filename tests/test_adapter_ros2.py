@@ -6,7 +6,6 @@ These tests run without rclpy -- only veronica_core internals are tested.
 from __future__ import annotations
 
 import logging
-import time
 
 from veronica_core.adapters.ros2 import OperatingMode, SafetyMonitor, _STATE_TO_MODE
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
@@ -101,14 +100,20 @@ class TestSafetyMonitorBasic:
         assert sm.current_mode is OperatingMode.HALT
 
     def test_recovery_after_timeout(self) -> None:
+        from tests.conftest import wait_for
+
         sm = _make_monitor(threshold=2, timeout=0.1)
         sm.record_fault(SensorFault("a"))
         sm.record_fault(SensorFault("b"))
         assert sm.current_mode is OperatingMode.HALT
 
-        time.sleep(0.15)
-        # After timeout, circuit goes HALF_OPEN -> SLOW
-        assert sm.current_mode is OperatingMode.SLOW
+        # Poll current_mode until CB transitions to HALF_OPEN -> SLOW.
+        # Polling current_mode drives the OPEN->HALF_OPEN state check.
+        wait_for(
+            lambda: sm.current_mode is OperatingMode.SLOW,
+            timeout=2.0,
+            msg="Expected SLOW mode after recovery timeout",
+        )
 
     def test_custom_state_to_mode(self) -> None:
         cb = CircuitBreaker(failure_threshold=2, recovery_timeout=1.0)
@@ -158,10 +163,17 @@ class TestSafetyMonitorGuard:
         assert sm.current_mode is OperatingMode.HALT
 
     def test_guard_records_healthy_on_success(self) -> None:
+        import time as _time
+
         sm = _make_monitor(threshold=2, timeout=0.1)
         sm.record_fault(SensorFault("a"))
         sm.record_fault(SensorFault("b"))
-        time.sleep(0.15)
+
+        # Wait until CB recovery_timeout elapses without reading cb.state, so
+        # the OPEN->HALF_OPEN transition is deferred to the guard() probe below.
+        _deadline = _time.monotonic() + sm.circuit_breaker.recovery_timeout + 0.05
+        while _time.monotonic() < _deadline:
+            _time.sleep(0.01)
 
         # HALF_OPEN -> guard with no exception -> record_healthy -> CLOSED
         with sm.guard(error_type=SensorFault):
@@ -211,6 +223,8 @@ class TestModeChangeCallback:
         assert len(transitions) == 0
 
     def test_full_lifecycle_transitions(self) -> None:
+        import time as _time
+
         transitions: list[tuple[OperatingMode, OperatingMode]] = []
 
         sm = _make_monitor(
@@ -224,14 +238,20 @@ class TestModeChangeCallback:
         sm.record_fault(SensorFault("b"))
         assert sm.current_mode is OperatingMode.HALT
 
-        # Wait for timeout -> HALF_OPEN (SLOW)
-        time.sleep(0.15)
-        # First record_healthy triggers HALT -> SLOW transition
+        # Wait until the CB recovery_timeout (0.1s) has elapsed without accessing
+        # cb.state, so the OPEN->HALF_OPEN transition is deferred. This lets
+        # record_healthy() below act as a no-op on the CB (still OPEN) while
+        # _check_transition() drives the HALT->SLOW callback.
+        _deadline = _time.monotonic() + sm.circuit_breaker.recovery_timeout + 0.05
+        while _time.monotonic() < _deadline:
+            _time.sleep(0.01)
+        # Record a healthy reading -- CB is still OPEN so record_success() is a
+        # no-op. _check_transition() then reads current_mode which triggers
+        # OPEN->HALF_OPEN inside the CB, emitting the HALT->SLOW callback.
         sm.record_healthy()
         assert sm.current_mode is OperatingMode.SLOW
 
-        # HALF_OPEN requires multiple successes to close;
-        # keep recording healthy until CLOSED
+        # Keep recording healthy until CB closes (SLOW -> FULL_AUTO).
         for _ in range(10):
             sm.record_healthy()
             if sm.current_mode is OperatingMode.FULL_AUTO:

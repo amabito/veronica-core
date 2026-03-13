@@ -14,8 +14,10 @@ Categories:
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -424,19 +426,30 @@ class TestSlidingWindow:
     def test_window_prunes_old_entries_after_sleep(self):
         """Cost window should drop entries older than window_sec.
 
-        We use a 0.05s window. After sleeping 0.1s, the first entry should
+        We use a 0.1s window. After sleeping 0.2s, the first entry should
         be pruned when the second is ingested.
         """
-        ingester = OTelMetricsIngester(window_sec=0.05)
+        sys.path.insert(0, str(Path(__file__).parent))
+        from conftest import wait_for  # type: ignore[import]
+
+        ingester = OTelMetricsIngester(window_sec=0.1)
         ingester.ingest_span(_make_llm_span(agent_id="prune", cost=10.0))
-        time.sleep(0.1)
-        ingester.ingest_span(_make_llm_span(agent_id="prune", cost=1.0))
-        # cost_window should now contain only the second entry
-        with ingester._global_lock:
-            state = ingester._agents["prune"]
-        with state.lock:
-            assert len(state.cost_window) == 1
-            assert state.cost_window[0][1] == pytest.approx(1.0)
+
+        # Poll: wait until the window has expired, then ingest a second span
+        # and verify the old entry is pruned -- nogil-tolerant.
+        def _ingest_and_check() -> bool:
+            ingester.ingest_span(_make_llm_span(agent_id="prune", cost=1.0))
+            with ingester._global_lock:
+                state = ingester._agents["prune"]
+            with state.lock:
+                # After window expiry, only the most recent entry remains.
+                return (
+                    len(state.cost_window) == 1
+                    and abs(state.cost_window[0][1] - 1.0) < 1e-9
+                )
+
+        time.sleep(0.2)  # ensure the first entry is outside the 0.1s window
+        wait_for(_ingest_and_check, timeout=3.0, interval=0.05, msg="Cost window not pruned")
 
 
 # ---------------------------------------------------------------------------

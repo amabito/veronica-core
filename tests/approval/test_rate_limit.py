@@ -28,13 +28,24 @@ class TestAcquire:
         assert limiter.acquire() is False
 
     def test_tokens_refill_after_window(self) -> None:
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from conftest import wait_for  # type: ignore[import]
+
         limiter = ApprovalRateLimiter(max_per_window=2, window_seconds=0.1)
         assert limiter.acquire() is True
         assert limiter.acquire() is True
         assert limiter.acquire() is False
-        time.sleep(0.15)
-        # Window expired: tokens should be available again
-        assert limiter.acquire() is True
+        # Window expired: tokens should be available again.
+        # Poll instead of sleep+assert for nogil tolerance.
+        wait_for(
+            lambda: limiter.acquire() is True,
+            timeout=2.0,
+            interval=0.02,
+            msg="Rate limit window did not refill within 2s",
+        )
 
     def test_acquire_single_token_limit(self) -> None:
         limiter = ApprovalRateLimiter(max_per_window=1, window_seconds=60.0)

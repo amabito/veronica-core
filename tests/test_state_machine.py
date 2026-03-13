@@ -84,6 +84,8 @@ class TestVeronicaStateMachine:
 
     def test_cooldown_expiry(self):
         """Test cooldown expires after duration."""
+        from tests.conftest import wait_for
+
         sm = VeronicaStateMachine(cooldown_fails=1, cooldown_seconds=0.1)
         entity = "test_task"
 
@@ -92,7 +94,10 @@ class TestVeronicaStateMachine:
 
         # Wait for cooldown to expire
         time.sleep(0.2)
-        assert not sm.is_in_cooldown(entity)
+        wait_for(
+            lambda: not sm.is_in_cooldown(entity),
+            msg="Expected cooldown to expire",
+        )
 
     def test_cleanup_expired(self):
         """Test cleanup_expired removes expired cooldowns."""
@@ -103,11 +108,18 @@ class TestVeronicaStateMachine:
 
         assert len(sm.cooldowns) == 2
 
-        # Wait for expiry
-        time.sleep(0.2)
+        # Poll cleanup_expired until both entries are returned. Using is_in_cooldown
+        # would eagerly remove entries before our explicit call, leaving nothing to
+        # return here. Polling cleanup_expired directly avoids that race.
+        deadline = time.monotonic() + 2.0
+        expired: list[str] = []
+        while time.monotonic() < deadline:
+            expired = sm.cleanup_expired()
+            if len(expired) == 2:
+                break
+            time.sleep(0.01)
 
-        expired = sm.cleanup_expired()
-        assert len(expired) == 2
+        assert len(expired) == 2, f"Expected 2 expired cooldowns, got {expired}"
         assert "task_1" in expired
         assert "task_2" in expired
         assert len(sm.cooldowns) == 0
@@ -501,6 +513,7 @@ class TestConcurrentStateMachine:
     def test_cleanup_expired_racing_with_is_in_cooldown(self):
         """cleanup_expired() racing with is_in_cooldown() must not corrupt cooldowns dict."""
         import threading
+        from tests.conftest import wait_for
 
         sm = VeronicaStateMachine(cooldown_fails=1, cooldown_seconds=0.05)
         barrier = threading.Barrier(6)
@@ -528,8 +541,14 @@ class TestConcurrentStateMachine:
                 with lock:
                     errors.append(exc)
 
-        # Wait for cooldowns to expire
+        # Wait for cooldowns to actually expire before starting the race
         time.sleep(0.1)
+        wait_for(
+            lambda: not sm.is_in_cooldown("pair_0")
+            and not sm.is_in_cooldown("pair_1")
+            and not sm.is_in_cooldown("pair_2"),
+            msg="Expected all cooldowns to expire before racing",
+        )
 
         # 3 cleanup + 3 is_in_cooldown threads race
         threads = [threading.Thread(target=cleanup_worker) for _ in range(3)] + [
@@ -541,7 +560,7 @@ class TestConcurrentStateMachine:
             t.join()
 
         assert not errors, f"Concurrent access errors: {errors}"
-        # All cooldowns must have been cleaned up (they expired 0.1s ago)
+        # All cooldowns must have been cleaned up (they expired before the race)
         assert len(sm.cooldowns) == 0
 
     def test_set_cooldown_racing_with_is_in_cooldown(self):

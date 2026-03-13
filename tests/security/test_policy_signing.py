@@ -9,6 +9,13 @@ import pytest
 
 from veronica_core.security.policy_signing import PolicySigner
 
+try:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+
+    _CRYPTO_AVAILABLE = True
+except ImportError:
+    _CRYPTO_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -113,6 +120,7 @@ def test_env_var_overrides_key(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not _CRYPTO_AVAILABLE, reason="cryptography not installed")
 def test_policy_engine_valid_sig_ok(
     tmp_policy: Path, signer: PolicySigner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -136,6 +144,7 @@ def test_policy_engine_valid_sig_ok(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not _CRYPTO_AVAILABLE, reason="cryptography not installed")
 def test_policy_engine_invalid_sig_raises(
     tmp_policy: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -185,6 +194,7 @@ def test_policy_engine_missing_sig_loads_ok(
     assert any("policy_sig_missing" in r.message for r in caplog.records)
 
 
+@pytest.mark.skipif(not _CRYPTO_AVAILABLE, reason="cryptography not installed")
 def test_policy_engine_missing_sig_raises_in_ci(
     tmp_policy: Path,
     monkeypatch: pytest.MonkeyPatch,

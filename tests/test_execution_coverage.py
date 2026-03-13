@@ -14,10 +14,12 @@ Targets uncovered paths to bring total coverage to >= 90%:
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from conftest import wait_for
 
 from veronica_core import (
     CancellationToken,
@@ -105,7 +107,11 @@ def test_timeout_ms_halts_after_expiry():
     )
     ctx = ExecutionContext(config=config)
     # Wait for the timeout to fire
-    time.sleep(0.1)
+    wait_for(
+        lambda: ctx._cancellation_token.is_cancelled,
+        timeout=2.0,
+        msg="Timeout did not fire within 2s",
+    )
     # After timeout fires, further wrap calls must HALT
     decision = ctx.wrap_llm_call(fn=lambda: None)
     assert decision == Decision.HALT

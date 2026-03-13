@@ -144,7 +144,9 @@ class TestLifecycle:
 class TestEnqueue:
     def test_enqueue_payload(self) -> None:
         """Payloads are placed on the internal queue."""
-        exporter = _make_exporter()
+        # Use a very long flush interval so the background thread does not
+        # drain the queue before we can inspect qsize() -- nogil-tolerant.
+        exporter = _make_exporter(flush_interval_s=60.0)
         exporter._enqueue({"test": True})
         assert exporter._queue.qsize() == 1
         exporter.close()

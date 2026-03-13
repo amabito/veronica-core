@@ -253,7 +253,7 @@ class TestPersistBackfill:
         p.save(_make_state())
 
         p.backup()
-        time.sleep(1.1)  # Ensure different timestamp in filename
+        time.sleep(1.5)  # Ensure different timestamp in filename (nogil-tolerant)
         p.backup()
 
         backups = list(tmp_path.glob("state_backup_*.json"))

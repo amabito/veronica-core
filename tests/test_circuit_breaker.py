@@ -184,14 +184,20 @@ class TestStaleSuccessInOpenState:
 
     def test_half_open_in_flight_reset_on_transition(self) -> None:
         """OPEN -> HALF_OPEN transition must reset _half_open_in_flight."""
+        import time
+        from tests.conftest import wait_for
+
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.01)
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
         # Stale success while OPEN (should be no-op)
         cb.record_success()
         # Wait for timeout to trigger OPEN -> HALF_OPEN
-        import time
         time.sleep(0.05)
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
         # check() triggers _maybe_half_open_locked
         decision = cb.check(PolicyContext())
         assert decision.allowed is True  # probe allowed (in_flight was reset)

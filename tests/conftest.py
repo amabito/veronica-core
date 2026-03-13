@@ -216,6 +216,47 @@ def make_test_bundle(
     )
 
 
+# ---------------------------------------------------------------------------
+# nogil-tolerant test helpers
+# ---------------------------------------------------------------------------
+
+
+def wait_for(
+    predicate: Any,
+    *,
+    timeout: float = 2.0,
+    interval: float = 0.01,
+    msg: str = "",
+) -> None:
+    """Poll *predicate* until it returns truthy, or raise AssertionError.
+
+    Use this instead of ``time.sleep(X); assert condition`` to make tests
+    tolerant of free-threaded Python (3.13t nogil) where thread scheduling
+    is less predictable.
+
+    Parameters
+    ----------
+    predicate:
+        Callable returning a truthy value when the condition is met.
+    timeout:
+        Maximum seconds to wait (default 2.0).
+    interval:
+        Seconds between polls (default 0.01).
+    msg:
+        Optional message for the AssertionError.
+    """
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(interval)
+    # Final check
+    if not predicate():
+        raise AssertionError(msg or f"Condition not met within {timeout}s")
+
+
 def make_signed_bundle(
     signer: PolicySigner,
     rules: tuple[PolicyRule, ...] = (),

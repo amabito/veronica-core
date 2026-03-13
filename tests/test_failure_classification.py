@@ -435,6 +435,9 @@ class TestAdversarialPredicate:
         This is critical: if a user-caused 400 error arrives during the
         test request, we should ignore it, not punish the service.
         """
+        import time
+        from tests.conftest import wait_for
+
         cb = CircuitBreaker(
             failure_threshold=2,
             recovery_timeout=0.01,
@@ -446,10 +449,11 @@ class TestAdversarialPredicate:
         assert cb.state == CircuitState.OPEN
 
         # Wait for HALF_OPEN
-        import time
-
         time.sleep(0.02)
-        assert cb.state == CircuitState.HALF_OPEN
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
 
         # Filtered failure during HALF_OPEN should be ignored
         result = cb.record_failure(error=BadRequestError("user error"))
@@ -459,6 +463,9 @@ class TestAdversarialPredicate:
 
     def test_counted_failure_in_half_open_reopens(self):
         """Counted failure during HALF_OPEN should reopen."""
+        import time
+        from tests.conftest import wait_for
+
         cb = CircuitBreaker(
             failure_threshold=2,
             recovery_timeout=0.01,
@@ -467,10 +474,11 @@ class TestAdversarialPredicate:
         cb.record_failure(error=ProviderError())
         cb.record_failure(error=ProviderError())
 
-        import time
-
         time.sleep(0.02)
-        assert cb.state == CircuitState.HALF_OPEN
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
 
         result = cb.record_failure(error=ProviderError("real failure"))
         assert result is True
@@ -554,6 +562,7 @@ class TestAdversarialPredicate:
         state check is inside the lock. Verify no corruption.
         """
         import time
+        from tests.conftest import wait_for
 
         cb = CircuitBreaker(
             failure_threshold=2,
@@ -563,7 +572,10 @@ class TestAdversarialPredicate:
         cb.record_failure(error=ProviderError())
         cb.record_failure(error=ProviderError())
         time.sleep(0.02)
-        assert cb.state == CircuitState.HALF_OPEN
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
 
         errors = []
 

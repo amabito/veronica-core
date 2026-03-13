@@ -869,6 +869,8 @@ class TestAdversarialRedisCorruption:
         Simulates: process claims HALF_OPEN slot, crashes, timeout elapses,
         next check() auto-releases the slot and allows a new test request.
         """
+        from tests.conftest import wait_for
+
         dcb = _make_dcb(
             fake_client,
             failure_threshold=1,
@@ -895,11 +897,10 @@ class TestAdversarialRedisCorruption:
 
         # Wait for slot timeout to elapse
         time.sleep(1.1)
-
-        # Now the stale slot should be auto-released
-        decision3 = dcb2.check(_ctx())
-        assert decision3.allowed, (
-            "After half_open_slot_timeout, stale slot must be auto-released"
+        wait_for(
+            lambda: dcb2.check(_ctx()).allowed,
+            timeout=3.0,
+            msg="After half_open_slot_timeout, stale slot must be auto-released",
         )
 
 
@@ -1430,15 +1431,44 @@ class TestAdversarialSlotTimeout:
 
         Lua atomicity guarantees exactly one claims the new slot.
         """
+        from tests.conftest import wait_for
+
+        slot_timeout = 0.05
         dcb = _make_dcb(
             fake_client,
             failure_threshold=1,
             recovery_timeout=0.0,
-            half_open_slot_timeout=0.01,
+            half_open_slot_timeout=slot_timeout,
         )
         dcb.record_failure()
         dcb.check(_ctx())  # claim slot
-        time.sleep(0.02)  # let slot go stale
+
+        # Wait until the slot is actually stale
+        time.sleep(slot_timeout + 0.05)
+        wait_for(
+            lambda: _make_dcb(
+                fake_client,
+                circuit_id="test",
+                failure_threshold=1,
+                recovery_timeout=0.0,
+                half_open_slot_timeout=slot_timeout,
+            ).check(_ctx()).allowed,
+            timeout=3.0,
+            msg="Expected stale slot to be auto-releasable before starting TOCTOU race",
+        )
+        # The wait_for probe consumed the slot; reclaim it so threads race on a
+        # fresh stale slot
+        dcb.reset()
+        dcb.record_failure()
+        reclaimer = _make_dcb(
+            fake_client,
+            circuit_id="test",
+            failure_threshold=1,
+            recovery_timeout=0.0,
+            half_open_slot_timeout=slot_timeout,
+        )
+        reclaimer.check(_ctx())  # hold slot
+        time.sleep(slot_timeout + 0.05)  # let it go stale again
 
         results: List[bool] = []
         barrier = threading.Barrier(10, timeout=5)
@@ -1491,6 +1521,8 @@ class TestAdversarialSlotTimeout:
 
     def test_slot_timeout_exact_boundary(self, fake_client):
         """At exactly the boundary, slot should be released (>= in Lua)."""
+        from tests.conftest import wait_for
+
         timeout = 0.5
         dcb = _make_dcb(
             fake_client,
@@ -1501,7 +1533,7 @@ class TestAdversarialSlotTimeout:
         dcb.record_failure()
         dcb.check(_ctx())  # claim slot
 
-        # Wait exactly the timeout + tiny margin
+        # Wait past the timeout, then poll until auto-release is confirmed
         time.sleep(timeout + 0.05)
         dcb2 = _make_dcb(
             fake_client,
@@ -1510,8 +1542,11 @@ class TestAdversarialSlotTimeout:
             recovery_timeout=0.0,
             half_open_slot_timeout=timeout,
         )
-        decision = dcb2.check(_ctx())
-        assert decision.allowed, "At/past boundary, slot must be released"
+        wait_for(
+            lambda: dcb2.check(_ctx()).allowed,
+            timeout=3.0,
+            msg="At/past boundary, slot must be released",
+        )
 
 
 class TestAdversarialInFlightInvariant:

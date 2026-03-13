@@ -10,6 +10,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+try:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+
+    _CRYPTO_AVAILABLE = True
+except ImportError:
+    _CRYPTO_AVAILABLE = False
+
 
 TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "tools"
 SIGN_SCRIPT = TOOLS_DIR / "release_sign_policy.py"
@@ -49,6 +58,7 @@ def _run(
 
 
 class TestVerifyRelease:
+    @pytest.mark.skipif(not _CRYPTO_AVAILABLE, reason="cryptography not installed")
     def test_verify_release_passes(self) -> None:
         """verify_release.py exits 0 on the committed default.yaml + sig."""
         result = _run(VERIFY_SCRIPT)

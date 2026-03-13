@@ -730,7 +730,7 @@ class TestTimeout:
         import time as _time
 
         def slow_fn(**kwargs: Any) -> str:
-            _time.sleep(0.2)
+            _time.sleep(0.5)
             return "done"
 
         ctx = _make_ctx()
@@ -771,7 +771,7 @@ class TestTimeout:
         import time as _time
 
         def slow_fn(**kwargs: Any) -> str:
-            _time.sleep(0.2)
+            _time.sleep(0.5)
             return "done"
 
         from veronica_core.adapters.mcp import MCPContainmentAdapter

@@ -323,10 +323,16 @@ class TestCircuitBreakerStateMatrix:
 
     def test_half_open_record_success_closes_circuit(self) -> None:
         """HALF_OPEN + record_success() -> CLOSED."""
+        from tests.conftest import wait_for
+
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.01)
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
         time.sleep(0.02)
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
         # Trigger HALF_OPEN transition via check()
         decision = cb.check(PolicyContext())
         assert cb.state == CircuitState.HALF_OPEN
@@ -348,9 +354,15 @@ class TestCircuitBreakerStateMatrix:
 
     def test_half_open_reentry_after_failure(self) -> None:
         """HALF_OPEN probe fails -> OPEN -> waits -> HALF_OPEN again (reentry path)."""
+        from tests.conftest import wait_for
+
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.01)
         cb.record_failure()
         time.sleep(0.02)
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected first HALF_OPEN after recovery_timeout",
+        )
         # First HALF_OPEN probe
         decision_first = cb.check(PolicyContext())
         assert decision_first.allowed
@@ -361,6 +373,10 @@ class TestCircuitBreakerStateMatrix:
             assert cb._state == CircuitState.OPEN
         # Wait again -> HALF_OPEN second time
         time.sleep(0.02)
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected second HALF_OPEN after recovery_timeout",
+        )
         decision_second = cb.check(PolicyContext())
         assert decision_second.allowed
         assert cb.state == CircuitState.HALF_OPEN

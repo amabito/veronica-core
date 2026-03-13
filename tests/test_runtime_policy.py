@@ -285,14 +285,22 @@ def test_circuit_breaker_state_transitions(
 
     # When
     if when_event == "success_after_timeout":
+        from tests.conftest import wait_for
         time.sleep(0.05)
-        _ = cb.state  # trigger half-open transition
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
         cb.record_success()
     elif when_event == "failure_after_timeout":
+        from tests.conftest import wait_for
         time.sleep(0.05)
-        _ = cb.state  # trigger half-open transition
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
         cb.record_failure()
-    # "none" → no additional event
+    # "none" -> no additional event
 
     # Then
     assert cb.state == then_state
@@ -323,20 +331,29 @@ class TestCircuitBreaker:
         assert cb.check(PolicyContext()).allowed
 
     def test_half_open_after_recovery_timeout(self):
+        from tests.conftest import wait_for
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.001)
         cb.record_failure()
         # Access internal _state directly to avoid triggering the half-open
         # transition that .state property may apply if enough time has passed.
         assert cb._state == CircuitState.OPEN
-        time.sleep(0.05)  # 50x buffer for CI stability
-        assert cb.state == CircuitState.HALF_OPEN
+        time.sleep(0.05)  # initial margin
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
         assert cb.check(PolicyContext()).allowed
 
     def test_closes_on_success_from_half_open(self):
+        from tests.conftest import wait_for
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.001)
         cb.record_failure()
         time.sleep(0.05)
-        _ = cb.state  # trigger half-open
+        wait_for(
+            lambda: cb.state == CircuitState.HALF_OPEN,
+            msg="Expected HALF_OPEN after recovery_timeout",
+        )
+        _ = cb.state  # trigger half-open (already done by wait_for)
         cb.record_success()
         assert cb.state == CircuitState.CLOSED
         assert cb.failure_count == 0  # Counter reset on close

@@ -315,7 +315,7 @@ class TestCostUsdOnException:
         """Sync timeout: cost_usd should equal cost_estimate."""
 
         def slow(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         costs = {"tool": MCPToolCost("tool", cost_per_call=0.03)}
@@ -747,10 +747,10 @@ class TestSyncPostCallTimeout:
     """Sync adapter detects timeout after call_fn returns (non-preemptive)."""
 
     def test_slow_fn_that_completes_still_gets_timeout_error(self) -> None:
-        """call_fn that sleeps 0.2s with 0.05s timeout -> TimeoutError after completion."""
+        """call_fn that sleeps 0.5s with 0.05s timeout -> TimeoutError after completion."""
 
         def slow_fn(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "completed but too slow"
 
         adapter = _make_sync(timeout_seconds=0.05)
@@ -764,7 +764,7 @@ class TestSyncPostCallTimeout:
         """Sync timeout error must increment error_count in stats."""
 
         def slow_fn(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         adapter = _make_sync(timeout_seconds=0.05)
@@ -776,7 +776,7 @@ class TestSyncPostCallTimeout:
         """Sync timeout error: total_cost_usd in stats should not include timed-out call."""
 
         def slow_fn(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         adapter = _make_sync(timeout_seconds=0.05, default_cost_per_call=0.01)

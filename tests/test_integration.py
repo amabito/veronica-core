@@ -1,11 +1,11 @@
 """Tests for VeronicaIntegration (main API)."""
 
 import concurrent.futures
+import sys
+from pathlib import Path
 import pytest
-import time
 import tempfile
 import shutil
-from pathlib import Path
 
 from veronica_core import VeronicaIntegration, VeronicaState
 from veronica_core.backends import JSONBackend, MemoryBackend
@@ -183,6 +183,9 @@ class TestVeronicaIntegration:
 
     def test_cleanup_expired(self):
         """Test cleanup_expired removes expired cooldowns."""
+        sys.path.insert(0, str(Path(__file__).parent))
+        from conftest import wait_for  # type: ignore[import]
+
         backend = MemoryBackend()
         veronica = VeronicaIntegration(
             cooldown_fails=1,
@@ -196,13 +199,12 @@ class TestVeronicaIntegration:
 
         assert len(veronica.state.cooldowns) == 2
 
-        # Wait for expiry
-        time.sleep(0.2)
+        # Poll until cleanup_expired() removes all entries (nogil-tolerant).
+        def _cleanup_and_check() -> bool:
+            veronica.cleanup_expired()
+            return len(veronica.state.cooldowns) == 0
 
-        # Cleanup
-        veronica.cleanup_expired()
-
-        assert len(veronica.state.cooldowns) == 0
+        wait_for(_cleanup_and_check, timeout=3.0, interval=0.02, msg="Cooldowns did not expire")
 
     def test_get_stats(self):
         """Test get_stats returns complete data."""

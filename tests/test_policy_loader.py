@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -276,6 +277,9 @@ class TestWatchHandle:
             tmp_path.unlink(missing_ok=True)
 
     def test_watch_triggers_callback_on_change(self) -> None:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from conftest import wait_for  # type: ignore[import]
+
         loader = PolicyLoader()
         with tempfile.NamedTemporaryFile(
             suffix=".json", mode="w", delete=False, encoding="utf-8"
@@ -299,8 +303,13 @@ class TestWatchHandle:
                 }
             )
             tmp_path.write_text(updated, encoding="utf-8")
-            time.sleep(0.4)
-            assert len(received) >= 1
+            # Poll until the watcher fires the callback -- nogil-tolerant.
+            wait_for(
+                lambda: len(received) >= 1,
+                timeout=5.0,
+                interval=0.05,
+                msg="File watcher callback did not fire within 5s",
+            )
             assert received[0].schema.name == "Updated Policy"
         finally:
             handle.cancel()

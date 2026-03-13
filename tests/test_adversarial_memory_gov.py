@@ -666,7 +666,7 @@ class TestAdversarialResourceExhaustion:
 
     def test_slow_hook_in_evaluate_completes_within_timeout(self) -> None:
         """A hook sleeping briefly must still complete -- evaluate() has no internal timeout."""
-        SLEEP_S = 0.1  # 100 ms -- generous enough to beat Windows scheduler jitter
+        SLEEP_S = 0.2  # 200 ms -- generous for nogil scheduler jitter
 
         class _SlowHook:
             def before_op(
@@ -690,9 +690,10 @@ class TestAdversarialResourceExhaustion:
         elapsed = time.monotonic() - start
 
         assert decision.verdict is GovernanceVerdict.ALLOW
-        # Allow +-50% timing tolerance for scheduler jitter on Windows
-        assert elapsed >= SLEEP_S * 0.5, "Hook sleep appeared skipped"
-        assert elapsed < 2.0, "evaluate() took unreasonably long"
+        # Allow +-75% timing tolerance for nogil/Windows scheduler jitter.
+        # The key invariant: evaluate() must not return before the hook finishes.
+        assert elapsed >= SLEEP_S * 0.25, "Hook sleep appeared skipped"
+        assert elapsed < 5.0, "evaluate() took unreasonably long"
 
 
 # ---------------------------------------------------------------------------

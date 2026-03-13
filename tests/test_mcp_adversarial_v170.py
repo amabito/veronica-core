@@ -391,7 +391,7 @@ class TestAdversarialSyncTimeout:
         """Timeout error result must have a non-None error message."""
 
         def slow_fn(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         adapter = _make_sync_adapter(timeout_seconds=0.05)
@@ -403,7 +403,7 @@ class TestAdversarialSyncTimeout:
         """5 threads with slow fn and short timeout -- must not crash or deadlock."""
 
         def slow_fn(**kwargs: Any) -> str:
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         adapter = _make_sync_adapter(timeout_seconds=0.05)
@@ -917,7 +917,7 @@ class TestAdversarialSharedStateDuringTimeout:
 
         def mutating_slow_fn(**kwargs: Any) -> str:
             shared["written"] = True
-            time.sleep(0.2)
+            time.sleep(0.5)
             return "done"
 
         adapter = _make_sync_adapter(timeout_seconds=0.05)
