@@ -129,7 +129,7 @@ class PolicyEngine:
         level = get_security_level()
         strict = level in (SecurityLevel.CI, SecurityLevel.PROD)
 
-        if strict and not _ED25519_AVAILABLE:
+        if strict and not _ED25519_AVAILABLE and policy_path is not None:
             raise RuntimeError(
                 f"cryptography package is required in {level.name} environment. "
                 "Install it with: pip install cryptography"
