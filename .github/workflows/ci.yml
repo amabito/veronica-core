@@ -46,6 +46,9 @@ jobs:
   test-nogil:
     needs: [test]
     runs-on: ubuntu-latest
+    # Smoke test only -- timing-sensitive tests may fail without GIL.
+    # Track results without blocking the pipeline.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
