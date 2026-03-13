@@ -6,9 +6,12 @@ or HashiCorp Vault transit engine.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 # Conditional import for Vault support
 try:
@@ -128,8 +131,11 @@ class VaultKeyProvider:
                 mount_point=self._mount_point,
             )
         except Exception as exc:
+            logger.debug(
+                "Vault key fetch raised %s: %s", type(exc).__name__, exc,
+            )
             raise RuntimeError(
-                f"Failed to fetch key '{self._key_name}' from Vault: {type(exc).__name__}"
+                f"Failed to fetch key '{self._key_name}' from Vault"
             ) from exc
 
         keys = response.get("data", {}).get("keys", {})

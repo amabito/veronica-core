@@ -419,3 +419,65 @@ class TestMessageGovernanceHookProtocol:
 
     def test_bridge_hook_satisfies_protocol(self) -> None:
         assert isinstance(MessageBridgeHook(), MessageGovernanceHook)
+
+
+# ---------------------------------------------------------------------------
+# Degrade zone meaning at extreme max_bytes values -- Rule 20
+# ---------------------------------------------------------------------------
+
+
+class TestDegradeZoneMeaning:
+    def test_max_bytes_one_has_no_degrade_zone(self) -> None:
+        """With max_bytes=1, the degrade zone [_degrade_at+1, max_bytes-1] is empty.
+
+        _degrade_at = int(1 * 0.8) = 0.
+        size=0 -> 0 <= 0 -> ALLOW (not in degrade zone, not at limit).
+        size=1 -> 1 >= 1 -> DENY.
+        There is no integer in (0, 1), so DEGRADE is unreachable at max_bytes=1.
+
+        This documents the boundary-meaning constraint: the computed _degrade_at=0
+        leaves no degrade zone. Callers that need a degrade zone must use max_bytes >= 2.
+        """
+        hook = DenyOversizedMessageHook(max_bytes=1, degrade_threshold=0.8)
+
+        result_zero = hook.before_message(_ctx(content_size_bytes=0))
+        assert result_zero.verdict == GovernanceVerdict.ALLOW, (
+            "size=0 with max_bytes=1 must be ALLOW (below degrade threshold)"
+        )
+
+        result_one = hook.before_message(_ctx(content_size_bytes=1))
+        assert result_one.verdict == GovernanceVerdict.DENY, (
+            "size=1 with max_bytes=1 must be DENY (at limit, boundary-inclusive)"
+        )
+
+        # No integer exists in the half-open interval (0, 1), so DEGRADE is
+        # unreachable with max_bytes=1 -- this is expected and documented.
+
+    def test_max_bytes_two_has_degrade_zone(self) -> None:
+        """With max_bytes=2 and threshold=0.8, _degrade_at=1 creates a degrade zone.
+
+        _degrade_at = int(2 * 0.8) = 1.
+        size=0 -> 0 <= 1 -> ALLOW.
+        size=1 -> 1 == 1 -> ALLOW (not strictly greater than).
+        size=2 -> 2 >= 2 -> DENY.
+        Degrade zone (1, 2) is empty for integers, so size=2 goes straight to DENY.
+        """
+        hook = DenyOversizedMessageHook(max_bytes=2, degrade_threshold=0.8)
+
+        assert hook.before_message(_ctx(content_size_bytes=0)).verdict == GovernanceVerdict.ALLOW
+        assert hook.before_message(_ctx(content_size_bytes=1)).verdict == GovernanceVerdict.ALLOW
+        assert hook.before_message(_ctx(content_size_bytes=2)).verdict == GovernanceVerdict.DENY
+
+    def test_max_bytes_ten_degrade_zone_reachable(self) -> None:
+        """With max_bytes=10 and threshold=0.8, _degrade_at=8 creates a real degrade zone.
+
+        _degrade_at = int(10 * 0.8) = 8.
+        size <= 8  -> ALLOW.
+        size in (8, 10) exclusive -> DEGRADE (size=9 is in the zone).
+        size >= 10 -> DENY.
+        """
+        hook = DenyOversizedMessageHook(max_bytes=10, degrade_threshold=0.8)
+
+        assert hook.before_message(_ctx(content_size_bytes=8)).verdict == GovernanceVerdict.ALLOW
+        assert hook.before_message(_ctx(content_size_bytes=9)).verdict == GovernanceVerdict.DEGRADE
+        assert hook.before_message(_ctx(content_size_bytes=10)).verdict == GovernanceVerdict.DENY

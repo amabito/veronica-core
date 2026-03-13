@@ -139,7 +139,8 @@ class TestEvaluateMessageBranches:
         gov.add_message_hook(_RaisingHook(ValueError("bad input")))
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DENY
-        assert "ValueError" in result.reason
+        assert "hook error" in result.reason
+        assert "ValueError" not in result.reason  # Rule 5: no exc type leak
 
     # Branch 4: Hook returns None -> TypeError -> DENY
     def test_hook_returns_none_deny(self) -> None:
@@ -147,7 +148,8 @@ class TestEvaluateMessageBranches:
         gov.add_message_hook(_NoneHook())
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DENY
-        assert "TypeError" in result.reason
+        assert "hook error" in result.reason
+        assert "TypeError" not in result.reason  # Rule 5: no exc type leak
 
     # Branch 5: Hook returns DENY -> immediate break
     def test_deny_hook_short_circuits(self) -> None:
@@ -365,3 +367,64 @@ class TestEvaluateMessageConcurrency:
             t.join()
 
         assert not errors, f"Unexpected exceptions: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Compound state: DENY + after_message raise -- Rule 6
+# ---------------------------------------------------------------------------
+
+
+class TestDenyPlusAfterMessageRaise:
+    def test_deny_verdict_not_swallowed_when_after_message_raises(self) -> None:
+        """DENY from first hook must be returned even when a second hook raises in after_message.
+
+        Verifies compound state: a DENY verdict (from before_message) and an exception
+        (from after_message on another hook) must both be handled without the DENY
+        being swallowed by the exception.
+        """
+
+        class _DenyHook:
+            def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
+                return MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.DENY,
+                    reason="compound-deny",
+                    policy_id="deny-hook",
+                )
+
+            def after_message(
+                self,
+                context: MessageContext,
+                decision: MemoryGovernanceDecision,
+                **kw: Any,
+            ) -> None:
+                pass
+
+        class _AfterRaisingSecondHook:
+            """Hook that returns ALLOW from before_message but raises in after_message."""
+
+            def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
+                return MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.ALLOW,
+                    reason="second-allow",
+                    policy_id="second-hook",
+                )
+
+            def after_message(
+                self,
+                context: MessageContext,
+                decision: MemoryGovernanceDecision,
+                **kw: Any,
+            ) -> None:
+                raise RuntimeError("after_message explosion in second hook")
+
+        gov = MemoryGovernor()
+        gov.add_message_hook(_DenyHook())
+        gov.add_message_hook(_AfterRaisingSecondHook())
+
+        # Must not raise; after_message exceptions are always swallowed.
+        result = gov.evaluate_message(_ctx())
+
+        assert result.verdict is GovernanceVerdict.DENY, (
+            "DENY from first hook must survive even when second hook's after_message raises"
+        )
+        assert result.reason == "compound-deny"

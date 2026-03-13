@@ -393,7 +393,9 @@ class TestAdversarialPolicyVerifier:
         bundle = PolicyBundle(metadata=meta, rules=(r,), signature="sig-value")
         result = PolicyVerifier(signer=ExplodingSigner()).verify(bundle)
         assert result.valid is False
-        assert any("RuntimeError" in e or "exploded" in e for e in result.errors)
+        assert any("verification failed" in e.lower() for e in result.errors)
+        # Rule 5: no exc type leak
+        assert not any("RuntimeError" in e for e in result.errors)
 
     def test_signer_without_verify_bundle_method_fails_closed(self) -> None:
         """signer without verify_bundle() must produce an error (fail-closed)."""

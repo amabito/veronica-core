@@ -8,6 +8,7 @@ Command injection is prevented by enforcing shell=False.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import subprocess
 import urllib.request
@@ -22,6 +23,8 @@ from veronica_core.security.policy_engine import (
     PolicyContext,
     PolicyEngine,
 )
+
+logger = logging.getLogger(__name__)
 
 # Regex for extracting redirect URL from error messages.
 # Using a regex avoids fragile string splitting that breaks if the URL
@@ -298,7 +301,8 @@ class SecureExecutor:
                     visited.add(redirect_url)
                     current = redirect_url
                     continue
-                raise URLError(f"fetch_url failed for {current}: {exc}") from exc
+                logger.debug("[exec] fetch_url failed for %s: %s", current, exc)
+                raise URLError("fetch_url failed") from exc
 
         raise URLError(f"Too many redirects (>{self._MAX_REDIRECTS}) for {url}")
 

@@ -575,7 +575,8 @@ class TestAdversarialGovernorErrorHandling:
         decision = governor.evaluate(_op())
 
         assert decision.verdict is GovernanceVerdict.DENY
-        assert "RuntimeError" in decision.reason
+        assert "hook error" in decision.reason
+        assert "RuntimeError" not in decision.reason  # Rule 5: no exc type leak
 
     def test_hook_returns_none_results_in_deny(self) -> None:
         """before_op returning None raises TypeError internally; must DENY."""
@@ -584,7 +585,8 @@ class TestAdversarialGovernorErrorHandling:
         decision = governor.evaluate(_op())
 
         assert decision.verdict is GovernanceVerdict.DENY
-        assert "TypeError" in decision.reason
+        assert "hook error" in decision.reason
+        assert "TypeError" not in decision.reason  # Rule 5: no exc type leak
 
     def test_unknown_verdict_enum_value_results_in_deny(self) -> None:
         """An unrecognized verdict not in _VERDICT_RANK must DENY (fail-closed)."""

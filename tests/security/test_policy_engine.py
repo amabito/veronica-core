@@ -760,3 +760,341 @@ class TestUnicodeBypassPrevention:
         decision = engine.evaluate(ctx)
         assert decision.verdict == "DENY"
         assert decision.rule_id == "SHELL_DENY_OPERATOR"
+
+
+# ---------------------------------------------------------------------------
+# T1: Windows .exe variants for DENY commands (Rule 8 -- platform variant)
+# ---------------------------------------------------------------------------
+
+
+class TestWindowsExeVariantsForDenyCommands:
+    """DENY commands must be blocked regardless of .exe suffix or case (Rule 8).
+
+    _check_shell_deny_commands normalises argv0 with os.path.basename().lower()
+    and .removesuffix('.exe'), so all variants must produce SHELL_DENY_CMD.
+    """
+
+    @pytest.mark.parametrize("cmd", ["rm", "rm.exe", "RM.EXE", "Rm.Exe"])
+    def test_rm_variants_denied(self, cmd: str) -> None:
+        """rm in any .exe / case variant must be DENY (SHELL_DENY_CMD)."""
+        engine = _engine()
+        ctx = _ctx("shell", [cmd, "-rf", "/"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    @pytest.mark.parametrize(
+        "cmd", ["cmd", "cmd.exe", "CMD.EXE", "Cmd.Exe"]
+    )
+    def test_cmd_variants_denied(self, cmd: str) -> None:
+        """cmd in any .exe / case variant must be DENY (SHELL_DENY_CMD)."""
+        engine = _engine()
+        ctx = _ctx("shell", [cmd, "/c", "dir"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        ["powershell", "powershell.exe", "POWERSHELL.EXE", "PowerShell.exe"],
+    )
+    def test_powershell_variants_denied(self, cmd: str) -> None:
+        """powershell in any .exe / case variant must be DENY (SHELL_DENY_CMD)."""
+        engine = _engine()
+        ctx = _ctx("shell", [cmd, "-ExecutionPolicy", "Bypass", "-c", "whoami"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    @pytest.mark.parametrize("cmd", ["del", "del.exe", "DEL.EXE", "Del.Exe"])
+    def test_del_variants_denied(self, cmd: str) -> None:
+        """del in any .exe / case variant must be DENY (SHELL_DENY_CMD)."""
+        engine = _engine()
+        ctx = _ctx("shell", [cmd, "/f", "/q", "C:\\secret.txt"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            r"C:\Windows\System32\rm.exe",
+            r"C:\Windows\System32\cmd.exe",
+            r"/usr/bin/rm",
+        ],
+    )
+    def test_full_path_variants_denied(self, cmd: str) -> None:
+        """Full-path invocations must be blocked via os.path.basename normalisation."""
+        engine = _engine()
+        ctx = _ctx("shell", [cmd, "-rf", "/"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+
+# ---------------------------------------------------------------------------
+# T2: EVALUATOR_ERROR branch -- fail-closed on raised exceptions (Rule 31)
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluatorErrorFailClosed:
+    """If a policy evaluator raises an exception the engine must return DENY
+    with rule_id == 'EVALUATOR_ERROR' (fail-closed, not fail-open).
+    """
+
+    def test_evaluator_exception_returns_deny(self, monkeypatch) -> None:
+        """Monkeypatched evaluator that raises must produce EVALUATOR_ERROR DENY."""
+        from veronica_core.security import policy_engine as _pe
+
+        def _raising_eval(ctx):
+            raise RuntimeError("simulated evaluator crash")
+
+        monkeypatch.setitem(_pe._EVALUATORS, "shell", _raising_eval)
+        engine = _engine()
+        ctx = _ctx("shell", ["pytest", "tests/"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "EVALUATOR_ERROR"
+
+    def test_evaluator_error_has_high_risk_delta(self, monkeypatch) -> None:
+        """EVALUATOR_ERROR must carry risk_score_delta == 10."""
+        from veronica_core.security import policy_engine as _pe
+
+        def _raising_eval(ctx):
+            raise ValueError("internal error")
+
+        monkeypatch.setitem(_pe._EVALUATORS, "shell", _raising_eval)
+        engine = _engine()
+        ctx = _ctx("shell", ["ls"])
+        decision = engine.evaluate(ctx)
+        assert decision.risk_score_delta == 10
+
+    def test_evaluator_error_does_not_leak_exception_message(
+        self, monkeypatch
+    ) -> None:
+        """Error message in EVALUATOR_ERROR must not contain exception details."""
+        from veronica_core.security import policy_engine as _pe
+
+        def _raising_eval(ctx):
+            raise RuntimeError("secret_internal_detail_xyz")
+
+        monkeypatch.setitem(_pe._EVALUATORS, "shell", _raising_eval)
+        engine = _engine()
+        ctx = _ctx("shell", ["ls"])
+        decision = engine.evaluate(ctx)
+        assert "secret_internal_detail_xyz" not in decision.reason
+        assert "RuntimeError" not in decision.reason
+
+
+# ---------------------------------------------------------------------------
+# T3: PolicyHook.before_tool_call and before_egress
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyHook:
+    """PolicyHook wraps PolicyEngine for ToolDispatchHook / EgressBoundaryHook
+    integration. Tests verify correct Decision mapping and last_decision tracking.
+    """
+
+    def _hook(self) -> "PolicyHook":  # noqa: F821
+        from veronica_core.security.policy_engine import PolicyHook
+
+        return PolicyHook(
+            engine=_engine(),
+            caps=_dev_caps(),
+            working_dir="/repo",
+            repo_root="/repo",
+            env="dev",
+        )
+
+    def _tool_ctx(
+        self,
+        action: str = "shell",
+        args: list[str] | None = None,
+    ) -> "ToolCallContext":  # noqa: F821
+        from veronica_core.shield.types import ToolCallContext
+
+        return ToolCallContext(
+            request_id="test-req-001",
+            user_id="tester",
+            metadata={"action": action, "args": args or []},
+        )
+
+    def test_before_tool_call_deny_returns_halt(self) -> None:
+        """before_tool_call for a DENY-worthy command must return Decision.HALT."""
+        from veronica_core.shield.types import Decision
+
+        hook = self._hook()
+        ctx = self._tool_ctx("shell", ["rm", "-rf", "/"])
+        result = hook.before_tool_call(ctx)
+        assert result == Decision.HALT
+
+    def test_before_tool_call_allow_returns_allow(self) -> None:
+        """before_tool_call for a safe command must return Decision.ALLOW."""
+        from veronica_core.shield.types import Decision
+
+        hook = self._hook()
+        ctx = self._tool_ctx("shell", ["pytest", "tests/"])
+        result = hook.before_tool_call(ctx)
+        assert result == Decision.ALLOW
+
+    def test_before_tool_call_require_approval_returns_quarantine(self) -> None:
+        """before_tool_call for REQUIRE_APPROVAL must return Decision.QUARANTINE."""
+        from veronica_core.shield.types import Decision
+
+        hook = self._hook()
+        ctx = self._tool_ctx("file_write", [".github/workflows/ci.yml"])
+        result = hook.before_tool_call(ctx)
+        assert result == Decision.QUARANTINE
+
+    def test_before_egress_blocked_host_returns_halt(self) -> None:
+        """before_egress for a non-allowlisted host must return Decision.HALT."""
+        from veronica_core.shield.types import Decision, ToolCallContext
+
+        hook = self._hook()
+        net_ctx = ToolCallContext(request_id="egress-001", user_id="tester")
+        result = hook.before_egress(net_ctx, "https://evil.com/malware.sh", "GET")
+        assert result == Decision.HALT
+
+    def test_before_egress_allowed_host_returns_allow(self) -> None:
+        """before_egress for an allowlisted host (GET) must return Decision.ALLOW."""
+        from veronica_core.shield.types import Decision, ToolCallContext
+
+        hook = self._hook()
+        net_ctx = ToolCallContext(request_id="egress-002", user_id="tester")
+        result = hook.before_egress(
+            net_ctx, "https://pypi.org/pypi/requests/json", "GET"
+        )
+        assert result == Decision.ALLOW
+
+    def test_before_egress_post_returns_halt(self) -> None:
+        """before_egress with POST method must return Decision.HALT."""
+        from veronica_core.shield.types import Decision, ToolCallContext
+
+        hook = self._hook()
+        net_ctx = ToolCallContext(request_id="egress-003", user_id="tester")
+        result = hook.before_egress(
+            net_ctx, "https://pypi.org/upload/", "POST"
+        )
+        assert result == Decision.HALT
+
+    def test_last_decision_is_none_before_any_call(self) -> None:
+        """last_decision must be None before any evaluation."""
+        hook = self._hook()
+        assert hook.last_decision is None
+
+    def test_last_decision_updated_after_before_tool_call(self) -> None:
+        """last_decision must reflect the most recent PolicyDecision after a call."""
+        hook = self._hook()
+        ctx = self._tool_ctx("shell", ["rm", "-rf", "/"])
+        hook.before_tool_call(ctx)
+        decision = hook.last_decision
+        assert decision is not None
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "SHELL_DENY_CMD"
+
+    def test_last_decision_updated_after_before_egress(self) -> None:
+        """last_decision must reflect the most recent egress evaluation."""
+        from veronica_core.shield.types import ToolCallContext
+
+        hook = self._hook()
+        net_ctx = ToolCallContext(request_id="egress-004", user_id="tester")
+        hook.before_egress(net_ctx, "https://evil.com/steal.sh", "GET")
+        decision = hook.last_decision
+        assert decision is not None
+        assert decision.verdict == "DENY"
+
+    def test_last_decision_overwritten_by_successive_calls(self) -> None:
+        """last_decision must always reflect the most recent call, not a prior one."""
+        hook = self._hook()
+        # First call: DENY
+        deny_ctx = self._tool_ctx("shell", ["rm", "-rf", "/"])
+        hook.before_tool_call(deny_ctx)
+        assert hook.last_decision is not None
+        assert hook.last_decision.verdict == "DENY"
+
+        # Second call: ALLOW -- last_decision must be updated
+        allow_ctx = self._tool_ctx("shell", ["pytest", "tests/"])
+        hook.before_tool_call(allow_ctx)
+        assert hook.last_decision is not None
+        assert hook.last_decision.verdict == "ALLOW"
+
+
+# ---------------------------------------------------------------------------
+# T8: git.exe Windows variants for GIT_DENY_SUBCMDS (Rule 8 -- platform variant)
+# ---------------------------------------------------------------------------
+
+
+class TestGitExeWindowsVariants:
+    """git binary variants (.exe, path-prefixed, case-varied) must all produce
+    GIT_DENY_SUBCMD when combined with denied subcommands (Rule 8).
+
+    The git evaluator strips the leading argv0 when it is recognisable as 'git',
+    so both ``action="git", args=["push"]`` and
+    ``action="git", args=["git.exe", "push"]`` must be handled.
+    """
+
+    @pytest.mark.parametrize(
+        "git_bin",
+        ["git", "git.exe", "GIT.EXE", r"C:\bin\git.exe", "/usr/bin/git"],
+    )
+    def test_git_push_force_denied_all_platforms(self, git_bin: str) -> None:
+        """git push --force must be DENY regardless of git binary name (GIT_DENY_SUBCMD)."""
+        engine = _engine()
+        ctx = _ctx("git", [git_bin, "push", "--force"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "GIT_DENY_SUBCMD"
+
+    @pytest.mark.parametrize(
+        "git_bin",
+        ["git", "git.exe", "GIT.EXE", r"C:\bin\git.exe", "/usr/bin/git"],
+    )
+    def test_git_workflow_denied_all_platforms(self, git_bin: str) -> None:
+        """git workflow must be DENY with any git binary variant."""
+        engine = _engine()
+        ctx = _ctx("git", [git_bin, "workflow", "run", "ci.yml"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "GIT_DENY_SUBCMD"
+
+    @pytest.mark.parametrize(
+        "git_bin",
+        ["git", "git.exe", "GIT.EXE", r"C:\bin\git.exe", "/usr/bin/git"],
+    )
+    def test_git_tag_denied_all_platforms(self, git_bin: str) -> None:
+        """git tag must be DENY with any git binary variant."""
+        engine = _engine()
+        ctx = _ctx("git", [git_bin, "tag", "v1.0.0"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "GIT_DENY_SUBCMD"
+
+    @pytest.mark.parametrize(
+        "git_bin",
+        ["git", "git.exe", "GIT.EXE", r"C:\bin\git.exe", "/usr/bin/git"],
+    )
+    def test_git_release_denied_all_platforms(self, git_bin: str) -> None:
+        """git release must be DENY with any git binary variant."""
+        engine = _engine()
+        ctx = _ctx("git", [git_bin, "release", "create", "v1.0.0"])
+        decision = engine.evaluate(ctx)
+        assert decision.verdict == "DENY"
+        assert decision.rule_id == "GIT_DENY_SUBCMD"
+
+    @pytest.mark.parametrize(
+        "git_bin",
+        ["git", "git.exe", "GIT.EXE", r"C:\bin\git.exe", "/usr/bin/git"],
+    )
+    def test_git_safe_subcmds_still_allowed_with_exe_variants(
+        self, git_bin: str
+    ) -> None:
+        """git status/log must remain ALLOW even with .exe variants (no regression)."""
+        engine = _engine()
+        for subcmd in ("status", "log", "diff"):
+            ctx = _ctx("git", [git_bin, subcmd])
+            decision = engine.evaluate(ctx)
+            assert decision.verdict == "ALLOW", (
+                f"git {subcmd} with binary '{git_bin}' must be ALLOW,"
+                f" got {decision.verdict} (rule={decision.rule_id})"
+            )

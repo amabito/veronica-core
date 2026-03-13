@@ -6,6 +6,7 @@ Rules are fail-closed: default verdict is DENY.
 
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from typing import Any, Literal
@@ -57,6 +58,8 @@ from veronica_core.security.policy_rules import (  # noqa: F401
     _check_protocol_rules,
     _check_data_exfil,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -351,9 +354,12 @@ class PolicyEngine:
             with policy_path.open("r", encoding="utf-8") as fh:
                 return yaml.safe_load(fh) or {}
         except Exception as exc:
+            logger.debug(
+                "policy_load_failed: %s raised %s: %s",
+                policy_path, type(exc).__name__, exc,
+            )
             raise RuntimeError(
-                f"policy_load_failed: policy file exists but could not be "
-                f"parsed: {policy_path} ({type(exc).__name__})"
+                "policy_load_failed: policy file could not be parsed"
             ) from exc
 
     def _check_rollback(self) -> None:

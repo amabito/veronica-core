@@ -9,12 +9,15 @@ verifies that the sandbox actually blocks filesystem and network access.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from veronica_core.audit.log import AuditLog
@@ -160,7 +163,8 @@ class SandboxProbe:
             else:
                 # Different OSError (e.g. file not found) -- not a sandbox
                 # block; treat as inconclusive / not blocking.
-                actual = f"ERROR:{exc}"
+                logger.debug("[attestation] probe_read OSError: %s", exc)
+                actual = "ERROR:oserror"
                 passed = False
         return ProbeResult(name=name, expected=expected, actual=actual, passed=passed)
 
@@ -191,7 +195,8 @@ class SandboxProbe:
         except Exception as exc:  # noqa: BLE001
             # Non-OSError exceptions (e.g. ValueError, TypeError) are not
             # evidence of sandbox blocking -- treat as inconclusive.
-            actual = f"ERROR:{exc}"
+            logger.debug("[attestation] probe_net error: %s: %s", type(exc).__name__, exc)
+            actual = "ERROR:exception"
             passed = False
         return ProbeResult(name=name, expected=expected, actual=actual, passed=passed)
 

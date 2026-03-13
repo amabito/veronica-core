@@ -208,7 +208,7 @@ class CircuitBreakerCapability:
                 _emit_ag2_otel_event(
                     name,
                     "FAILURE",
-                    f"generate_reply raised {type(exc).__name__}",
+                    "generate_reply raised exception",
                     "post_call",
                 )
                 raise

@@ -95,9 +95,9 @@ class VeronicaPersistence:
 
         try:
             import shutil
-            from datetime import datetime
+            from datetime import datetime, timezone
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             backup_path = self.path.with_name(
                 f"{self.path.stem}_backup_{timestamp}.json"
             )

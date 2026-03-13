@@ -88,7 +88,9 @@ class TestAdversarialStartupSignerBehavior:
         result = verify_policy_or_halt(bundle, raising_signer)
 
         assert result.valid is False
-        assert any("RuntimeError" in e for e in result.errors)
+        assert any("verification failed" in e.lower() for e in result.errors)
+        # Rule 5: no exc type leak in user-facing errors
+        assert not any("RuntimeError" in e for e in result.errors)
 
     def test_signer_verify_bundle_returns_truthy_non_bool_string_accepted(
         self, tmp_path: Path
@@ -174,7 +176,9 @@ class TestAdversarialStartupSignerBehavior:
         result = verify_policy_or_halt(bundle, FlakyValueErrorSigner())
 
         assert result.valid is False
-        assert any("ValueError" in e for e in result.errors)
+        assert any("verification failed" in e.lower() for e in result.errors)
+        # Rule 5: no exc type leak
+        assert not any("ValueError" in e for e in result.errors)
 
 
 # ---------------------------------------------------------------------------

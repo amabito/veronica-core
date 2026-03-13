@@ -219,6 +219,7 @@ class TestHookErrorHandling:
         decision = gov.evaluate(_op())
         assert decision.denied is True
         assert "hook error" in decision.reason
+        assert "RuntimeError" not in decision.reason  # Rule 5: no exc type leak
 
     def test_hook_error_after_allow_fails_closed(self) -> None:
         """An exception in before_op must return DENY even after prior ALLOWs."""
@@ -227,6 +228,8 @@ class TestHookErrorHandling:
         gov.add_hook(_make_raising_hook())
         decision = gov.evaluate(_op())
         assert decision.denied is True
+        assert "hook error" in decision.reason
+        assert "RuntimeError" not in decision.reason  # Rule 5: no exc type leak
 
 
 # ---------------------------------------------------------------------------
@@ -386,3 +389,116 @@ class TestConcurrentEvaluate:
             t.join()
 
         assert errors == [], f"Unexpected errors: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Reentrancy -- Rule 29
+# ---------------------------------------------------------------------------
+
+
+class TestReentrancy:
+    def test_reentrant_hook_causes_recursion_error_not_hang(self) -> None:
+        """Hook that calls governor.evaluate() from before_op() must not hang.
+
+        The implementation releases the lock before iterating hooks (snapshot
+        pattern), so re-entrant calls do not deadlock. Instead they recurse
+        unboundedly and hit Python's RecursionError, which is caught by the
+        fail-closed handler and converted to a DENY verdict.
+
+        This test documents the actual contract:
+        - Re-entrant hooks must not cause indefinite blocking (no deadlock).
+        - The outer evaluate() must eventually return (with DENY, fail-closed).
+        - Hooks MUST NOT call back into the same governor; doing so wastes stack.
+        """
+        gov = MemoryGovernor(fail_closed=True)
+        result_holder: list[MemoryGovernanceDecision] = []
+
+        class ReentrantHook:
+            def before_op(
+                self,
+                operation: MemoryOperation,
+                context: MemoryPolicyContext | None,
+            ) -> MemoryGovernanceDecision:
+                # Re-enters governor -- snapshot lock is already released, so
+                # this recurses instead of deadlocking.
+                return gov.evaluate(operation)
+
+            def after_op(
+                self,
+                operation: MemoryOperation,
+                decision: MemoryGovernanceDecision,
+                result: Any = None,
+                error: Any = None,
+            ) -> None:
+                pass
+
+        gov.add_hook(ReentrantHook())
+
+        def run() -> None:
+            result_holder.append(gov.evaluate(_op()))
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join(timeout=5.0)
+
+        # Thread must finish within the timeout -- no hang / deadlock.
+        assert not t.is_alive(), (
+            "Re-entrant evaluate() call hung for 5 seconds -- possible deadlock"
+        )
+        # Fail-closed: RecursionError is caught and converted to DENY.
+        assert len(result_holder) == 1
+        assert result_holder[0].denied is True, (
+            "Re-entrant RecursionError must produce a DENY verdict (fail-closed)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# DENY early-exit notify_after side effect -- Rule 7
+# ---------------------------------------------------------------------------
+
+
+class TestDenyEarlyExitNotifyAfter:
+    def test_deny_hook_triggers_after_op_on_tracking_hook(self) -> None:
+        """After a DENY early-exit, notify_after must still call after_op on all hooks.
+
+        Verifies the Bug #10 fix: evaluate() calls notify_after even when a hook
+        returns DENY (or raises), so that tracking hooks receive the final verdict.
+        """
+        after_op_calls: list[GovernanceVerdict] = []
+
+        class _TrackingAfterHook:
+            """Records verdicts received in after_op."""
+
+            def before_op(
+                self,
+                operation: MemoryOperation,
+                context: MemoryPolicyContext | None,
+            ) -> MemoryGovernanceDecision:
+                return MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.ALLOW,
+                    policy_id="tracker",
+                    operation=operation,
+                )
+
+            def after_op(
+                self,
+                operation: MemoryOperation,
+                decision: MemoryGovernanceDecision,
+                result: Any = None,
+                error: Any = None,
+            ) -> None:
+                after_op_calls.append(decision.verdict)
+
+        gov = MemoryGovernor()
+        gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY, policy_id="deny-first"))
+        gov.add_hook(_TrackingAfterHook())
+
+        decision = gov.evaluate(_op())
+
+        assert decision.denied is True, "evaluate() must return DENY"
+        assert len(after_op_calls) == 1, (
+            "notify_after must call after_op on the tracking hook even after DENY"
+        )
+        assert after_op_calls[0] is GovernanceVerdict.DENY, (
+            "The tracking hook's after_op must receive the DENY decision"
+        )

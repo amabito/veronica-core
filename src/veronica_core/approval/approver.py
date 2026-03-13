@@ -271,7 +271,7 @@ class CLIApprover:
         scope = f"{request.action}:{request.args_hash}"
         issued_at = datetime.fromisoformat(request.timestamp)
         if issued_at.tzinfo is None:
-            issued_at = issued_at.replace(tzinfo=timezone.utc)
+            raise ValueError("Timestamp must include timezone info")
         expiry = (issued_at + timedelta(seconds=_TOKEN_MAX_AGE_SECONDS)).isoformat()
 
         message = (
@@ -346,7 +346,7 @@ class CLIApprover:
             except ValueError:
                 return deny("invalid_expiry_format")
             if expiry_at.tzinfo is None:
-                expiry_at = expiry_at.replace(tzinfo=timezone.utc)
+                return deny("invalid_expiry_format")
             if datetime.now(timezone.utc) > expiry_at:
                 return deny("token_expired")
         else:
@@ -355,7 +355,7 @@ class CLIApprover:
             except ValueError:
                 return deny("invalid_timestamp_format")
             if issued_at.tzinfo is None:
-                issued_at = issued_at.replace(tzinfo=timezone.utc)
+                return deny("invalid_timestamp_format")
             age_seconds = (datetime.now(timezone.utc) - issued_at).total_seconds()
             if age_seconds > _TOKEN_MAX_AGE_SECONDS:
                 return deny("token_expired")

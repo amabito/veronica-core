@@ -9,11 +9,14 @@ No external dependencies are required.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from veronica_core.policy.bundle import PolicyBundle
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -182,9 +185,11 @@ class PolicyVerifier:
                     if not verify_fn(bundle):
                         errors.append("Bundle signature verification failed")
                 except Exception as exc:
-                    errors.append(
-                        f"Bundle signature verification raised {type(exc).__name__}"
+                    logger.debug(
+                        "Bundle signature verification raised %s: %s",
+                        type(exc).__name__, exc,
                     )
+                    errors.append("Bundle signature verification failed")
             else:
                 errors.append(
                     "Signer was provided but has no verify_bundle() method; "
@@ -236,7 +241,10 @@ class PolicyVerifier:
         try:
             return verifier.verify(bundle)
         except Exception as exc:
+            logger.debug(
+                "[verifier] verify_or_halt raised %s: %s", type(exc).__name__, exc
+            )
             return VerificationResult(
                 valid=False,
-                errors=(f"Verification raised {type(exc).__name__}: {exc}",),
+                errors=("Verification failed",),
             )

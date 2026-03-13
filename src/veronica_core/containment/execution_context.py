@@ -1030,7 +1030,7 @@ class ExecutionContext:
             )
             self._emit_chain_event(
                 self._MG_DENIED,
-                f"memory governor error: {type(exc).__name__}",
+                "memory governor error",
             )
             return self._halt_node(
                 node, stack, graph_node_id, self._MG_DENIED
@@ -1194,7 +1194,10 @@ class ExecutionContext:
             if len(self._nodes) < _MAX_NODES:
                 self._nodes.append(node)
         stack.pop()
-        self._graph.mark_failure(graph_node_id, error_class=type(exc).__name__)
+        logger.debug(
+            "[execution_context] step %s failed: %s", graph_node_id, type(exc).__name__,
+        )
+        self._graph.mark_failure(graph_node_id, error_class="error")
 
         # Re-raise signal-class exceptions (KeyboardInterrupt, SystemExit) after
         # node bookkeeping is complete.  These must propagate to the caller; storing

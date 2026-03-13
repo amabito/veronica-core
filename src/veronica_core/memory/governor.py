@@ -267,7 +267,7 @@ class MemoryGovernor:
                 )
                 final_decision = MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
-                    reason=f"hook error: {type(exc).__name__}",
+                    reason="hook error: hook raised unexpectedly",
                     policy_id=type(hook).__name__,
                 )
                 break
@@ -407,7 +407,7 @@ class MemoryGovernor:
                 )
                 early_exit_decision = MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
-                    reason=f"hook error: {type(exc).__name__}",
+                    reason="hook error: hook raised unexpectedly",
                     policy_id=type(hook).__name__,
                     operation=operation,
                 )

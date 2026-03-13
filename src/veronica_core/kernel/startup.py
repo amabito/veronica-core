@@ -15,14 +15,17 @@ __all__ = [
     "verify_policy_or_halt",
 ]
 
+import logging
 from typing import TYPE_CHECKING, Any
 
+from veronica_core.kernel.decision import ReasonCode, make_envelope
 from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.policy.verifier import PolicyVerifier, VerificationResult
-from veronica_core.kernel.decision import make_envelope, ReasonCode
 
 if TYPE_CHECKING:
     from veronica_core.audit.log import AuditLog
+
+logger = logging.getLogger(__name__)
 
 
 def verify_policy_or_halt(
@@ -134,13 +137,16 @@ def load_and_verify(
 
     except Exception as exc:
         # Fail-closed: construction failure means the bundle is untrusted.
+        logger.debug(
+            "[startup] bundle construction raised %s: %s", type(exc).__name__, exc
+        )
         bad_bundle = PolicyBundle(
             metadata=PolicyMetadata(policy_id="__invalid__"),
             rules=(),
         )
         result = VerificationResult(
             valid=False,
-            errors=(f"Bundle construction failed: {type(exc).__name__}: {exc}",),
+            errors=("Bundle construction failed",),
         )
         return bad_bundle, result
 
