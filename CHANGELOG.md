@@ -6,6 +6,35 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.4] -- 2026-03-13 -- A2A Containment Adapters
+
+**Breaking changes:** none
+
+### Added
+
+- **A2A client adapter** (`adapters/a2a_client.py`): `A2AContainmentAdapter` with circuit breaker pre-check, budget probe, per-token cost delta, streaming support, stats cap, and `BoundA2AAdapter` convenience wrapper.
+- **A2A server middleware** (`adapters/a2a_server.py`): `A2AServerContainmentMiddleware` with message size check, per-tenant/per-sender sliding-window rate limiting, Agent Card verification, trust escalation, governance hooks, fail-closed mode.
+- **A2A base types** (`adapters/_a2a_base.py`): Frozen dataclasses for config, request, decision, stream event, and message cost with full `__post_init__` validation (bool-as-int, NaN/Inf, negative, boundary guards).
+- **A2A identity provenance** (`a2a/provenance.py`): `A2AIdentityProvenance` frozen dataclass with `card_verified` bool enforcement.
+- **Card utilities** (`a2a/card.py`): `identity_from_a2a_card` with non-dict guard and PRIVILEGED downgrade; `verify_card_signature` with fail-closed on non-serializable cards.
+
+### Fixed
+
+- **Rule 5 info leakage**: 12 source files -- replaced `type(exc).__name__` / `str(exc)` in user-facing error strings with fixed messages; diagnostics moved to `logger.debug`.
+- **Rule 30 timezone safety**: `backends.py` and `persist.py` now use `datetime.now(timezone.utc)`.
+
+### Tests
+
+- 300 A2A-specific tests (base types, server middleware, client adapter, card verification, provenance).
+- Rule 5/30 hardening: updated assertions in 8 test files, added compound state and git variant parametrize tests.
+- F.R.I.D.A.Y. 3-body parallel review-fix loop: R8-R11 (14 fixes), R12+R13 = 2 consecutive CLEAN rounds.
+
+### Stats
+
+6123 tests, 94% coverage.
+
+---
+
 ## [3.7.3] -- 2026-03-13 -- Tri-Memory Mathematical Consistency
 
 **Breaking changes:** none
