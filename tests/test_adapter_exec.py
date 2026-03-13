@@ -1,4 +1,4 @@
-"""Dedicated tests for veronica_core.adapter.exec.SecureExecutor.
+"""Dedicated tests for veronica_core.adapters.exec.SecureExecutor.
 
 Covers:
 - execute_shell(): path traversal attempts, allowed commands, empty argv
@@ -22,7 +22,7 @@ from urllib.error import URLError
 
 import pytest
 
-from veronica_core.adapter.exec import (
+from veronica_core.adapters.exec import (
     AdapterConfig,
     ApprovalRequiredError,
     SecureExecutor,

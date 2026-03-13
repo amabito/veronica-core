@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from veronica_core.adapter.exec import (
+from veronica_core.adapters.exec import (
     AdapterConfig,
     ApprovalRequiredError,
     SecureExecutor,

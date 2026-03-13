@@ -224,7 +224,7 @@ class TestCreateWindowsSandbox:
 class TestWindowsExecution:
     def test_echo_runs_successfully(self, repo_root: str) -> None:
         """On Windows, a real python script via SecureExecutor should work."""
-        from veronica_core.adapter.exec import AdapterConfig, SecureExecutor
+        from veronica_core.adapters.exec import AdapterConfig, SecureExecutor
         from veronica_core.security.capabilities import CapabilitySet
         from veronica_core.security.policy_engine import PolicyEngine
 

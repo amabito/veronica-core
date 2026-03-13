@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from veronica_core.adapter.exec import AdapterConfig, SecureExecutor
+from veronica_core.adapters.exec import AdapterConfig, SecureExecutor
 from veronica_core.runner.sandbox import (
     SandboxConfig,
     SandboxRunner,

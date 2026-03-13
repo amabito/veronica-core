@@ -209,7 +209,7 @@ class TestCleanFile:
         f = _write(
             tmp_path,
             "clean.py",
-            "from veronica_core.adapter.exec import SecureExecutor\n"
+            "from veronica_core.adapters.exec import SecureExecutor\n"
             "executor = SecureExecutor(config)\n"
             "rc, out, err = executor.execute_shell(['pytest', 'tests/'])\n",
         )

@@ -15,7 +15,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from veronica_core.adapter.exec import SecureExecutor
+    from veronica_core.adapters.exec import SecureExecutor
 
 
 # ---------------------------------------------------------------------------
