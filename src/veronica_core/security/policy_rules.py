@@ -322,7 +322,9 @@ def _check_shell_deny_commands(argv0: str) -> PolicyDecision | None:
     like /usr/bin/rm or C:\\Windows\\System32\\cmd.exe are correctly matched
     and receive the expected risk_score_delta=8 (H-1 fix).
     """
-    basename = os.path.basename(argv0).lower().removesuffix(".exe")
+    # Use both / and \ as separators so that Windows paths like
+    # C:\Windows\System32\rm.exe are correctly normalised on Linux CI.
+    basename = argv0.replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
     if basename not in SHELL_DENY_COMMANDS:
         return None
     return PolicyDecision(

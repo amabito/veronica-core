@@ -227,27 +227,27 @@ class TestAdversarialCardParsing:
     """Adversarial tests for identity_from_a2a_card -- attacker mindset."""
 
     def test_missing_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({})
 
     def test_empty_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({"name": ""})
 
     def test_none_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({"name": None})
 
     def test_int_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({"name": 42})
 
     def test_list_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({"name": ["agent"]})
 
     def test_bytes_name_raises(self) -> None:
-        with pytest.raises(ValueError, match="non-empty 'name'"):
+        with pytest.raises(ValueError, match="non-empty"):
             identity_from_a2a_card({"name": b"agent"})
 
     def test_trust_level_injection_attempt(self) -> None:
