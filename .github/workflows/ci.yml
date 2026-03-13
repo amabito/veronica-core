@@ -57,7 +57,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # cffi does not support free-threaded CPython 3.13 (fixed in 3.14+).
+          # Skip cryptography/hvac (which depend on cffi) and install remaining
+          # test dependencies individually.
+          pip install pytest pytest-cov pytest-timeout fakeredis lupa pyyaml redis \
+            opentelemetry-api opentelemetry-sdk
+          pip install -e .
 
       - name: Verify free-threaded build
         run: |
