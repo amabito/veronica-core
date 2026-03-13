@@ -142,7 +142,13 @@ class VeronicaASGIMiddleware:
                     halted = True
 
                 if app_exception is not None:
-                    raise app_exception
+                    if halted:
+                        logger.warning(
+                            "App raised %s while context was halted; sending 429",
+                            type(app_exception).__name__,
+                        )
+                    else:
+                        raise app_exception
 
         finally:
             _current_execution_context.reset(token)
@@ -224,7 +230,13 @@ class VeronicaASGIMiddleware:
                     halted = True
 
                 if app_exception is not None:
-                    raise app_exception
+                    if halted:
+                        logger.warning(
+                            "App raised %s while context was halted; sending WS close 1008",
+                            type(app_exception).__name__,
+                        )
+                    else:
+                        raise app_exception
         finally:
             _current_execution_context.reset(token)
             ctx.__exit__(None, None, None)

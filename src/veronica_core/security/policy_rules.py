@@ -209,6 +209,13 @@ class ExecPolicyContext:
     env: str  # "dev" | "ci" | "audit" | "unknown"
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Freeze mutable fields so hooks cannot mutate them in-place.
+        from types import MappingProxyType
+
+        object.__setattr__(self, "args", tuple(self.args))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
 
 # Backward-compatible alias -- prefer ExecPolicyContext in new code.
 PolicyContext = ExecPolicyContext
@@ -315,7 +322,7 @@ def _check_shell_deny_commands(argv0: str) -> PolicyDecision | None:
     like /usr/bin/rm or C:\\Windows\\System32\\cmd.exe are correctly matched
     and receive the expected risk_score_delta=8 (H-1 fix).
     """
-    basename = os.path.basename(argv0)
+    basename = os.path.basename(argv0).lower().removesuffix(".exe")
     if basename not in SHELL_DENY_COMMANDS:
         return None
     return PolicyDecision(
@@ -873,7 +880,7 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     skip_next = False
     # Strip leading executable name (e.g. "git", "git.exe", "/usr/bin/git")
     git_args = ctx.args
-    if git_args and os.path.basename(git_args[0]).lower().rstrip(".exe") == "git":
+    if git_args and os.path.basename(git_args[0]).lower().removesuffix(".exe") == "git":
         git_args = git_args[1:]
     for token in git_args:
         if skip_next:

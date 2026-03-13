@@ -118,6 +118,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         circuit_breaker: Optional[CircuitBreaker] = None,
         entity_id: str = "llm",
         *,
+        execution_context: Optional[Any] = None,
         metrics: Optional[Any] = None,
         agent_id: str = "llamaindex",
     ) -> None:
@@ -134,7 +135,7 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
             event_ends_to_ignore=[],
         )
 
-        self._container = build_adapter_container(config)
+        self._container = build_adapter_container(config, execution_context)
         self._circuit_breaker = circuit_breaker
         self._entity_id = entity_id
         self._metrics = metrics

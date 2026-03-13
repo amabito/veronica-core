@@ -317,11 +317,18 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
         actual_cost = self._compute_actual_cost(tool_name, result_value)
 
         # Phase 3: commit the reservation or record cost on legacy path.
+        # In both paths, the per-token delta must be charged separately because
+        # the reservation / budget-probe only covered cost_estimate (= cost_per_call).
+        token_delta = actual_cost - cost_estimate
         if _reservation_id is not None:
             try:
                 _cm = budget_backend.commit(_reservation_id)
                 if inspect.isawaitable(_cm):
                     await _cm
+                # Charge per-token delta not included in the original reservation.
+                if token_delta > 0:
+                    self._ctx._budget_backend.add(token_delta)
+                    self._ctx._limits.budget.add(token_delta)
             except Exception as _commit_exc:  # noqa: BLE001
                 # Commit failed (expired, already committed, or backend error).
                 # Do NOT call add() -- that would double-charge the budget if the
@@ -333,17 +340,12 @@ class AsyncMCPContainmentAdapter(_MCPAdapterBase):
                     _commit_exc,
                 )
         else:
-            # Legacy path: _budget_probe was a no-op, so actual cost was never
-            # recorded against the budget.  Charge it now via wrap_tool_call with
-            # the actual cost so that the ExecutionContext tracks the spend.
-            if actual_cost > 0.0:
-                _actual_cost_hint = actual_cost
-
-                def _record_actual_cost() -> None:
-                    pass
-
-                opts = self._build_wrap_options(tool_name, _actual_cost_hint)
-                self._ctx.wrap_tool_call(fn=_record_actual_cost, options=opts)
+            # Legacy path: _budget_probe already charged cost_estimate via
+            # wrap_tool_call.  Only add the per-token delta (if any) to avoid
+            # double-charging the base cost_per_call.
+            if token_delta > 0:
+                self._ctx._budget_backend.add(token_delta)
+                self._ctx._limits.budget.add(token_delta)
 
         # Record success in CB and stats.
         self._record_circuit_breaker_success()

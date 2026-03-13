@@ -155,11 +155,11 @@ class TestDenyOversizedMessageHook:
         with pytest.raises(ValueError, match="degrade_threshold must be in"):
             DenyOversizedMessageHook(max_bytes=1000, degrade_threshold=1.5)
 
-    def test_exact_limit_allows(self) -> None:
-        # content_size_bytes == max_bytes should ALLOW (not exceed)
+    def test_exact_limit_denies(self) -> None:
+        # content_size_bytes == max_bytes should DENY (boundary-inclusive)
         hook = DenyOversizedMessageHook(max_bytes=1000, degrade_threshold=0.8)
         decision = hook.before_message(_ctx(content_size_bytes=1000))
-        assert decision.verdict == GovernanceVerdict.ALLOW
+        assert decision.verdict == GovernanceVerdict.DENY
 
     def test_exact_degrade_threshold_degrades(self) -> None:
         # degrade_at = int(1000 * 0.8) = 800; size 801 > 800 -> DEGRADE

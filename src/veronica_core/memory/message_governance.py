@@ -93,7 +93,7 @@ class DenyOversizedMessageHook:
 
     def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
         size = context.content_size_bytes
-        if size > self._max_bytes:
+        if size >= self._max_bytes:
             return MemoryGovernanceDecision(
                 verdict=GovernanceVerdict.DENY,
                 reason=f"message size {size} exceeds limit {self._max_bytes}",
@@ -104,7 +104,7 @@ class DenyOversizedMessageHook:
                     source_trust=context.trust_level,
                 ),
             )
-        if size > self._degrade_at and size < self._max_bytes:
+        if size > self._degrade_at:
             return MemoryGovernanceDecision(
                 verdict=GovernanceVerdict.DEGRADE,
                 reason=f"message size {size} exceeds degrade threshold {self._degrade_at}",

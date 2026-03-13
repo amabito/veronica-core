@@ -136,16 +136,16 @@ class TestAdversarialDenyOversizedMessageHook:
 
         assert decision.verdict is GovernanceVerdict.ALLOW
 
-    def test_size_exactly_max_bytes_is_allowed(self) -> None:
-        """size == max_bytes must be ALLOW (condition is strictly greater-than)."""
+    def test_size_exactly_max_bytes_is_denied(self) -> None:
+        """size == max_bytes must be DENY (boundary-inclusive)."""
         max_bytes = 1000
         hook = DenyOversizedMessageHook(max_bytes=max_bytes)
         ctx = _ctx(size=max_bytes)
 
         decision = hook.before_message(ctx)
 
-        # Implementation: if size > self._max_bytes -> DENY. Equal is not DENY.
-        assert decision.verdict is GovernanceVerdict.ALLOW
+        # Boundary fix: size >= max_bytes is DENY, not just strictly greater.
+        assert decision.verdict is GovernanceVerdict.DENY
 
     def test_size_max_bytes_plus_one_is_denied(self) -> None:
         """size == max_bytes + 1 must be DENY."""
@@ -166,14 +166,14 @@ class TestAdversarialDenyOversizedMessageHook:
 
         assert decision.verdict is GovernanceVerdict.DENY
 
-    def test_max_bytes_one_size_one_is_allowed(self) -> None:
-        """max_bytes=1, size=1 -- exactly at limit, must be ALLOW."""
+    def test_max_bytes_one_size_one_is_denied(self) -> None:
+        """max_bytes=1, size=1 -- exactly at limit, must be DENY (boundary-inclusive)."""
         hook = DenyOversizedMessageHook(max_bytes=1)
         ctx = _ctx(size=1)
 
         decision = hook.before_message(ctx)
 
-        assert decision.verdict is GovernanceVerdict.ALLOW
+        assert decision.verdict is GovernanceVerdict.DENY
 
     def test_max_bytes_one_size_two_is_denied(self) -> None:
         """max_bytes=1, size=2 -- one byte over, must be DENY."""
@@ -197,9 +197,9 @@ class TestAdversarialDenyOversizedMessageHook:
         below = _ctx(size=max_bytes - 1)
         assert hook.before_message(below).verdict is GovernanceVerdict.ALLOW
 
-        # At max -- ALLOW (not strictly greater).
+        # At max -- DENY (boundary-inclusive).
         at_max = _ctx(size=max_bytes)
-        assert hook.before_message(at_max).verdict is GovernanceVerdict.ALLOW
+        assert hook.before_message(at_max).verdict is GovernanceVerdict.DENY
 
         # Above max -- DENY.
         above = _ctx(size=max_bytes + 1)
@@ -225,9 +225,8 @@ class TestAdversarialDenyOversizedMessageHook:
         assert decision.verdict is GovernanceVerdict.DEGRADE
         assert decision.degrade_directive is not None
 
-        # Size max_bytes -- ALLOW (equal, not DENY; not in degrade zone either
-        # because condition requires size < max_bytes to be DEGRADE).
-        assert hook.before_message(_ctx(size=max_bytes)).verdict is GovernanceVerdict.ALLOW
+        # Size max_bytes -- DENY (boundary-inclusive).
+        assert hook.before_message(_ctx(size=max_bytes)).verdict is GovernanceVerdict.DENY
 
     def test_invalid_max_bytes_zero_raises(self) -> None:
         """max_bytes=0 must raise ValueError at construction."""

@@ -84,6 +84,14 @@ class ViewPolicyEvaluator:
 
         # --- AGENT_PRIVATE: owner-only check ---
         if view is MemoryView.AGENT_PRIVATE:
+            if not self._owner:
+                return _deny(
+                    operation,
+                    reason="AGENT_PRIVATE view: no owner configured (deny all)",
+                    effective_view=view.value,
+                    effective_scope="agent_private_no_owner",
+                    mitigation="deny",
+                )
             if operation.agent_id != self._owner:
                 return _deny(
                     operation,

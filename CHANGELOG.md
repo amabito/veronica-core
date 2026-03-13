@@ -6,6 +6,27 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.2] -- 2026-03-13 -- Security & Correctness Hardening
+
+**Breaking changes:** none
+
+### Fixed
+
+- **middleware**: ASGI WebSocket halt + app exception path now suppresses exception and sends close 1008 (mirrors existing HTTP behaviour)
+- **view_policy**: empty `owner_agent_id` on AGENT_PRIVATE view now denies all operations (fail-closed)
+- **message_governance**: boundary-inclusive size check (`>=` instead of `>`) for oversized message denial
+- **safe_mode**: added `threading.Lock` to all reads/writes of `_enabled` flag for nogil safety
+- **quickstart**: `get_context()` reads `_context` under lock; removed dead `hasattr` check
+- **policy_rules**: `rstrip(".exe")` replaced with `removesuffix(".exe")` to prevent character-set stripping corruption (e.g. `"git"` -> `"gi"`)
+- **policy_rules**: shell deny command check now lowercases and strips `.exe` suffix for Windows compatibility
+- **policy_rules**: `ExecPolicyContext.__post_init__` converts `args` to `tuple` and `metadata` to `MappingProxyType` for true immutability on frozen dataclass
+- **mcp adapter**: per-token cost delta now reported to `ExecutionContext` budget after `wrap_tool_call` completes
+- **mcp_async adapter**: legacy fallback path no longer double-charges base cost; reserve path now adds token delta after commit
+- **llamaindex adapter**: `execution_context` parameter wired through to `build_adapter_container()`
+- **exec adapter**: redirect URL extraction changed from fragile string split to regex
+
+---
+
 ## [3.7.1] -- 2026-03-12 -- Message Hooks + Adapter DEGRADE Wiring
 
 **Breaking changes:** none

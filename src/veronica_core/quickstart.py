@@ -238,12 +238,9 @@ def _install_on_halt_dispatch(
         result = original_wrap(*args, **kwargs)
         if isinstance(result, Decision) and result == Decision.HALT:
             if mode == "raise":
-                raise VeronicaHalt(
-                    f"HALT: {result.reason}" if hasattr(result, "reason") else "HALT"
-                )
+                raise VeronicaHalt("HALT")
             elif mode == "warn":
-                reason = getattr(result, "reason", "unknown")
-                logger.warning("[VERONICA] HALT: %s", reason)
+                logger.warning("[VERONICA] HALT")
         return result
 
     _dispatching_wrap._quickstart_original = original_wrap  # type: ignore[attr-defined]
@@ -294,7 +291,7 @@ def shutdown() -> None:
 def get_context() -> Optional[ExecutionContext]:
     """Return the global ExecutionContext, or None if not initialized.
 
-    Thread-safe (read-only access to a module-level reference).
+    Thread-safe: reads under the module lock for nogil compatibility.
 
     Returns:
         The active :class:`~veronica_core.containment.ExecutionContext`, or
@@ -308,4 +305,5 @@ def get_context() -> Optional[ExecutionContext]:
             snap = ctx.get_snapshot()
             print(f"Spent: ${snap.cost_usd_accumulated:.4f}")
     """
-    return _context
+    with _lock:
+        return _context

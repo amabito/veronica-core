@@ -11,20 +11,28 @@ BudgetBoundaryHook).
 
 from __future__ import annotations
 
+import threading
+
 from veronica_core.shield.types import Decision, ToolCallContext
 
 __all__ = ["SafeModeHook"]
 
 
 class SafeModeHook:
-    """Emergency kill-switch that halts tool calls and retries."""
+    """Emergency kill-switch that halts tool calls and retries.
+
+    Thread-safe: all reads/writes of ``_enabled`` are protected by a lock
+    for nogil (free-threaded Python) compatibility.
+    """
 
     def __init__(self, enabled: bool = True) -> None:
+        self._lock = threading.Lock()
         self._enabled = enabled
 
     @property
     def enabled(self) -> bool:
-        return self._enabled
+        with self._lock:
+            return self._enabled
 
     def disable(self) -> None:
         """Disable safe mode programmatically.
@@ -32,20 +40,24 @@ class SafeModeHook:
         L5: Provides a proper API for disabling safe mode without accessing
         the private ``_enabled`` attribute directly.
         """
-        self._enabled = False
+        with self._lock:
+            self._enabled = False
 
     def enable(self) -> None:
         """Re-enable safe mode programmatically."""
-        self._enabled = True
+        with self._lock:
+            self._enabled = True
 
     def before_llm_call(self, ctx: ToolCallContext) -> Decision | None:
         """Block tool dispatch when enabled and a tool_name is present."""
-        if self._enabled and ctx.tool_name is not None:
+        with self._lock:
+            enabled = self._enabled
+        if enabled and ctx.tool_name is not None:
             return Decision.HALT
         return None
 
     def on_error(self, ctx: ToolCallContext, err: BaseException) -> Decision | None:
         """Suppress retries when enabled."""
-        if self._enabled:
-            return Decision.HALT
-        return None
+        with self._lock:
+            enabled = self._enabled
+        return Decision.HALT if enabled else None

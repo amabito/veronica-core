@@ -238,6 +238,14 @@ class MCPContainmentAdapter(_MCPAdapterBase):
         # Compute variable per-token cost if configured.
         actual_cost = self._compute_actual_cost(tool_name, result_value)
 
+        # Report per-token cost delta to ExecutionContext budget.
+        # wrap_tool_call() only saw cost_estimate (= cost_per_call); the
+        # per-token component was unknown until after call_fn returned.
+        token_delta = actual_cost - cost_estimate
+        if token_delta > 0:
+            self._ctx._budget_backend.add(token_delta)
+            self._ctx._limits.budget.add(token_delta)
+
         # Record success in circuit breaker and stats.
         self._record_circuit_breaker_success()
 

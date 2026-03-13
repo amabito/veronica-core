@@ -8,6 +8,7 @@ Command injection is prevented by enforcing shell=False.
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 import urllib.request
 from dataclasses import dataclass, field
@@ -21,6 +22,11 @@ from veronica_core.security.policy_engine import (
     PolicyContext,
     PolicyEngine,
 )
+
+# Regex for extracting redirect URL from error messages.
+# Using a regex avoids fragile string splitting that breaks if the URL
+# itself contains the word "blocked".
+_RE_REDIRECT_BLOCKED = re.compile(r"Redirect to (.+?) blocked")
 
 # ---------------------------------------------------------------------------
 # Custom exceptions
@@ -284,8 +290,9 @@ class SecureExecutor:
                 return self._masker.mask(body)
             except URLError as exc:
                 err_msg = str(exc.reason) if hasattr(exc, "reason") else str(exc)
-                if "Redirect to " in err_msg and " blocked" in err_msg:
-                    redirect_url = err_msg.split("Redirect to ", 1)[1].split(" blocked", 1)[0]
+                _redirect_match = _RE_REDIRECT_BLOCKED.search(err_msg) if "Redirect to " in err_msg else None
+                if _redirect_match:
+                    redirect_url = _redirect_match.group(1)
                     if redirect_url in visited:
                         raise URLError(f"Redirect loop detected: {redirect_url}") from exc
                     visited.add(redirect_url)

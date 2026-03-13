@@ -99,11 +99,12 @@ class TestAgentPrivateView:
         result = _eval(ev, op, view=MemoryView.AGENT_PRIVATE, trust="privileged")
         assert result.verdict is GovernanceVerdict.DENY
 
-    def test_agent_private_empty_owner_and_empty_agent_allows(self) -> None:
+    def test_agent_private_empty_owner_empty_agent_denies(self) -> None:
+        """Empty owner + empty agent_id must deny (fail-closed, not match)."""
         ev = ViewPolicyEvaluator(owner_agent_id="")
         op = MemoryOperation(action=MemoryAction.READ, agent_id="")
         result = _eval(ev, op, view=MemoryView.AGENT_PRIVATE, trust="trusted")
-        assert result.verdict is GovernanceVerdict.ALLOW
+        assert result.verdict is GovernanceVerdict.DENY
 
 
 # ---------------------------------------------------------------------------
