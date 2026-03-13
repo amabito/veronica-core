@@ -133,19 +133,13 @@ AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/p
 
 ## Architecture
 
-```
-Application / Agent Framework
-         |
-    veronica-core          <-- enforcement boundary
-         |
-    LLM Provider (OpenAI, Anthropic, etc.)
-```
+![Architecture overview](docs/diagrams/architecture-overview.svg)
 
 Each call passes through a `ShieldPipeline` of registered hooks. Any hook may emit `DEGRADE` or `HALT`. A `HALT` blocks the call and emits a `SafetyEvent`. veronica-core enforces that the evaluation occurs and the call does not proceed past `HALT`.
 
 veronica-core does not schedule, route, or orchestrate agents. Policy management and fleet coordination belong to [veronica](https://github.com/amabito/veronica).
 
-Details: [docs/architecture.md](docs/architecture.md)
+Details: [docs/architecture.md](docs/architecture.md) -- includes [supporting systems](docs/diagrams/supporting-systems.svg) and [evaluation flow](docs/diagrams/shield-pipeline-flow.svg) diagrams.
 
 ---
 
