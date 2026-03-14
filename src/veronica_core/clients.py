@@ -7,6 +7,7 @@ VERONICA Core does NOT require LLM - this is purely optional.
 from __future__ import annotations
 from typing import Protocol, Dict, Any, Optional
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +79,15 @@ class DummyClient:
         self.fixed_response = fixed_response
         self.call_count = 0
         self.last_prompt: Optional[str] = None
+        self._lock = threading.Lock()
 
     def generate(
         self, prompt: str, *, context: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> str:
         """Return fixed response (for testing)."""
-        self.call_count += 1
-        self.last_prompt = prompt
+        with self._lock:
+            self.call_count += 1
+            self.last_prompt = prompt
         # Log call count only -- never log prompt content (may contain secrets).
         logger.debug("[DummyClient] Call #%d", self.call_count)
         return self.fixed_response
