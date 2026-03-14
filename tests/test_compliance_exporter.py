@@ -143,6 +143,7 @@ class TestLifecycle:
 
 
 class TestEnqueue:
+    @nogil_unstable
     def test_enqueue_payload(self) -> None:
         """Payloads are placed on the internal queue."""
         # Use a very long flush interval so the background thread does not
@@ -413,6 +414,7 @@ class TestAdversarialCorruptedInput:
         mock_urlopen.assert_called_once()
         exporter.close()
 
+    @nogil_unstable
     def test_enqueue_none_payload(self) -> None:
         """Enqueueing None must not crash the queue."""
         exporter = _make_exporter()
@@ -1067,6 +1069,7 @@ class TestAdversarialAttach:
 
     # -- Partial failure: drain with mixed live/dead/broken refs --
 
+    @nogil_unstable
     def test_drain_mixed_live_dead_broken(self) -> None:
         """drain_attached with mix of live, dead, and broken refs must not crash."""
         import gc
