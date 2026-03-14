@@ -6,7 +6,7 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
-## [3.7.6] -- 2026-03-14 -- F.R.I.D.A.Y. 3-Body Review Hardening
+## [3.7.6] -- 2026-03-14 -- 3-Agent Parallel Review Hardening
 
 **Breaking changes:** `ContextSnapshot.nodes` and `ContextSnapshot.events` changed from
 `list` to `tuple` for true immutability. Code that calls `.append()` on these fields
@@ -45,7 +45,7 @@ will raise `AttributeError`. Use the list passed to the constructor instead.
 ### Stats
 
 - 6131 tests, 3 skipped, 4 xfailed
-- F.R.I.D.A.Y. 3-body review-fix loop: R2+R3 = 2 consecutive CLEAN
+- 3-agent parallel review-fix loop: R2+R3 = 2 consecutive CLEAN
 - 10 source files, 1 test file modified
 
 ## [3.7.5] -- 2026-03-14 -- Adapter Unification + nogil CI
