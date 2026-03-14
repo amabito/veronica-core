@@ -14,6 +14,7 @@ from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 
+from _nogil_compat import nogil_unstable
 from veronica_core.compliance.exporter import ComplianceExporter, _SHUTDOWN
 from veronica_core import ChainMetadata, ContextSnapshot, NodeRecord
 from veronica_core.shield.event import SafetyEvent
@@ -461,6 +462,7 @@ class TestAdversarialStatCorruption:
 class TestAdversarialBoundaryAbuse:
     """Boundary abuse: edge values, off-by-one, zero, extremes."""
 
+    @nogil_unstable
     def test_max_queue_one(self) -> None:
         """max_queue=1 must work -- only 1 item in queue at a time."""
         exporter = _make_exporter(max_queue=1)
