@@ -41,6 +41,10 @@ class BudgetEnforcer:
             raise ValueError(f"limit_usd must be finite, got {self.limit_usd!r}")
         if self.limit_usd < 0:
             raise ValueError(f"limit_usd must be non-negative, got {self.limit_usd!r}")
+        # Zero budget means "no spending allowed" -- mark as exceeded immediately
+        # so is_exceeded is consistent with check()/spend() from construction.
+        if self.limit_usd == 0.0:
+            self._exceeded = True
 
     _call_count: int = field(default=0, init=False)
     _exceeded: bool = field(default=False, init=False)
@@ -138,7 +142,8 @@ class BudgetEnforcer:
         with self._lock:
             self._spent_usd = 0.0
             self._call_count = 0
-            self._exceeded = False
+            # Re-apply zero-budget invariant: zero budget is always exceeded.
+            self._exceeded = self.limit_usd == 0.0
             logger.info("[VERONICA_BUDGET] Budget reset")
 
     @property
@@ -177,8 +182,7 @@ class BudgetEnforcer:
                 )
             if self._exceeded:
                 reason = (
-                    f"Budget exceeded: "
-                    f"${self._spent_usd:.2f} / ${self.limit_usd:.2f}"
+                    f"Budget exceeded: ${self._spent_usd:.2f} / ${self.limit_usd:.2f}"
                 )
                 return PolicyDecision(
                     allowed=False,

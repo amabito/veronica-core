@@ -120,12 +120,14 @@ class ExecutionMode(str, Enum):
 # Trust levels in ascending privilege order.
 # Shared across view_policy, lifecycle, and memory_rules.
 # Frozen via MappingProxyType to prevent external mutation.
-TRUST_RANK: _types.MappingProxyType[str, int] = _types.MappingProxyType({
-    "untrusted": 0,
-    "provisional": 1,
-    "trusted": 2,
-    "privileged": 3,
-})
+TRUST_RANK: _types.MappingProxyType[str, int] = _types.MappingProxyType(
+    {
+        "untrusted": 0,
+        "provisional": 1,
+        "trusted": 2,
+        "privileged": 3,
+    }
+)
 
 
 def trust_rank(trust_level: str) -> int:
@@ -209,6 +211,13 @@ class DegradeDirective:
     """Maximum byte size for the content payload. 0 = no limit."""
 
     def __post_init__(self) -> None:
+        # Coerce list -> tuple for JSON round-trip safety.
+        if isinstance(self.allowed_provenance, list):
+            object.__setattr__(
+                self, "allowed_provenance", tuple(self.allowed_provenance)
+            )
+        if isinstance(self.redacted_fields, list):
+            object.__setattr__(self, "redacted_fields", tuple(self.redacted_fields))
         # Bug #7: verified_only=True with allowed_provenance that excludes
         # "verified" creates an empty intersection -- nothing can ever pass.
         if self.verified_only and self.allowed_provenance:
@@ -381,9 +390,17 @@ class MemoryGovernanceDecision:
 
     # Fields that must not appear as audit_metadata keys (prevents overwrite in to_audit_dict).
     _RESERVED_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"verdict", "reason", "policy_id", "operation_action",
-         "operation_resource_id", "operation_agent_id", "operation_namespace",
-         "operation_provenance", "operation_content_size_bytes"}
+        {
+            "verdict",
+            "reason",
+            "policy_id",
+            "operation_action",
+            "operation_resource_id",
+            "operation_agent_id",
+            "operation_namespace",
+            "operation_provenance",
+            "operation_content_size_bytes",
+        }
     )
 
     verdict: GovernanceVerdict
@@ -482,7 +499,9 @@ class MemoryGovernanceDecision:
 
 
 @contextmanager
-def scoped_execution_mode(mode: ExecutionMode) -> Generator[MemoryPolicyContext, None, None]:
+def scoped_execution_mode(
+    mode: ExecutionMode,
+) -> Generator[MemoryPolicyContext, None, None]:
     """Context manager that yields a MemoryPolicyContext for the given ExecutionMode.
 
     Useful for temporarily switching execution mode when calling governor.evaluate().

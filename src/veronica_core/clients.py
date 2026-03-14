@@ -88,6 +88,7 @@ class DummyClient:
         with self._lock:
             self.call_count += 1
             self.last_prompt = prompt
+            _count = self.call_count
         # Log call count only -- never log prompt content (may contain secrets).
-        logger.debug("[DummyClient] Call #%d", self.call_count)
+        logger.debug("[DummyClient] Call #%d", _count)
         return self.fixed_response

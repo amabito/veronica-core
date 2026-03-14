@@ -129,6 +129,8 @@ class PolicyEngine:
         level = get_security_level()
         strict = level in (SecurityLevel.CI, SecurityLevel.PROD)
 
+        # Allow construction without cryptography when no policy_path is given --
+        # the engine falls back to unsigned/permissive mode in that case.
         if strict and not _ED25519_AVAILABLE and policy_path is not None:
             raise RuntimeError(
                 f"cryptography package is required in {level.name} environment. "
@@ -297,7 +299,10 @@ class PolicyEngine:
 
         if sig_v2_path.exists():
             PolicyEngine._validate_jwk_format(
-                policy_path, sig_v2_path, public_key_path, key_provider,
+                policy_path,
+                sig_v2_path,
+                public_key_path,
+                key_provider,
                 policy_bytes=policy_bytes,
             )
             return
@@ -356,7 +361,9 @@ class PolicyEngine:
         except Exception as exc:
             logger.debug(
                 "policy_load_failed: %s raised %s: %s",
-                policy_path, type(exc).__name__, exc,
+                policy_path,
+                type(exc).__name__,
+                exc,
             )
             raise RuntimeError(
                 "policy_load_failed: policy file could not be parsed"
@@ -373,7 +380,8 @@ class PolicyEngine:
             # M-6: pass the actual policy path so the audit log records the
             # real file location rather than a hardcoded default.
             policy_path_str = (
-                str(self._policy_path) if self._policy_path is not None
+                str(self._policy_path)
+                if self._policy_path is not None
                 else "policies/default.yaml"
             )
             guard.check(int(policy_version), min_engine, policy_path=policy_path_str)

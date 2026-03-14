@@ -6,6 +6,48 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.6] -- 2026-03-14 -- F.R.I.D.A.Y. 3-Body Review Hardening
+
+**Breaking changes:** `ContextSnapshot.nodes` and `ContextSnapshot.events` changed from
+`list` to `tuple` for true immutability. Code that calls `.append()` on these fields
+will raise `AttributeError`. Use the list passed to the constructor instead.
+
+### Security
+
+- **`os.path.basename` cross-platform bypass (Rule 32):** `_eval_git()` used
+  `os.path.basename()` which fails on Linux with Windows-style paths. Replaced with
+  manual `replace("\\", "/").rsplit("/", 1)[-1]` consistent with `_check_shell_deny_commands`.
+- **Frozen dataclass metadata mutation:** `AgentIdentity.metadata` (A2A trust boundary),
+  `ChainMetadata.tags`, `ContextSnapshot.graph_summary`, and `ContextSnapshot.policy_metadata`
+  are now frozen via `freeze_mapping()` / tuple coercion in `__post_init__`.
+- **Log info leakage (Rule 5):** Removed `str(exc)` from `logger.error`/`logger.warning`
+  in `persist.py`, `backends.py`, and `integration.py`. Exception details moved to
+  `logger.debug` only.
+
+### Bug fixes
+
+- **fd leak on `os.fdopen` failure:** `backends.py` and `persist.py` atomic-write now
+  tracks `fdopen_ok` flag to avoid both fd leak (when `fdopen` raises) and double-close
+  (when `fdopen` succeeds but `json.dump` raises).
+- **`BudgetEnforcer` zero-budget invariant:** `is_exceeded` now returns `True` immediately
+  after construction with `limit_usd=0.0` (previously required a `spend()` call).
+  `reset()` preserves this invariant.
+- **`DegradeDirective` serialization round-trip:** `allowed_provenance` and `redacted_fields`
+  are coerced from `list` to `tuple` in `__post_init__`, preventing silent type corruption
+  after JSON round-trip.
+- **`DummyClient.call_count` race:** Log statement now reads `call_count` inside the lock
+  scope to avoid stale reads under concurrent access.
+
+### Internal
+
+- `PolicyEngine.__init__` guard relaxation documented with intent comment.
+
+### Stats
+
+- 6131 tests, 3 skipped, 4 xfailed
+- F.R.I.D.A.Y. 3-body review-fix loop: R2+R3 = 2 consecutive CLEAN
+- 10 source files, 1 test file modified
+
 ## [3.7.5] -- 2026-03-14 -- Adapter Unification + nogil CI
 
 **Breaking changes:** `veronica_core.adapter` removed (deprecated since v3.4.0, DeprecationWarning emitted on import). Replace:

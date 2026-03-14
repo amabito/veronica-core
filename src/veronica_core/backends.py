@@ -82,18 +82,26 @@ class JSONBackend(PersistenceBackend):
                 fd, tmp_name = _tempfile.mkstemp(
                     dir=str(self.path.parent), suffix=".tmp"
                 )
+                fdopen_ok = False
                 try:
                     with os.fdopen(fd, "w") as f:
+                        fdopen_ok = True
                         json.dump(data, f, indent=2)
                     Path(tmp_name).replace(self.path)
                 except BaseException:
+                    if not fdopen_ok:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
                     Path(tmp_name).unlink(missing_ok=True)
                     raise
                 logger.info(f"[JSONBackend] State saved to {self.path}")
                 return True
 
             except Exception as e:
-                logger.error(f"[JSONBackend] Save failed: {e}")
+                logger.error("[JSONBackend] Save failed")
+                logger.debug("[JSONBackend] Save error detail: %s", e)
                 return False
 
     def load(self) -> Optional[Dict]:
@@ -111,7 +119,8 @@ class JSONBackend(PersistenceBackend):
             with open(self.path, "r") as f:
                 data = json.load(f)
         except Exception as e:
-            logger.error(f"[JSONBackend] Load failed: {e}")
+            logger.error("[JSONBackend] Load failed")
+            logger.debug("[JSONBackend] Load error detail: %s", e)
             return None
 
         # M2: Basic schema check -- data must be a dict with expected keys.
@@ -151,7 +160,8 @@ class JSONBackend(PersistenceBackend):
             return True
 
         except Exception as e:
-            logger.error(f"[JSONBackend] Backup failed: {e}")
+            logger.error("[JSONBackend] Backup failed")
+            logger.debug("[JSONBackend] Backup error detail: %s", e)
             return False
 
 

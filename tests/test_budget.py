@@ -501,12 +501,13 @@ class TestBudgetZeroLimitSpend:
         b = BudgetEnforcer(limit_usd=0.0)
         assert b.spend(0.001) is False
 
-    def test_zero_budget_reset_clears_exceeded(self) -> None:
-        """reset() after spend on zero-budget restores initial state."""
+    def test_zero_budget_reset_preserves_exceeded(self) -> None:
+        """reset() on zero-budget preserves is_exceeded invariant."""
         b = BudgetEnforcer(limit_usd=0.0)
         b.spend(0.0)
         assert b.is_exceeded is True
         b.reset()
-        assert b.is_exceeded is False
+        # Zero budget is always exceeded -- reset must preserve this invariant.
+        assert b.is_exceeded is True
         # After reset, spend should still deny (budget is still zero)
         assert b.spend(0.0) is False

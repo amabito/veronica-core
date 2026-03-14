@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from veronica_core._utils import freeze_mapping
+
 # L-2: Safe pattern for agent_id values.  Allows letters, digits, and a small
 # set of separator/namespace characters.  Blocks control characters, newlines,
 # and other characters that could cause issues in log output.
@@ -52,6 +54,7 @@ class AgentIdentity:
                 f"AgentIdentity.agent_id={self.agent_id!r} contains invalid characters. "
                 "Allowed: A-Za-z0-9_.:-@ (1-256 chars)."
             )
+        freeze_mapping(self, "metadata")
 
 
 @dataclass(frozen=True)

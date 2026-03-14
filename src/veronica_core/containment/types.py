@@ -89,6 +89,11 @@ class ChainMetadata:
     model: str | None = None
     tags: dict[str, str] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        from veronica_core._utils import freeze_mapping
+
+        freeze_mapping(self, "tags")
+
 
 @dataclass(frozen=True)
 class ExecutionConfig:
@@ -203,9 +208,22 @@ class ContextSnapshot:
     aborted: bool
     abort_reason: str | None
     elapsed_ms: float
-    nodes: list[NodeRecord]
-    events: list[SafetyEvent]
+    nodes: tuple[NodeRecord, ...]
+    events: tuple[SafetyEvent, ...]
     graph_summary: Optional[dict[str, Any]] = None
     parent_chain_id: str | None = None
     agent_identity: "AgentIdentity | None" = None
     policy_metadata: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        from veronica_core._utils import freeze_mapping
+
+        # Coerce list -> tuple for true immutability.
+        if isinstance(self.nodes, list):
+            object.__setattr__(self, "nodes", tuple(self.nodes))
+        if isinstance(self.events, list):
+            object.__setattr__(self, "events", tuple(self.events))
+        if self.graph_summary is not None:
+            freeze_mapping(self, "graph_summary")
+        if self.policy_metadata is not None:
+            freeze_mapping(self, "policy_metadata")

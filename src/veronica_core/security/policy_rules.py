@@ -167,10 +167,17 @@ _UV_INSTALL_SUBCMDS: frozenset[str] = frozenset({"add", "pip"})
 _UV_PIP_INSTALL_SUBCMDS: frozenset[str] = frozenset({"install", "download"})
 
 # Options that consume the next token as a value (used when scanning uv args).
-_UV_OPTS_WITH_VALUE: frozenset[str] = frozenset({
-    "--project", "--directory", "--config-file", "--cache-dir",
-    "--python-preference", "--python-fetch", "--color",
-})
+_UV_OPTS_WITH_VALUE: frozenset[str] = frozenset(
+    {
+        "--project",
+        "--directory",
+        "--config-file",
+        "--cache-dir",
+        "--python-preference",
+        "--python-fetch",
+        "--color",
+    }
+)
 
 # npm/pnpm subcommands that execute arbitrary packages.
 _NPM_EXEC_SUBCMDS: frozenset[str] = frozenset({"exec", "dlx", "x"})
@@ -349,7 +356,9 @@ def _check_shell_operators(full_cmd: str) -> PolicyDecision | None:
     return None
 
 
-def _check_credentials_in_args(argv0: str, argv1: str, args: list[str] | None = None) -> PolicyDecision | None:
+def _check_credentials_in_args(
+    argv0: str, argv1: str, args: list[str] | None = None
+) -> PolicyDecision | None:
     """Return DENY if a credential sub-command is detected (git credential, gh auth, etc.)."""
     for cmd, blocked_subcmds in SHELL_CREDENTIAL_DENY:
         if argv0 != cmd:
@@ -378,7 +387,11 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
 
     for token in args[1:]:
         # Match: -c, -c<code> (attached), -Ic (combined), etc.
-        if token == "-c" or token.startswith("-c") or _has_combined_short_flag(token, "c"):
+        if (
+            token == "-c"
+            or token.startswith("-c")
+            or _has_combined_short_flag(token, "c")
+        ):
             return PolicyDecision(
                 verdict="DENY",
                 rule_id="SHELL_DENY_INLINE_EXEC",
@@ -396,7 +409,9 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
 
     # Detect -m flag including combined short flags like -Im, -mI, -Sm etc.
     for i, arg in enumerate(args[1:], start=1):
-        if arg == "-m" or (arg.startswith("-") and not arg.startswith("--") and "m" in arg[1:]):
+        if arg == "-m" or (
+            arg.startswith("-") and not arg.startswith("--") and "m" in arg[1:]
+        ):
             # The module name follows the -m flag; for combined flags the
             # module may be embedded in the arg itself (see branches below).
             module_idx = i + 1 if arg == "-m" else i
@@ -408,7 +423,7 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
                 # -Im -> m at end, module is next arg (handled above)
                 # For -mPKG style, the module is the rest after m
                 m_pos = arg[1:].index("m")
-                rest = arg[2 + m_pos:]
+                rest = arg[2 + m_pos :]
                 if rest:
                     # e.g. -mpip -> module is "pip"
                     if rest.lower() in _PYTHON_MODULE_PKG_MANAGERS:
@@ -475,7 +490,7 @@ def _check_pkg_install(
             break
 
         if uv_subcmd == "run" and uv_subcmd_idx > 0:
-            rest = args[uv_subcmd_idx + 1:]
+            rest = args[uv_subcmd_idx + 1 :]
             matched = _UVR_INLINE_EXEC_FLAGS.intersection(rest)
             if matched:
                 return PolicyDecision(
@@ -514,7 +529,9 @@ def _check_pkg_install(
     # to prevent bypass via unknown options (fail-closed).
     # Scan ALL non-option tokens for dangerous subcommands (position-independent).
     # This avoids option-parsing bypass where unknown flags hide the real subcommand.
-    if argv0 in ("npm", "pnpm") or argv0 in {cmd for cmd, _ in SHELL_PKG_INSTALL_APPROVAL}:
+    if argv0 in ("npm", "pnpm") or argv0 in {
+        cmd for cmd, _ in SHELL_PKG_INSTALL_APPROVAL
+    }:
         non_option_tokens = frozenset(
             t.lower() for t in args[1:] if not t.startswith("-")
         )
@@ -778,21 +795,25 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
     # Handle both '&' and ';' as query separators (RFC 2396 legacy).
     # Replace ';' with '&' before parsing because parse_qs separator param
     # matches the full string, not individual characters.
-    qs = urllib.parse.parse_qs(
-        parsed.query.replace(";", "&"), keep_blank_values=True
-    )
+    qs = urllib.parse.parse_qs(parsed.query.replace(";", "&"), keep_blank_values=True)
     for key, values in qs.items():
         # Check query keys (new in C-2 fix)
         if decision := _check_token(
-            key, "query key",
-            "net.base64_in_query_key", "net.hex_in_query_key", "net.high_entropy_query_key"
+            key,
+            "query key",
+            "net.base64_in_query_key",
+            "net.hex_in_query_key",
+            "net.high_entropy_query_key",
         ):
             return decision
         for value in values:
             # Original rule IDs preserved for backward compat
             if decision := _check_token(
-                value, "query value",
-                "net.base64_in_query", "net.hex_in_query", "net.high_entropy_query"
+                value,
+                "query value",
+                "net.base64_in_query",
+                "net.hex_in_query",
+                "net.high_entropy_query",
             ):
                 return decision
 
@@ -812,8 +833,11 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
                 token = urllib.parse.unquote(raw_token)
                 if token:
                     if decision := _check_token(
-                        token, "path segment",
-                        "net.base64_in_path", "net.hex_in_path", "net.high_entropy_path"
+                        token,
+                        "path segment",
+                        "net.base64_in_path",
+                        "net.hex_in_path",
+                        "net.high_entropy_path",
                     ):
                         return decision
 
@@ -821,14 +845,20 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
     # Explicitly unquote in case urlparse preserves percent-encoded chars.
     if parsed.username:
         if decision := _check_token(
-            urllib.parse.unquote(parsed.username), "userinfo username",
-            "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
+            urllib.parse.unquote(parsed.username),
+            "userinfo username",
+            "net.base64_in_userinfo",
+            "net.hex_in_userinfo",
+            "net.high_entropy_userinfo",
         ):
             return decision
     if parsed.password:
         if decision := _check_token(
-            urllib.parse.unquote(parsed.password), "userinfo password",
-            "net.base64_in_userinfo", "net.hex_in_userinfo", "net.high_entropy_userinfo"
+            urllib.parse.unquote(parsed.password),
+            "userinfo password",
+            "net.base64_in_userinfo",
+            "net.hex_in_userinfo",
+            "net.high_entropy_userinfo",
         ):
             return decision
 
@@ -836,8 +866,11 @@ def _check_data_exfil(url: str) -> PolicyDecision | None:
     # code even though browsers don't send them to servers).
     if parsed.fragment:
         if decision := _check_token(
-            urllib.parse.unquote(parsed.fragment), "fragment",
-            "net.base64_in_fragment", "net.hex_in_fragment", "net.high_entropy_fragment"
+            urllib.parse.unquote(parsed.fragment),
+            "fragment",
+            "net.base64_in_fragment",
+            "net.hex_in_fragment",
+            "net.high_entropy_fragment",
         ):
             return decision
 
@@ -874,15 +907,31 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     # Git options that consume the next token as a value must be handled
     # specially; otherwise ``git -c key=val push`` would treat ``key=val``
     # as the subcommand and bypass the push deny rule (H-5 fix).
-    _GIT_OPTS_WITH_VALUE = frozenset({
-        "-c", "-C", "--git-dir", "--work-tree", "--namespace",
-        "--config-env", "--super-prefix", "--exec-path",
-    })
+    _GIT_OPTS_WITH_VALUE = frozenset(
+        {
+            "-c",
+            "-C",
+            "--git-dir",
+            "--work-tree",
+            "--namespace",
+            "--config-env",
+            "--super-prefix",
+            "--exec-path",
+        }
+    )
     subcmd = ""
     skip_next = False
     # Strip leading executable name (e.g. "git", "git.exe", "/usr/bin/git")
     git_args = ctx.args
-    if git_args and os.path.basename(git_args[0]).lower().removesuffix(".exe") == "git":
+    if (
+        git_args
+        and git_args[0]
+        .replace("\\", "/")
+        .rsplit("/", 1)[-1]
+        .lower()
+        .removesuffix(".exe")
+        == "git"
+    ):
         git_args = git_args[1:]
     for token in git_args:
         if skip_next:
@@ -899,7 +948,9 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
 
     # Also scan all non-option tokens for denied subcommands (defense-in-depth
     # against option-parsing gaps that could hide a blocked subcommand).
-    denied_anywhere = {t.lower() for t in git_args if not t.startswith("-")} & GIT_DENY_SUBCMDS
+    denied_anywhere = {
+        t.lower() for t in git_args if not t.startswith("-")
+    } & GIT_DENY_SUBCMDS
     if subcmd in GIT_DENY_SUBCMDS or denied_anywhere:
         # Prefer the primary subcmd for deterministic matching; fall back to
         # the sorted set to avoid iteration-order non-determinism.

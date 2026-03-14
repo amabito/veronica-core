@@ -144,8 +144,9 @@ class VeronicaIntegration:
                 loaded_from_disk = True
             except Exception as exc:
                 logger.warning(
-                    f"[VERONICA_INTEGRATION] Failed to deserialize state, starting fresh: {exc}"
+                    "[VERONICA_INTEGRATION] Failed to deserialize state, starting fresh"
                 )
+                logger.debug("[VERONICA_INTEGRATION] Deserialize error: %s", exc)
                 self.state = None
         else:
             self.state = None
