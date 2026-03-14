@@ -26,7 +26,7 @@ Zero required dependencies. Python 3.10+. Works with any LLM provider.
 - **Circuit breaker** -- per-entity failure counting with automatic COOLDOWN (local or Redis-backed).
 - **Degrade / HALT** -- 4-tier graceful degradation ladder. The call does not proceed past HALT.
 
-Containment, not observability -- it doesn't inspect prompts or completions; it caps resource consumption. If you want to filter prompt content, use [guardrails-ai](https://github.com/guardrails-ai/guardrails) or [NeMo Guardrails](https://github.com/NVIDIA/NeMoGuardrails). If you want to cap cost, recursion, and retries before the model call -- this is the library.
+Containment, not observability -- it doesn't inspect prompts or completions; it caps resource consumption. If you want to filter prompt content, use [guardrails-ai](https://github.com/guardrails-ai/guardrails) or [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails). If you want to cap cost, recursion, and retries before the model call -- this is the library.
 
 ---
 
