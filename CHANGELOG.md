@@ -1732,7 +1732,7 @@ none
 ### Packaging
 
 - **License field**: Changed `license = "MIT"` to `license = {text = "MIT"}` so PyPI
-  correctly displays the MIT license (PEP 621 table-format required by hatchling).
+  correctly displays the Apache-2.0 license (PEP 621 table-format required by hatchling).
 - **Development Status**: Classifier updated from `3 - Alpha` to `4 - Beta` reflecting
   stable API surface and 1289-test coverage since v0.10.4.
 - **New classifiers**: Added `Operating System :: OS Independent` and

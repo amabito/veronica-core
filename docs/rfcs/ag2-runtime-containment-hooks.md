@@ -154,7 +154,7 @@ Each layer is independent and opt-in. An application can use any combination -- 
 
 ## Reference Implementation
 
-[veronica-core](https://github.com/amabito/veronica-core) (v1.8.3, MIT, 2346 tests, 92% coverage) implements all three patterns today via monkey-patching:
+[veronica-core](https://github.com/amabito/veronica-core) (v1.8.3, Apache-2.0, 2346 tests, 92% coverage) implements all three patterns today via monkey-patching:
 
 - `CircuitBreakerCapability` -- maps to ReplyInterceptor (wraps `generate_reply` with before/after)
 - `TokenBudgetHook` -- maps to LLMCallMiddleware (pre-call budget check, post-call usage recording)

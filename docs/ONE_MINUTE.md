@@ -308,7 +308,7 @@ A: Target audience (LLM agents, strategy engines) is predominantly Python. Stdli
 A: Run them yourself (`python scripts/proof_runner.py`). Full reproduction steps in PROOF.md. If any test fails, file an issue -- we'll fix immediately.
 
 **Q: License?**
-A: MIT (no restrictions, commercial use allowed, no monetization plans).
+A: Apache-2.0 (no restrictions, commercial use allowed, no monetization plans).
 
 ---
 

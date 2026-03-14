@@ -4,7 +4,7 @@
 ![CI](https://img.shields.io/badge/tests-6125%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 Stops LLM agent runs from burning money. Catches runaway retries, infinite agent loops, and surprise API bills before they happen.
 
@@ -194,4 +194,4 @@ Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ## License
 
-MIT
+Apache-2.0
