@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "veronica-core"
 version = "3.7.5"
-description = "Runtime Containment Layer for LLM Systems. Enforces bounded cost, retries, recursion, wait states, and failure domains."
+description = "Runtime containment kernel for LLM agents. Enforces budget, step, retry, and circuit-breaker limits before the model call."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -29,6 +29,7 @@ keywords = [
     "llm", "agent", "runtime", "budget", "enforcement", "guardrails",
     "safety", "circuit-breaker", "token-budget", "ai-safety",
     "multi-agent", "containment", "rate-limit",
+    "cost-control", "agentic-ai", "agent-safety", "llm-cost",
 ]
 
 [project.urls]

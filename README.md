@@ -6,28 +6,50 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-Stops LLM agent runs from burning money. Catches runaway retries, infinite agent loops, and surprise API bills before they happen.
+Your agent retries 3 times per layer. Three layers deep, that is 64 API calls from one user click. veronica-core caps that at whatever limit you set -- and halts the call before it reaches the model.
 
-Your agent retries 3 times per layer. Three layers deep, that's 64 API calls from one user click. veronica-core enforces a hard budget across the entire run -- cost, steps, retries, timeouts -- and halts the call before it reaches the model.
+Runtime containment kernel for LLM agents. Not a prompt filter. Not a semantic guardrail. Resource enforcement: budget ceilings, step limits, retry caps, and circuit breakers.
 
 ```bash
 pip install veronica-core
 ```
 
-```
-# 3-layer retry, no run-level cap:  up to 64 API calls per user action
-# 3-layer retry, with veronica-core: capped at 6 (example: max_retries_total=5)
-```
+Zero required dependencies. Python 3.10+. Works with any LLM provider.
 
-No required dependencies. Python 3.10+. Works with any LLM provider.
+---
 
-Containment, not observability -- it doesn't inspect prompts or completions, it caps resource consumption.
+## What it enforces
 
-veronica-core is the enforcement kernel. [veronica](https://github.com/amabito/veronica-public) is the control plane (policy management, fleet coordination, dashboard). Pairs with [TriMemory](https://github.com/amabito/tri-memory) for pre-inference knowledge-state resolution.
+- **Budget ceiling** -- hard cost cap per chain. HALT before overspend.
+- **Step limit** -- bounded recursion depth. No infinite agent loops.
+- **Retry containment** -- 3 layers x 4 retries = 64 calls -> capped at your limit. One line.
+- **Circuit breaker** -- per-entity failure counting with automatic COOLDOWN (local or Redis-backed).
+- **Degrade / HALT** -- 4-tier graceful degradation ladder. The call does not proceed past HALT.
+
+Containment, not observability -- it doesn't inspect prompts or completions; it caps resource consumption. If you want to filter prompt content, use [guardrails-ai](https://github.com/guardrails-ai/guardrails) or [NeMo Guardrails](https://github.com/NVIDIA/NeMoGuardrails). If you want to cap cost, recursion, and retries before the model call -- this is the library.
 
 ---
 
 ## Quickstart
+
+Two lines. Your existing agent code unchanged. Hard ceiling at $1.00:
+
+```python
+from veronica_core.patch import patch_openai
+from veronica_core import veronica_guard
+
+patch_openai()
+
+@veronica_guard(max_cost_usd=1.0, max_steps=20)
+def run_agent(prompt: str) -> str:
+    from openai import OpenAI
+    return OpenAI().chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    ).choices[0].message.content
+```
+
+Full control with `ExecutionContext`:
 
 ```python
 from veronica_core import ExecutionContext, ExecutionConfig, WrapOptions
@@ -59,22 +81,64 @@ print(snap["aggregates"])
 # {"total_cost_usd": 0.12, "total_llm_calls": 3, ...}
 ```
 
-SDK-level injection (no per-call changes):
+---
+
+## Ecosystem
+
+veronica-core is the in-process enforcement kernel. It runs inside your agent process and decides ALLOW, DEGRADE, or HALT before each model call.
+
+[veronica](https://github.com/amabito/veronica-public) is the control plane: policy management, fleet coordination, and dashboard. It tells veronica-core what to enforce.
+
+[TriMemory](https://github.com/amabito/tri-memory) resolves which document governs before inference; veronica-core enforces that the inference does not exceed its resource budget.
 
 ```python
-from veronica_core.patch import patch_openai
-from veronica_core import veronica_guard
+# TriMemory resolves what the agent knows
+knowledge_state = tri_memory_engine.compile(documents)
 
-patch_openai()
-
-@veronica_guard(max_cost_usd=1.0, max_steps=20)
-def run_agent(prompt: str) -> str:
-    from openai import OpenAI
-    return OpenAI().chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-    ).choices[0].message.content
+# veronica-core enforces that the inference stays within budget
+@veronica_guard(max_cost_usd=0.50, max_steps=10)
+def answer_query(query: str) -> str:
+    context = knowledge_state.retrieve(query)
+    return llm.complete(query, context=context)
 ```
+
+---
+
+## Integrations
+
+| Framework | Adapter | Example |
+|-----------|---------|---------|
+| OpenAI SDK | `patch_openai()` | [examples/integrations/openai_sdk/](examples/integrations/openai_sdk/) |
+| Anthropic SDK | `patch_anthropic()` | -- |
+| LangChain | `VeronicaCallbackHandler` | [examples/integrations/langchain/](examples/integrations/langchain/) |
+| AG2 (AutoGen) | `CircuitBreakerCapability` | [examples/ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) |
+| LlamaIndex | `VeronicaLlamaIndexHandler` | -- |
+| CrewAI | `VeronicaCrewAIListener` | [examples/integrations/crewai/](examples/integrations/crewai/) |
+| LangGraph | `VeronicaLangGraphCallback` | [examples/langgraph_minimal.py](examples/langgraph_minimal.py) |
+| ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
+| MCP | `MCPContainmentAdapter` | -- |
+
+AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) (merged)
+
+---
+
+## Architecture
+
+![Architecture overview](docs/diagrams/architecture-overview.svg)
+
+Each call passes through a `ShieldPipeline` of registered hooks. Any hook may emit `DEGRADE` or `HALT`. A `HALT` blocks the call and emits a `SafetyEvent`. veronica-core enforces that the evaluation occurs and the call does not proceed past `HALT`.
+
+veronica-core does not schedule, route, or orchestrate agents. Policy management and fleet coordination belong to [veronica](https://github.com/amabito/veronica-public).
+
+Details: [docs/architecture.md](docs/architecture.md) -- includes [supporting systems](docs/diagrams/supporting-systems.svg) and [evaluation flow](docs/diagrams/shield-pipeline-flow.svg) diagrams.
+
+---
+
+## Security
+
+Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 4 rounds of independent security audit (130+ findings fixed).
+
+Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
@@ -93,28 +157,7 @@ def run_agent(prompt: str) -> str:
 - **MCP containment** -- sync and async MCP server adapters with per-tool budget enforcement
 - **Declarative policy** -- YAML/JSON policy files with hot-reload, 7 builtin rule types
 
-No required dependencies. Works with any LLM provider.
-
 Full feature list: [docs/FEATURES.md](docs/FEATURES.md)
-
----
-
-## Integrations
-
-| Framework | Adapter | Example |
-|-----------|---------|---------|
-| OpenAI SDK | `patch_openai()` | [examples/integrations/openai_sdk/](examples/integrations/openai_sdk/) |
-| Anthropic SDK | `patch_anthropic()` | -- |
-| LangChain | `VeronicaCallbackHandler` | [examples/integrations/langchain/](examples/integrations/langchain/) |
-| AG2 (AutoGen) | `CircuitBreakerCapability` | [examples/ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) |
-| LlamaIndex | `VeronicaLlamaIndexHandler` | -- |
-| CrewAI | `VeronicaCrewAIListener` | [examples/integrations/crewai/](examples/integrations/crewai/) |
-| LangGraph | `VeronicaLangGraphCallback` | [examples/langgraph_minimal.py](examples/langgraph_minimal.py) |
-| ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
-| MCP | `MCPContainmentAdapter` | -- |
-| ROS2 | `SafetyMonitor` | [examples/ros2/](examples/ros2/) |
-
-AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) (merged)
 
 ---
 
@@ -128,26 +171,6 @@ AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/p
 | [ag2_circuit_breaker.py](examples/ag2_circuit_breaker.py) | AG2 agent-level circuit breaker |
 | [langchain_minimal.py](examples/langchain_minimal.py) | LangChain integration quickstart |
 | [langgraph_minimal.py](examples/langgraph_minimal.py) | LangGraph integration quickstart |
-
----
-
-## Architecture
-
-![Architecture overview](docs/diagrams/architecture-overview.svg)
-
-Each call passes through a `ShieldPipeline` of registered hooks. Any hook may emit `DEGRADE` or `HALT`. A `HALT` blocks the call and emits a `SafetyEvent`. veronica-core enforces that the evaluation occurs and the call does not proceed past `HALT`.
-
-veronica-core does not schedule, route, or orchestrate agents. Policy management and fleet coordination belong to [veronica](https://github.com/amabito/veronica).
-
-Details: [docs/architecture.md](docs/architecture.md) -- includes [supporting systems](docs/diagrams/supporting-systems.svg) and [evaluation flow](docs/diagrams/shield-pipeline-flow.svg) diagrams.
-
----
-
-## Security
-
-Process-boundary policy enforcement. 20-scenario red-team regression suite covering exfiltration, credential hunt, workflow poisoning, and persistence attacks. 4 rounds of independent security audit (130+ findings fixed).
-
-Details: [docs/SECURITY_CONTAINMENT_PLAN.md](docs/SECURITY_CONTAINMENT_PLAN.md) | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
 ---
 
