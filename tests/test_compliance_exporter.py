@@ -916,6 +916,7 @@ class TestAttach:
         payload = mock_send.call_args[0][0]
         assert payload["chain"]["service"] == "svc"
 
+    @nogil_unstable
     def test_attach_weakref_does_not_prevent_gc(self) -> None:
         """Attached context can be garbage collected (weakref)."""
         import gc
