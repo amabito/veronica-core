@@ -23,7 +23,7 @@ No required dependencies. Python 3.10+. Works with any LLM provider.
 
 Containment, not observability -- it doesn't inspect prompts or completions, it caps resource consumption.
 
-veronica-core is the enforcement kernel. [veronica](https://github.com/amabito/veronica-public) is the control plane (policy management, fleet coordination, dashboard).
+veronica-core is the enforcement kernel. [veronica](https://github.com/amabito/veronica-public) is the control plane (policy management, fleet coordination, dashboard). Pairs with [TriMemory](https://github.com/amabito/tri-memory) for pre-inference knowledge-state resolution.
 
 ---
 
