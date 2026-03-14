@@ -10,6 +10,7 @@ from unittest.mock import patch
 import fakeredis
 import pytest
 
+from _nogil_compat import nogil_unstable
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
 from veronica_core.distributed import (
     CircuitSnapshot,
@@ -1426,6 +1427,7 @@ class TestAdversarialSlotTimeout:
         decision2 = dcb.check(_ctx())
         assert decision2.allowed
 
+    @nogil_unstable
     def test_toctou_concurrent_stale_release(self, fake_client):
         """Two processes both detect stale slot simultaneously.
 

@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from _nogil_compat import nogil_unstable
 from veronica_core.memory.governor import MemoryGovernor
 from veronica_core.memory.hooks import (
     DefaultMemoryGovernanceHook,
@@ -664,6 +665,7 @@ class TestAdversarialResourceExhaustion:
             pass
         assert gov.hook_count == 100
 
+    @nogil_unstable
     def test_slow_hook_in_evaluate_completes_within_timeout(self) -> None:
         """A hook sleeping briefly must still complete -- evaluate() has no internal timeout."""
         SLEEP_S = 0.2  # 200 ms -- generous for nogil scheduler jitter

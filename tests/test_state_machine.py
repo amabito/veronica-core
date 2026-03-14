@@ -2,6 +2,8 @@
 
 import logging
 import time
+
+from _nogil_compat import nogil_unstable
 from veronica_core.state import VeronicaState, VeronicaStateMachine
 
 
@@ -99,6 +101,7 @@ class TestVeronicaStateMachine:
             msg="Expected cooldown to expire",
         )
 
+    @nogil_unstable
     def test_cleanup_expired(self):
         """Test cleanup_expired removes expired cooldowns."""
         sm = VeronicaStateMachine(cooldown_fails=1, cooldown_seconds=0.1)

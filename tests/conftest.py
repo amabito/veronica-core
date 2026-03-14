@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,13 @@ from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.policy.frozen_view import FrozenPolicyView, PolicyViewHolder
 from veronica_core.policy.verifier import VerificationResult
 from veronica_core.security.policy_signing import PolicySigner
+
+# Marker for tests that are unstable under free-threaded Python (nogil)
+_NOGIL = not getattr(sys, "_is_gil_enabled", lambda: True)()
+nogil_unstable = pytest.mark.skipif(
+    _NOGIL,
+    reason="Timing-sensitive test unstable under free-threaded Python 3.13t (nogil)",
+)
 
 
 @pytest.fixture

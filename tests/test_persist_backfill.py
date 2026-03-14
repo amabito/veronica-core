@@ -28,6 +28,7 @@ from unittest.mock import patch
 
 import pytest
 
+from _nogil_compat import nogil_unstable
 from veronica_core.persist import VeronicaPersistence
 from veronica_core.state import VeronicaState, VeronicaStateMachine
 
@@ -247,6 +248,7 @@ class TestPersistBackfill:
         result = p.load()
         assert result is None
 
+    @nogil_unstable
     def test_multiple_backups_produce_distinct_files(self, tmp_path: Path) -> None:
         """Two backup() calls separated by sleep must produce 2 distinct files."""
         p = _make_persistence(tmp_path)

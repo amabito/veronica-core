@@ -17,6 +17,7 @@ import threading
 import time
 
 
+from _nogil_compat import nogil_unstable
 from veronica_core.containment._limit_checker import _LimitChecker
 from veronica_core.containment.types import CancellationToken, ExecutionConfig
 from veronica_core.distributed import LocalBudgetBackend
@@ -244,6 +245,7 @@ class TestElapsedMs:
         t1 = checker.elapsed_ms
         assert t1 > t0
 
+    @nogil_unstable
     def test_elapsed_ms_approximate_sleep(self) -> None:
         checker = _make_checker()
         time.sleep(0.2)

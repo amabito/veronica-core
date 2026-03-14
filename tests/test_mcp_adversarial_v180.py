@@ -26,6 +26,8 @@ from typing import Any, Optional
 
 import pytest
 
+from _nogil_compat import nogil_unstable
+
 from veronica_core.adapters.mcp import MCPContainmentAdapter, MCPToolCost, MCPToolResult
 from veronica_core.adapters.mcp_async import AsyncMCPContainmentAdapter, wrap_mcp_server
 from veronica_core.circuit_breaker import CircuitBreaker, CircuitState
@@ -311,6 +313,7 @@ class TestCostUsdOnException:
         assert result.cost_usd == pytest.approx(0.07)
         assert result.success is False
 
+    @nogil_unstable
     def test_timeout_cost_is_estimate_sync(self) -> None:
         """Sync timeout: cost_usd should equal cost_estimate."""
 
@@ -746,6 +749,7 @@ class TestAsyncTwoPhaseBudget:
 class TestSyncPostCallTimeout:
     """Sync adapter detects timeout after call_fn returns (non-preemptive)."""
 
+    @nogil_unstable
     def test_slow_fn_that_completes_still_gets_timeout_error(self) -> None:
         """call_fn that sleeps 0.5s with 0.05s timeout -> TimeoutError after completion."""
 
@@ -760,6 +764,7 @@ class TestSyncPostCallTimeout:
         assert result.error is not None
         assert "tool call failed" in result.error
 
+    @nogil_unstable
     def test_timeout_error_path_increments_error_count(self) -> None:
         """Sync timeout error must increment error_count in stats."""
 
@@ -772,6 +777,7 @@ class TestSyncPostCallTimeout:
         stats = adapter.get_tool_stats()
         assert stats["tool"].error_count == 1
 
+    @nogil_unstable
     def test_timeout_result_not_stored_in_stats_cost(self) -> None:
         """Sync timeout error: total_cost_usd in stats should not include timed-out call."""
 

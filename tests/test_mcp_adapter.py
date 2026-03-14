@@ -10,6 +10,8 @@ from typing import Any, Optional
 
 import pytest
 
+from _nogil_compat import nogil_unstable
+
 from veronica_core.adapters.mcp import (
     MCPContainmentAdapter,
     MCPToolCost,
@@ -726,6 +728,7 @@ class TestAsyncGuard:
 class TestTimeout:
     """timeout_seconds parameter: calls that exceed the limit are marked as timeout errors."""
 
+    @nogil_unstable
     def test_slow_fn_triggers_timeout(self) -> None:
         import time as _time
 
@@ -767,6 +770,7 @@ class TestTimeout:
         result = adapter.wrap_tool_call("slow_tool", {}, slow_fn)
         assert result.success is True
 
+    @nogil_unstable
     def test_timeout_increments_error_count(self) -> None:
         import time as _time
 

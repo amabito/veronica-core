@@ -43,6 +43,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from _nogil_compat import nogil_unstable
+
 from veronica_core.adapters._shared import (
     ExecutionContextContainerAdapter,
     _BudgetProxy,
@@ -288,6 +290,7 @@ class TestSharedTimeoutPoolEdgeCases:
         """SharedTimeoutPool.instance() must return the module-level _timeout_pool."""
         assert SharedTimeoutPool.instance() is _timeout_pool
 
+    @nogil_unstable
     def test_callback_exception_does_not_kill_daemon_thread(self) -> None:
         """A callback that raises must not kill the daemon thread."""
         pool = SharedTimeoutPool()

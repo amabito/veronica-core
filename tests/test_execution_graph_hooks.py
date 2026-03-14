@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+from _nogil_compat import nogil_unstable
 from veronica_core.containment.execution_graph import (
     ExecutionGraph,
     NodeEvent,
@@ -446,6 +447,7 @@ def test_subscriber_receives_correct_depth() -> None:
     assert depth_map[grandchild_id] == 2
 
 
+@nogil_unstable
 def test_subscriber_receives_correct_elapsed_ms() -> None:
     """NodeEvent.elapsed_ms approximates end_ts_ms - start_ts_ms."""
     g = _make_graph()

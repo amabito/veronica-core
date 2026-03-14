@@ -85,7 +85,7 @@ exclude = ["src/veronica_core/compliance/app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 
 [tool.coverage.run]
 source = ["veronica_core"]

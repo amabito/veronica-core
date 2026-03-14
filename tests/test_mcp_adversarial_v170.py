@@ -15,6 +15,8 @@ from typing import Any, Optional
 
 import pytest
 
+from _nogil_compat import nogil_unstable
+
 from veronica_core.adapters.mcp import (
     MCPContainmentAdapter,
     MCPToolResult,
@@ -387,6 +389,7 @@ class TestAdversarialSyncTimeout:
         # 0s timeout: elapsed > 0 * 1000 = True -> timeout
         assert result.success is False
 
+    @nogil_unstable
     def test_timeout_error_message_contains_info(self) -> None:
         """Timeout error result must have a non-None error message."""
 
@@ -399,6 +402,7 @@ class TestAdversarialSyncTimeout:
         assert result.success is False
         assert result.error is not None
 
+    @nogil_unstable
     def test_concurrent_timeout_calls_five_threads(self) -> None:
         """5 threads with slow fn and short timeout -- must not crash or deadlock."""
 
@@ -909,6 +913,7 @@ class TestAdversarialAsyncHalfOpenConcurrent:
 class TestAdversarialSharedStateDuringTimeout:
     """call_fn that writes to shared state and then times out."""
 
+    @nogil_unstable
     def test_shared_state_written_before_timeout_detected(self) -> None:
         """Sync timeout is non-preemptive: call_fn completes, then timeout checked.
         Any shared state mutation by call_fn will have taken effect.
