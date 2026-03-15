@@ -1,0 +1,16 @@
+name: Codespell
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: codespell-project/actions-codespell@v2
+        with:
+          skip: "*.lock,*.json,.git"
+          ignore_words_list: "crate,ment"
