@@ -266,9 +266,12 @@ class TestClassifyAction:
         p = classify_action("file_write")
         assert SideEffectClass.WRITE_LOCAL in p.effects
 
-    def test_unknown_action_returns_empty_effects(self) -> None:
+    def test_unknown_action_returns_irreversible_effect(self) -> None:
+        """Unknown actions must be fail-closed: IRREVERSIBLE effect, high severity."""
         p = classify_action("completely_unknown_action_xyz")
-        assert len(p.effects) == 0
+        assert SideEffectClass.IRREVERSIBLE in p.effects
+        assert p.has_dangerous
+        assert not p.is_read_only
 
     def test_unknown_action_strict_mode_true(self) -> None:
         p = classify_action("unknown_action_abc")

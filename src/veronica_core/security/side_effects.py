@@ -187,9 +187,12 @@ def classify_action(
     profile = ACTION_SIDE_EFFECTS.get(action)
     if profile is not None:
         return profile
-    # Unknown action: fail-closed with max severity.
+    # Unknown action: fail-closed. Include IRREVERSIBLE so that
+    # max_severity=10, has_dangerous=True, is_read_only=False.
+    # This prevents unknown actions from being treated as safe by
+    # any consumer that checks profile properties.
     return SideEffectProfile(
-        effects=frozenset(),
+        effects=frozenset({SideEffectClass.IRREVERSIBLE}),
         description=f"unknown action: {action}",
         strict_mode=True,
     )
