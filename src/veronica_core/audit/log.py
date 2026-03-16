@@ -27,6 +27,29 @@ from veronica_core._utils import GENESIS_HASH  # noqa: E402
 from veronica_core.security.masking import SecretMasker  # noqa: E402
 
 
+# ---------------------------------------------------------------------------
+# Authority audit event type constants
+# ---------------------------------------------------------------------------
+
+# Emitted when an AuthorityClaim is first attached to an action request.
+AUTHORITY_ASSIGNED = "authority_assigned"
+
+# Emitted when an AuthorityClaim is propagated to a derived action via derives().
+AUTHORITY_PROPAGATED = "authority_propagated"
+
+# Emitted when a human approval elevates an action to APPROVED_OVERRIDE.
+AUTHORITY_OVERRIDE_APPROVED = "authority_override_approved"
+
+# Emitted when the policy engine denies an action due to insufficient authority.
+AUTHORITY_POLICY_DENIED = "authority_policy_denied"
+
+# Emitted when the policy engine degrades (REQUIRE_APPROVAL) due to authority level.
+AUTHORITY_POLICY_DEGRADED = "authority_policy_degraded"
+
+# Emitted when the policy engine allows an action and authority was sufficient.
+AUTHORITY_POLICY_ALLOWED = "authority_policy_allowed"
+
+
 _CHUNK = 8192  # bytes per read when scanning backward through JSONL files
 
 
@@ -430,3 +453,45 @@ class AuditLog:
             pass
 
         return GENESIS_HASH
+
+    # ------------------------------------------------------------------
+    # Authority audit helpers
+    # ------------------------------------------------------------------
+
+    def write_authority_event(
+        self,
+        event_type: str,
+        authority_source: str,
+        effective_trust_level: str,
+        action: str,
+        decision: str,
+        reason: str,
+        chain: tuple[str, ...] = (),
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Write an authority policy event to the audit log.
+
+        Convenience wrapper that structures authority-related fields
+        consistently across all authority event types.
+
+        Args:
+            event_type: One of the AUTHORITY_* constants defined in this module.
+            authority_source: The AuthoritySource value string (e.g. "tool_output").
+            effective_trust_level: Resolved trust level after ceiling enforcement.
+            action: The action being evaluated (e.g. "shell", "file_write").
+            decision: The policy outcome ("ALLOW", "DENY", "REQUIRE_APPROVAL").
+            reason: Human-readable explanation for the decision.
+            chain: Authority derivation chain tuple (ancestry).
+            metadata: Optional additional key-value pairs.
+        """
+        data: dict[str, Any] = {
+            "authority_source": authority_source,
+            "effective_trust_level": effective_trust_level,
+            "action": action,
+            "decision": decision,
+            "reason": reason,
+            "chain": list(chain),
+        }
+        if metadata:
+            data["metadata"] = metadata
+        self.write(event_type, data)

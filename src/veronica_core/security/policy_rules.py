@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from veronica_core.security.authority import UNKNOWN_AUTHORITY, AuthorityClaim
 from veronica_core.security.capabilities import Capability, CapabilitySet
 
 # ---------------------------------------------------------------------------
@@ -215,6 +216,7 @@ class ExecPolicyContext:
     caps: CapabilitySet
     env: str  # "dev" | "ci" | "audit" | "unknown"
     metadata: dict[str, Any] = field(default_factory=dict)
+    authority: AuthorityClaim = field(default_factory=lambda: UNKNOWN_AUTHORITY)
 
     def __post_init__(self) -> None:
         # Freeze mutable fields so hooks cannot mutate them in-place.
@@ -240,6 +242,8 @@ class ExecPolicyDecision:
     rule_id: str
     reason: str
     risk_score_delta: int  # 0=safe, 1-5=moderate, 6-10=critical
+    authority_required: str = ""  # Min trust level needed
+    authority_provided: str = ""  # Trust level in context
 
 
 # Backward-compatible alias -- prefer ExecPolicyDecision in new code.

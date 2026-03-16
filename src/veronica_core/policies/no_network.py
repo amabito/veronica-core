@@ -87,12 +87,18 @@ class NoNetworkPolicy:
     enabled: bool = False
     allowlist: frozenset[str] = field(default_factory=frozenset)
 
-    def check_egress(self, url: str, method: str = "GET") -> tuple[bool, str]:
+    def check_egress(
+        self, url: str, method: str = "GET", authority: object = None
+    ) -> tuple[bool, str]:
         """Check whether an outbound HTTP request is allowed.
+
+        The ``authority`` parameter is accepted for API compatibility but does
+        not affect the verdict -- NoNetworkPolicy intent overrides authority level.
 
         Args:
             url: Target URL.
             method: HTTP method (informational; all methods are blocked).
+            authority: Optional AuthorityClaim (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.
@@ -103,11 +109,17 @@ class NoNetworkPolicy:
             return True, f"URL in allowlist: {url!r}"
         return False, f"outbound network blocked by NoNetworkPolicy: {url!r}"
 
-    def check_shell(self, args: list[str]) -> tuple[bool, str]:
+    def check_shell(
+        self, args: list[str], authority: object = None
+    ) -> tuple[bool, str]:
         """Check whether a shell command performs network I/O.
+
+        The ``authority`` parameter is accepted for API compatibility but does
+        not affect the verdict -- NoNetworkPolicy intent overrides authority level.
 
         Args:
             args: Command argument list. args[0] is the executable name.
+            authority: Optional AuthorityClaim (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.

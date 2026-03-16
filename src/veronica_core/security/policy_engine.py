@@ -86,8 +86,9 @@ _DEFAULT_DENY = PolicyDecision(
 class PolicyEngine:
     """Evaluates PolicyContext against security rules and returns PolicyDecision.
 
-    Rules are evaluated in order: DENY first, then REQUIRE_APPROVAL, then ALLOW.
-    Unknown actions are denied by default (fail-closed).
+    Rules are evaluated in order: authority pre-check first, then DENY, then
+    REQUIRE_APPROVAL, then ALLOW.  Unknown actions are denied by default
+    (fail-closed).
     """
 
     def __init__(
@@ -386,12 +387,93 @@ class PolicyEngine:
             )
             guard.check(int(policy_version), min_engine, policy_path=policy_path_str)
 
+    @staticmethod
+    def _check_authority(ctx: PolicyContext) -> PolicyDecision | None:
+        """Pre-check authority level before action-specific evaluation.
+
+        Returns a DENY or REQUIRE_APPROVAL decision when the originating
+        authority is insufficient for the requested action.  Returns None
+        to proceed with normal action evaluation.
+
+        Rules applied (fail-closed):
+        - UNKNOWN authority (no explicit context) is a no-op for backward
+          compatibility -- existing callers that omit authority are unaffected.
+        - tool_output / retrieved_content / memory_content cannot execute
+          shell or file_write directly -- these sources have provisional trust
+          at most and must not trigger side-effecting actions without approval.
+        - agent_generated sources require explicit approval for any side-
+          effecting action (shell, file_write, net) when below trusted rank.
+        - external_message sources are restricted to file_read only;
+          all other actions are denied.
+        """
+        from veronica_core.security.authority import (
+            UNKNOWN_AUTHORITY,
+            AuthoritySource,
+        )
+        from veronica_core.memory.types import trust_rank
+
+        authority = getattr(ctx, "authority", UNKNOWN_AUTHORITY)
+        source_value = authority.source.value
+        rank = trust_rank(authority.effective_trust_level)
+
+        # UNKNOWN means "no authority context provided" -- backward-compat default.
+        # Skip the pre-check so existing callers that omit authority are unaffected.
+        if authority.source is AuthoritySource.UNKNOWN:
+            return None
+
+        # Rule: tool_output / retrieved_content / memory_content cannot
+        # directly execute shell or file_write.
+        if source_value in ("tool_output", "retrieved_content", "memory_content"):
+            if ctx.action in ("shell", "file_write"):
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="AUTHORITY_TOOL_OUTPUT_NO_SIDE_EFFECT",
+                    reason=(
+                        f"{source_value} cannot execute {ctx.action} without approval"
+                    ),
+                    risk_score_delta=50,
+                )
+
+        # Rule: agent_generated requires approval for side-effecting actions
+        # when effective trust is below trusted.
+        if source_value == "agent_generated":
+            if ctx.action in ("shell", "file_write", "net"):
+                if rank < trust_rank("trusted"):
+                    return PolicyDecision(
+                        verdict="REQUIRE_APPROVAL",
+                        rule_id="AUTHORITY_AGENT_NEEDS_APPROVAL",
+                        reason=(
+                            f"agent_generated action {ctx.action} requires approval"
+                        ),
+                        risk_score_delta=30,
+                    )
+
+        # Rule: external_message sources are restricted to file_read only.
+        if source_value == "external_message":
+            if ctx.action != "file_read":
+                return PolicyDecision(
+                    verdict="DENY",
+                    rule_id="AUTHORITY_EXTERNAL_DENY",
+                    reason=(
+                        f"external_message authority cannot perform {ctx.action}"
+                    ),
+                    risk_score_delta=80,
+                )
+
+        return None  # proceed to normal evaluation
+
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
         """Evaluate *ctx* and return a PolicyDecision.
 
-        The engine delegates to a per-action evaluator function.
-        If the action is unknown, DENY is returned immediately.
+        Runs an authority pre-check first, then delegates to a per-action
+        evaluator function.  If the action is unknown, DENY is returned
+        immediately.
         """
+        # Authority pre-check: runs before action-specific rules.
+        authority_decision = self._check_authority(ctx)
+        if authority_decision is not None:
+            return authority_decision
+
         evaluator = _EVALUATORS.get(ctx.action)
         if evaluator is None:
             return PolicyDecision(
@@ -467,9 +549,15 @@ class PolicyHook:
 
     def before_tool_call(self, ctx: ToolCallContext) -> Decision | None:
         """Intercept tool dispatch. Extract action from ctx.metadata."""
+        from veronica_core.security.authority import AuthorityClaim, UNKNOWN_AUTHORITY
+
         meta = ctx.metadata or {}
         action: str = meta.get("action", "shell")
         args: list[str] = meta.get("args", [])
+
+        authority = meta.get("authority")
+        if not isinstance(authority, AuthorityClaim):
+            authority = UNKNOWN_AUTHORITY
 
         policy_ctx = PolicyContext(
             action=action,  # type: ignore[arg-type]
@@ -480,6 +568,7 @@ class PolicyHook:
             caps=self._caps,
             env=self._env,
             metadata=meta,
+            authority=authority,
         )
         decision = self._engine.evaluate(policy_ctx)
         self.last_decision = decision

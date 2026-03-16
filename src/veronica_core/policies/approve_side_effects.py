@@ -203,15 +203,37 @@ class ApproveSideEffectsPolicy:
                 return True
             return False
 
-    def check_egress(self, url: str, method: str = "GET") -> tuple[bool, str]:
+    @staticmethod
+    def _is_low_authority(authority: object) -> bool:
+        """Return True if authority is below trusted rank.
+
+        Low-authority sources (tool_output, retrieved_content, memory_content,
+        agent_generated, external_message, unknown) must not bypass the
+        approval gate even for nominally read-only operations.
+        """
+        try:
+            from veronica_core.security.authority import AuthorityClaim
+            from veronica_core.memory.types import trust_rank
+
+            if not isinstance(authority, AuthorityClaim):
+                return False
+            return trust_rank(authority.effective_trust_level) < trust_rank("trusted")
+        except Exception:
+            return False
+
+    def check_egress(
+        self, url: str, method: str = "GET", authority: object = None
+    ) -> tuple[bool, str]:
         """Check whether an outbound HTTP request is allowed.
 
-        GET/HEAD/OPTIONS are auto-approved.  All other methods require
-        a prior call to request_approval() + record_approval().
+        GET/HEAD/OPTIONS are auto-approved for trusted+ sources.
+        For low-authority sources (below trusted), all methods require a
+        prior call to request_approval() + record_approval().
 
         Args:
             url: Target URL.
             method: HTTP method.
+            authority: Optional AuthorityClaim for authority-aware gating.
 
         Returns:
             (allowed, reason) tuple.
@@ -219,9 +241,17 @@ class ApproveSideEffectsPolicy:
         if not self.enabled:
             return True, "policy disabled"
         upper = method.upper()
+        operation_id = f"{upper}:{url}"
+
+        # Low-authority sources must always go through approval, even for
+        # read-only HTTP methods -- they may be exfiltrating data.
+        if self._is_low_authority(authority):
+            if self._consume_approval(operation_id):
+                return True, f"approved: {operation_id}"
+            return False, f"operation requires approval: {operation_id}"
+
         if upper in _READ_ONLY_HTTP:
             return True, f"read-only HTTP {upper} auto-approved"
-        operation_id = f"{upper}:{url}"
         if self._consume_approval(operation_id):
             return True, f"approved: {operation_id}"
         return (
@@ -229,15 +259,19 @@ class ApproveSideEffectsPolicy:
             f"operation requires approval: {operation_id}",
         )
 
-    def check_shell(self, args: list[str]) -> tuple[bool, str]:
+    def check_shell(
+        self, args: list[str], authority: object = None
+    ) -> tuple[bool, str]:
         """Check whether a shell command is allowed.
 
-        Read-only commands (not in the write list) are auto-approved.
-        Write commands require prior approval via request_approval() +
-        record_approval().
+        Read-only commands (not in the write list) are auto-approved for
+        trusted+ sources.  For low-authority sources, all shell commands
+        require prior approval.  Write commands always require approval
+        regardless of authority.
 
         Args:
             args: Command argument list.
+            authority: Optional AuthorityClaim for authority-aware gating.
 
         Returns:
             (allowed, reason) tuple.
@@ -248,6 +282,14 @@ class ApproveSideEffectsPolicy:
             return True, "empty command allowed"
         cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
         stem = _normalize_command_name(cmd)
+
+        # Low-authority sources require approval for all shell commands.
+        if self._is_low_authority(authority):
+            operation_id = f"SHELL:{stem}"
+            if self._consume_approval(operation_id):
+                return True, f"approved: {operation_id}"
+            return False, f"operation requires approval: {operation_id}"
+
         if stem not in _WRITE_SHELL_COMMANDS:
             return True, f"read-only shell command auto-approved: {cmd!r}"
         operation_id = f"SHELL:{stem}"
@@ -255,14 +297,18 @@ class ApproveSideEffectsPolicy:
             return True, f"approved: {operation_id}"
         return False, f"operation requires approval: {operation_id}"
 
-    def check_file_write(self, path: str) -> tuple[bool, str]:
+    def check_file_write(
+        self, path: str, authority: object = None
+    ) -> tuple[bool, str]:
         """Check whether a file write is allowed.
 
         All file writes require a prior call to request_approval() +
-        record_approval().
+        record_approval(), regardless of authority level.
 
         Args:
             path: File path being written.
+            authority: Optional AuthorityClaim (accepted for API compatibility;
+                all file writes require approval regardless of authority).
 
         Returns:
             (allowed, reason) tuple.

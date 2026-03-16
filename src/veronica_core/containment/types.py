@@ -24,6 +24,7 @@ from veronica_core.shield.event import SafetyEvent
 if TYPE_CHECKING:
     from veronica_core.a2a.types import AgentIdentity
     from veronica_core.partial import PartialResultBuffer
+    from veronica_core.security.authority import AuthorityClaim
 
 __all__ = [
     "CancellationToken",
@@ -88,6 +89,7 @@ class ChainMetadata:
     user_id: str | None = None
     model: str | None = None
     tags: dict[str, str] = field(default_factory=dict)
+    authority: "AuthorityClaim | None" = None
 
     def __post_init__(self) -> None:
         from veronica_core._utils import freeze_mapping
