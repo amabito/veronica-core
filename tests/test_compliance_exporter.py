@@ -1218,6 +1218,7 @@ class TestAdversarialAttach:
 
     # -- TOCTOU: drain clears _attached, but attach adds during drain --
 
+    @nogil_unstable
     @patch("veronica_core.compliance.exporter.ComplianceExporter._send_one")
     def test_attach_during_drain_no_data_loss(self, mock_send: MagicMock) -> None:
         """Attach during _drain_attached -- new attachment must not be silently lost."""
