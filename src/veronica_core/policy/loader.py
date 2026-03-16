@@ -15,7 +15,13 @@ from typing import Any, Callable, Literal
 
 from veronica_core.policy.registry import PolicyRegistry
 from veronica_core.policy.schema import PolicySchema, RuleSchema, PolicyValidationError
-from veronica_core.shield.hooks import PreDispatchHook
+from veronica_core.shield.hooks import (
+    BudgetBoundaryHook,
+    EgressBoundaryHook,
+    PreDispatchHook,
+    RetryBoundaryHook,
+    ToolDispatchHook,
+)
 from veronica_core.shield.pipeline import ShieldPipeline
 
 logger = logging.getLogger(__name__)
@@ -135,9 +141,15 @@ def _build_pipeline(
 
     Single loop: each factory is called ONCE per rule.  The same component
     instance is used for both the ShieldPipeline slot and the hooks list.
-    PreDispatchHook membership is detected via isinstance (fix #2).
+    Protocol membership is detected via isinstance for all five hook types
+    (fix #2 extended: previously only PreDispatchHook was wired).
+    Last matching rule per slot wins (consistent with append-order iteration).
     """
     pre_dispatch: PreDispatchHook | None = None
+    egress: EgressBoundaryHook | None = None
+    retry: RetryBoundaryHook | None = None
+    budget: BudgetBoundaryHook | None = None
+    tool_dispatch: ToolDispatchHook | None = None
     hooks: list[tuple[RuleSchema, Any]] = []
 
     for rule in schema.rules:
@@ -145,13 +157,24 @@ def _build_pipeline(
         component = factory(rule.params)
         hooks.append((rule, component))
 
-        # Wire into the ShieldPipeline's pre_dispatch slot if the component
-        # implements the PreDispatchHook protocol.  Last matching rule wins
-        # (consistent with append-order iteration).
         if isinstance(component, PreDispatchHook):
             pre_dispatch = component
+        if isinstance(component, EgressBoundaryHook):
+            egress = component
+        if isinstance(component, RetryBoundaryHook):
+            retry = component
+        if isinstance(component, BudgetBoundaryHook):
+            budget = component
+        if isinstance(component, ToolDispatchHook):
+            tool_dispatch = component
 
-    pipeline = ShieldPipeline(pre_dispatch=pre_dispatch)
+    pipeline = ShieldPipeline(
+        pre_dispatch=pre_dispatch,
+        egress=egress,
+        retry=retry,
+        budget=budget,
+        tool_dispatch=tool_dispatch,
+    )
     return LoadedPolicy(pipeline=pipeline, schema=schema, hooks=hooks)
 
 

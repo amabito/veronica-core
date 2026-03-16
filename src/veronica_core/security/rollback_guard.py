@@ -76,7 +76,18 @@ class RollbackGuard:
 
         # Engine version check
         if min_engine_version:
-            if parse_version(ENGINE_VERSION) < parse_version(min_engine_version):
+            # B2-M1: parse_version() drops non-digit segments and may return an
+            # empty tuple for malformed strings (e.g. "alpha", "").  An empty
+            # parsed version would silently satisfy any "< engine_version" check,
+            # allowing a malformed min_engine_version to bypass the guard entirely.
+            # Fail-closed: treat an un-parseable min_engine_version as a hard error.
+            parsed_min = parse_version(min_engine_version)
+            if not parsed_min:
+                raise ValueError(
+                    f"min_engine_version {min_engine_version!r} could not be parsed "
+                    "into a version tuple; at least one numeric component is required"
+                )
+            if parse_version(ENGINE_VERSION) < parsed_min:
                 raise RuntimeError(
                     f"Engine {ENGINE_VERSION} < required {min_engine_version}"
                 )

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veronica-core"
-version = "3.7.7"
+version = "3.7.8"
 description = "Runtime containment kernel for LLM agents. Enforces budget, step, retry, and circuit-breaker limits before the model call."
 readme = "README.md"
 license = "Apache-2.0"

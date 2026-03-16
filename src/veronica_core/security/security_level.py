@@ -7,10 +7,13 @@ requirements.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from enum import Enum, auto
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # SecurityLevel enum
@@ -77,6 +80,18 @@ def detect_security_level() -> SecurityLevel:
         if os.environ.get(var, ""):
             return SecurityLevel.CI
 
+    # B2-H1: No explicit level set and no CI markers detected.  Emit a loud
+    # warning so operators are aware that policy/key enforcement runs in the
+    # relaxed DEV tier rather than the strict PROD tier.  Production
+    # deployments should set VERONICA_SECURITY_LEVEL=PROD explicitly.
+    logger.warning(
+        "[VERONICA] Security level not explicitly configured (%s is unset) "
+        "and no CI environment variables detected. "
+        "Defaulting to DEV (relaxed enforcement). "
+        "Set %s=PROD in production environments.",
+        _ENV_VAR,
+        _ENV_VAR,
+    )
     return SecurityLevel.DEV
 
 

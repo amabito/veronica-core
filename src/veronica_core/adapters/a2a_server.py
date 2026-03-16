@@ -166,9 +166,18 @@ class _RateLimiter:
                 bucket = deque()
                 self._buckets[key] = bucket
 
-            # Prune expired timestamps
+            # Prune expired timestamps from this bucket.
             while bucket and bucket[0] < cutoff:
                 bucket.popleft()
+
+            # B3-M1: evict the key entirely when its bucket is now empty so
+            # the dict does not grow without bound for identities that are no
+            # longer active.  This also reclaims the cardinality slot so a
+            # formerly-active tenant/sender can re-register after going quiet.
+            if not bucket and key in self._buckets:
+                del self._buckets[key]
+                bucket = deque()
+                self._buckets[key] = bucket
 
             if len(bucket) >= max_per_window:
                 logger.warning(

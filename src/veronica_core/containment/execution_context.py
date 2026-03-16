@@ -1045,12 +1045,18 @@ class ExecutionContext:
             return self._halt_node(
                 node, stack, graph_node_id, self._MG_DENIED
             )
+        # Stash the real decision on the node so
+        # _notify_memory_governance_after can pass it to hooks instead of
+        # a synthetic ALLOW.  Per-node storage avoids shared-state bugs
+        # with reentrant/concurrent wrap calls on the same context.
+        node._mg_decision = decision  # type: ignore[attr-defined]
         return None
 
     def _notify_memory_governance_after(
         self,
         kind: Literal["llm", "tool", "memory_read", "memory_write"],
         opts: WrapOptions,
+        node: Any = None,
     ) -> None:
         """Notify memory governor after successful dispatch. Never raises."""
         from veronica_core.memory.types import (
@@ -1059,15 +1065,23 @@ class ExecutionContext:
         )
 
         mem_op = self._build_memory_op(kind, opts)
-        allow_decision = MemoryGovernanceDecision(
-            verdict=GovernanceVerdict.ALLOW,
-            reason="post-dispatch notification",
-            policy_id="execution_context",
-            operation=mem_op,
-        )
+        # Use the real pre-dispatch decision stashed on the node (may be
+        # DEGRADE/QUARANTINE, not just ALLOW).  Per-node storage avoids
+        # shared-state bugs with reentrant/concurrent wrap calls.
+        # Fall back to synthetic ALLOW if no pre-dispatch check ran.
+        decision = getattr(node, "_mg_decision", None) if node is not None else None
+        if node is not None and decision is not None:
+            del node._mg_decision  # clean up after use
+        if decision is None:
+            decision = MemoryGovernanceDecision(
+                verdict=GovernanceVerdict.ALLOW,
+                reason="post-dispatch notification",
+                policy_id="execution_context",
+                operation=mem_op,
+            )
         try:
             self._memory_governor.notify_after(  # type: ignore[union-attr]
-                mem_op, allow_decision
+                mem_op, decision
             )
         except BaseException:  # noqa: BLE001
             # Catch BaseException (not just Exception) to honour the "never
@@ -1158,6 +1172,10 @@ class ExecutionContext:
         graph_node_id: str,
     ) -> Decision:
         """Handle an exception raised by fn(). Returns HALT or RETRY."""
+        # Clean up per-node mg_decision stashed by _check_memory_governance
+        # so it does not leak into snapshots/history for failed nodes.
+        if hasattr(node, "_mg_decision"):
+            del node._mg_decision
         if self._cancellation_token.is_cancelled:
             node.status = "timeout"
             node.end_ts = datetime.now(timezone.utc)
@@ -1188,7 +1206,17 @@ class ExecutionContext:
                         exc_info=True,
                     )
 
-        node.status = "error"
+        # B1-M1: classify status BEFORE persisting the node so the recorded
+        # status matches the actual outcome.  HALT decisions must not be
+        # stored as "error" -- they have distinct semantics and dashboards
+        # display them differently.
+        if error_decision == Decision.HALT:
+            node.status = "halted"
+            self._graph.mark_halt(graph_node_id, stop_reason="pipeline_halt")
+        else:
+            node.status = "error"
+            self._graph.mark_failure(graph_node_id, error_class="error")
+
         node.end_ts = datetime.now(timezone.utc)
         with self._lock:
             if len(self._nodes) < _MAX_NODES:
@@ -1197,7 +1225,6 @@ class ExecutionContext:
         logger.debug(
             "[execution_context] step %s failed: %s", graph_node_id, type(exc).__name__,
         )
-        self._graph.mark_failure(graph_node_id, error_class="error")
 
         # Re-raise signal-class exceptions (KeyboardInterrupt, SystemExit) after
         # node bookkeeping is complete.  These must propagate to the caller; storing
@@ -1312,9 +1339,29 @@ class ExecutionContext:
         if reservation_id is not None:
             try:
                 self._budget_backend.commit(reservation_id)
-            except (KeyError, Exception):  # noqa: BLE001
-                # Reservation expired between reserve and commit; fall back to add().
+                # B1-H1: commit() only moves the reserved estimate to committed cost.
+                # When actual_cost exceeds the estimate, the delta was never reserved
+                # and must be added explicitly to prevent cross-process budget drift.
+                cost_delta = actual_cost - opts.cost_estimate_hint
+                if cost_delta > 0.0:
+                    self._budget_backend.add(cost_delta)
+            except KeyError:
+                # Reservation expired (or already committed/rolled back) between
+                # reserve() and commit().  The cost was never added to the backend,
+                # so add it directly now.
                 self._budget_backend.add(actual_cost)
+            except Exception:  # noqa: BLE001
+                # Non-KeyError commit failure (e.g. transient Redis connection error).
+                # The reservation may still be held -- do NOT call add() here to avoid
+                # double-counting.  Log and let the reservation expire naturally.
+                logger.warning(
+                    "ExecutionContext: budget_backend.commit(%r) failed with a "
+                    "non-KeyError exception; cost %.4f USD may be under-counted "
+                    "if the reservation has not yet expired.",
+                    reservation_id,
+                    actual_cost,
+                    exc_info=True,
+                )
         else:
             self._budget_backend.add(actual_cost)
 
@@ -1376,7 +1423,7 @@ class ExecutionContext:
 
         # Memory governance post-dispatch notification (v3.3).
         if self._memory_governor is not None:
-            self._notify_memory_governance_after(node.kind, opts)
+            self._notify_memory_governance_after(node.kind, opts, node=node)
 
         # Reconciliation callback: notify caller of estimated vs actual cost.
         if opts.reconciliation_callback is not None:

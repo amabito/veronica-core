@@ -180,6 +180,18 @@ class AIContainer:
                 reason="memory governor error",
                 policy_type="memory_governance",
             )
+        # B3-M2: notify_after must be called on the allowed path so that hooks
+        # registered for post-decision audit/metrics/cleanup are invoked.
+        # Errors in after_op are swallowed here (same policy as wrap_llm_call).
+        try:
+            self.memory_governor.notify_after(mem_op, decision)  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+
+            _logging.getLogger(__name__).debug(
+                "AIContainer: MemoryGovernor.notify_after() raised unexpectedly",
+                exc_info=True,
+            )
         return None
 
     @property

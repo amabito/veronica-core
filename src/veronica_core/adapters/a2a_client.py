@@ -180,6 +180,21 @@ class A2AClientContainmentAdapter:
 
         await self._ensure_stats(agent_id)
 
+        # B3-H2: provenance is accepted but not yet wired into the containment
+        # check.  The parameter is reserved for future trust-escalation and
+        # circuit-breaker integration (e.g. denying calls from unverified
+        # provenances at configurable trust thresholds).
+        # TODO: pass provenance into container.check() once the governance
+        # interface supports provenance-aware decisions.
+        if provenance is not None:
+            logger.debug(
+                "[A2A_CLIENT_ADAPTER] agent=%s tenant=%s provenance received "
+                "(card_verified=%s) -- not yet wired into governance checks",
+                agent_id,
+                tenant_id,
+                getattr(provenance, "card_verified", "unknown"),
+            )
+
         # Circuit breaker pre-check.
         if self._circuit_breaker is not None:
             cb_decision = self._circuit_breaker.check(PolicyContext())

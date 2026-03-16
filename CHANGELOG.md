@@ -6,6 +6,52 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.8] -- 2026-03-16 -- Full Codebase Review Hardening
+
+**Breaking changes:** none
+
+### Security
+
+- **`detect_security_level` DEV fallback:** Added warning log when defaulting to DEV
+  due to missing environment markers. Operators can now detect misconfigured deployments.
+- **`parse_version` rollback guard bypass:** Malformed `min_engine_version` strings
+  (e.g., `"abc"`) that parse to empty tuples now raise `ValueError` (fail-closed)
+  instead of silently passing the version check.
+
+### Fixed
+
+- **ShieldPipeline hook wiring:** `policy/loader.py` now wires all 5 hook protocol
+  types (PreDispatchHook, EgressBoundaryHook, RetryBoundaryHook, BudgetBoundaryHook,
+  ToolDispatchHook) into ShieldPipeline slots. Previously only PreDispatchHook was wired.
+- **Two-phase budget reservation drift:** `_finalize_success` now commits the delta
+  between actual_cost and cost_estimate_hint to the backend, preventing cross-process
+  budget accounting drift.
+- **HALT vs error node classification:** `_handle_fn_error` now checks `error_decision`
+  before setting node status. HALT decisions get `status="halted"` and `mark_halt()`,
+  not `status="error"` and `mark_failure()`.
+- **Memory governance decision threading:** `_notify_memory_governance_after` now
+  receives the real pre-dispatch decision (ALLOW/DEGRADE/QUARANTINE) stored per-node,
+  instead of always constructing a synthetic ALLOW. After-hooks can now observe the
+  actual governance verdict.
+- **CircuitBreakerCapability cleanup:** Added `cleanup()` method and `_cleanup_dead_refs()`
+  for pruning stale breaker/name entries when agents are GC'd.
+- **A2A rate limiter stale key eviction:** Expired buckets are now pruned on access,
+  preventing unbounded dict growth in long-running servers.
+- **MemoryGovernor notify_after symmetry:** Post-dispatch notification now fires on
+  the normal success path, not only on early exits.
+
+### Documentation
+
+- `A2AClientContainmentAdapter.send_message`: `provenance` parameter documented as
+  reserved for future governance wiring (TODO).
+
+### Deferred to v3.8.0
+
+- `_mg_decision` cleanup on all early-return paths in `_wrap` (requires `_wrap`
+  refactoring). Currently cleaned up on success and fn_error paths only.
+
+---
+
 ## [3.7.7] -- 2026-03-16 -- AG2 Adapter Fixes
 
 **Breaking changes:** none

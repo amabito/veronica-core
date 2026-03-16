@@ -268,6 +268,45 @@ class CircuitBreakerCapability:
         logger.debug("[VERONICA_CAP] Circuit breaker injected into '%s'", name)
         return breaker
 
+    def _remove_by_key(self, agent_key: str) -> None:
+        """Remove all state for *agent_key*.
+
+        Called directly by remove_from_agent().  Safe to call multiple times
+        for the same key (idempotent).
+        """
+        self._originals.pop(agent_key, None)
+        self._breakers.pop(agent_key, None)
+        self._agent_names.pop(agent_key, None)
+
+    def cleanup(self) -> int:
+        """Prune entries for agents that have been garbage-collected.
+
+        B3-H1: _breakers, _agent_names, and _originals are keyed by UUID
+        strings and grow without bound when many short-lived agents are
+        wrapped over a long-running process.  Callers should invoke cleanup()
+        periodically (e.g. in a maintenance task or after each batch of
+        add_to_agent calls) to reclaim memory.
+
+        Returns the number of entries pruned.
+        """
+        return self._cleanup_dead_refs()
+
+    def _cleanup_dead_refs(self) -> int:
+        """Internal: prune entries whose weakref to the original method is dead.
+
+        Note: the original method weakref dies as soon as add_to_agent()
+        returns because the wrapped closure is the only reference held by the
+        agent.  This method therefore prunes all registered agents that have
+        since called remove_from_agent() or been cleaned up by other means.
+        Use remove_from_agent() or cleanup() for the primary GC mechanism.
+
+        Returns the number of entries pruned.
+        """
+        dead_keys = [k for k, ref in list(self._originals.items()) if ref() is None]
+        for k in dead_keys:
+            self._remove_by_key(k)
+        return len(dead_keys)
+
     def remove_from_agent(self, agent: Any) -> None:
         """Remove the circuit breaker previously injected into *agent*.
 
@@ -309,8 +348,7 @@ class CircuitBreakerCapability:
                 "was GC'd before removal; generate_reply NOT restored",
                 name,
             )
-        del self._breakers[agent_key]
-        self._agent_names.pop(agent_key, None)
+        self._remove_by_key(agent_key)
         try:
             del agent._veronica_agent_key
         except AttributeError:
