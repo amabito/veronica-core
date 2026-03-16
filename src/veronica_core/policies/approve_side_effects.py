@@ -222,7 +222,11 @@ class ApproveSideEffectsPolicy:
             return False
 
     def check_egress(
-        self, url: str, method: str = "GET", authority: object = None
+        self,
+        url: str,
+        method: str = "GET",
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether an outbound HTTP request is allowed.
 
@@ -230,10 +234,14 @@ class ApproveSideEffectsPolicy:
         For low-authority sources (below trusted), all methods require a
         prior call to request_approval() + record_approval().
 
+        When *side_effects* carries EXTERNAL_MUTATION or IRREVERSIBLE effects,
+        approval is required regardless of authority level.
+
         Args:
             url: Target URL.
             method: HTTP method.
             authority: Optional AuthorityClaim for authority-aware gating.
+            side_effects: Optional SideEffectProfile for profile-based gating.
 
         Returns:
             (allowed, reason) tuple.
@@ -250,6 +258,13 @@ class ApproveSideEffectsPolicy:
                 return True, f"approved: {operation_id}"
             return False, f"operation requires approval: {operation_id}"
 
+        # Side-effect aware: external mutation forces the approval path.
+        if side_effects is not None and getattr(side_effects, "has_external", False):
+            if upper not in _READ_ONLY_HTTP or getattr(side_effects, "has_dangerous", False):
+                if self._consume_approval(operation_id):
+                    return True, f"approved: {operation_id}"
+                return False, f"external mutation requires approval: {operation_id}"
+
         if upper in _READ_ONLY_HTTP:
             return True, f"read-only HTTP {upper} auto-approved"
         if self._consume_approval(operation_id):
@@ -260,7 +275,10 @@ class ApproveSideEffectsPolicy:
         )
 
     def check_shell(
-        self, args: list[str], authority: object = None
+        self,
+        args: list[str],
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether a shell command is allowed.
 
@@ -269,9 +287,14 @@ class ApproveSideEffectsPolicy:
         require prior approval.  Write commands always require approval
         regardless of authority.
 
+        When a SideEffectProfile is provided via *side_effects* and reports
+        dangerous effects, the command is treated as a write operation and
+        requires prior approval regardless of the command name.
+
         Args:
             args: Command argument list.
             authority: Optional AuthorityClaim for authority-aware gating.
+            side_effects: Optional SideEffectProfile for profile-based gating.
 
         Returns:
             (allowed, reason) tuple.
@@ -289,6 +312,13 @@ class ApproveSideEffectsPolicy:
             if self._consume_approval(operation_id):
                 return True, f"approved: {operation_id}"
             return False, f"operation requires approval: {operation_id}"
+
+        # Side-effect aware: dangerous profile forces the approval path.
+        if side_effects is not None and getattr(side_effects, "has_dangerous", False):
+            operation_id = f"SHELL:{stem}"
+            if self._consume_approval(operation_id):
+                return True, f"approved: {operation_id}"
+            return False, f"dangerous side effect requires approval: {operation_id}"
 
         if stem not in _WRITE_SHELL_COMMANDS:
             return True, f"read-only shell command auto-approved: {cmd!r}"

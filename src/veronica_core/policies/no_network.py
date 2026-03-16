@@ -88,17 +88,23 @@ class NoNetworkPolicy:
     allowlist: frozenset[str] = field(default_factory=frozenset)
 
     def check_egress(
-        self, url: str, method: str = "GET", authority: object = None
+        self,
+        url: str,
+        method: str = "GET",
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether an outbound HTTP request is allowed.
 
-        The ``authority`` parameter is accepted for API compatibility but does
-        not affect the verdict -- NoNetworkPolicy intent overrides authority level.
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility but do not affect the verdict -- NoNetworkPolicy intent
+        overrides authority level and side-effect profiles.
 
         Args:
             url: Target URL.
             method: HTTP method (informational; all methods are blocked).
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.
@@ -110,16 +116,24 @@ class NoNetworkPolicy:
         return False, f"outbound network blocked by NoNetworkPolicy: {url!r}"
 
     def check_shell(
-        self, args: list[str], authority: object = None
+        self,
+        args: list[str],
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether a shell command performs network I/O.
 
-        The ``authority`` parameter is accepted for API compatibility but does
-        not affect the verdict -- NoNetworkPolicy intent overrides authority level.
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility but do not affect the verdict -- NoNetworkPolicy intent
+        overrides authority level.
+
+        When *side_effects* reports OUTBOUND_NETWORK effects, the command is
+        blocked even if its name is not in the known network command list.
 
         Args:
             args: Command argument list. args[0] is the executable name.
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile for profile-based detection.
 
         Returns:
             (allowed, reason) tuple.
@@ -132,6 +146,9 @@ class NoNetworkPolicy:
         stem = _normalize_command_name(cmd)
         if stem in _NETWORK_SHELL_COMMANDS:
             return False, f"network shell command blocked by NoNetworkPolicy: {cmd!r}"
+        # Side-effect aware: block any command whose profile reports network effects.
+        if side_effects is not None and getattr(side_effects, "has_external", False):
+            return False, f"network side effect blocked by NoNetworkPolicy: {cmd!r}"
         return True, "non-network shell command allowed"
 
     def create_event(

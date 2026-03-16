@@ -123,17 +123,21 @@ class ReadOnlyAssistantPolicy:
         return _DENIED_SHELL_PREFIXES | self.extra_denied_commands
 
     def check_shell(
-        self, args: list[str], authority: object = None
+        self,
+        args: list[str],
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether a shell command is allowed.
 
-        The ``authority`` parameter is accepted for API compatibility but does
-        not affect which commands are permitted -- ReadOnlyAssistantPolicy
-        intent overrides authority level for write commands.
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility but do not affect which commands are permitted --
+        ReadOnlyAssistantPolicy intent overrides both for write commands.
 
         Args:
             args: Command argument list. args[0] is the executable name.
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.
@@ -149,17 +153,22 @@ class ReadOnlyAssistantPolicy:
         return True, "read-only shell command allowed"
 
     def check_egress(
-        self, url: str, method: str = "GET", authority: object = None
+        self,
+        url: str,
+        method: str = "GET",
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether an outbound HTTP request is allowed.
 
-        The ``authority`` parameter is accepted for API compatibility but does
-        not affect which methods are permitted.
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility but do not affect which methods are permitted.
 
         Args:
             url: Target URL.
             method: HTTP method (GET, POST, PUT, ...).
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.
@@ -176,17 +185,21 @@ class ReadOnlyAssistantPolicy:
         return True, f"HTTP {upper} allowed"
 
     def check_file_write(
-        self, path: str, authority: object = None
+        self,
+        path: str,
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether a file write operation is allowed.
 
-        The ``authority`` parameter is accepted for API compatibility but does
-        not affect the verdict -- file writes are always denied regardless of
-        authority level.
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility but do not affect the verdict -- file writes are always
+        denied regardless of authority or profile.
 
         Args:
             path: File path being written.
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.

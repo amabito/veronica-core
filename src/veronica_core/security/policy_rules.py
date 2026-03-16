@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 from veronica_core.security.authority import UNKNOWN_AUTHORITY, AuthorityClaim
 from veronica_core.security.capabilities import Capability, CapabilitySet
+from veronica_core.security.side_effects import SideEffectProfile
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -217,6 +218,7 @@ class ExecPolicyContext:
     env: str  # "dev" | "ci" | "audit" | "unknown"
     metadata: dict[str, Any] = field(default_factory=dict)
     authority: AuthorityClaim = field(default_factory=lambda: UNKNOWN_AUTHORITY)
+    side_effects: SideEffectProfile | None = None
 
     def __post_init__(self) -> None:
         # Freeze mutable fields so hooks cannot mutate them in-place.

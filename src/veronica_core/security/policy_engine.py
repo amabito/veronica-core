@@ -388,6 +388,59 @@ class PolicyEngine:
             guard.check(int(policy_version), min_engine, policy_path=policy_path_str)
 
     @staticmethod
+    def _check_side_effects(ctx: PolicyContext) -> PolicyDecision | None:
+        """Pre-check side-effect profile. Returns REQUIRE_APPROVAL if too dangerous.
+
+        Runs after authority check but before action-specific rules.
+        Returns None to proceed with normal evaluation.
+
+        Rules applied:
+        - Only inspects ctx.side_effects when it is explicitly provided by the
+          caller. Inferring a profile here would override existing evaluator
+          verdicts (e.g. converting DENY for unknown actions to REQUIRE_APPROVAL).
+        - Irreversible side effects always require explicit approval.
+        - Unknown actions whose explicit profile carries strict_mode=True and
+          no effects AND that are not handled by any evaluator, require approval.
+          Known evaluator actions (shell, net, etc.) are never intercepted here.
+        """
+        from veronica_core.security.side_effects import SideEffectClass
+
+        # Only act on an explicitly provided side-effect profile. Falling back
+        # to classify_action() for all actions would silently override existing
+        # evaluator verdicts (e.g., DENY for unknown actions becomes
+        # REQUIRE_APPROVAL), breaking the fail-closed contract.
+        profile = getattr(ctx, "side_effects", None)
+        if profile is None:
+            return None
+
+        # Irreversible effects always require approval regardless of authority.
+        if SideEffectClass.IRREVERSIBLE in (profile.effects or frozenset()):
+            return PolicyDecision(
+                verdict="REQUIRE_APPROVAL",
+                rule_id="SIDE_EFFECT_IRREVERSIBLE",
+                reason="irreversible side effect requires approval",
+                risk_score_delta=60,
+            )
+
+        # Unknown action in strict mode requires approval when not handled by
+        # any evaluator (actions not in _EVALUATORS). Existing evaluators
+        # (shell, net, file_read, file_write, git, browser) handle their own
+        # actions and must not be short-circuited here.
+        if (
+            profile.strict_mode
+            and not profile.effects
+            and ctx.action not in _EVALUATORS
+        ):
+            return PolicyDecision(
+                verdict="REQUIRE_APPROVAL",
+                rule_id="SIDE_EFFECT_UNKNOWN_ACTION",
+                reason=f"unknown action '{ctx.action}' requires approval (strict mode)",
+                risk_score_delta=40,
+            )
+
+        return None  # proceed to normal evaluation
+
+    @staticmethod
     def _check_authority(ctx: PolicyContext) -> PolicyDecision | None:
         """Pre-check authority level before action-specific evaluation.
 
@@ -473,6 +526,11 @@ class PolicyEngine:
         authority_decision = self._check_authority(ctx)
         if authority_decision is not None:
             return authority_decision
+
+        # Side-effect pre-check: runs after authority but before action rules.
+        se_decision = self._check_side_effects(ctx)
+        if se_decision is not None:
+            return se_decision
 
         evaluator = _EVALUATORS.get(ctx.action)
         if evaluator is None:

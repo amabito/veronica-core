@@ -50,6 +50,26 @@ AUTHORITY_POLICY_DEGRADED = "authority_policy_degraded"
 AUTHORITY_POLICY_ALLOWED = "authority_policy_allowed"
 
 
+# ---------------------------------------------------------------------------
+# Side-effect audit event type constants
+# ---------------------------------------------------------------------------
+
+# Emitted when an action's side-effect profile is successfully classified.
+SIDE_EFFECT_CLASSIFIED = "side_effect_classified"
+
+# Emitted when classify_action returns a strict-mode unknown profile.
+SIDE_EFFECT_UNKNOWN = "side_effect_unknown"
+
+# Emitted when policy evaluation allows an action with known side effects.
+SIDE_EFFECT_POLICY_ALLOWED = "side_effect_policy_allowed"
+
+# Emitted when policy evaluation denies an action due to its side effects.
+SIDE_EFFECT_POLICY_DENIED = "side_effect_policy_denied"
+
+# Emitted when policy evaluation requires approval for an action's side effects.
+SIDE_EFFECT_APPROVAL_REQUIRED = "side_effect_approval_required"
+
+
 _CHUNK = 8192  # bytes per read when scanning backward through JSONL files
 
 

@@ -66,19 +66,23 @@ class NoShellPolicy:
     allowlist: frozenset[str] = field(default_factory=frozenset)
 
     def check_shell(
-        self, args: list[str], authority: object = None
+        self,
+        args: list[str],
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Check whether a shell command is allowed.
 
         All commands are blocked unless the executable basename appears
-        in ``allowlist``.  The ``authority`` parameter is accepted for API
-        compatibility but does not affect the verdict -- NoShellPolicy intent
-        overrides authority level.
+        in ``allowlist``.  The ``authority`` and ``side_effects`` parameters
+        are accepted for API compatibility but do not affect the verdict --
+        NoShellPolicy intent overrides both.
 
         Args:
             args: Command argument list. args[0] is the executable path
                 or name.
             authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.

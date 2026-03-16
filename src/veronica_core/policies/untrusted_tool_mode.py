@@ -111,18 +111,24 @@ class UntrustedToolModePolicy:
             return False
 
     def check_shell(
-        self, args: list[str], authority: object = None
+        self,
+        args: list[str],
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Block all shell execution unconditionally.
 
         Only developer_policy or system_config authority sources may override
         this restriction.  All other sources (including user_input and
-        agent_generated) are denied.
+        agent_generated) are denied.  The ``side_effects`` parameter is
+        accepted for API compatibility but does not affect the verdict --
+        untrusted tool mode is the strictest sandbox.
 
         Args:
             args: Command argument list.
             authority: Optional AuthorityClaim. Only developer_policy /
                 system_config sources bypass the block.
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple. Always (False, ...) when enabled, unless
@@ -138,18 +144,24 @@ class UntrustedToolModePolicy:
         return False, f"shell blocked in untrusted tool mode: {cmd!r}"
 
     def check_egress(
-        self, url: str, method: str = "GET", authority: object = None
+        self,
+        url: str,
+        method: str = "GET",
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Block all outbound network access unconditionally.
 
         Only developer_policy or system_config authority sources may override
-        this restriction.
+        this restriction.  The ``side_effects`` parameter is accepted for API
+        compatibility but does not affect the verdict.
 
         Args:
             url: Target URL.
             method: HTTP method (informational; all methods are blocked).
             authority: Optional AuthorityClaim. Only developer_policy /
                 system_config sources bypass the block.
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple. Always (False, ...) when enabled, unless
@@ -162,17 +174,22 @@ class UntrustedToolModePolicy:
         return False, f"network blocked in untrusted tool mode: {url!r}"
 
     def check_file_write(
-        self, path: str, authority: object = None
+        self,
+        path: str,
+        authority: object = None,
+        side_effects: object = None,
     ) -> tuple[bool, str]:
         """Block all file write operations unconditionally.
 
         Only developer_policy or system_config authority sources may override
-        this restriction.
+        this restriction.  The ``side_effects`` parameter is accepted for API
+        compatibility but does not affect the verdict.
 
         Args:
             path: File path being written.
             authority: Optional AuthorityClaim. Only developer_policy /
                 system_config sources bypass the block.
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple. Always (False, ...) when enabled, unless
