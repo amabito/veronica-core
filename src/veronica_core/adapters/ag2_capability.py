@@ -31,9 +31,14 @@ Example::
 from __future__ import annotations
 
 import logging
+import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional
 from uuid import uuid4
 
+from veronica_core.adapters._ag2_helpers import (
+    _AG2_SUPPORTED_VERSIONS,
+    emit_ag2_otel_event as _emit_ag2_otel_event,
+)
 from veronica_core.circuit_breaker import CircuitBreaker
 from veronica_core.runtime_policy import PolicyContext
 from veronica_core.shield.types import Decision, ToolCallContext
@@ -96,7 +101,11 @@ class CircuitBreakerCapability:
         self._veronica = veronica
         self._token_budget_hook = token_budget_hook
         self._breakers: Dict[str, CircuitBreaker] = {}
-        self._originals: Dict[str, Any] = {}
+        # _originals stores weak references to the original bound methods so
+        # that this capability does not prevent agent GC. WeakMethod is used
+        # for bound methods; plain weakref.ref is used as fallback for
+        # non-method callables (e.g. closures, lambda, function objects).
+        self._originals: Dict[str, Any] = {}  # agent_key -> weakref
         self._agent_names: Dict[str, str] = {}  # agent_key -> display name
 
     # ------------------------------------------------------------------
@@ -158,7 +167,16 @@ class CircuitBreakerCapability:
         self._agent_names[agent_key] = name
 
         original_generate_reply = agent.generate_reply
-        self._originals[agent_key] = original_generate_reply
+        # Store a weak reference so this capability does not prevent agent GC.
+        # WeakMethod works for bound methods; fall back to weakref.ref for
+        # plain callables (closures, lambdas, unbound functions).
+        # The closure uses this same weak reference when invoking the original,
+        # so neither _originals nor the closure holds a strong ref to the agent.
+        try:
+            _original_ref: Any = weakref.WeakMethod(original_generate_reply)
+        except TypeError:
+            _original_ref = weakref.ref(original_generate_reply)
+        self._originals[agent_key] = _original_ref
         cap = self  # explicit capture to avoid late-binding
 
         def _guarded_generate_reply(*args: Any, **kwargs: Any) -> Optional[Any]:
@@ -200,9 +218,21 @@ class CircuitBreakerCapability:
             # Emit ALLOW event before invoking the original
             _emit_ag2_otel_event(name, "ALLOW", "all checks passed", "pre_call")
 
+            # Dereference the weak reference to obtain the original method.
+            # If the agent was GC'd, fn is None; treat as a circuit failure.
+            fn = _original_ref()
+            if fn is None:
+                logger.warning(
+                    "[VERONICA_CAP] %s: original generate_reply was GC'd; "
+                    "treating as failure",
+                    name,
+                )
+                breaker.record_failure()
+                return None
+
             # Invoke the original generate_reply
             try:
-                reply = original_generate_reply(*args, **kwargs)
+                reply = fn(*args, **kwargs)
             except Exception as exc:
                 breaker.record_failure(error=exc)
                 _emit_ag2_otel_event(
@@ -247,6 +277,13 @@ class CircuitBreakerCapability:
         If *agent* was not registered with this capability, a warning is logged
         and the call is a no-op.
 
+        Warning:
+            Circuit breaker state is NOT preserved across remove/re-add cycles.
+            Calling ``remove_from_agent`` followed by ``add_to_agent`` assigns a
+            fresh ``CircuitBreaker`` with zero failure history. Any accumulated
+            failure counts and state transitions (OPEN, HALF_OPEN) from before
+            the removal are permanently discarded.
+
         Args:
             agent: The agent from which to remove the circuit breaker.
                    Must be the same object that was passed to ``add_to_agent``.
@@ -259,7 +296,19 @@ class CircuitBreakerCapability:
                 name,
             )
             return
-        agent.generate_reply = self._originals.pop(agent_key)
+        # Dereference the weakref stored in _originals to restore the method.
+        # If the weak reference is dead (agent was partially GC'd), fall back
+        # to leaving generate_reply as-is rather than crashing.
+        original_ref = self._originals.pop(agent_key)
+        original = original_ref()  # dereference WeakMethod / weakref.ref
+        if original is not None:
+            agent.generate_reply = original
+        else:
+            logger.warning(
+                "[VERONICA_CAP] remove_from_agent: original generate_reply for '%s' "
+                "was GC'd before removal; generate_reply NOT restored",
+                name,
+            )
         del self._breakers[agent_key]
         self._agent_names.pop(agent_key, None)
         try:
@@ -286,14 +335,17 @@ class CircuitBreakerCapability:
     def breakers(self) -> Dict[str, CircuitBreaker]:
         """Snapshot of all agent-name -> CircuitBreaker mappings.
 
-        Note: if multiple agents share a name, only the last one appears
-        in this dict. Use get_breaker() for name-based lookup.
+        When multiple agents share the same display name, the first-registered
+        agent's breaker is returned for that name -- consistent with
+        get_breaker() semantics. Subsequent same-named agents are still tracked
+        and their breakers are accessible via get_breaker() (which also returns
+        the first match).
         """
-        return {
-            self._agent_names[k]: v
-            for k, v in self._breakers.items()
-            if k in self._agent_names
-        }
+        result: Dict[str, CircuitBreaker] = {}
+        for agent_key, name in self._agent_names.items():
+            if name not in result and agent_key in self._breakers:
+                result[name] = self._breakers[agent_key]
+        return result
 
     def capabilities(self) -> "AdapterCapabilities":
         """Return the capability descriptor for this adapter."""
@@ -303,30 +355,8 @@ class CircuitBreakerCapability:
             framework_name="AG2",
             supports_cost_extraction=True,
             supports_token_extraction=True,
+            supported_versions=_AG2_SUPPORTED_VERSIONS,
         )
 
 
-# ---------------------------------------------------------------------------
-# OTel helpers (no-op when OTel is not enabled)
-# ---------------------------------------------------------------------------
-
-
-def _emit_ag2_otel_event(
-    agent_name: str, decision: str, reason: str, check_type: str
-) -> None:
-    """Add a veronica containment event to the current OTel span.
-
-    No-op if OTel is not enabled. Never raises.
-    """
-    try:
-        from veronica_core.otel import emit_containment_decision
-
-        emit_containment_decision(
-            decision_name=decision,
-            reason=f"[{check_type}] {agent_name}: {reason}",
-        )
-    except Exception:
-        # Intentionally swallowed: this helper is declared "Never raises";
-        # OTel emission is best-effort telemetry that must not disrupt agent
-        # containment logic.
-        pass
+# _emit_ag2_otel_event is imported from _ag2_helpers at the top of this module.

@@ -6,6 +6,30 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.7.7] -- 2026-03-16 -- AG2 Adapter Fixes
+
+**Breaking changes:** none
+
+### Fixed
+
+- **Step counter asymmetry (Critical):** `register_veronica_hook` no longer increments
+  `step_guard.step()` unconditionally. The hook path now matches the subclass path
+  (step counted only on productive replies).
+- **`supported_versions` cross-file inconsistency:** Both `VeronicaConversableAgent` and
+  `CircuitBreakerCapability` now use shared `_AG2_SUPPORTED_VERSIONS` constant.
+- **`_originals` dict memory leak:** `CircuitBreakerCapability` now stores `weakref.WeakMethod`
+  references instead of strong bound-method references, preventing agent GC retention.
+- **`breakers` property inconsistency:** Property now uses first-match semantics
+  (same as `get_breaker()`), not last-write-wins.
+- **`_emit_ag2_otel_event` duplication:** Deduplicated into shared `_ag2_helpers.py` module.
+
+### Documentation
+
+- Added `cost_usd=0.0` rationale to `register_veronica_hook` docstring.
+- Added circuit state reset warning to `remove_from_agent` docstring.
+
+---
+
 ## [3.7.6] -- 2026-03-14 -- 3-Agent Parallel Review Hardening
 
 **Breaking changes:** `ContextSnapshot.nodes` and `ContextSnapshot.events` changed from

@@ -331,3 +331,70 @@ class TestEdgeCases:
         agent.generate_reply(messages=[{"role": "user", "content": "x"}])
         with pytest.raises(VeronicaHalt, match="[Ss]tep"):
             agent.generate_reply(messages=[{"role": "user", "content": "y"}])
+
+
+# ---------------------------------------------------------------------------
+# C2 regression: hook must NOT increment step counter
+# ---------------------------------------------------------------------------
+
+
+class TestHookStepCounterRegression:
+    """C2 regression: register_veronica_hook must NOT increment step counter.
+
+    The hook returns (False, None) and has no visibility into whether a
+    subsequent reply function actually produces a reply. Incrementing the
+    step counter unconditionally would over-count steps.
+    """
+
+    def test_hook_does_not_increment_step_counter(self) -> None:
+        """Invoking the policy hook must leave the step counter at zero."""
+        agent = FakeConversableAgent("hook-step-test")
+        container = register_veronica_hook(
+            agent, GuardConfig(max_cost_usd=10.0, max_steps=20)
+        )
+        _trigger, reply_fn = agent._reply_funcs[0]
+        result = reply_fn(agent, messages=[], sender=None, config=None)
+        assert result == (False, None)
+        # Step counter must NOT have been touched by the hook
+        assert container.step_guard.current_step == 0
+
+    def test_hook_step_counter_stays_zero_across_multiple_invocations(self) -> None:
+        """Multiple hook invocations must not accumulate step counts."""
+        agent = FakeConversableAgent("hook-multi-step")
+        container = register_veronica_hook(
+            agent, GuardConfig(max_cost_usd=10.0, max_steps=20)
+        )
+        _trigger, reply_fn = agent._reply_funcs[0]
+        for _ in range(5):
+            reply_fn(agent, messages=[], sender=None, config=None)
+        assert container.step_guard.current_step == 0
+
+
+# ---------------------------------------------------------------------------
+# H11 regression: supported_versions consistency
+# ---------------------------------------------------------------------------
+
+
+class TestSupportedVersionsConsistency:
+    """H11 regression: VeronicaConversableAgent.capabilities() must report
+    the same supported_versions as CircuitBreakerCapability.capabilities().
+    """
+
+    def test_subclass_and_capability_report_same_supported_versions(self) -> None:
+        """Both AG2 adapters must report identical supported_versions."""
+        from veronica_core.adapters.ag2_capability import CircuitBreakerCapability
+
+        agent_caps = VeronicaConversableAgent(
+            "v-agent", config=GuardConfig(max_cost_usd=1.0)
+        ).capabilities()
+        cb_caps = CircuitBreakerCapability().capabilities()
+        assert agent_caps.supported_versions == cb_caps.supported_versions
+
+    def test_supported_versions_constant_is_used(self) -> None:
+        """supported_versions must not be an inline literal."""
+        from veronica_core.adapters._ag2_helpers import _AG2_SUPPORTED_VERSIONS
+
+        agent_caps = VeronicaConversableAgent(
+            "v-agent2", config=GuardConfig(max_cost_usd=1.0)
+        ).capabilities()
+        assert agent_caps.supported_versions == _AG2_SUPPORTED_VERSIONS

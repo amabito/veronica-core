@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-__version__ = "3.7.6"
+__version__ = "3.7.7"
 
 # ---------------------------------------------------------------------------
 # Eager imports -- minimal core types needed at import time

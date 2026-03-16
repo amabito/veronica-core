@@ -483,3 +483,100 @@ class TestExceptionRecordedAsFailure:
         reply = agent.generate_reply([])
         assert reply is None
         assert call_count == 2  # original NOT called
+
+
+# ---------------------------------------------------------------------------
+# H11 regression: supported_versions consistency
+# ---------------------------------------------------------------------------
+
+
+class TestCapabilitiesVersionConsistency:
+    """H11 regression: CircuitBreakerCapability.capabilities() must report
+    the same supported_versions as VeronicaConversableAgent.capabilities().
+    Both must use the shared _AG2_SUPPORTED_VERSIONS constant.
+    """
+
+    def test_capabilities_reports_supported_versions(self) -> None:
+        """capabilities() must include a non-default supported_versions."""
+        from veronica_core.adapter_capabilities import UNCONSTRAINED_VERSIONS
+
+        cap = CircuitBreakerCapability()
+        caps = cap.capabilities()
+        # Must not be the unconstrained default -- a real range must be set
+        assert caps.supported_versions != UNCONSTRAINED_VERSIONS
+
+    def test_capabilities_versions_match_shared_constant(self) -> None:
+        """supported_versions must equal _AG2_SUPPORTED_VERSIONS."""
+        from veronica_core.adapters._ag2_helpers import _AG2_SUPPORTED_VERSIONS
+
+        cap = CircuitBreakerCapability()
+        assert cap.capabilities().supported_versions == _AG2_SUPPORTED_VERSIONS
+
+
+# ---------------------------------------------------------------------------
+# M1 regression: breakers property first-match consistency with get_breaker
+# ---------------------------------------------------------------------------
+
+
+class TestBreakersPropertyConsistency:
+    """M1 regression: breakers property must use first-match semantics,
+    consistent with get_breaker().
+    """
+
+    def test_breakers_and_get_breaker_return_same_instance_for_duplicate_name(
+        self,
+    ) -> None:
+        """When two agents share a name, both properties must return the same breaker."""
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        a1 = StubAgent("dup")
+        a2 = StubAgent("dup")
+        cap.add_to_agent(a1)
+        cap.add_to_agent(a2)
+        # get_breaker returns first match
+        gb = cap.get_breaker("dup")
+        # breakers property must agree -- same first-match object
+        bp = cap.breakers.get("dup")
+        assert gb is bp
+
+    def test_breakers_does_not_show_last_write_wins(self) -> None:
+        """breakers must not silently overwrite first agent with later same-named agent."""
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        first = StubAgent("same")
+        second = StubAgent("same")
+        breaker_first = cap.add_to_agent(first)
+        cap.add_to_agent(second)
+        # The first agent's breaker must appear in the dict (not the second's)
+        assert cap.breakers["same"] is breaker_first
+
+
+# ---------------------------------------------------------------------------
+# H12 regression: weakref in _originals does not prevent agent GC
+# ---------------------------------------------------------------------------
+
+
+class TestWeakrefOriginals:
+    """H12 regression: _originals must store weak references, not strong refs."""
+
+    def test_originals_stores_weakref(self) -> None:
+        """After add_to_agent, _originals must hold a weakref, not a bound method."""
+        import weakref
+
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        agent = StubAgent("weakref-test")
+        cap.add_to_agent(agent)
+        agent_key = agent._veronica_agent_key
+        stored = cap._originals[agent_key]
+        # Stored value must be a WeakMethod or weakref.ref, not a raw callable
+        assert isinstance(stored, (weakref.WeakMethod, weakref.ref)), (
+            f"Expected weakref, got {type(stored)}"
+        )
+
+    def test_remove_from_agent_still_works_with_weakref(self) -> None:
+        """remove_from_agent must correctly dereference weakref to restore method."""
+        cap = CircuitBreakerCapability(failure_threshold=3)
+        agent = StubAgent("weakref-remove")
+        original_func = agent.generate_reply.__func__
+        cap.add_to_agent(agent)
+        cap.remove_from_agent(agent)
+        # Original method must be restored correctly despite weakref storage
+        assert agent.generate_reply.__func__ is original_func
