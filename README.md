@@ -176,7 +176,7 @@ Full feature list: [docs/FEATURES.md](docs/FEATURES.md)
 
 ## Stats
 
-6131 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.7.4. v3.7.5 removes the deprecated `veronica_core.adapter` shim (deprecated since v3.4.0; use `veronica_core.adapters.exec` instead). Python 3.10+.
+6131 tests, 94% coverage, zero required dependencies. Zero breaking changes from v2.1.0 through v3.7.4. v3.7.5 removes the deprecated `veronica_core.adapter` shim (deprecated since v3.4.0; use `veronica_core.adapters.exec` instead). v3.7.7 fixes AG2 adapter correctness. Python 3.10+.
 
 Evaluation: [docs/EVALUATION.md](docs/EVALUATION.md) | [CHANGELOG.md](CHANGELOG.md)
 
@@ -209,7 +209,7 @@ pytest
 
 ## Roadmap
 
-v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.7.6.
+v4.0 Federation (multi-process policy coordination) is the next milestone. No timeline commitment -- veronica-core is stable at v3.7.7.
 
 Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
 
