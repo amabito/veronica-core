@@ -118,7 +118,7 @@ def answer_query(query: str) -> str:
 | ASGI/WSGI | `VeronicaASGIMiddleware` | [docs/middleware.md](docs/middleware.md) |
 | MCP | `MCPContainmentAdapter` | -- |
 
-AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) (merged)
+AG2 integration via `AgentCapability`: [PR #2430](https://github.com/ag2ai/ag2/pull/2430) -- shipped in [AG2 v0.11.3](https://github.com/ag2ai/ag2/releases/tag/v0.11.3)
 
 ---
 
