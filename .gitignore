@@ -63,6 +63,10 @@ coverage.xml
 htmlcov/
 veronica-events.jsonl
 
+# Private keys (never commit)
+policies/private_key.pem
+**/private_key.pem
+
 # Runtime state (machine-local, never commit)
 .post_state.json
 data/

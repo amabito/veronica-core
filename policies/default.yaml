@@ -1,4 +1,4 @@
-# VERONICA Security Containment Layer — Default Policy
+# VERONICA Security Containment Layer --Default Policy
 # This file documents the built-in rules enforced by PolicyEngine.
 # Loaded for reference; actual enforcement is in policy_engine.py.
 #
@@ -16,34 +16,34 @@ version: "1.1"
 # ---------------------------------------------------------------------------
 
 secret_patterns:
-  AWS_KEY: "AKIA[0-9A-Z]{16} — AWS access key ID"
-  AWS_SECRET: "aws_secret_key=... — AWS secret access key"
-  GITHUB_TOKEN: "gh[psoua]_... — GitHub PAT (classic + server)"
-  GITHUB_FINE_GRAINED: "github_pat_... — GitHub fine-grained PAT (82+ chars)"
-  GITHUB_CLI_TOKEN: "gho_... — GitHub CLI OAuth token"
-  STRIPE_KEY: "sk_live_... / pk_live_... — Stripe live keys"
-  SERVICE_ROLE_JWT: "eyJ...eyJ...sig — Firebase/Supabase JWT"
-  RESEND_KEY: "re_... — Resend API key"
-  BITBANK_KEY: "bitbank_api_key=... — bitbank exchange credentials"
-  OPENAI_KEY: "sk-proj-... / sk-... — OpenAI API key"
-  ANTHROPIC_KEY: "sk-ant-... — Anthropic API key"
-  SLACK_TOKEN: "xox[bposa]-... — Slack bot/user/app/oauth token"
-  SLACK_WEBHOOK: "https://hooks.slack.com/... — Slack incoming webhook URL"
-  DISCORD_TOKEN: "M/N/O... — Discord bot token"
-  TWILIO_SID: "AC[0-9a-f]{32} — Twilio account SID"
-  TWILIO_TOKEN: "twilio_token=... — Twilio auth token"
-  SENDGRID_KEY: "SG.xxx.xxx — SendGrid API key"
-  GOOGLE_API_KEY: "AIza... — Google API key"
-  GOOGLE_OAUTH: "GOCSPX-... — Google OAuth2 client secret"
-  AZURE_SAS: "sig=... — Azure SAS token"
-  PGP_PRIVATE_KEY: "-----BEGIN PGP PRIVATE KEY BLOCK----- — PGP private key"
-  SSH_PRIVATE_KEY: "-----BEGIN RSA/EC/DSA/OPENSSH PRIVATE KEY----- — SSH private key"
-  NETRC_PASSWORD: "password <value> — .netrc password field"
-  NPM_TOKEN: "npm_... — npm automation token"
-  PYPI_TOKEN: "pypi-... — PyPI API token"
-  POLYMARKET_KEY: "polymarket_key=... — Polymarket API credentials"
-  HEX_SECRET: "[0-9a-f]{32,64} — generic 32-64 char hex secret"
-  PASSWORD_KV: "password=... / token=... — generic KV secret"
+  AWS_KEY: "AKIA[0-9A-Z]{16} --AWS access key ID"
+  AWS_SECRET: "aws_secret_key=... --AWS secret access key"
+  GITHUB_TOKEN: "gh[psoua]_... --GitHub PAT (classic + server)"
+  GITHUB_FINE_GRAINED: "github_pat_... --GitHub fine-grained PAT (82+ chars)"
+  GITHUB_CLI_TOKEN: "gho_... --GitHub CLI OAuth token"
+  STRIPE_KEY: "sk_live_... / pk_live_... --Stripe live keys"
+  SERVICE_ROLE_JWT: "eyJ...eyJ...sig --Firebase/Supabase JWT"
+  RESEND_KEY: "re_... --Resend API key"
+  BITBANK_KEY: "bitbank_api_key=... --bitbank exchange credentials"
+  OPENAI_KEY: "sk-proj-... / sk-... --OpenAI API key"
+  ANTHROPIC_KEY: "sk-ant-... --Anthropic API key"
+  SLACK_TOKEN: "xox[bposa]-... --Slack bot/user/app/oauth token"
+  SLACK_WEBHOOK: "https://hooks.slack.com/... --Slack incoming webhook URL"
+  DISCORD_TOKEN: "M/N/O... --Discord bot token"
+  TWILIO_SID: "AC[0-9a-f]{32} --Twilio account SID"
+  TWILIO_TOKEN: "twilio_token=... --Twilio auth token"
+  SENDGRID_KEY: "SG.xxx.xxx --SendGrid API key"
+  GOOGLE_API_KEY: "AIza... --Google API key"
+  GOOGLE_OAUTH: "GOCSPX-... --Google OAuth2 client secret"
+  AZURE_SAS: "sig=... --Azure SAS token"
+  PGP_PRIVATE_KEY: "-----BEGIN PGP PRIVATE KEY BLOCK----- --PGP private key"
+  SSH_PRIVATE_KEY: "-----BEGIN RSA/EC/DSA/OPENSSH PRIVATE KEY----- --SSH private key"
+  NETRC_PASSWORD: "password <value> --.netrc password field"
+  NPM_TOKEN: "npm_... --npm automation token"
+  PYPI_TOKEN: "pypi-... --PyPI API token"
+  POLYMARKET_KEY: "polymarket_key=... --Polymarket API credentials"
+  HEX_SECRET: "[0-9a-f]{32,64} --generic 32-64 char hex secret"
+  PASSWORD_KV: "password=... / token=... --generic KV secret"
 
 # ---------------------------------------------------------------------------
 # DENY rules
@@ -77,6 +77,25 @@ deny:
       - "&&"
       - ";"
 
+    # Credential sub-commands (E-2) -- argv[0]=cmd, argv[1] in blocked list
+    # rule_id: SHELL_DENY_CREDENTIAL_SUBCMD, risk_delta=9
+    credential_commands:
+      git:
+        - credential
+        - credentials
+      gh:
+        - auth
+        - token
+        - secret
+      npm:
+        - token
+        - login
+        - logout
+        - adduser
+        - set-script
+      pip:
+        - config
+
   file_read:
     # Block access to sensitive file paths
     patterns:
@@ -97,26 +116,6 @@ deny:
       - "**/*.p12"
       - "**/*.pfx"
 
-  shell:
-    # Credential sub-commands (E-2) — argv[0]=cmd, argv[1] in blocked list
-    # rule_id: SHELL_DENY_CREDENTIAL_SUBCMD, risk_delta=9
-    credential_commands:
-      git:
-        - credential
-        - credentials
-      gh:
-        - auth
-        - token
-        - secret
-      npm:
-        - token
-        - login
-        - logout
-        - adduser
-        - set-script
-      pip:
-        - config
-
   net:
     # Block mutating HTTP methods
     methods:
@@ -135,7 +134,7 @@ deny:
 
     # Additional GET restrictions to prevent network exfiltration (E-3)
     get_restrictions:
-      # URL length limit — prevents data-in-URL exfiltration
+      # URL length limit --prevents data-in-URL exfiltration
       url_max_length: 2048               # rule_id: net.url_too_long, risk_delta=8
 
       # Query string entropy analysis
@@ -211,4 +210,4 @@ allow:
 # Default fallback
 # ---------------------------------------------------------------------------
 
-default: DENY  # fail-closed — anything not explicitly allowed is denied
+default: DENY  # fail-closed --anything not explicitly allowed is denied
