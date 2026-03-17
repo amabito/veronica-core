@@ -11,7 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from veronica_core.policies._policy_utils import _normalize_command_name
+from veronica_core.policies._policy_utils import (
+    NETWORK_SHELL_COMMANDS,
+    SAFE_HTTP_METHODS,
+    WRITE_SHELL_COMMANDS,
+    _extract_command_stem,
+    _normalize_command_name,
+)
 from veronica_core.policies.approve_side_effects import ApproveSideEffectsPolicy
 from veronica_core.policies.no_network import NoNetworkPolicy
 from veronica_core.policies.no_shell import NoShellPolicy
@@ -50,13 +56,17 @@ class TestReadOnlyAssistantPolicyEnabled:
 
     def test_get_request_allowed(self):
         policy = ReadOnlyAssistantPolicy(enabled=True)
-        allowed, reason = policy.check_egress("https://api.example.com/data", method="GET")
+        allowed, reason = policy.check_egress(
+            "https://api.example.com/data", method="GET"
+        )
         assert allowed
         assert "allowed" in reason
 
     def test_post_request_blocked(self):
         policy = ReadOnlyAssistantPolicy(enabled=True)
-        allowed, reason = policy.check_egress("https://api.example.com/submit", method="POST")
+        allowed, reason = policy.check_egress(
+            "https://api.example.com/submit", method="POST"
+        )
         assert not allowed
         assert "POST" in reason
 
@@ -67,7 +77,9 @@ class TestReadOnlyAssistantPolicyEnabled:
 
     def test_delete_request_blocked(self):
         policy = ReadOnlyAssistantPolicy(enabled=True)
-        allowed, _ = policy.check_egress("https://api.example.com/item/1", method="DELETE")
+        allowed, _ = policy.check_egress(
+            "https://api.example.com/item/1", method="DELETE"
+        )
         assert not allowed
 
     def test_read_only_shell_allowed(self):
@@ -168,7 +180,9 @@ class TestNoNetworkPolicyEnabled:
 
     def test_curl_shell_blocked(self):
         policy = NoNetworkPolicy(enabled=True)
-        allowed, reason = policy.check_shell(["curl", "-X", "GET", "https://example.com"])
+        allowed, reason = policy.check_shell(
+            ["curl", "-X", "GET", "https://example.com"]
+        )
         assert not allowed
         assert "curl" in reason
 
@@ -283,7 +297,9 @@ class TestApproveSideEffectsPolicyEnabled:
 
     def test_post_requires_approval(self):
         policy = ApproveSideEffectsPolicy(enabled=True)
-        allowed, reason = policy.check_egress("https://api.example.com/submit", method="POST")
+        allowed, reason = policy.check_egress(
+            "https://api.example.com/submit", method="POST"
+        )
         assert not allowed
         assert "requires approval" in reason
 
@@ -580,7 +596,8 @@ class TestReadOnlyAssistantVersionSuffixBypass:
         policy = ReadOnlyAssistantPolicy(enabled=True)
         allowed, reason = policy.check_shell([cmd, "-c", "evil"])
         assert not allowed, f"versioned command {cmd!r} should be blocked"
-        assert cmd in reason
+        # Reason contains the normalized stem, not the versioned name.
+        assert "blocked" in reason
 
     @pytest.mark.parametrize(
         "cmd",
@@ -626,7 +643,79 @@ class TestNoNetworkVersionSuffixBypass:
         policy = NoNetworkPolicy(enabled=True)
         allowed, reason = policy.check_shell([cmd, "https://example.com"])
         assert not allowed, f"versioned command {cmd!r} should be blocked"
-        assert cmd in reason
+        # Reason contains the normalized stem, not the versioned name.
+        assert "blocked" in reason
+
+
+# ---------------------------------------------------------------------------
+# NoNetworkPolicy URL allowlist case-insensitivity (F.R.I.D.A.Y. B1#4)
+# ---------------------------------------------------------------------------
+
+
+class TestNoNetworkAllowlistCaseInsensitive:
+    """URL allowlist must be case-insensitive to prevent bypass."""
+
+    def test_uppercase_url_matches_lowercase_allowlist(self) -> None:
+        policy = NoNetworkPolicy(
+            enabled=True,
+            allowlist=frozenset({"https://internal.corp/api"}),
+        )
+        allowed, _ = policy.check_egress("HTTPS://INTERNAL.CORP/API")
+        assert allowed
+
+    def test_mixed_case_url_matches(self) -> None:
+        policy = NoNetworkPolicy(
+            enabled=True,
+            allowlist=frozenset({"https://Api.Example.Com/v1"}),
+        )
+        allowed, _ = policy.check_egress("https://api.example.com/v1")
+        assert allowed
+
+    def test_non_matching_url_still_blocked(self) -> None:
+        policy = NoNetworkPolicy(
+            enabled=True,
+            allowlist=frozenset({"https://safe.example.com"}),
+        )
+        allowed, _ = policy.check_egress("https://evil.example.com")
+        assert not allowed
+
+
+# ---------------------------------------------------------------------------
+# UntrustedToolModePolicy: empty frozenset vs None (F.R.I.D.A.Y. B2)
+# ---------------------------------------------------------------------------
+
+
+class TestUntrustedToolModeEmptyVsNoneSandbox:
+    """Empty frozenset means 'deny all reads'; None means 'allow all (warn)'."""
+
+    def test_empty_frozenset_denies_all_reads(self) -> None:
+        policy = UntrustedToolModePolicy(
+            enabled=True,
+            allowed_read_paths=frozenset(),
+        )
+        allowed, _ = policy.check_file_read("/data/anything.txt")
+        assert not allowed
+
+    def test_none_allows_all_reads(self) -> None:
+        policy = UntrustedToolModePolicy(
+            enabled=True,
+            allowed_read_paths=None,
+        )
+        allowed, _ = policy.check_file_read("/data/anything.txt")
+        assert allowed
+
+    def test_check_file_read_accepts_authority_param(self) -> None:
+        """API consistency: check_file_read accepts authority/side_effects."""
+        policy = UntrustedToolModePolicy(
+            enabled=True,
+            allowed_read_paths=frozenset({"/data/"}),
+        )
+        allowed, _ = policy.check_file_read(
+            "/data/file.txt",
+            authority=None,
+            side_effects=None,
+        )
+        assert allowed
 
 
 # ---------------------------------------------------------------------------
@@ -703,7 +792,9 @@ class TestApproveSideEffectsNonce:
         op = "POST:https://api.example.com/submit"
         token = policy.request_approval(op)
         policy.record_approval(op, token)
-        allowed, reason = policy.check_egress("https://api.example.com/submit", method="POST")
+        allowed, reason = policy.check_egress(
+            "https://api.example.com/submit", method="POST"
+        )
         assert allowed
         assert "approved" in reason
 
@@ -758,12 +849,16 @@ class TestUntrustedToolModeReadSandbox:
             allowed, _ = policy.check_file_read(path)
             assert not allowed, f"sensitive path {path!r} should be denied"
 
-    def test_no_sandbox_allows_all_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_no_sandbox_allows_all_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """No allowed_read_paths -- reads allowed but warning emitted once."""
         import logging
 
         policy = UntrustedToolModePolicy(enabled=True, allowed_read_paths=None)
-        with caplog.at_level(logging.WARNING, logger="veronica_core.policies.untrusted_tool_mode"):
+        with caplog.at_level(
+            logging.WARNING, logger="veronica_core.policies.untrusted_tool_mode"
+        ):
             allowed1, _ = policy.check_file_read("/etc/passwd")
             allowed2, _ = policy.check_file_read("/data/safe.json")
 
@@ -793,6 +888,16 @@ class TestUntrustedToolModeReadSandbox:
         allowed, reason = policy.check_file_read("/etc/passwd")
         assert allowed
         assert "disabled" in reason
+
+    def test_resolved_paths_cached(self) -> None:
+        """_get_resolved_read_paths must return the same tuple on repeat calls."""
+        policy = UntrustedToolModePolicy(
+            enabled=True,
+            allowed_read_paths=frozenset({"/data/", "/tmp/"}),
+        )
+        first = policy._get_resolved_read_paths()
+        second = policy._get_resolved_read_paths()
+        assert first is second  # same object, not recomputed
 
 
 # ---------------------------------------------------------------------------
@@ -825,3 +930,68 @@ class TestPoliciesInit:
             "UntrustedToolModePolicy",
         ]:
             assert name in pkg.__all__, f"{name} missing from __all__"
+
+
+# ---------------------------------------------------------------------------
+# _extract_command_stem tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractCommandStem:
+    """Tests for the consolidated _extract_command_stem helper."""
+
+    @pytest.mark.parametrize(
+        "argv0,expected",
+        [
+            ("python3.11", "python"),
+            ("python3", "python"),
+            ("/usr/bin/python3.11", "python"),
+            ("C:\\Windows\\System32\\cmd.exe", "cmd"),
+            ("curl7.86", "curl"),
+            ("wget2", "wget"),
+            ("node18", "node"),
+            ("apt-get", "apt-get"),
+            ("bash", "bash"),
+            ("rm", "rm"),
+            ("ls", "ls"),
+            ("GIT.EXE", "git"),
+            ("Git.Exe", "git"),
+        ],
+    )
+    def test_extraction(self, argv0: str, expected: str) -> None:
+        assert _extract_command_stem(argv0) == expected
+
+    def test_backslash_windows_path(self) -> None:
+        assert _extract_command_stem("C:\\Program Files\\Git\\bin\\git.exe") == "git"
+
+    def test_forward_slash_unix_path(self) -> None:
+        assert _extract_command_stem("/usr/local/bin/ssh") == "ssh"
+
+
+# ---------------------------------------------------------------------------
+# Shared constant consistency tests
+# ---------------------------------------------------------------------------
+
+
+class TestSharedConstants:
+    """Verify shared command sets are consistent and non-empty."""
+
+    def test_write_shell_commands_non_empty(self) -> None:
+        assert len(WRITE_SHELL_COMMANDS) > 20
+
+    def test_network_shell_commands_non_empty(self) -> None:
+        assert len(NETWORK_SHELL_COMMANDS) > 10
+
+    def test_safe_http_methods_exact(self) -> None:
+        assert SAFE_HTTP_METHODS == {"GET", "HEAD", "OPTIONS"}
+
+    def test_network_commands_subset_of_write(self) -> None:
+        """Network transfer commands should also be in write set."""
+        overlap = {"curl", "wget", "ssh", "scp", "rsync", "ftp", "sftp"}
+        assert overlap <= WRITE_SHELL_COMMANDS
+        assert overlap <= NETWORK_SHELL_COMMANDS
+
+    def test_all_frozensets(self) -> None:
+        assert isinstance(WRITE_SHELL_COMMANDS, frozenset)
+        assert isinstance(NETWORK_SHELL_COMMANDS, frozenset)
+        assert isinstance(SAFE_HTTP_METHODS, frozenset)

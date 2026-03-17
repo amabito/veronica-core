@@ -42,34 +42,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from veronica_core.policies._policy_utils import _normalize_command_name
+from veronica_core.policies._policy_utils import (
+    NETWORK_SHELL_COMMANDS,
+    _extract_command_stem,
+)
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
-
-# Network-initiating shell commands.
-_NETWORK_SHELL_COMMANDS: frozenset[str] = frozenset(
-    {
-        "curl",
-        "wget",
-        "ssh",
-        "scp",
-        "rsync",
-        "ftp",
-        "sftp",
-        "nc",
-        "ncat",
-        "netcat",
-        "telnet",
-        "ping",
-        "traceroute",
-        "dig",
-        "nslookup",
-        "host",
-        "whois",
-        "nmap",
-        "git",
-    }
-)
 
 
 @dataclass
@@ -111,7 +89,10 @@ class NoNetworkPolicy:
         """
         if not self.enabled:
             return True, "policy disabled"
-        if url in self.allowlist:
+        # Case-insensitive comparison to prevent bypass via URL casing
+        # (e.g. "HTTPS://Internal.Corp/api" vs "https://internal.corp/api").
+        url_lower = url.lower()
+        if any(url_lower == allowed.lower() for allowed in self.allowlist):
             return True, f"URL in allowlist: {url!r}"
         return False, f"outbound network blocked by NoNetworkPolicy: {url!r}"
 
@@ -142,13 +123,12 @@ class NoNetworkPolicy:
             return True, "policy disabled"
         if not args:
             return True, "empty command allowed"
-        cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
-        stem = _normalize_command_name(cmd)
-        if stem in _NETWORK_SHELL_COMMANDS:
-            return False, f"network shell command blocked by NoNetworkPolicy: {cmd!r}"
+        stem = _extract_command_stem(args[0])
+        if stem in NETWORK_SHELL_COMMANDS:
+            return False, f"network shell command blocked by NoNetworkPolicy: {stem!r}"
         # Side-effect aware: block any command whose profile reports network effects.
         if side_effects is not None and getattr(side_effects, "has_external", False):
-            return False, f"network side effect blocked by NoNetworkPolicy: {cmd!r}"
+            return False, f"network side effect blocked by NoNetworkPolicy: {stem!r}"
         return True, "non-network shell command allowed"
 
     def create_event(

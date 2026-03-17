@@ -115,12 +115,27 @@ class ToolPinRegistry:
         self._lock = threading.Lock()
 
     @staticmethod
-    def hash_schema(schema: dict) -> str:
-        """Return the SHA-256 hex digest of the canonical JSON representation.
+    def _canonical_json(schema: dict) -> str:
+        """Return the canonical JSON representation of *schema*.
 
         Canonical form: keys sorted, no extra whitespace, allow_nan=False.
-        This makes the hash independent of key insertion order and rejects
+        This makes the output independent of key insertion order and rejects
         ambiguous IEEE 754 values (NaN/Infinity).
+
+        Raises:
+            TypeError: If schema contains non-serializable values.
+            ValueError: If schema contains NaN/Infinity.
+        """
+        return json.dumps(
+            schema,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+
+    @staticmethod
+    def hash_schema(schema: dict) -> str:
+        """Return the SHA-256 hex digest of the canonical JSON representation.
 
         Args:
             schema: Tool schema as a plain dict. Must be JSON-serializable.
@@ -132,9 +147,7 @@ class ToolPinRegistry:
             TypeError: If schema contains non-serializable values.
             ValueError: If schema contains NaN/Infinity.
         """
-        canonical = json.dumps(
-            schema, sort_keys=True, separators=(",", ":"), allow_nan=False,
-        )
+        canonical = ToolPinRegistry._canonical_json(schema)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def register(self, tool_name: str, schema: dict) -> ToolSchemaPin:
@@ -147,10 +160,8 @@ class ToolPinRegistry:
         Returns:
             The newly created ToolSchemaPin.
         """
-        schema_hash = self.hash_schema(schema)
-        canonical = json.dumps(
-            schema, sort_keys=True, separators=(",", ":"), allow_nan=False,
-        )
+        canonical = self._canonical_json(schema)
+        schema_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         pin = ToolSchemaPin(
             tool_name=tool_name,
             schema_hash=schema_hash,

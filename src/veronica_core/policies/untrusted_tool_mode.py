@@ -61,6 +61,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from veronica_core.policies._policy_utils import _extract_command_stem
+from veronica_core.security.authority import is_policy_authority
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
 
@@ -89,26 +91,22 @@ class UntrustedToolModePolicy:
     enabled: bool = False
     allowed_read_paths: frozenset[str] | None = field(default=None)
     _warned_unconfigured_reads: bool = field(default=False, repr=False, compare=False)
+    _resolved_read_paths: tuple | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        init=False,
+    )
 
-    @staticmethod
-    def _is_policy_authority(authority: object) -> bool:
-        """Return True only for developer_policy or system_config sources.
+    def _get_resolved_read_paths(self) -> tuple:
+        """Return pre-resolved allowed_read_paths (cached after first call)."""
+        if self._resolved_read_paths is not None:
+            return self._resolved_read_paths
+        from pathlib import Path
 
-        Only these two authority sources may override untrusted tool mode
-        restrictions.  All other sources (including user_input) are subject
-        to the full sandbox.
-        """
-        try:
-            from veronica_core.security.authority import AuthorityClaim, AuthoritySource
-
-            if not isinstance(authority, AuthorityClaim):
-                return False
-            return authority.source in (
-                AuthoritySource.DEVELOPER_POLICY,
-                AuthoritySource.SYSTEM_CONFIG,
-            )
-        except Exception:
-            return False
+        resolved = tuple(Path(p).resolve() for p in (self.allowed_read_paths or ()))
+        object.__setattr__(self, "_resolved_read_paths", resolved)
+        return resolved
 
     def check_shell(
         self,
@@ -136,12 +134,12 @@ class UntrustedToolModePolicy:
         """
         if not self.enabled:
             return True, "policy disabled"
-        if self._is_policy_authority(authority):
+        if is_policy_authority(authority):
             return True, "shell allowed: developer_policy/system_config override"
         if not args:
             return True, "empty command allowed"
-        cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
-        return False, f"shell blocked in untrusted tool mode: {cmd!r}"
+        stem = _extract_command_stem(args[0])
+        return False, f"shell blocked in untrusted tool mode: {stem!r}"
 
     def check_egress(
         self,
@@ -169,7 +167,7 @@ class UntrustedToolModePolicy:
         """
         if not self.enabled:
             return True, "policy disabled"
-        if self._is_policy_authority(authority):
+        if is_policy_authority(authority):
             return True, "network allowed: developer_policy/system_config override"
         return False, f"network blocked in untrusted tool mode: {url!r}"
 
@@ -197,11 +195,16 @@ class UntrustedToolModePolicy:
         """
         if not self.enabled:
             return True, "policy disabled"
-        if self._is_policy_authority(authority):
+        if is_policy_authority(authority):
             return True, "file write allowed: developer_policy/system_config override"
         return False, f"file write blocked in untrusted tool mode: {path!r}"
 
-    def check_file_read(self, path: str) -> tuple[bool, str]:
+    def check_file_read(
+        self,
+        path: str,
+        authority: object = None,
+        side_effects: object = None,
+    ) -> tuple[bool, str]:
         """Check whether a file read is permitted.
 
         If ``allowed_read_paths`` is configured, only paths that start with
@@ -212,8 +215,14 @@ class UntrustedToolModePolicy:
         WARNING is emitted to alert operators that the read sandbox is not
         configured.
 
+        The ``authority`` and ``side_effects`` parameters are accepted for API
+        compatibility with other policy check methods but do not affect the
+        verdict -- untrusted tool mode sandbox is path-based only.
+
         Args:
             path: File path being read.
+            authority: Optional AuthorityClaim (ignored by this policy).
+            side_effects: Optional SideEffectProfile (ignored by this policy).
 
         Returns:
             (allowed, reason) tuple.
@@ -230,7 +239,10 @@ class UntrustedToolModePolicy:
                     "frozenset of path prefixes to restrict reads to a sandbox."
                 )
                 object.__setattr__(self, "_warned_unconfigured_reads", True)
-            return True, f"file read allowed in untrusted tool mode (no sandbox): {path!r}"
+            return (
+                True,
+                f"file read allowed in untrusted tool mode (no sandbox): {path!r}",
+            )
 
         # Sandbox is configured -- only allow reads under an allowed prefix.
         # Use Path.resolve() to canonicalize (resolves .., symlinks) and
@@ -238,8 +250,8 @@ class UntrustedToolModePolicy:
         from pathlib import Path
 
         resolved = Path(path).resolve()
-        for prefix in self.allowed_read_paths:
-            if resolved.is_relative_to(Path(prefix).resolve()):
+        for prefix in self._get_resolved_read_paths():
+            if resolved.is_relative_to(prefix):
                 return True, f"file read allowed in untrusted tool mode: {path!r}"
 
         return (

@@ -52,67 +52,14 @@ import secrets
 import threading
 from dataclasses import dataclass, field
 
-from veronica_core.policies._policy_utils import _normalize_command_name
+from veronica_core.policies._policy_utils import (
+    SAFE_HTTP_METHODS,
+    WRITE_SHELL_COMMANDS,
+    _extract_command_stem,
+)
+from veronica_core.security.authority import is_low_authority
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
-
-_READ_ONLY_HTTP: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
-
-# Shell commands that write, delete, transfer data, or execute arbitrary code.
-# Versioned variants (python3.11, curl7, scp2 ...) are handled by
-# _normalize_command_name() before lookup, so only canonical stems are listed.
-_WRITE_SHELL_COMMANDS: frozenset[str] = frozenset(
-    {
-        "rm",
-        "rmdir",
-        "mv",
-        "cp",
-        "chmod",
-        "chown",
-        "dd",
-        "mkfs",
-        "fdisk",
-        "mount",
-        "umount",
-        "kill",
-        "pkill",
-        "systemctl",
-        "service",
-        "apt",
-        "apt-get",
-        "yum",
-        "dnf",
-        "brew",
-        "pip",
-        "npm",
-        "yarn",
-        "sudo",
-        "su",
-        "bash",
-        "sh",
-        "zsh",
-        "fish",
-        "python",
-        "python3",
-        "node",
-        "ruby",
-        "perl",
-        "exec",
-        "eval",
-        # Data transfer / remote copy
-        "curl",
-        "wget",
-        "scp",
-        "rsync",
-        "ftp",
-        "sftp",
-        # Stream multiplexer / file splitter
-        "tee",
-        # Text processing that can write files (awk -i, sed -i, etc.)
-        "awk",
-        "sed",
-    }
-)
 
 
 @dataclass
@@ -203,24 +150,6 @@ class ApproveSideEffectsPolicy:
                 return True
             return False
 
-    @staticmethod
-    def _is_low_authority(authority: object) -> bool:
-        """Return True if authority is below trusted rank.
-
-        Low-authority sources (tool_output, retrieved_content, memory_content,
-        agent_generated, external_message, unknown) must not bypass the
-        approval gate even for nominally read-only operations.
-        """
-        try:
-            from veronica_core.security.authority import AuthorityClaim
-            from veronica_core.memory.types import trust_rank
-
-            if not isinstance(authority, AuthorityClaim):
-                return False
-            return trust_rank(authority.effective_trust_level) < trust_rank("trusted")
-        except Exception:
-            return False
-
     def check_egress(
         self,
         url: str,
@@ -253,19 +182,21 @@ class ApproveSideEffectsPolicy:
 
         # Low-authority sources must always go through approval, even for
         # read-only HTTP methods -- they may be exfiltrating data.
-        if self._is_low_authority(authority):
+        if is_low_authority(authority):
             if self._consume_approval(operation_id):
                 return True, f"approved: {operation_id}"
             return False, f"operation requires approval: {operation_id}"
 
         # Side-effect aware: external mutation forces the approval path.
         if side_effects is not None and getattr(side_effects, "has_external", False):
-            if upper not in _READ_ONLY_HTTP or getattr(side_effects, "has_dangerous", False):
+            if upper not in SAFE_HTTP_METHODS or getattr(
+                side_effects, "has_dangerous", False
+            ):
                 if self._consume_approval(operation_id):
                     return True, f"approved: {operation_id}"
                 return False, f"external mutation requires approval: {operation_id}"
 
-        if upper in _READ_ONLY_HTTP:
+        if upper in SAFE_HTTP_METHODS:
             return True, f"read-only HTTP {upper} auto-approved"
         if self._consume_approval(operation_id):
             return True, f"approved: {operation_id}"
@@ -303,11 +234,10 @@ class ApproveSideEffectsPolicy:
             return True, "policy disabled"
         if not args:
             return True, "empty command allowed"
-        cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
-        stem = _normalize_command_name(cmd)
+        stem = _extract_command_stem(args[0])
 
         # Low-authority sources require approval for all shell commands.
-        if self._is_low_authority(authority):
+        if is_low_authority(authority):
             operation_id = f"SHELL:{stem}"
             if self._consume_approval(operation_id):
                 return True, f"approved: {operation_id}"
@@ -320,16 +250,14 @@ class ApproveSideEffectsPolicy:
                 return True, f"approved: {operation_id}"
             return False, f"dangerous side effect requires approval: {operation_id}"
 
-        if stem not in _WRITE_SHELL_COMMANDS:
-            return True, f"read-only shell command auto-approved: {cmd!r}"
+        if stem not in WRITE_SHELL_COMMANDS:
+            return True, f"read-only shell command auto-approved: {stem!r}"
         operation_id = f"SHELL:{stem}"
         if self._consume_approval(operation_id):
             return True, f"approved: {operation_id}"
         return False, f"operation requires approval: {operation_id}"
 
-    def check_file_write(
-        self, path: str, authority: object = None
-    ) -> tuple[bool, str]:
+    def check_file_write(self, path: str, authority: object = None) -> tuple[bool, str]:
         """Check whether a file write is allowed.
 
         All file writes require a prior call to request_approval() +

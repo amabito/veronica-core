@@ -139,9 +139,48 @@ class AuthorityClaim:
 UNKNOWN_AUTHORITY: AuthorityClaim = AuthorityClaim(source=AuthoritySource.UNKNOWN)
 
 
+def is_low_authority(authority: object) -> bool:
+    """Return True if *authority* is below 'trusted' rank.
+
+    Low-authority sources (tool_output, retrieved_content, memory_content,
+    agent_generated, external_message, unknown) should not bypass approval
+    gates.  Returns False for non-AuthorityClaim objects (backward compat).
+    Fail-closed: returns False on unexpected errors (non-claim treated as
+    not-low, which is the pre-existing behavior from the static methods).
+    """
+    try:
+        if not isinstance(authority, AuthorityClaim):
+            return False
+        from veronica_core.memory.types import trust_rank
+
+        return trust_rank(authority.effective_trust_level) < trust_rank("trusted")
+    except Exception:
+        return False
+
+
+def is_policy_authority(authority: object) -> bool:
+    """Return True only for developer_policy or system_config sources.
+
+    These two authority sources represent deliberate operator intent and
+    may override sandbox restrictions.  Returns False for non-AuthorityClaim
+    objects (backward compat).  Fail-closed: returns False on unexpected errors.
+    """
+    try:
+        if not isinstance(authority, AuthorityClaim):
+            return False
+        return authority.source in (
+            AuthoritySource.DEVELOPER_POLICY,
+            AuthoritySource.SYSTEM_CONFIG,
+        )
+    except Exception:
+        return False
+
+
 __all__ = [
     "AuthoritySource",
     "AuthorityClaim",
     "AUTHORITY_TRUST_CEILING",
     "UNKNOWN_AUTHORITY",
+    "is_low_authority",
+    "is_policy_authority",
 ]

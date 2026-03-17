@@ -42,67 +42,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from veronica_core.policies._policy_utils import _normalize_command_name
+from veronica_core.policies._policy_utils import (
+    SAFE_HTTP_METHODS,
+    WRITE_SHELL_COMMANDS,
+    _extract_command_stem,
+)
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
-
-
-# Shell commands that write, delete, or execute arbitrary code.
-_DENIED_SHELL_PREFIXES: frozenset[str] = frozenset(
-    {
-        "rm",
-        "rmdir",
-        "mv",
-        "cp",
-        "chmod",
-        "chown",
-        "dd",
-        "mkfs",
-        "fdisk",
-        "mount",
-        "umount",
-        "kill",
-        "pkill",
-        "systemctl",
-        "service",
-        "apt",
-        "apt-get",
-        "yum",
-        "dnf",
-        "brew",
-        "pip",
-        "npm",
-        "yarn",
-        "curl",
-        "wget",
-        "ssh",
-        "scp",
-        "rsync",
-        "bash",
-        "sh",
-        "zsh",
-        "fish",
-        "python",
-        "python3",
-        "node",
-        "ruby",
-        "perl",
-        "exec",
-        "eval",
-        "source",
-        "sudo",
-        "su",
-        "crontab",
-        "at",
-        "nohup",
-    }
-)
-
-# HTTP methods that are safe (read-only, no server-side state change).
-# Everything NOT in this set is blocked -- positive allowlist, not denylist.
-_SAFE_HTTP_METHODS: frozenset[str] = frozenset(
-    {"GET", "HEAD", "OPTIONS"}
-)
 
 
 @dataclass
@@ -120,7 +66,7 @@ class ReadOnlyAssistantPolicy:
     extra_denied_commands: frozenset[str] = field(default_factory=frozenset)
 
     def _denied_commands(self) -> frozenset[str]:
-        return _DENIED_SHELL_PREFIXES | self.extra_denied_commands
+        return WRITE_SHELL_COMMANDS | self.extra_denied_commands
 
     def check_shell(
         self,
@@ -146,10 +92,12 @@ class ReadOnlyAssistantPolicy:
             return True, "policy disabled"
         if not args:
             return True, "empty command allowed"
-        cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
-        stem = _normalize_command_name(cmd)
+        stem = _extract_command_stem(args[0])
         if stem in self._denied_commands():
-            return False, f"shell write command blocked by ReadOnlyAssistantPolicy: {cmd!r}"
+            return (
+                False,
+                f"shell write command blocked by ReadOnlyAssistantPolicy: {stem!r}",
+            )
         return True, "read-only shell command allowed"
 
     def check_egress(
@@ -176,7 +124,7 @@ class ReadOnlyAssistantPolicy:
         if not self.enabled:
             return True, "policy disabled"
         upper = method.upper()
-        if upper not in _SAFE_HTTP_METHODS:
+        if upper not in SAFE_HTTP_METHODS:
             return (
                 False,
                 f"HTTP {upper} blocked by ReadOnlyAssistantPolicy"

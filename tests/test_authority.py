@@ -12,6 +12,8 @@ from veronica_core.security.authority import (
     UNKNOWN_AUTHORITY,
     AuthorityClaim,
     AuthoritySource,
+    is_low_authority,
+    is_policy_authority,
 )
 
 
@@ -416,3 +418,77 @@ class TestUnknownAuthority:
     def test_unknown_authority_is_frozen(self) -> None:
         with pytest.raises((AttributeError, TypeError)):
             UNKNOWN_AUTHORITY.source = AuthoritySource.DEVELOPER_POLICY  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# is_low_authority / is_policy_authority helpers
+# ---------------------------------------------------------------------------
+
+
+class TestIsLowAuthority:
+    """Tests for the is_low_authority() helper."""
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            AuthoritySource.TOOL_OUTPUT,
+            AuthoritySource.RETRIEVED_CONTENT,
+            AuthoritySource.MEMORY_CONTENT,
+            AuthoritySource.AGENT_GENERATED,
+            AuthoritySource.EXTERNAL_MESSAGE,
+            AuthoritySource.UNKNOWN,
+        ],
+    )
+    def test_low_authority_sources(self, source: AuthoritySource) -> None:
+        claim = _claim(source)
+        assert is_low_authority(claim)
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            AuthoritySource.DEVELOPER_POLICY,
+            AuthoritySource.SYSTEM_CONFIG,
+            AuthoritySource.USER_INPUT,
+            AuthoritySource.APPROVED_OVERRIDE,
+        ],
+    )
+    def test_high_authority_sources(self, source: AuthoritySource) -> None:
+        claim = _claim(source)
+        assert not is_low_authority(claim)
+
+    def test_non_claim_returns_false(self) -> None:
+        assert not is_low_authority(None)
+        assert not is_low_authority("not a claim")
+        assert not is_low_authority(42)
+
+    def test_asserted_trust_does_not_escalate(self) -> None:
+        """tool_output claiming 'privileged' is still low (capped to provisional)."""
+        claim = _claim(AuthoritySource.TOOL_OUTPUT, asserted="privileged")
+        assert is_low_authority(claim)
+
+
+class TestIsPolicyAuthority:
+    """Tests for the is_policy_authority() helper."""
+
+    def test_developer_policy(self) -> None:
+        assert is_policy_authority(_claim(AuthoritySource.DEVELOPER_POLICY))
+
+    def test_system_config(self) -> None:
+        assert is_policy_authority(_claim(AuthoritySource.SYSTEM_CONFIG))
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            AuthoritySource.USER_INPUT,
+            AuthoritySource.TOOL_OUTPUT,
+            AuthoritySource.AGENT_GENERATED,
+            AuthoritySource.APPROVED_OVERRIDE,
+            AuthoritySource.UNKNOWN,
+        ],
+    )
+    def test_non_policy_sources(self, source: AuthoritySource) -> None:
+        assert not is_policy_authority(_claim(source))
+
+    def test_non_claim_returns_false(self) -> None:
+        assert not is_policy_authority(None)
+        assert not is_policy_authority("developer_policy")

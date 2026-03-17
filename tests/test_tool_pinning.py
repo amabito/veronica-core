@@ -337,3 +337,41 @@ class TestPinVerification:
         reg = ToolPinRegistry()
         result = reg.verify("ghost", SCHEMA_A)
         assert result.pin is None
+
+
+# ---------------------------------------------------------------------------
+# _canonical_json and register single-serialization
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalJson:
+    """Verify _canonical_json produces consistent canonical output."""
+
+    def test_sorted_keys(self) -> None:
+        canon = ToolPinRegistry._canonical_json({"z": 1, "a": 2})
+        assert canon == '{"a":2,"z":1}'
+
+    def test_no_whitespace(self) -> None:
+        canon = ToolPinRegistry._canonical_json({"key": "value"})
+        assert " " not in canon
+
+    def test_nan_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            ToolPinRegistry._canonical_json({"val": float("nan")})
+
+    def test_inf_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            ToolPinRegistry._canonical_json({"val": float("inf")})
+
+    def test_register_stores_canonical_json(self) -> None:
+        """register() must store the same canonical form as _canonical_json."""
+        reg = ToolPinRegistry()
+        pin = reg.register("tool", SCHEMA_A)
+        expected = ToolPinRegistry._canonical_json(SCHEMA_A)
+        assert pin.raw_schema == expected
+
+    def test_register_hash_matches_hash_schema(self) -> None:
+        """register() hash must match hash_schema() for the same input."""
+        reg = ToolPinRegistry()
+        pin = reg.register("tool", SCHEMA_A)
+        assert pin.schema_hash == ToolPinRegistry.hash_schema(SCHEMA_A)
