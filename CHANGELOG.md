@@ -6,6 +6,52 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.8.0] -- 2026-03-17 -- Policy Consolidation + Authority + Side-Effects
+
+**Breaking changes:** none
+
+### Added
+
+- **Authority-aware execution policy:** `AuthoritySource` enum, `AuthorityClaim` dataclass,
+  `AUTHORITY_TRUST_CEILING` mapping. Policy engine pre-checks deny tool_output/agent_generated
+  sources from shell and file_write actions. 135 tests.
+- **Runtime side-effect classification:** `SideEffectClass` enum, `SideEffectProfile`,
+  `classify_action()` with fail-closed default (unknown actions -> IRREVERSIBLE). 96 tests.
+- **Tool description pinning:** `ToolPinRegistry` with SHA-256 hash verification,
+  `PinVerification` structured result, thread-safe register/verify/unpin. 34 tests.
+- **Built-in policy packs:** 5 policies (ReadOnlyAssistant, NoNetwork, NoShell,
+  ApproveSideEffects, UntrustedToolMode) with authority and side-effect awareness.
+  128 tests.
+- **OpenAI Agents SDK adapter scaffold:** `OpenAIAgentsAdapter` with config dataclass.
+  SDK wiring pending stable extension API. 15 tests.
+- **`is_low_authority()` / `is_policy_authority()`:** Shared authority helpers in
+  `authority.py`, replacing duplicated static methods across policy files.
+- **`_extract_command_stem()`:** Consolidated command normalization in `_policy_utils.py`,
+  replacing 5 duplicated inline patterns.
+- **Shared command sets:** `WRITE_SHELL_COMMANDS`, `NETWORK_SHELL_COMMANDS`,
+  `SAFE_HTTP_METHODS` in `_policy_utils.py` as single source of truth.
+
+### Fixed
+
+- **default.yaml duplicate keys:** 4 duplicate `shell:` keys merged into one block.
+  YAML parsers silently dropped commands and operators sections.
+- **default.yaml em dashes:** All U+2014 replaced with `--` (CP932 compatibility).
+- **NoNetworkPolicy URL allowlist case bypass:** Allowlist comparison now
+  case-insensitive to prevent bypass via URL casing.
+- **ToolPinRegistry double serialization:** `register()` called `json.dumps` twice.
+  Refactored to share `_canonical_json()`.
+- **classify_action fail-closed:** Unknown actions now return IRREVERSIBLE effect
+  (max severity) instead of empty profile.
+
+### Changed
+
+- **Policy re-signing:** New Ed25519 keypair generated, default.yaml re-signed.
+  key_pin.txt updated to match.
+- **README:** Rewritten for execution containment positioning, test badge updated
+  to 6602 tests.
+
+---
+
 ## [3.7.8] -- 2026-03-16 -- Full Codebase Review Hardening
 
 **Breaking changes:** none

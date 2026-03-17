@@ -280,9 +280,7 @@ class TestDerives:
         assert child.parent_source is AuthoritySource.USER_INPUT
 
     def test_derives_grows_chain(self) -> None:
-        parent = AuthorityClaim(
-            source=AuthoritySource.USER_INPUT, chain=("root",)
-        )
+        parent = AuthorityClaim(source=AuthoritySource.USER_INPUT, chain=("root",))
         child = parent.derives(AuthoritySource.AGENT_GENERATED)
         assert "user_input" in child.chain
         assert len(child.chain) == len(parent.chain) + 1

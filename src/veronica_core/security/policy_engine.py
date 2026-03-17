@@ -507,9 +507,7 @@ class PolicyEngine:
                 return PolicyDecision(
                     verdict="DENY",
                     rule_id="AUTHORITY_EXTERNAL_DENY",
-                    reason=(
-                        f"external_message authority cannot perform {ctx.action}"
-                    ),
+                    reason=(f"external_message authority cannot perform {ctx.action}"),
                     risk_score_delta=80,
                 )
 
