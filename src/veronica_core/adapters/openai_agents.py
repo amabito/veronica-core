@@ -29,10 +29,10 @@ class OpenAIAgentsConfig:
     max_cost_usd: float = 1.0
     """Hard budget ceiling per run in USD."""
 
-    max_steps: int = 50
+    max_steps: int = 25
     """Maximum number of tool calls / agent steps per run."""
 
-    max_retries: int = 3
+    max_retries_total: int = 3
     """Maximum number of retries on transient errors."""
 
     failure_threshold: int = 5

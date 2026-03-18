@@ -16,7 +16,7 @@ It is an execution enforcement kernel.
 pip install veronica-core
 ```
 
-Zero required dependencies. Operationally stable at v3.8.0. Python 3.10+. Works with any LLM provider.
+Zero required dependencies. Operationally stable at v3.8.1. Python 3.10+. Works with any LLM provider.
 
 ---
 

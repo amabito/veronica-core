@@ -405,11 +405,12 @@ class TestCardVerification:
 
 
 class TestDefaultCardVerifier:
-    def test_card_with_string_signature_verified(self) -> None:
+    def test_card_with_string_signature_not_verified(self) -> None:
+        """DefaultCardVerifier never grants verified -- no crypto check."""
         verifier = DefaultCardVerifier()
         card = {"name": "agent-1", "signature": "abc123"}
         prov = verifier.verify(card)
-        assert prov.card_verified is True
+        assert prov.card_verified is False
         assert prov.card_fingerprint is not None
 
     def test_card_without_signature_not_verified(self) -> None:

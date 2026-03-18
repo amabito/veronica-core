@@ -6,6 +6,29 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.8.1] -- 2026-03-18 -- Fail-Closed Security Hardening
+
+**Breaking changes:** `MemoryBoundaryConfig.default_allow` now defaults to `False`
+(was `True`). Callers relying on the old allow-all default must pass
+`default_allow=True` explicitly. `DefaultCardVerifier.verify()` now always returns
+`card_verified=False` (was `True` when a signature key existed).
+
+### Fixed
+
+- **integration.py:** `if state_data:` -> `if state_data is not None:` -- empty dict
+  `{}` from backend was silently treated as missing state, discarding persisted data.
+- **A2A server fail-closed:** unrecognised governance hook verdict now returns DENY
+  instead of falling through to ALLOW.
+- **DefaultCardVerifier:** no longer grants `card_verified=True` without cryptographic
+  verification. Always returns `False`; production deployments must supply a real
+  `CardVerifierProtocol` implementation.
+- **MemoryBoundaryConfig:** default changed from allow-all to deny-all (fail-closed).
+  Explicit `default_allow=True` restores the previous behaviour.
+- **OpenAIAgentsConfig:** `max_retries` renamed to `max_retries_total` (consistent
+  with `GuardConfig`); `max_steps` default aligned from 50 to 25.
+
+---
+
 ## [3.8.0] -- 2026-03-17 -- Policy Consolidation + Authority + Side-Effects
 
 **Breaking changes:** none

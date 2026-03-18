@@ -74,8 +74,8 @@ class MemoryAccessRule:
 class MemoryBoundaryConfig:
     """Configuration for MemoryBoundaryHook.
 
-    When rules is empty and default_allow is True (default), all memory
-    accesses are permitted -- backward-compatible behaviour.
+    When rules is empty and default_allow is False (default), all memory
+    accesses are denied -- fail-closed by default.
 
     Rule evaluation order (by specificity score, highest wins):
     1. Exact agent_id + exact namespace match (score 3).
@@ -90,7 +90,7 @@ class MemoryBoundaryConfig:
     """
 
     rules: list[MemoryAccessRule] = field(default_factory=list)
-    default_allow: bool = True
+    default_allow: bool = False
 
 
 def _match_rule(

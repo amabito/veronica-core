@@ -39,11 +39,11 @@ class TestOpenAIAgentsConfig:
 
     def test_default_max_steps(self) -> None:
         cfg = OpenAIAgentsConfig()
-        assert cfg.max_steps == 50
+        assert cfg.max_steps == 25
 
-    def test_default_max_retries(self) -> None:
+    def test_default_max_retries_total(self) -> None:
         cfg = OpenAIAgentsConfig()
-        assert cfg.max_retries == 3
+        assert cfg.max_retries_total == 3
 
     def test_default_failure_threshold(self) -> None:
         cfg = OpenAIAgentsConfig()
@@ -53,19 +53,19 @@ class TestOpenAIAgentsConfig:
         cfg = OpenAIAgentsConfig()
         assert cfg.max_cost_usd > 0
         assert cfg.max_steps > 0
-        assert cfg.max_retries >= 0
+        assert cfg.max_retries_total >= 0
         assert cfg.failure_threshold > 0
 
     def test_custom_values_stored(self) -> None:
         cfg = OpenAIAgentsConfig(
             max_cost_usd=0.25,
             max_steps=10,
-            max_retries=1,
+            max_retries_total=1,
             failure_threshold=2,
         )
         assert cfg.max_cost_usd == 0.25
         assert cfg.max_steps == 10
-        assert cfg.max_retries == 1
+        assert cfg.max_retries_total == 1
         assert cfg.failure_threshold == 2
 
 
@@ -92,7 +92,7 @@ class TestOpenAIAgentsAdapter:
     def test_none_config_uses_defaults(self) -> None:
         adapter = OpenAIAgentsAdapter(config=None)
         assert isinstance(adapter.config, OpenAIAgentsConfig)
-        assert adapter.config.max_steps == 50
+        assert adapter.config.max_steps == 25
 
     def test_multiple_instances_are_independent(self) -> None:
         a1 = OpenAIAgentsAdapter(config=OpenAIAgentsConfig(max_cost_usd=0.10))

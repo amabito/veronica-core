@@ -82,13 +82,14 @@ class CardVerifierProtocol(Protocol):
 
 
 class DefaultCardVerifier:
-    """Default card verifier -- checks for a 'signature' key and computes fingerprint.
+    """Default card verifier -- computes fingerprint only; never grants verified.
 
-    card_verified is True when the card contains a non-empty 'signature' key.
+    card_verified is always False because this verifier performs NO cryptographic
+    signature validation. Production deployments must supply a real
+    CardVerifierProtocol implementation (e.g. JWS/JWK) to grant VERIFIED
+    provenance.
+
     card_fingerprint is the hex-encoded SHA-256 of the sorted JSON representation.
-
-    This is a minimal implementation for bootstrapping. Production deployments
-    should replace this with JWS/JWK signature verification.
     """
 
     def verify(self, card: dict[str, Any]) -> A2AIdentityProvenance:
@@ -98,8 +99,8 @@ class DefaultCardVerifier:
             card: A2A Agent Card dict. May contain any keys.
 
         Returns:
-            A2AIdentityProvenance with card_verified=True if a 'signature'
-            key exists and is non-empty; fingerprint is always computed.
+            A2AIdentityProvenance with card_verified=False (no crypto check)
+            and a fingerprint computed from the card contents.
         """
         try:
             canonical = json.dumps(card, sort_keys=True, separators=(",", ":"))
@@ -107,11 +108,8 @@ class DefaultCardVerifier:
         except (TypeError, ValueError):
             fingerprint = None
 
-        signature = card.get("signature")
-        card_verified = bool(signature and isinstance(signature, str))
-
         return A2AIdentityProvenance(
-            card_verified=card_verified,
+            card_verified=False,
             card_fingerprint=fingerprint,
         )
 
@@ -231,6 +229,8 @@ class A2AServerContainmentMiddleware:
     ) -> None:
         self._config = config if config is not None else A2AServerConfig()
         self._trust_tracker = trust_tracker
+        # TODO: integrate trust_router into process_incoming() routing logic.
+        # Currently stored but unused -- kept for API compatibility.
         self._trust_router = trust_router
         self._hooks: list[MessageGovernanceHook] = list(governance_hooks or [])
         self._card_verifier: CardVerifierProtocol = (
@@ -380,10 +380,15 @@ class A2AServerContainmentMiddleware:
                 elif decision.verdict != GovernanceVerdict.ALLOW:
                     logger.warning(
                         "[A2AServer] unrecognised verdict %r from hook "
-                        "for tenant=%r sender=%r, treating as ALLOW",
+                        "for tenant=%r sender=%r, treating as DENY",
                         decision.verdict,
                         request.tenant_id,
                         sender.agent_id,
+                    )
+                    return A2AServerDecision(
+                        verdict="DENY",
+                        reason="unrecognised governance hook verdict",
+                        sender_trust=resolved_trust,
                     )
 
             # All hooks passed

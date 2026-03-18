@@ -68,18 +68,20 @@ def _write_op(agent_id: str = "agent-1", namespace: str = "ns-a") -> MemoryOpera
 # ---------------------------------------------------------------------------
 
 
-class TestDefaultAllowAll:
-    def test_no_config_allows_memory_read(self) -> None:
+class TestDefaultDenyAll:
+    """Default is deny-all (fail-closed) when no rules configured."""
+
+    def test_no_config_denies_memory_read(self) -> None:
         hook = MemoryBoundaryHook()
         decision = hook.before_op(_read_op(), None)
-        assert decision.verdict is GovernanceVerdict.ALLOW
+        assert decision.verdict is GovernanceVerdict.DENY
 
-    def test_no_config_allows_memory_write(self) -> None:
+    def test_no_config_denies_memory_write(self) -> None:
         hook = MemoryBoundaryHook()
         decision = hook.before_op(_write_op(), None)
-        assert decision.verdict is GovernanceVerdict.ALLOW
+        assert decision.verdict is GovernanceVerdict.DENY
 
-    def test_empty_rules_allows_any_agent(self) -> None:
+    def test_explicit_allow_all_with_flag(self) -> None:
         config = MemoryBoundaryConfig(rules=[], default_allow=True)
         hook = MemoryBoundaryHook(config=config)
         decision = hook.before_op(_read_op(agent_id="unknown-agent"), None)
@@ -220,7 +222,8 @@ class TestPostDispatchHook:
             hook.after_llm_call(ctx, response=None)
 
     def test_memory_read_allowed_does_not_raise(self) -> None:
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         ctx = _ctx(kind="memory_read", agent_id="legit-agent", namespace="public")
         hook.after_llm_call(ctx, response="data")  # must not raise
 
@@ -237,7 +240,8 @@ class TestMemoryGovernorIntegration:
         assert governor.hook_count == 1
 
     def test_governor_allows_when_hook_allows(self) -> None:
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         governor = MemoryGovernor(hooks=[hook], fail_closed=False)
         decision = governor.evaluate(_read_op())
         assert decision.verdict is GovernanceVerdict.ALLOW
@@ -284,7 +288,8 @@ class TestDenyCountObservability:
 class TestConcurrentAccess:
     def test_concurrent_reads_all_allowed(self) -> None:
         """5 threads reading simultaneously must all succeed without race."""
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         results: list[GovernanceVerdict] = []
         lock = threading.Lock()
 
@@ -344,7 +349,8 @@ class TestAdversarialInputs:
 
     def test_after_llm_call_none_agent_id_in_metadata(self) -> None:
         """None agent_id in metadata should not crash -- converts to empty str."""
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         ctx = ToolCallContext(
             request_id="r1",
             metadata={"kind": "memory_read", "agent_id": None, "namespace": "ns"},
@@ -352,7 +358,8 @@ class TestAdversarialInputs:
         hook.after_llm_call(ctx, response=None)  # must not raise
 
     def test_after_llm_call_none_namespace_in_metadata(self) -> None:
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         ctx = ToolCallContext(
             request_id="r1",
             metadata={"kind": "memory_write", "agent_id": "a", "namespace": None},
@@ -421,7 +428,8 @@ class TestAdversarialBoundaryAbuse:
 
     def test_deny_count_never_negative(self) -> None:
         """deny_count must never go below 0 even after many allows."""
-        hook = MemoryBoundaryHook()
+        config = MemoryBoundaryConfig(default_allow=True)
+        hook = MemoryBoundaryHook(config=config)
         for _ in range(20):
             hook.before_op(_read_op(), None)
         assert hook.deny_count == 0

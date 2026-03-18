@@ -138,7 +138,7 @@ class VeronicaIntegration:
         state_data = self.backend.load()
 
         loaded_from_disk = False
-        if state_data:
+        if state_data is not None:
             try:
                 self.state = VeronicaStateMachine.from_dict(state_data)
                 loaded_from_disk = True
