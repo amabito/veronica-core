@@ -168,6 +168,10 @@ class RetryContainer:
         to increment the retry counter and set last_error so that subsequent
         check() calls reflect the failure state. Use reset() to clear.
 
+        WARNING: Do NOT call record_failure() from inside a function passed to
+        execute(). execute() already tracks failures internally. Calling both
+        will double-count failures and exhaust the retry budget prematurely.
+
         Args:
             error: The exception to record, or None for a generic failure.
         """

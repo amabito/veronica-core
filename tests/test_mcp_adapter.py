@@ -1005,3 +1005,8 @@ class TestTimeoutSecondsValidation:
         ctx = _make_ctx()
         adapter = MCPContainmentAdapter(ctx, timeout_seconds=None)
         assert adapter._timeout_seconds is None
+
+    def test_bool_timeout_raises(self) -> None:
+        ctx = _make_ctx()
+        with pytest.raises(TypeError, match="must be a number"):
+            MCPContainmentAdapter(ctx, timeout_seconds=True)

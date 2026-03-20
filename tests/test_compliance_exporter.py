@@ -1146,6 +1146,21 @@ class TestAdversarialAttach:
         assert len(exporter._attached) == 100
         exporter.close()  # drain 100 contexts -- must not crash or hang
 
+    def test_max_attached_cap_enforced(self) -> None:
+        """attach() must drop silently when max_attached is reached."""
+        exporter = _make_exporter(max_attached=3)
+
+        class FakeCtx:
+            _metadata = None
+
+        contexts = [FakeCtx() for _ in range(5)]
+        for ctx in contexts:
+            exporter.attach(ctx)  # type: ignore[arg-type]
+
+        assert len(exporter._attached) == 3
+        assert len(exporter._attached_ids) == 3
+        exporter.close()
+
     # -- Concurrency: attach while drain is running --
 
     def test_concurrent_attach_and_close(self) -> None:

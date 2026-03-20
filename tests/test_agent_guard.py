@@ -111,6 +111,15 @@ class TestAgentStepResultPreservation:
         assert g.last_result == payload
         assert g.last_result is not payload  # deepcopy at limit
 
+    def test_uncopyable_result_kept_by_reference_at_limit(self) -> None:
+        """Non-copyable objects fall back to direct reference at limit."""
+        import threading
+
+        g = AgentStepGuard(max_steps=1)
+        lock = threading.Lock()
+        g.step(result=lock)  # limit hit; deepcopy fails, fallback to ref
+        assert g.last_result is lock
+
     def test_reset_clears_last_result(self) -> None:
         g = AgentStepGuard(max_steps=3)
         g.step(result="something")

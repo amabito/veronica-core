@@ -208,6 +208,10 @@ class ExecutionLog:
         """
         file_path = Path(path)
         limit = max_size_bytes if max_size_bytes is not None else cls._DEFAULT_MAX_SIZE_BYTES
+        if not isinstance(limit, int):
+            raise TypeError(
+                f"max_size_bytes must be an int, got {type(limit).__name__}"
+            )
         if limit > 0:
             size = file_path.stat().st_size
             if size > limit:
