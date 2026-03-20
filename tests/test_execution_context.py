@@ -188,7 +188,7 @@ class TestAdversarialExecutionConfig:
     )
     def test_negative_non_cost_fields_raise(self, kwargs: dict) -> None:
         """Negative max_steps or max_retries_total must raise ValueError."""
-        with pytest.raises(ValueError, match="non-negative"):
+        with pytest.raises(ValueError, match=">="):
             ExecutionConfig(**kwargs)
 
     def test_zero_max_cost_allowed(self):
@@ -845,7 +845,7 @@ class TestExecutionConfigTimeoutValidation:
     def test_negative_timeout_ms_raises(self):
         import pytest
 
-        with pytest.raises(ValueError, match="timeout_ms must be non-negative"):
+        with pytest.raises(ValueError, match="timeout_ms must be >= 0"):
             ExecutionConfig(
                 max_cost_usd=1.0, max_steps=10, max_retries_total=5, timeout_ms=-1
             )

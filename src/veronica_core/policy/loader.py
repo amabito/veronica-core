@@ -244,16 +244,17 @@ class PolicyLoader:
 
     def _check_path(self, path: str | Path) -> Path:
         """Resolve *path* and verify it stays within policy_root (if set)."""
-        resolved = Path(path).resolve()
-        if self._policy_root is not None:
-            try:
-                resolved.relative_to(self._policy_root)
-            except ValueError:
-                raise PolicyValidationError(
-                    ["Path traversal denied: path resolves outside policy_root"],
-                    field_name="path",
-                ) from None
-        return resolved
+        if self._policy_root is None:
+            return Path(path)
+        from veronica_core._utils import check_path_within_root
+
+        try:
+            return check_path_within_root(path, self._policy_root)
+        except ValueError:
+            raise PolicyValidationError(
+                ["Path traversal denied: path resolves outside policy_root"],
+                field_name="path",
+            ) from None
 
     def load(self, path: str | Path) -> LoadedPolicy:
         """Load a policy from *path* and return a LoadedPolicy.

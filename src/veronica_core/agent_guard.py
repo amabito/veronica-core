@@ -34,12 +34,9 @@ class AgentStepGuard:
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.max_steps, int) or isinstance(self.max_steps, bool):
-            raise TypeError(
-                f"max_steps must be an int, got {type(self.max_steps).__name__}"
-            )
-        if self.max_steps < 0:
-            raise ValueError(f"max_steps must be non-negative, got {self.max_steps}")
+        from veronica_core._utils import require_strict_int
+
+        require_strict_int(self.max_steps, "max_steps")
 
     def step(self, result: Any = None) -> bool:
         """Record one agent step. Returns True if more steps allowed.
@@ -53,11 +50,15 @@ class AgentStepGuard:
         with self._lock:
             self._current_step += 1
             if result is not None:
-                try:
-                    self._last_result = copy.deepcopy(result)
-                except Exception:
-                    self._last_result = result
+                self._last_result = result
             if self._current_step >= self.max_steps:
+                # Deepcopy only at limit to preserve a snapshot safe from
+                # caller mutation. Skipped on non-final steps for performance.
+                if self._last_result is not None:
+                    try:
+                        self._last_result = copy.deepcopy(self._last_result)
+                    except Exception:
+                        pass  # keep direct reference as fallback
                 logger.warning(
                     f"[VERONICA_AGENT] Step limit reached: "
                     f"{self._current_step}/{self.max_steps}"

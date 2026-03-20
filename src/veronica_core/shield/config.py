@@ -265,15 +265,12 @@ class ShieldConfig:
             config_root: If set, *path* must resolve within this directory.
                 Prevents path traversal when *path* comes from untrusted input.
         """
-        file_path = Path(path).resolve()
         if config_root is not None:
-            resolved_root = Path(config_root).resolve()
-            try:
-                file_path.relative_to(resolved_root)
-            except ValueError:
-                raise ValueError(
-                    "Path traversal denied: path resolves outside config_root"
-                ) from None
+            from veronica_core._utils import check_path_within_root
+
+            file_path = check_path_within_root(path, config_root)
+        else:
+            file_path = Path(path).resolve()
 
         if file_path.suffix.lower() == ".json":
             with open(file_path) as fh:

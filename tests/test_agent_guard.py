@@ -100,8 +100,16 @@ class TestAgentStepResultPreservation:
         g = AgentStepGuard(max_steps=3)
         payload = {"output": [1, 2, 3], "tokens": 42}
         g.step(result=payload)
-        assert g.last_result == payload  # Equal value (deepcopy)
-        assert g.last_result is not payload  # Distinct object (aliasing safe)
+        assert g.last_result == payload
+        # Before limit hit, result is stored by reference (no deepcopy overhead)
+        assert g.last_result is payload
+
+    def test_last_result_deepcopied_at_limit(self) -> None:
+        g = AgentStepGuard(max_steps=1)
+        payload = {"output": [1, 2, 3], "tokens": 42}
+        g.step(result=payload)  # limit hit on step 1
+        assert g.last_result == payload
+        assert g.last_result is not payload  # deepcopy at limit
 
     def test_reset_clears_last_result(self) -> None:
         g = AgentStepGuard(max_steps=3)
@@ -234,7 +242,7 @@ class TestAgentStepGuardValidation:
             AgentStepGuard(max_steps=False)
 
     def test_negative_raises_value_error(self) -> None:
-        with pytest.raises(ValueError, match="non-negative"):
+        with pytest.raises(ValueError, match=">="):
             AgentStepGuard(max_steps=-1)
 
     def test_zero_is_valid(self) -> None:

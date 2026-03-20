@@ -175,18 +175,8 @@ class ComplianceExporter:
                 # Dedup: skip if already attached
                 if ctx_id in self._attached_ids:
                     return
-                # Prune dead refs before checking capacity
-                alive = []
-                alive_ids: set[int] = set()
-                for ref, m in self._attached:
-                    obj = ref()
-                    if obj is not None:
-                        alive.append((ref, m))
-                        alive_ids.add(id(obj))
-                self._attached = alive
-                self._attached_ids = alive_ids
-                # Enforce cap
-                if len(self._attached) >= self._max_attached:
+                # Enforce cap (O(1) -- dead refs pruned at drain time)
+                if len(self._attached_ids) >= self._max_attached:
                     logger.warning(
                         "compliance: max_attached=%d reached, dropping attach",
                         self._max_attached,
@@ -252,6 +242,7 @@ class ComplianceExporter:
         with self._lock:
             attached = self._attached
             self._attached = []
+            self._attached_ids = set()
         for ref, meta in attached:
             try:
                 ctx = ref()

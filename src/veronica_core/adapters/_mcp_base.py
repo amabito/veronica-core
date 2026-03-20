@@ -13,6 +13,7 @@ Public types (re-exported from mcp.py and mcp_async.py):
 from __future__ import annotations
 
 import logging
+import math
 import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -147,9 +148,7 @@ class _MCPAdapterBase:
                 raise TypeError(
                     f"timeout_seconds must be a number, got {type(timeout_seconds).__name__}"
                 )
-            import math as _math
-
-            if not _math.isfinite(timeout_seconds) or timeout_seconds < 0:
+            if not math.isfinite(timeout_seconds) or timeout_seconds < 0:
                 raise ValueError(
                     f"timeout_seconds must be a finite non-negative number, got {timeout_seconds}"
                 )

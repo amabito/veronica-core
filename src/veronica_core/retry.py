@@ -176,10 +176,11 @@ class RetryContainer:
         )
         with self._lock:
             self._total_retries += 1
+            total = self._total_retries
             if self._total_retries > self.max_retries:
                 self._last_error = sentinel
         logger.debug(
-            "[VERONICA_RETRY] record_failure(): total_retries=%d", self._total_retries
+            "[VERONICA_RETRY] record_failure(): total_retries=%d", total
         )
 
     def reset(self) -> None:
