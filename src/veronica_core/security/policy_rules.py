@@ -602,7 +602,13 @@ def _check_pkg_install(
                 risk_score_delta=4,
             )
         if uv_sub == "pip" and uv_sub_idx > 0:
-            pip_sub = args[uv_sub_idx + 1].lower() if uv_sub_idx + 1 < len(args) else ""
+            # Scan past any option flags (e.g. --quiet, --system) to find the
+            # actual sub-subcommand.  Taking args[uv_sub_idx + 1] directly would
+            # be bypassed by `uv pip --quiet install requests`.
+            pip_sub = next(
+                (t.lower() for t in args[uv_sub_idx + 1 :] if not t.startswith("-")),
+                "",
+            )
             if pip_sub in _UV_PIP_INSTALL_SUBCMDS:
                 return PolicyDecision(
                     verdict="REQUIRE_APPROVAL",

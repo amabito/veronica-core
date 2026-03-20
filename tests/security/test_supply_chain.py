@@ -276,6 +276,15 @@ def test_uv_add_with_global_python_option_requires_approval() -> None:
     assert decision.rule_id == "SHELL_PKG_INSTALL"
 
 
+def test_uv_pip_with_flag_before_install_requires_approval() -> None:
+    """uv pip --quiet install must not bypass SHELL_PKG_INSTALL via flag before subcommand."""
+    engine = _engine()
+    ctx = _shell_ctx(["uv", "pip", "--quiet", "install", "requests"])
+    decision = engine.evaluate(ctx)
+    assert decision.verdict == "REQUIRE_APPROVAL"
+    assert decision.rule_id == "SHELL_PKG_INSTALL"
+
+
 def test_uv_run_with_global_project_option_detects_inline_exec() -> None:
     """--project consumes its value; 'run -c' after it must still be detected."""
     engine = _engine()
