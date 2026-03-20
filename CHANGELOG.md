@@ -6,6 +6,55 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.9.0] -- 2026-03-20 -- Codebase Hardening + Full Simplify
+
+**Breaking changes:** none
+
+### Added
+
+- `_utils.require_strict_int()` -- shared bool/float/int validator (replaces 7 inline checks)
+- `_utils.check_path_within_root()` -- shared path traversal guard
+- `PolicyLoader(policy_root=...)` -- opt-in path traversal prevention for policy files
+- `ShieldConfig.from_yaml(config_root=...)` -- opt-in path traversal prevention for config files
+- `ComplianceExporter(max_attached=...)` -- cap + dedup for attached contexts
+- `ExecutionLog.from_file(max_size_bytes=...)` -- file size guard (default 50 MB)
+- `MemoryGovernor.fail_closed`, `.hook_count`, `.get_hooks()` -- public read-only API
+- `_find_uv_subcmd()` helper -- deduplicated uv subcommand scanning in policy rules
+- `_enter_fallback_mode()` -- deduplicated Redis fallback logic in distributed module
+- 95 new tests across validation, security, path traversal, governor API, edge cases
+
+### Fixed
+
+- `RetryContainer.record_failure()` no longer permanently denies after 1 call
+  (threshold aligned with `execute()` semantics: deny after max_retries+1 failures)
+- `AgentStepGuard.step()` deepcopy only at limit-hit (was copying every step)
+- `ag2._extract_ag2_reply_cost()` `or` -> `is None` (zero token counts were masked)
+- `retry.record_failure()` log reads `_total_retries` inside lock (data race fix)
+- `simulation/log.py` rejects non-int `max_size_bytes` (NaN bypassed size check)
+- `exporter._drain_attached()` clears `_attached_ids` (dedup set diverged after drain)
+- `policy_rules.py` uv subcommand index bug: linear search found option-value position
+  instead of actual subcommand position
+- `policy_rules.py` `--python`, `--python-version`, `-p` added to `_UV_OPTS_WITH_VALUE`
+- `policy_rules.py` `uv pip --quiet install` bypass: flags before sub-subcommand were
+  not skipped, allowing SHELL_PKG_INSTALL to be bypassed
+- `no_shell.py` uses `_extract_command_stem()` instead of inline extraction (divergence risk)
+- `diagnostics/readiness.py` no longer accesses `MemoryGovernor` private fields
+- MCP adapter tests: conditional asserts made unconditional (5 places)
+- `ExecutionConfig` rejects `bool` and `float` for `max_steps`/`max_retries_total`/`timeout_ms`
+- `_MCPAdapterBase` rejects NaN/Inf/bool for `timeout_seconds`
+
+### Improved
+
+- `masking.py` pre-binds replacement closures in `__init__` (28 allocations/call -> 0)
+- `no_network.py` pre-lowercases allowlist in `__post_init__` (O(n) -> O(1) per call)
+- `read_only_assistant.py` caches frozenset union in `__post_init__`
+- `metrics_policy.py` `_SEVERITY` dict moved to module-level constant
+- `rate_limit.py` converted from list to `collections.deque` for O(k) eviction
+- `exporter.attach()` O(1) dedup check (moved O(n) prune to drain time)
+- Path traversal error messages stripped of absolute filesystem paths
+
+---
+
 ## [3.8.1] -- 2026-03-18 -- Fail-Closed Security Hardening
 
 **Breaking changes:** `MemoryBoundaryConfig.default_allow` now defaults to `False`
