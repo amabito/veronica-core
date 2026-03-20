@@ -144,8 +144,8 @@ class MemoryGovernanceReadiness:
 
         return ReadinessSnapshot(
             governance_enabled=len(hooks) > 0,
-            fail_closed=governor._fail_closed,
-            hook_count=len(hooks),
+            fail_closed=governor.fail_closed,
+            hook_count=governor.hook_count,
             registered_hooks=hook_names,
             compactness_evaluator_present=has_compactness,
             view_policy_evaluator_present=has_view_policy,
@@ -165,9 +165,8 @@ class MemoryGovernanceReadiness:
     @staticmethod
     def _extract_hooks(governor: MemoryGovernor) -> list[Any]:
         """Extract the hook list from a governor (read-only snapshot)."""
-        # Access internal _hooks under the governor's lock for thread safety.
-        with governor._lock:
-            return list(governor._hooks)
+        # Use the public get_hooks() method for thread-safe hook access.
+        return governor.get_hooks()
 
     @staticmethod
     def _supported_views() -> tuple[str, ...]:

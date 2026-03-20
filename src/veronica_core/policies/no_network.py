@@ -65,6 +65,12 @@ class NoNetworkPolicy:
     enabled: bool = False
     allowlist: frozenset[str] = field(default_factory=frozenset)
 
+    # Pre-lowercased allowlist for O(1) case-insensitive lookup.
+    _allowlist_lower: frozenset[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._allowlist_lower = frozenset(u.lower() for u in self.allowlist)
+
     def check_egress(
         self,
         url: str,
@@ -92,7 +98,7 @@ class NoNetworkPolicy:
         # Case-insensitive comparison to prevent bypass via URL casing
         # (e.g. "HTTPS://Internal.Corp/api" vs "https://internal.corp/api").
         url_lower = url.lower()
-        if any(url_lower == allowed.lower() for allowed in self.allowlist):
+        if url_lower in self._allowlist_lower:
             return True, f"URL in allowlist: {url!r}"
         return False, f"outbound network blocked by NoNetworkPolicy: {url!r}"
 

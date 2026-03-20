@@ -134,28 +134,35 @@ class SecretMasker:
     """Masks sensitive secrets in strings, dicts, and argument lists."""
 
     def __init__(self) -> None:
-        # Pre-build (pattern, replacement_tag, has_group) tuples once so that
-        # mask() does not allocate closures or format strings on every call.
-        self._compiled: list[tuple[re.Pattern[str], str, bool]] = [
-            (pattern, f"[REDACTED:{label}]", pattern.groups > 0)
+        # Pre-bind one replacement callable per pattern so that mask() never
+        # allocates new function objects on every call.
+        def _make_replacer(
+            tag: str, has_group: bool
+        ):  # -> Callable[[re.Match[str]], str]
+            if has_group:
+
+                def _replace_group(m: re.Match[str]) -> str:
+                    if m.lastindex:
+                        return m.group(0).replace(m.group(1), tag, 1)
+                    return tag
+
+                return _replace_group
+            else:
+
+                def _replace_full(m: re.Match[str]) -> str:  # noqa: ARG001
+                    return tag
+
+                return _replace_full
+
+        self._compiled: list[tuple[re.Pattern[str], object]] = [
+            (pattern, _make_replacer(f"[REDACTED:{label}]", pattern.groups > 0))
             for label, pattern in _PATTERNS
         ]
 
     def mask(self, text: str) -> str:
         """Replace detected secrets in *text* with ``[REDACTED:<type>]``."""
-        for pattern, redacted_tag, has_group in self._compiled:
-
-            def _replace(
-                m: re.Match[str], _tag: str = redacted_tag, _has_group: bool = has_group
-            ) -> str:  # noqa: E731
-                # If the pattern has a capture group, replace only the group
-                if _has_group and m.lastindex:
-                    full = m.group(0)
-                    captured = m.group(1)
-                    return full.replace(captured, _tag, 1)
-                return _tag
-
-            text = pattern.sub(_replace, text)
+        for pattern, replacer in self._compiled:
+            text = pattern.sub(replacer, text)  # type: ignore[arg-type]
         return text
 
     # Hard recursion depth limit to prevent infinite loops on self-referential

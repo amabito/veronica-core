@@ -334,6 +334,27 @@ class RedisBudgetBackend:
         # Reconcile failed -- stay on fallback.
         return False
 
+    def _enter_fallback_mode(self, operation: str, exc: BaseException) -> None:
+        """Seed the local fallback from Redis and activate fallback mode.
+
+        Must be called with ``self._lock`` already held (double-check pattern).
+        The ``if not self._using_fallback`` guard ensures only the first thread
+        to acquire the lock performs the seed; subsequent threads skip straight
+        to the fallback backend.
+
+        Args:
+            operation: Name of the calling operation (for the log message).
+            exc: The exception that triggered the failover.
+        """
+        if not self._using_fallback:
+            self._seed_fallback_from_redis()
+            self._using_fallback = True
+            logger.warning(
+                "RedisBudgetBackend.%s: switching to local fallback after Redis failure (%s).",
+                operation,
+                exc,
+            )
+
     def _seed_fallback_from_redis(self) -> None:
         """Seed the local fallback with the current Redis total before failover.
 
@@ -408,12 +429,7 @@ class RedisBudgetBackend:
                 # The lock + double-check prevents concurrent threads from seeding
                 # multiple times or losing increments during the transition.
                 with self._lock:
-                    if not self._using_fallback:
-                        # Only the first thread to acquire the lock performs the
-                        # seed; subsequent threads see _using_fallback=True and
-                        # skip straight to fallback.add() below.
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                    self._enter_fallback_mode("add", exc)
                 return self._fallback.add(amount)
             raise
 
@@ -568,9 +584,7 @@ return 1
                     _redact_exc(exc),
                 )
                 with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                    self._enter_fallback_mode("reserve", exc)
                 return self._fallback.reserve(amount, ceiling)
             raise
 
@@ -632,9 +646,7 @@ return tostring(new_total)
                     _redact_exc(exc),
                 )
                 with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                    self._enter_fallback_mode("commit", exc)
                 try:
                     return self._fallback.commit(reservation_id)
                 except KeyError:
@@ -682,9 +694,7 @@ return 1
                     _redact_exc(exc),
                 )
                 with self._lock:
-                    if not self._using_fallback:
-                        self._seed_fallback_from_redis()
-                        self._using_fallback = True
+                    self._enter_fallback_mode("rollback", exc)
                 try:
                     self._fallback.rollback(reservation_id)
                 except KeyError:

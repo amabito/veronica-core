@@ -6,6 +6,7 @@ operators from being overwhelmed by automated approval spam.
 
 from __future__ import annotations
 
+import collections
 import threading
 import time
 
@@ -42,8 +43,9 @@ class ApprovalRateLimiter:
         self._max = max_per_window
         self._window = window_seconds
         self._lock = threading.Lock()
-        # Track timestamps of successful acquisitions within the window
-        self._timestamps: list[float] = []
+        # Track timestamps of successful acquisitions within the window.
+        # deque allows O(1) popleft() eviction instead of list-comprehension rebuild.
+        self._timestamps: collections.deque[float] = collections.deque()
 
     # ------------------------------------------------------------------
     # Public API
@@ -62,8 +64,9 @@ class ApprovalRateLimiter:
         now = time.monotonic()
         with self._lock:
             cutoff = now - self._window
-            # Evict expired timestamps
-            self._timestamps = [t for t in self._timestamps if t > cutoff]
+            # Evict expired timestamps from the left end (oldest first).
+            while self._timestamps and self._timestamps[0] <= cutoff:
+                self._timestamps.popleft()
             if len(self._timestamps) >= self._max:
                 return False
             self._timestamps.append(now)
@@ -78,7 +81,8 @@ class ApprovalRateLimiter:
         now = time.monotonic()
         with self._lock:
             cutoff = now - self._window
-            self._timestamps = [t for t in self._timestamps if t > cutoff]
+            while self._timestamps and self._timestamps[0] <= cutoff:
+                self._timestamps.popleft()
             return max(0, self._max - len(self._timestamps))
 
     def reset(self) -> None:

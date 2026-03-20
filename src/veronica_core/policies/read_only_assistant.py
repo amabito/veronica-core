@@ -65,8 +65,11 @@ class ReadOnlyAssistantPolicy:
     enabled: bool = False
     extra_denied_commands: frozenset[str] = field(default_factory=frozenset)
 
-    def _denied_commands(self) -> frozenset[str]:
-        return WRITE_SHELL_COMMANDS | self.extra_denied_commands
+    # Cached union of WRITE_SHELL_COMMANDS and extra_denied_commands.
+    _cached_denied: frozenset[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._cached_denied = WRITE_SHELL_COMMANDS | self.extra_denied_commands
 
     def check_shell(
         self,
@@ -93,7 +96,7 @@ class ReadOnlyAssistantPolicy:
         if not args:
             return True, "empty command allowed"
         stem = _extract_command_stem(args[0])
-        if stem in self._denied_commands():
+        if stem in self._cached_denied:
             return (
                 False,
                 f"shell write command blocked by ReadOnlyAssistantPolicy: {stem!r}",

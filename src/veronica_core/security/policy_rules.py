@@ -184,6 +184,19 @@ _UV_OPTS_WITH_VALUE: frozenset[str] = frozenset(
 # npm/pnpm subcommands that execute arbitrary packages.
 _NPM_EXEC_SUBCMDS: frozenset[str] = frozenset({"exec", "dlx", "x"})
 
+_GIT_OPTS_WITH_VALUE: frozenset[str] = frozenset(
+    {
+        "-c",
+        "-C",
+        "--git-dir",
+        "--work-tree",
+        "--namespace",
+        "--config-env",
+        "--super-prefix",
+        "--exec-path",
+    }
+)
+
 FILE_WRITE_LOCKFILE_PATTERNS: tuple[str, ...] = (
     "package-lock.json",
     "yarn.lock",
@@ -459,6 +472,27 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
     return None
 
 
+def _find_uv_subcmd(args: list[str]) -> str | None:
+    """Return the first non-option token after ``args[0]`` (the uv executable).
+
+    Skips tokens in ``_UV_OPTS_WITH_VALUE`` (each consumes the next token as
+    its value) and bare flags starting with ``-``.  Returns ``None`` if no
+    subcommand is found.
+    """
+    skip_val = False
+    for tok in args[1:]:
+        if skip_val:
+            skip_val = False
+            continue
+        if tok in _UV_OPTS_WITH_VALUE:
+            skip_val = True
+            continue
+        if tok.startswith("-"):
+            continue
+        return tok.lower()
+    return None
+
+
 def _check_pkg_install(
     argv0: str, argv1: str, args: list[str]
 ) -> PolicyDecision | None:
@@ -479,21 +513,11 @@ def _check_pkg_install(
     # DENY: uv run wrapping inline code execution or wrapped commands.
     # Skip global options (e.g. --project, --no-config) to find "run" subcommand.
     if argv0 == "uv":
-        uv_subcmd = ""
-        uv_subcmd_idx = -1
-        skip_val = False
-        for i, tok in enumerate(args[1:], start=1):
-            if skip_val:
-                skip_val = False
-                continue
-            if tok in _UV_OPTS_WITH_VALUE:
-                skip_val = True
-                continue
-            if tok.startswith("-"):
-                continue
-            uv_subcmd = tok.lower()
-            uv_subcmd_idx = i
-            break
+        uv_subcmd = _find_uv_subcmd(args)
+        uv_subcmd_idx = next(
+            (i for i, tok in enumerate(args[1:], start=1) if tok.lower() == uv_subcmd),
+            -1,
+        ) if uv_subcmd else -1
 
         if uv_subcmd == "run" and uv_subcmd_idx > 0:
             rest = args[uv_subcmd_idx + 1 :]
@@ -566,21 +590,11 @@ def _check_pkg_install(
     # Reuse _UV_OPTS_WITH_VALUE to skip global options for all uv subcommands.
     if argv0 == "uv":
         # Find effective subcommand (skip global options)
-        uv_sub = ""
-        uv_sub_idx = -1
-        skip_v = False
-        for i, tok in enumerate(args[1:], start=1):
-            if skip_v:
-                skip_v = False
-                continue
-            if tok in _UV_OPTS_WITH_VALUE:
-                skip_v = True
-                continue
-            if tok.startswith("-"):
-                continue
-            uv_sub = tok.lower()
-            uv_sub_idx = i
-            break
+        uv_sub = _find_uv_subcmd(args)
+        uv_sub_idx = next(
+            (i for i, tok in enumerate(args[1:], start=1) if tok.lower() == uv_sub),
+            -1,
+        ) if uv_sub else -1
         if uv_sub == "add":
             return PolicyDecision(
                 verdict="REQUIRE_APPROVAL",
@@ -913,18 +927,6 @@ def _eval_git(ctx: PolicyContext) -> PolicyDecision | None:
     # Git options that consume the next token as a value must be handled
     # specially; otherwise ``git -c key=val push`` would treat ``key=val``
     # as the subcommand and bypass the push deny rule (H-5 fix).
-    _GIT_OPTS_WITH_VALUE = frozenset(
-        {
-            "-c",
-            "-C",
-            "--git-dir",
-            "--work-tree",
-            "--namespace",
-            "--config-env",
-            "--super-prefix",
-            "--exec-path",
-        }
-    )
     subcmd = ""
     skip_next = False
     # Strip leading executable name (e.g. "git", "git.exe", "/usr/bin/git")

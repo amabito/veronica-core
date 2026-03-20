@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from veronica_core.policies._policy_utils import _extract_command_stem
 from veronica_core.shield.event import SafetyEvent
 from veronica_core.shield.types import Decision
 
@@ -91,7 +92,7 @@ class NoShellPolicy:
             return True, "policy disabled"
         if not args:
             return True, "empty command allowed"
-        cmd = args[0].replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
+        cmd = _extract_command_stem(args[0])
         if cmd in self.allowlist:
             return True, f"shell command in allowlist: {cmd!r}"
         return False, f"shell execution blocked by NoShellPolicy: {cmd!r}"

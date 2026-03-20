@@ -525,6 +525,19 @@ class MemoryGovernor:
                     exc,
                 )
 
+    def get_hooks(self) -> list[MemoryGovernanceHook]:
+        """Return a snapshot of the current memory operation hook list.
+
+        Thread-safe: acquires the internal lock and returns a copy.
+        """
+        with self._lock:
+            return list(self._hooks)
+
+    @property
+    def fail_closed(self) -> bool:
+        """True if zero-hook evaluations return DENY (fail-closed semantics)."""
+        return self._fail_closed
+
     @property
     def hook_count(self) -> int:
         """Number of registered memory operation hooks."""

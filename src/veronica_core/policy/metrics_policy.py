@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 _POLICY_TYPE = "metric_rule"
 
+# Severity ordering for MetricsDrivenPolicy: halt > degrade > warn.
+_SEVERITY: dict[str, int] = {"halt": 3, "degrade": 2, "warn": 1}
+
 # ---------------------------------------------------------------------------
 # Operator map
 # ---------------------------------------------------------------------------
@@ -315,9 +318,7 @@ class MetricsDrivenPolicy:
 
         default_agent = self._agent_id or context.entity_id or None
 
-        # Severity ordering: halt > degrade > warn
         # Collect and return highest-severity triggered decision.
-        _SEVERITY: dict[str, int] = {"halt": 3, "degrade": 2, "warn": 1}
         best: Optional[tuple[int, PolicyDecision]] = None
 
         for rule in rules:
