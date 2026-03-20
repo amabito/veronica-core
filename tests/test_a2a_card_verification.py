@@ -8,7 +8,11 @@ from typing import Any
 
 import pytest
 
-from veronica_core.a2a.card import CardVerifierProtocol, identity_from_a2a_card, verify_card_signature
+from veronica_core.a2a.card import (
+    CardVerifierProtocol,
+    identity_from_a2a_card,
+    verify_card_signature,
+)
 from veronica_core.a2a.provenance import A2AIdentityProvenance
 from veronica_core.a2a.types import TrustLevel
 
@@ -87,7 +91,9 @@ class TestVerifyCardSignatureHappyPath:
 
     def test_card_url_passthrough(self) -> None:
         card = {"name": "agent-1"}
-        result = verify_card_signature(card, card_url="https://example.com/.well-known/agent.json")
+        result = verify_card_signature(
+            card, card_url="https://example.com/.well-known/agent.json"
+        )
         assert result.card_url == "https://example.com/.well-known/agent.json"
 
     def test_card_url_none_default(self) -> None:
@@ -239,7 +245,9 @@ class TestCardVerificationNonSerializable:
 
     def test_non_serializable_card_with_signature(self) -> None:
         """Non-serializable card with signature key: fail-closed, verified=False."""
-        prov = verify_card_signature({"name": "agent", "signature": "abc", "data": {1, 2, 3}})
+        prov = verify_card_signature(
+            {"name": "agent", "signature": "abc", "data": {1, 2, 3}}
+        )
         assert prov.card_fingerprint is None
         assert prov.card_verified is False  # fail-closed: no fingerprint -> unverified
 
@@ -291,11 +299,15 @@ class TestIdentityFromA2ACard:
 
     def test_privileged_trust_downgraded_to_untrusted(self) -> None:
         """PRIVILEGED must never be granted via external A2A card (L-3 rule)."""
-        identity = identity_from_a2a_card({"name": "agent-1", "trust_level": "privileged"})
+        identity = identity_from_a2a_card(
+            {"name": "agent-1", "trust_level": "privileged"}
+        )
         assert identity.trust_level == TrustLevel.UNTRUSTED
 
     def test_unrecognised_trust_level_defaults_untrusted(self) -> None:
-        identity = identity_from_a2a_card({"name": "agent-1", "trust_level": "SUPERADMIN"})
+        identity = identity_from_a2a_card(
+            {"name": "agent-1", "trust_level": "SUPERADMIN"}
+        )
         assert identity.trust_level == TrustLevel.UNTRUSTED
 
     def test_valid_trust_level_accepted(self) -> None:
@@ -303,7 +315,9 @@ class TestIdentityFromA2ACard:
         assert identity.trust_level == TrustLevel.TRUSTED
 
     def test_url_stored_in_metadata(self) -> None:
-        identity = identity_from_a2a_card({"name": "agent-1", "url": "https://example.com"})
+        identity = identity_from_a2a_card(
+            {"name": "agent-1", "url": "https://example.com"}
+        )
         assert identity.metadata.get("url") == "https://example.com"
 
     def test_non_string_url_ignored(self) -> None:

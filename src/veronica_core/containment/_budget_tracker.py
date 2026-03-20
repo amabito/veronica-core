@@ -7,6 +7,7 @@ veronica_core.containment.
 
 from __future__ import annotations
 
+import math
 import threading
 
 
@@ -27,13 +28,27 @@ class BudgetTracker:
         with self._lock:
             return self._cost
 
+    @staticmethod
+    def _validate_amount(amount: float, method: str = "add") -> None:
+        """Reject non-finite or negative amounts before mutation."""
+        if not math.isfinite(amount):
+            raise ValueError(
+                f"BudgetTracker.{method}() amount must be a finite number, got {amount!r}"
+            )
+        if amount < 0:
+            raise ValueError(
+                f"BudgetTracker.{method}() amount must be non-negative, got {amount!r}"
+            )
+
     def add(self, amount: float) -> None:
         """Add *amount* to the accumulated cost."""
+        self._validate_amount(amount, "add")
         with self._lock:
             self._cost += amount
 
     def add_returning(self, amount: float) -> float:
         """Add *amount* and return the new total atomically."""
+        self._validate_amount(amount, "add_returning")
         with self._lock:
             self._cost += amount
             return self._cost

@@ -88,7 +88,9 @@ def test_multiple_callbacks_fire_in_deadline_order() -> None:
     pool.schedule(deadline=now + 0.1, callback=lambda: order.append(1))
     pool.schedule(deadline=now + 0.3, callback=lambda: order.append(3))
 
-    wait_for(lambda: len(order) == 3, timeout=2.0, msg=f"Expected [1, 2, 3], got {order}")
+    wait_for(
+        lambda: len(order) == 3, timeout=2.0, msg=f"Expected [1, 2, 3], got {order}"
+    )
     assert order == [1, 2, 3], f"Expected [1, 2, 3], got {order}"
     pool.shutdown()
 

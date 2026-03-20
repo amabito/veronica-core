@@ -70,6 +70,9 @@ class ComplianceExporter:
         HTTP request timeout in seconds.
     max_retries:
         Retries per failed HTTP request (0 = no retries).
+    max_attached:
+        Maximum number of attached execution contexts. Prevents unbounded
+        growth from repeated attach() calls. Default 10000.
     """
 
     def __init__(
@@ -82,6 +85,7 @@ class ComplianceExporter:
         max_queue: int = 1000,
         timeout_s: float = 5.0,
         max_retries: int = 2,
+        max_attached: int = 10_000,
         allow_insecure_http: bool = False,
     ) -> None:
         if not endpoint:
@@ -109,11 +113,13 @@ class ComplianceExporter:
         self._max_queue = max_queue
         self._timeout_s = timeout_s
         self._max_retries = max_retries
+        self._max_attached = max_attached
 
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=max_queue)
         self._closed = False
         self._lock = threading.Lock()
         self._attached: List[Tuple[weakref.ref, Optional[Any]]] = []
+        self._attached_ids: set[int] = set()
 
         # httpx client (reuses connections)
         self._httpx: Any = None
@@ -153,11 +159,41 @@ class ComplianceExporter:
         The exporter keeps a weak reference to *ctx*.  When ``flush()``
         or ``close()`` is called (including the atexit handler), any
         still-alive attached contexts are snapshotted and queued.
+
+        Duplicate contexts (same object id) are silently ignored.
+        Dead weak references are pruned on each call.
         """
         try:
+            ctx_id = id(ctx)
             meta = getattr(ctx, "_metadata", None)
+
+            def _on_finalize(ref: weakref.ref, _id: int = ctx_id) -> None:
+                with self._lock:
+                    self._attached_ids.discard(_id)
+
             with self._lock:
-                self._attached.append((weakref.ref(ctx), meta))
+                # Dedup: skip if already attached
+                if ctx_id in self._attached_ids:
+                    return
+                # Prune dead refs before checking capacity
+                alive = []
+                alive_ids: set[int] = set()
+                for ref, m in self._attached:
+                    obj = ref()
+                    if obj is not None:
+                        alive.append((ref, m))
+                        alive_ids.add(id(obj))
+                self._attached = alive
+                self._attached_ids = alive_ids
+                # Enforce cap
+                if len(self._attached) >= self._max_attached:
+                    logger.warning(
+                        "compliance: max_attached=%d reached, dropping attach",
+                        self._max_attached,
+                    )
+                    return
+                self._attached.append((weakref.ref(ctx, _on_finalize), meta))
+                self._attached_ids.add(ctx_id)
         except Exception:
             logger.debug("compliance: attach failed", exc_info=True)
 

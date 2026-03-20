@@ -50,7 +50,9 @@ def _make_state(
     return sm
 
 
-def _make_persistence(tmp_path: Path, filename: str = "state.json") -> VeronicaPersistence:
+def _make_persistence(
+    tmp_path: Path, filename: str = "state.json"
+) -> VeronicaPersistence:
     with pytest.warns(DeprecationWarning):
         return VeronicaPersistence(path=tmp_path / filename)
 
@@ -159,7 +161,12 @@ class TestPersistBackfill:
 
         raw = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
         raw["state_history"] = [
-            {"from_state": "IDLE", "to_state": "SCREENING", "timestamp": 0.0, "reason": "ok"},
+            {
+                "from_state": "IDLE",
+                "to_state": "SCREENING",
+                "timestamp": 0.0,
+                "reason": "ok",
+            },
             {"from_state": "IDLE"},  # missing to_state, timestamp, reason
         ]
         (tmp_path / "state.json").write_text(json.dumps(raw), encoding="utf-8")

@@ -56,11 +56,15 @@ def _ctx(
 
 
 def _read_op(agent_id: str = "agent-1", namespace: str = "ns-a") -> MemoryOperation:
-    return MemoryOperation(action=MemoryAction.READ, agent_id=agent_id, namespace=namespace)
+    return MemoryOperation(
+        action=MemoryAction.READ, agent_id=agent_id, namespace=namespace
+    )
 
 
 def _write_op(agent_id: str = "agent-1", namespace: str = "ns-a") -> MemoryOperation:
-    return MemoryOperation(action=MemoryAction.WRITE, agent_id=agent_id, namespace=namespace)
+    return MemoryOperation(
+        action=MemoryAction.WRITE, agent_id=agent_id, namespace=namespace
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -101,49 +105,71 @@ class TestDefaultDenyAll:
 
 class TestExplicitRules:
     def test_deny_write_for_specific_agent_and_namespace(self) -> None:
-        rule = MemoryAccessRule(agent_id="bad-agent", namespace="secret", allow_write=False, allow_read=True)
+        rule = MemoryAccessRule(
+            agent_id="bad-agent", namespace="secret", allow_write=False, allow_read=True
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
 
-        decision = hook.before_op(_write_op(agent_id="bad-agent", namespace="secret"), None)
+        decision = hook.before_op(
+            _write_op(agent_id="bad-agent", namespace="secret"), None
+        )
         assert decision.verdict is GovernanceVerdict.DENY
 
     def test_allow_read_when_write_is_denied(self) -> None:
-        rule = MemoryAccessRule(agent_id="bad-agent", namespace="secret", allow_write=False, allow_read=True)
+        rule = MemoryAccessRule(
+            agent_id="bad-agent", namespace="secret", allow_write=False, allow_read=True
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
 
-        decision = hook.before_op(_read_op(agent_id="bad-agent", namespace="secret"), None)
+        decision = hook.before_op(
+            _read_op(agent_id="bad-agent", namespace="secret"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_deny_read_for_specific_agent_and_namespace(self) -> None:
-        rule = MemoryAccessRule(agent_id="read-denied", namespace="classified", allow_read=False)
+        rule = MemoryAccessRule(
+            agent_id="read-denied", namespace="classified", allow_read=False
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
 
-        decision = hook.before_op(_read_op(agent_id="read-denied", namespace="classified"), None)
+        decision = hook.before_op(
+            _read_op(agent_id="read-denied", namespace="classified"), None
+        )
         assert decision.verdict is GovernanceVerdict.DENY
 
     def test_other_agent_is_allowed_by_default(self) -> None:
-        rule = MemoryAccessRule(agent_id="restricted", namespace="vault", allow_write=False)
+        rule = MemoryAccessRule(
+            agent_id="restricted", namespace="vault", allow_write=False
+        )
         config = MemoryBoundaryConfig(rules=[rule], default_allow=True)
         hook = MemoryBoundaryHook(config=config)
 
         # A different agent should still be allowed.
-        decision = hook.before_op(_write_op(agent_id="other-agent", namespace="vault"), None)
+        decision = hook.before_op(
+            _write_op(agent_id="other-agent", namespace="vault"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_wildcard_agent_denies_all_agents_write(self) -> None:
-        rule = MemoryAccessRule(agent_id="*", namespace="locked", allow_write=False, allow_read=True)
+        rule = MemoryAccessRule(
+            agent_id="*", namespace="locked", allow_write=False, allow_read=True
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
 
         for agent in ("agent-1", "agent-2", "any-agent"):
             dec = hook.before_op(_write_op(agent_id=agent, namespace="locked"), None)
-            assert dec.verdict is GovernanceVerdict.DENY, f"expected DENY for agent {agent}"
+            assert dec.verdict is GovernanceVerdict.DENY, (
+                f"expected DENY for agent {agent}"
+            )
 
     def test_wildcard_namespace_denies_all_namespaces(self) -> None:
-        rule = MemoryAccessRule(agent_id="rogue", namespace="*", allow_read=False, allow_write=False)
+        rule = MemoryAccessRule(
+            agent_id="rogue", namespace="*", allow_read=False, allow_write=False
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
 
@@ -153,8 +179,12 @@ class TestExplicitRules:
 
     def test_exact_rule_beats_wildcard(self) -> None:
         """Exact agent+namespace rule overrides wildcard rule."""
-        wildcard = MemoryAccessRule(agent_id="*", namespace="*", allow_write=False, allow_read=True)
-        exact = MemoryAccessRule(agent_id="admin", namespace="ns-a", allow_write=True, allow_read=True)
+        wildcard = MemoryAccessRule(
+            agent_id="*", namespace="*", allow_write=False, allow_read=True
+        )
+        exact = MemoryAccessRule(
+            agent_id="admin", namespace="ns-a", allow_write=True, allow_read=True
+        )
         config = MemoryBoundaryConfig(rules=[wildcard, exact], default_allow=True)
         hook = MemoryBoundaryHook(config=config)
 
@@ -174,11 +204,15 @@ class TestExplicitRules:
 
 class TestNonReadWritePassThrough:
     def test_archive_action_passes_through(self) -> None:
-        rule = MemoryAccessRule(agent_id="*", namespace="*", allow_read=False, allow_write=False)
+        rule = MemoryAccessRule(
+            agent_id="*", namespace="*", allow_read=False, allow_write=False
+        )
         config = MemoryBoundaryConfig(rules=[rule], default_allow=False)
         hook = MemoryBoundaryHook(config=config)
 
-        op = MemoryOperation(action=MemoryAction.ARCHIVE, agent_id="agent-1", namespace="ns")
+        op = MemoryOperation(
+            action=MemoryAction.ARCHIVE, agent_id="agent-1", namespace="ns"
+        )
         decision = hook.before_op(op, None)
         assert decision.verdict is GovernanceVerdict.ALLOW
 
@@ -214,7 +248,9 @@ class TestPostDispatchHook:
             hook.after_llm_call(ctx, response=None)
 
     def test_memory_read_denied_raises_permission_error(self) -> None:
-        rule = MemoryAccessRule(agent_id="spy", namespace="classified", allow_read=False)
+        rule = MemoryAccessRule(
+            agent_id="spy", namespace="classified", allow_read=False
+        )
         config = MemoryBoundaryConfig(rules=[rule])
         hook = MemoryBoundaryHook(config=config)
         ctx = _ctx(kind="memory_read", agent_id="spy", namespace="classified")
@@ -252,7 +288,9 @@ class TestMemoryGovernorIntegration:
         hook = MemoryBoundaryHook(config=config)
         governor = MemoryGovernor(hooks=[hook], fail_closed=False)
 
-        op = MemoryOperation(action=MemoryAction.READ, agent_id="blocked", namespace="ns")
+        op = MemoryOperation(
+            action=MemoryAction.READ, agent_id="blocked", namespace="ns"
+        )
         decision = governor.evaluate(op)
         assert decision.verdict is GovernanceVerdict.DENY
         assert "memory_boundary" in decision.policy_id
@@ -342,7 +380,9 @@ class TestAdversarialInputs:
     def test_empty_namespace_uses_default_policy(self) -> None:
         hook = MemoryBoundaryHook(config=MemoryBoundaryConfig(default_allow=True))
         decision = hook.before_op(
-            MemoryOperation(action=MemoryAction.WRITE, agent_id="agent-1", namespace=""),
+            MemoryOperation(
+                action=MemoryAction.WRITE, agent_id="agent-1", namespace=""
+            ),
             None,
         )
         assert decision.verdict is GovernanceVerdict.ALLOW
@@ -386,8 +426,12 @@ class TestAdversarialInputs:
 class TestAdversarialBoundaryAbuse:
     def test_same_specificity_first_rule_wins(self) -> None:
         """When two rules have equal specificity, the first match in list order wins."""
-        rule_deny = MemoryAccessRule(agent_id="agent-x", namespace="ns-y", allow_write=False)
-        rule_allow = MemoryAccessRule(agent_id="agent-x", namespace="ns-y", allow_write=True)
+        rule_deny = MemoryAccessRule(
+            agent_id="agent-x", namespace="ns-y", allow_write=False
+        )
+        rule_allow = MemoryAccessRule(
+            agent_id="agent-x", namespace="ns-y", allow_write=True
+        )
         config = MemoryBoundaryConfig(rules=[rule_deny, rule_allow])
         hook = MemoryBoundaryHook(config=config)
         # Both rules have max specificity (3) and match. First match (deny) should win
@@ -436,7 +480,9 @@ class TestAdversarialBoundaryAbuse:
 
     def test_concurrent_mixed_allow_deny(self) -> None:
         """10 threads: 5 denied + 5 allowed. deny_count must be exactly 5."""
-        deny_rule = MemoryAccessRule(agent_id="deny-agent", namespace="ns", allow_read=False)
+        deny_rule = MemoryAccessRule(
+            agent_id="deny-agent", namespace="ns", allow_read=False
+        )
         config = MemoryBoundaryConfig(rules=[deny_rule], default_allow=True)
         hook = MemoryBoundaryHook(config=config)
 

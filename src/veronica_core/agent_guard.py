@@ -1,6 +1,7 @@
 """VERONICA Agent Step Guard - Limits autonomous agent iterations."""
 
 from __future__ import annotations
+import copy
 from dataclasses import dataclass, field
 from typing import Optional, Any
 import logging
@@ -34,7 +35,9 @@ class AgentStepGuard:
 
     def __post_init__(self) -> None:
         if not isinstance(self.max_steps, int) or isinstance(self.max_steps, bool):
-            raise TypeError(f"max_steps must be an int, got {type(self.max_steps).__name__}")
+            raise TypeError(
+                f"max_steps must be an int, got {type(self.max_steps).__name__}"
+            )
         if self.max_steps < 0:
             raise ValueError(f"max_steps must be non-negative, got {self.max_steps}")
 
@@ -50,7 +53,7 @@ class AgentStepGuard:
         with self._lock:
             self._current_step += 1
             if result is not None:
-                self._last_result = result
+                self._last_result = copy.deepcopy(result)
             if self._current_step >= self.max_steps:
                 logger.warning(
                     f"[VERONICA_AGENT] Step limit reached: "

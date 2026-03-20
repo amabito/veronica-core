@@ -187,7 +187,8 @@ class PolicyVerifier:
                 except Exception as exc:
                     logger.debug(
                         "Bundle signature verification raised %s: %s",
-                        type(exc).__name__, exc,
+                        type(exc).__name__,
+                        exc,
                     )
                     errors.append("Bundle signature verification failed")
             else:

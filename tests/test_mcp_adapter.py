@@ -177,22 +177,22 @@ class TestBudgetHalt:
         adapter = _make_adapter(max_cost_usd=0.0001, default_cost_per_call=0.01)
         adapter.wrap_tool_call("search", {}, _echo_fn)
         result = adapter.wrap_tool_call("search", {}, _echo_fn)
-        if result.decision == "HALT":
-            assert result.error is not None
+        assert result.decision == "HALT"
+        assert result.error is not None
 
     def test_halt_result_success_is_false(self) -> None:
         adapter = _make_adapter(max_cost_usd=0.0001, default_cost_per_call=0.01)
         adapter.wrap_tool_call("search", {}, _echo_fn)
         result = adapter.wrap_tool_call("search", {}, _echo_fn)
-        if result.decision == "HALT":
-            assert result.success is False
+        assert result.decision == "HALT"
+        assert result.success is False
 
     def test_halt_cost_is_zero(self) -> None:
         adapter = _make_adapter(max_cost_usd=0.0001, default_cost_per_call=0.01)
         adapter.wrap_tool_call("search", {}, _echo_fn)
         result = adapter.wrap_tool_call("search", {}, _echo_fn)
-        if result.decision == "HALT":
-            assert result.cost_usd == 0.0
+        assert result.decision == "HALT"
+        assert result.cost_usd == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +216,8 @@ class TestCircuitBreaker:
         adapter.wrap_tool_call("search", {}, _raise_fn)
         adapter.wrap_tool_call("search", {}, _raise_fn)
         result = adapter.wrap_tool_call("search", {}, _echo_fn)
-        if result.decision == "HALT":
-            assert "circuit" in result.error.lower() or "Circuit" in result.error
+        assert result.decision == "HALT"
+        assert "circuit" in result.error.lower() or "Circuit" in result.error
 
     def test_circuit_open_does_not_call_fn(self) -> None:
         call_count = [0]

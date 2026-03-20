@@ -165,7 +165,11 @@ class WindowsSandboxRunner:
 
         # Drive-less rooted paths (e.g. /Users/Alice, \Users\Alice) inherit the
         # current drive.  Prepend it so the blocked-prefix check works correctly.
-        if len(norm_path) >= 1 and norm_path[0] == "/" and (len(norm_path) < 2 or norm_path[1] != "/"):
+        if (
+            len(norm_path) >= 1
+            and norm_path[0] == "/"
+            and (len(norm_path) < 2 or norm_path[1] != "/")
+        ):
             drive = os.path.splitdrive(os.getcwd())[0].lower()
             if drive:
                 norm_path = drive + norm_path
@@ -181,7 +185,7 @@ class WindowsSandboxRunner:
         for prefix in _LOCAL_UNC:
             if norm_path.startswith(prefix):
                 # Convert //localhost/c$/Users → c:/users
-                remainder = norm_path[len(prefix):]
+                remainder = norm_path[len(prefix) :]
                 if len(remainder) >= 2 and remainder[1] == "$":
                     norm_path = remainder[0] + ":/" + remainder[2:].lstrip("/")
                 break
@@ -230,7 +234,9 @@ class WindowsSandboxRunner:
                 tokens.append(arg.split("=", 1)[1])
             for token in tokens:
                 if self._looks_like_path(token) and self.read_path_blocked(token):
-                    raise PermissionError(f"Argument references a blocked path: {arg!r}")
+                    raise PermissionError(
+                        f"Argument references a blocked path: {arg!r}"
+                    )
 
         return self._executor.execute_shell(
             argv,

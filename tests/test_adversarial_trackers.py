@@ -129,10 +129,9 @@ class TestAdversarialBudgetTracker:
                     with errors_lock:
                         errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=adder) for _ in range(5)]
-            + [threading.Thread(target=checker) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=adder) for _ in range(5)] + [
+            threading.Thread(target=checker) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -152,10 +151,9 @@ class TestAdversarialBudgetTracker:
             for _ in range(100):
                 tracker.add(0.1)
 
-        threads = (
-            [threading.Thread(target=setter) for _ in range(5)]
-            + [threading.Thread(target=adder) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=setter) for _ in range(5)] + [
+            threading.Thread(target=adder) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -167,38 +165,34 @@ class TestAdversarialBudgetTracker:
     # Negative / invalid inputs
     # -----------------------------------------------------------------------
 
-    def test_add_negative_amount_decreases_cost(self) -> None:
-        """add() with a negative amount reduces cost -- no crash or exception."""
+    def test_add_negative_amount_raises(self) -> None:
+        """add() with a negative amount must raise ValueError -- not silently corrupt state."""
         tracker = BudgetTracker()
         tracker.add(1.0)
-        tracker.add(-0.5)
-        # Implementation allows negative adds; cost becomes 0.5.
-        assert math.isfinite(tracker.cost)
+        with pytest.raises(ValueError, match="non-negative"):
+            tracker.add(-0.5)
+        assert tracker.cost == pytest.approx(1.0)
 
-    def test_add_nan_propagates_to_cost(self) -> None:
-        """Adding NaN corrupts the accumulator -- document the behaviour."""
+    def test_add_nan_raises(self) -> None:
+        """add(NaN) must raise ValueError -- NaN must not corrupt the accumulator."""
         tracker = BudgetTracker()
-        tracker.add(float("nan"))
-        # After NaN injection, cost is NaN; check() must not raise.
-        result = tracker.check(max_cost=1.0, epsilon=_EPSILON)
-        # NaN + epsilon >= 1.0 is False in Python, so result is None.
-        # The key invariant: no exception is raised.
-        assert result is None or result == "budget_exceeded"
+        with pytest.raises(ValueError, match="finite"):
+            tracker.add(float("nan"))
+        assert tracker.cost == pytest.approx(0.0)
 
-    def test_add_positive_infinity_does_not_raise(self) -> None:
-        """add(+inf) must not raise; subsequent check() must return exceeded."""
+    def test_add_positive_infinity_raises(self) -> None:
+        """add(+inf) must raise ValueError -- infinity must not corrupt the accumulator."""
         tracker = BudgetTracker()
-        tracker.add(float("inf"))
-        # inf + epsilon >= any finite max_cost
-        assert tracker.check(max_cost=1.0, epsilon=_EPSILON) == "budget_exceeded"
+        with pytest.raises(ValueError, match="finite"):
+            tracker.add(float("inf"))
+        assert tracker.cost == pytest.approx(0.0)
 
-    def test_add_negative_infinity_does_not_raise(self) -> None:
-        """add(-inf) must not raise; check() against finite max must be None."""
+    def test_add_negative_infinity_raises(self) -> None:
+        """add(-inf) must raise ValueError -- negative infinity is neither finite nor non-negative."""
         tracker = BudgetTracker()
-        tracker.add(float("-inf"))
-        # -inf + epsilon < any finite max_cost
-        result = tracker.check(max_cost=1.0, epsilon=_EPSILON)
-        assert result is None
+        with pytest.raises(ValueError, match="finite"):
+            tracker.add(float("-inf"))
+        assert tracker.cost == pytest.approx(0.0)
 
     # -----------------------------------------------------------------------
     # Overflow: near MAX_FLOAT
@@ -312,7 +306,9 @@ class TestAdversarialStepTracker:
 
         errors = _run_threads(worker, n=10)
         assert not errors
-        assert len(results) == len(set(results)), "Duplicate increment_returning() values"
+        assert len(results) == len(set(results)), (
+            "Duplicate increment_returning() values"
+        )
         assert max(results) == len(results)
 
     def test_concurrent_set_and_increment_no_crash(self) -> None:
@@ -327,10 +323,9 @@ class TestAdversarialStepTracker:
             for _ in range(100):
                 tracker.increment()
 
-        threads = (
-            [threading.Thread(target=resetter) for _ in range(5)]
-            + [threading.Thread(target=incrementer) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=resetter) for _ in range(5)] + [
+            threading.Thread(target=incrementer) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -357,10 +352,9 @@ class TestAdversarialStepTracker:
                     with errors_lock:
                         errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=incrementer) for _ in range(5)]
-            + [threading.Thread(target=checker) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=incrementer) for _ in range(5)] + [
+            threading.Thread(target=checker) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -381,14 +375,12 @@ class TestAdversarialStepTracker:
         tracker.increment()
         assert tracker.count == sys.maxsize + 1
 
-    def test_set_negative_value_accepted(self) -> None:
-        """set() with a negative value must not raise -- behaviour documented."""
+    def test_set_negative_value_rejected(self) -> None:
+        """set() with a negative value must raise ValueError -- negative counts are invalid."""
         tracker = StepTracker()
-        tracker.set(-100)
-        # Negative count is unusual but must not crash.
-        assert tracker.count == -100
-        # check() with negative count vs positive max_steps: within limit.
-        assert tracker.check(max_steps=0) is None
+        with pytest.raises(ValueError, match="non-negative"):
+            tracker.set(-100)
+        assert tracker.count == 0
 
     # -----------------------------------------------------------------------
     # Boundary: zero max_steps
@@ -475,10 +467,9 @@ class TestAdversarialRetryTracker:
                     with errors_lock:
                         errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=incrementer) for _ in range(5)]
-            + [threading.Thread(target=checker) for _ in range(5)]
-        )
+        threads = [threading.Thread(target=incrementer) for _ in range(5)] + [
+            threading.Thread(target=checker) for _ in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -491,7 +482,9 @@ class TestAdversarialRetryTracker:
         n_threads = 8
         n_ops = 125
 
-        errors = _run_threads(lambda: [tracker.increment() for _ in range(n_ops)], n=n_threads)
+        errors = _run_threads(
+            lambda: [tracker.increment() for _ in range(n_ops)], n=n_threads
+        )
         assert not errors
         assert tracker.count == n_threads * n_ops
 

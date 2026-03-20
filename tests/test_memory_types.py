@@ -21,7 +21,15 @@ from veronica_core.memory.types import (
 class TestMemoryActionValues:
     def test_memory_action_values(self) -> None:
         """All seven MemoryAction members must be present."""
-        expected = {"read", "write", "retrieve", "archive", "consolidate", "delete", "quarantine"}
+        expected = {
+            "read",
+            "write",
+            "retrieve",
+            "archive",
+            "consolidate",
+            "delete",
+            "quarantine",
+        }
         actual = {a.value for a in MemoryAction}
         assert actual == expected
 
@@ -57,6 +65,7 @@ class TestMemoryOperationCreation:
         assert op.content_size_bytes == 0
         assert op.provenance is MemoryProvenance.UNKNOWN
         from collections.abc import Mapping
+
         assert isinstance(op.metadata, Mapping)
         assert op.timestamp > 0
 
@@ -142,7 +151,11 @@ class TestGovernanceVerdictValues:
 class TestMemoryGovernanceDecision:
     def test_governance_decision_allowed_verdicts(self) -> None:
         """ALLOW, QUARANTINE, and DEGRADE verdicts must set allowed=True."""
-        for verdict in (GovernanceVerdict.ALLOW, GovernanceVerdict.QUARANTINE, GovernanceVerdict.DEGRADE):
+        for verdict in (
+            GovernanceVerdict.ALLOW,
+            GovernanceVerdict.QUARANTINE,
+            GovernanceVerdict.DEGRADE,
+        ):
             decision = MemoryGovernanceDecision(verdict=verdict)
             assert decision.allowed is True, f"Expected allowed=True for {verdict}"
             assert decision.denied is False

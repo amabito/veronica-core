@@ -4,6 +4,7 @@ Provides governance over agent-to-agent messages before they are delivered
 or written to memory. This is the entry point for message-level policy --
 the message engine itself is NOT implemented here (that's TriMemory's job).
 """
+
 from __future__ import annotations
 
 __all__ = [
@@ -40,8 +41,7 @@ class MessageGovernanceHook(Protocol):
     def before_message(
         self,
         context: MessageContext,
-    ) -> MemoryGovernanceDecision:
-        ...
+    ) -> MemoryGovernanceDecision: ...
 
     def after_message(
         self,
@@ -49,8 +49,7 @@ class MessageGovernanceHook(Protocol):
         decision: MemoryGovernanceDecision,
         result: Any = None,
         error: BaseException | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class DefaultMessageGovernanceHook:
@@ -83,11 +82,15 @@ class DenyOversizedMessageHook:
             below max_bytes get DEGRADE with summary_required=True.
     """
 
-    def __init__(self, max_bytes: int = 1_000_000, degrade_threshold: float = 0.8) -> None:
+    def __init__(
+        self, max_bytes: int = 1_000_000, degrade_threshold: float = 0.8
+    ) -> None:
         if max_bytes <= 0:
             raise ValueError(f"max_bytes must be > 0, got {max_bytes}")
         if not 0.0 < degrade_threshold < 1.0:
-            raise ValueError(f"degrade_threshold must be in (0, 1), got {degrade_threshold}")
+            raise ValueError(
+                f"degrade_threshold must be in (0, 1), got {degrade_threshold}"
+            )
         self._max_bytes = max_bytes
         # Floor rounding is intentional: for security-conservative behavior a
         # smaller _degrade_at means DEGRADE triggers earlier. For very small
@@ -193,7 +196,10 @@ class MessageBridgeHook:
                 ),
             )
 
-        if self._allowed_types is not None and context.message_type not in self._allowed_types:
+        if (
+            self._allowed_types is not None
+            and context.message_type not in self._allowed_types
+        ):
             return MemoryGovernanceDecision(
                 verdict=GovernanceVerdict.DENY,
                 reason=f"message type {context.message_type!r} not in allowed types",

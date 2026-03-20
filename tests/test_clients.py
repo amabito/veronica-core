@@ -114,7 +114,9 @@ class TestDummyClientBasicBehavior:
 class TestDummyClientLogging:
     """DummyClient must never log prompt content (secret leakage prevention)."""
 
-    def test_generate_does_not_log_prompt_content(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_generate_does_not_log_prompt_content(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Prompt text must not appear in debug logs."""
         import logging
 

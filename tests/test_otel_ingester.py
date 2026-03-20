@@ -449,7 +449,9 @@ class TestSlidingWindow:
                 )
 
         time.sleep(0.2)  # ensure the first entry is outside the 0.1s window
-        wait_for(_ingest_and_check, timeout=3.0, interval=0.05, msg="Cost window not pruned")
+        wait_for(
+            _ingest_and_check, timeout=3.0, interval=0.05, msg="Cost window not pruned"
+        )
 
 
 # ---------------------------------------------------------------------------

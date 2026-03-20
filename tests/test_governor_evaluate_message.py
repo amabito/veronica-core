@@ -30,6 +30,7 @@ from veronica_core.memory.types import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ctx(**overrides: Any) -> MessageContext:
     defaults = {
         "sender_id": "agent_a",
@@ -84,7 +85,9 @@ class _RaisingHook:
     def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
         raise self._exc
 
-    def after_message(self, context: MessageContext, decision: MemoryGovernanceDecision, **kw: Any) -> None:
+    def after_message(
+        self, context: MessageContext, decision: MemoryGovernanceDecision, **kw: Any
+    ) -> None:
         pass
 
 
@@ -94,7 +97,9 @@ class _NoneHook:
     def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
         return None  # type: ignore[return-value]
 
-    def after_message(self, context: MessageContext, decision: MemoryGovernanceDecision, **kw: Any) -> None:
+    def after_message(
+        self, context: MessageContext, decision: MemoryGovernanceDecision, **kw: Any
+    ) -> None:
         pass
 
 
@@ -193,11 +198,13 @@ class TestEvaluateMessageBranches:
     def test_degrade_hook_returns_directive(self) -> None:
         directive = DegradeDirective(mode="compact", summary_required=True)
         gov = MemoryGovernor()
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.DEGRADE,
-            reason="near limit",
-            directive=directive,
-        ))
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.DEGRADE,
+                reason="near limit",
+                directive=directive,
+            )
+        )
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DEGRADE
         assert result.degrade_directive is not None
@@ -207,11 +214,13 @@ class TestEvaluateMessageBranches:
     def test_allow_then_degrade_accumulates_to_degrade(self) -> None:
         gov = MemoryGovernor()
         gov.add_message_hook(_FixedVerdictHook(GovernanceVerdict.ALLOW))
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.DEGRADE,
-            reason="size warning",
-            directive=DegradeDirective(mode="compact"),
-        ))
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.DEGRADE,
+                reason="size warning",
+                directive=DegradeDirective(mode="compact"),
+            )
+        )
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DEGRADE
         assert result.reason == "size warning"
@@ -247,10 +256,12 @@ class TestEvaluateMessageBranches:
     # Branch 12: ALLOW -> threat_context is None
     def test_allow_verdict_strips_threat_context(self) -> None:
         gov = MemoryGovernor()
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.ALLOW,
-            threat=ThreatContext(threat_hypothesis="test"),
-        ))
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.ALLOW,
+                threat=ThreatContext(threat_hypothesis="test"),
+            )
+        )
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.ALLOW
         assert result.threat_context is None
@@ -266,24 +277,28 @@ class TestDirectiveMerge:
 
     def test_two_degrade_hooks_merge_directives(self) -> None:
         gov = MemoryGovernor()
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.DEGRADE,
-            reason="hook1",
-            directive=DegradeDirective(
-                mode="compact",
-                summary_required=False,
-                max_content_size_bytes=5000,
-            ),
-        ))
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.DEGRADE,
-            reason="hook2",
-            directive=DegradeDirective(
-                mode="redact",
-                summary_required=True,
-                max_content_size_bytes=3000,
-            ),
-        ))
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.DEGRADE,
+                reason="hook1",
+                directive=DegradeDirective(
+                    mode="compact",
+                    summary_required=False,
+                    max_content_size_bytes=5000,
+                ),
+            )
+        )
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.DEGRADE,
+                reason="hook2",
+                directive=DegradeDirective(
+                    mode="redact",
+                    summary_required=True,
+                    max_content_size_bytes=3000,
+                ),
+            )
+        )
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DEGRADE
         d = result.degrade_directive
@@ -297,11 +312,13 @@ class TestDirectiveMerge:
 
     def test_degrade_without_directive_does_not_crash(self) -> None:
         gov = MemoryGovernor()
-        gov.add_message_hook(_FixedVerdictHook(
-            GovernanceVerdict.DEGRADE,
-            reason="no directive",
-            directive=None,
-        ))
+        gov.add_message_hook(
+            _FixedVerdictHook(
+                GovernanceVerdict.DEGRADE,
+                reason="no directive",
+                directive=None,
+            )
+        )
         result = gov.evaluate_message(_ctx())
         assert result.verdict is GovernanceVerdict.DEGRADE
         assert result.degrade_directive is None
@@ -324,7 +341,9 @@ class TestEvaluateMessageIntegration:
 
     def test_near_limit_message_degraded(self) -> None:
         gov = MemoryGovernor()
-        gov.add_message_hook(DenyOversizedMessageHook(max_bytes=1000, degrade_threshold=0.8))
+        gov.add_message_hook(
+            DenyOversizedMessageHook(max_bytes=1000, degrade_threshold=0.8)
+        )
         ctx = _ctx(content_size_bytes=900)
         result = gov.evaluate_message(ctx)
         assert result.verdict is GovernanceVerdict.DEGRADE
@@ -384,7 +403,9 @@ class TestDenyPlusAfterMessageRaise:
         """
 
         class _DenyHook:
-            def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
+            def before_message(
+                self, context: MessageContext
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
                     reason="compound-deny",
@@ -402,7 +423,9 @@ class TestDenyPlusAfterMessageRaise:
         class _AfterRaisingSecondHook:
             """Hook that returns ALLOW from before_message but raises in after_message."""
 
-            def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
+            def before_message(
+                self, context: MessageContext
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="second-allow",

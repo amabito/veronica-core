@@ -87,6 +87,7 @@ class TestA2AIdentityProvenance:
     # Exported from a2a package
     def test_importable_from_a2a_package(self) -> None:
         from veronica_core.a2a import A2AIdentityProvenance as Imported
+
         assert Imported is A2AIdentityProvenance
 
 

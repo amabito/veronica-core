@@ -51,9 +51,7 @@ def identity_from_a2a_card(card: dict[str, Any]) -> AgentIdentity:
         ValueError: If ``card`` is missing the ``"name"`` key or it is empty.
     """
     if not isinstance(card, dict):
-        raise ValueError(
-            f"A2A Agent Card must be a dict, got {type(card).__name__}"
-        )
+        raise ValueError(f"A2A Agent Card must be a dict, got {type(card).__name__}")
     name = card.get("name")
     if not name or not isinstance(name, str) or not name.strip():
         raise ValueError(
@@ -135,9 +133,7 @@ def verify_card_signature(
         # serialization.  Matches DefaultCardVerifier semantics so that
         # callers get consistent results regardless of which path is used.
         sig = card.get("signature")
-        card_verified = (
-            bool(sig and isinstance(sig, str)) and not _serialization_failed
-        )
+        card_verified = bool(sig and isinstance(sig, str)) and not _serialization_failed
         card_signature_alg = None
 
     return A2AIdentityProvenance(

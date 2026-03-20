@@ -1,4 +1,5 @@
 """Memory view and execution mode policy evaluator."""
+
 from __future__ import annotations
 
 __all__ = ["ViewPolicyEvaluator"]
@@ -129,7 +130,9 @@ class ViewPolicyEvaluator:
             # Quarantined read: trusted+ allowed in AUDIT_REVIEW, others denied
             if view is MemoryView.QUARANTINED:
                 if _trust_rank(trust) >= _trust_rank("trusted"):
-                    return _allow(operation, view=view, scope="audit_review_quarantined")
+                    return _allow(
+                        operation, view=view, scope="audit_review_quarantined"
+                    )
                 return _deny(
                     operation,
                     reason=(
@@ -157,7 +160,9 @@ class ViewPolicyEvaluator:
 
         # LIVE mode: untrusted agents accessing VERIFIED_ARCHIVE denied
         if mode is ExecutionMode.LIVE and not is_write_op:
-            if view is MemoryView.VERIFIED_ARCHIVE and _trust_rank(trust) < _trust_rank("trusted"):
+            if view is MemoryView.VERIFIED_ARCHIVE and _trust_rank(trust) < _trust_rank(
+                "trusted"
+            ):
                 return _deny(
                     operation,
                     reason=(
@@ -170,7 +175,9 @@ class ViewPolicyEvaluator:
                 )
 
         # --- View access matrix ---
-        verdict = _check_view_access(view, mode, trust, is_write_op, self._owner, operation)
+        verdict = _check_view_access(
+            view, mode, trust, is_write_op, self._owner, operation
+        )
         return verdict
 
     def after_op(
@@ -212,8 +219,7 @@ def _check_view_access(
             return _deny(
                 operation,
                 reason=(
-                    f"TEAM_SHARED write requires 'trusted' trust level; "
-                    f"got {trust!r}"
+                    f"TEAM_SHARED write requires 'trusted' trust level; got {trust!r}"
                 ),
                 effective_view=view.value,
                 effective_scope="team_shared_write_denied",
@@ -234,7 +240,9 @@ def _check_view_access(
 
     if view is MemoryView.SESSION_STATE:
         if is_write_op:
-            required = "trusted" if mode is ExecutionMode.CONSOLIDATION else "privileged"
+            required = (
+                "trusted" if mode is ExecutionMode.CONSOLIDATION else "privileged"
+            )
             if rank < _trust_rank(required):
                 return _deny(
                     operation,
@@ -264,7 +272,9 @@ def _check_view_access(
         if is_write_op:
             # CONSOLIDATION mode: trusted+ may write; otherwise no write allowed.
             if mode is ExecutionMode.CONSOLIDATION and rank >= _trust_rank("trusted"):
-                return _allow(operation, view=view, scope="verified_archive_consolidation_write")
+                return _allow(
+                    operation, view=view, scope="verified_archive_consolidation_write"
+                )
             return _deny(
                 operation,
                 reason=(

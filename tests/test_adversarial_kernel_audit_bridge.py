@@ -143,9 +143,7 @@ class TestAdversarialAuditBridgeConcurrent:
             with lock:
                 emitted.append(result)
 
-        threads = [
-            threading.Thread(target=emit_one, args=(d,)) for d in decisions
-        ]
+        threads = [threading.Thread(target=emit_one, args=(d,)) for d in decisions]
         for t in threads:
             t.start()
         for t in threads:

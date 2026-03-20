@@ -529,7 +529,9 @@ class TestGovernorDegradeDirectiveMerging:
         from veronica_core.memory.governor import MemoryGovernor
 
         class DegradeHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="compact needed",
@@ -555,7 +557,9 @@ class TestGovernorDegradeDirectiveMerging:
         from veronica_core.memory.governor import MemoryGovernor
 
         class Hook1:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="h1",
@@ -570,7 +574,9 @@ class TestGovernorDegradeDirectiveMerging:
                 pass
 
         class Hook2:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="h2",
@@ -590,15 +596,17 @@ class TestGovernorDegradeDirectiveMerging:
         assert decision.verdict == GovernanceVerdict.DEGRADE
         d = decision.degrade_directive
         assert d is not None
-        assert d.summary_required is True   # from Hook1
-        assert d.verified_only is True       # from Hook2
+        assert d.summary_required is True  # from Hook1
+        assert d.verified_only is True  # from Hook2
         assert set(d.redacted_fields) == {"a", "b"}  # union
 
     def test_allow_then_degrade_propagates_directive(self) -> None:
         from veronica_core.memory.governor import MemoryGovernor
 
         class AllowHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="ok",
@@ -609,7 +617,9 @@ class TestGovernorDegradeDirectiveMerging:
                 pass
 
         class DegradeHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="degrade",
@@ -631,7 +641,9 @@ class TestGovernorDegradeDirectiveMerging:
         from veronica_core.memory.governor import MemoryGovernor
 
         class DenyHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DENY,
                     reason="denied",
@@ -642,7 +654,9 @@ class TestGovernorDegradeDirectiveMerging:
                 pass
 
         class DegradeHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="degrade",
@@ -657,13 +671,15 @@ class TestGovernorDegradeDirectiveMerging:
         op = _op()
         decision = gov.evaluate(op)
         assert decision.verdict == GovernanceVerdict.DENY
-        assert decision.degrade_directive is None   # DENY short-circuits
+        assert decision.degrade_directive is None  # DENY short-circuits
 
     def test_degrade_hook_without_directive_still_degrades(self) -> None:
         from veronica_core.memory.governor import MemoryGovernor
 
         class DegradeHookNoDirective:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="degrade without directive",
@@ -683,7 +699,9 @@ class TestGovernorDegradeDirectiveMerging:
         from veronica_core.memory.governor import MemoryGovernor
 
         class AllowHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="ok",
@@ -705,7 +723,9 @@ class TestGovernorDegradeDirectiveMerging:
         tc = ThreatContext(threat_hypothesis="injection", source_trust="untrusted")
 
         class AllowHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="ok",
@@ -717,7 +737,9 @@ class TestGovernorDegradeDirectiveMerging:
                 pass
 
         class DegradeHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.DEGRADE,
                     reason="degrade",
@@ -738,7 +760,9 @@ class TestGovernorDegradeDirectiveMerging:
 class TestMergeLimitEdgeCases:
     """Adversarial: _merge_limit boundary conditions."""
 
-    def _merge(self, d1: DegradeDirective, d2: DegradeDirective) -> DegradeDirective | None:
+    def _merge(
+        self, d1: DegradeDirective, d2: DegradeDirective
+    ) -> DegradeDirective | None:
         from veronica_core.memory.governor import _merge_directives
 
         return _merge_directives(d1, d2)

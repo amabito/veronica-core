@@ -140,7 +140,11 @@ class TestCompilerValid:
 
     def test_bridge_restrictions(self) -> None:
         compiled = MemoryRuleCompiler().compile(
-            _rule(bridge_allow_archive=False, bridge_require_signature=True, verdict="deny"),
+            _rule(
+                bridge_allow_archive=False,
+                bridge_require_signature=True,
+                verdict="deny",
+            ),
         )
         assert compiled.bridge_allow_archive is False
         assert compiled.bridge_require_signature is True
@@ -281,7 +285,9 @@ class TestEvaluatorDeterministic:
         )
         evaluator = MemoryRuleEvaluator((compiled,))
         assert evaluator.before_op(_op(namespace="secret"), None).denied
-        assert evaluator.before_op(_op(namespace="public"), None).denied  # no match -> deny
+        assert evaluator.before_op(
+            _op(namespace="public"), None
+        ).denied  # no match -> deny
 
     def test_provenance_filter(self) -> None:
         compiled = MemoryRuleCompiler().compile(
@@ -289,10 +295,12 @@ class TestEvaluatorDeterministic:
         )
         evaluator = MemoryRuleEvaluator((compiled,))
         assert evaluator.before_op(
-            _op(provenance=MemoryProvenance.VERIFIED), None,
+            _op(provenance=MemoryProvenance.VERIFIED),
+            None,
         ).allowed
         assert evaluator.before_op(
-            _op(provenance=MemoryProvenance.UNKNOWN), None,
+            _op(provenance=MemoryProvenance.UNKNOWN),
+            None,
         ).denied
 
     def test_view_filter(self) -> None:
@@ -302,10 +310,12 @@ class TestEvaluatorDeterministic:
         evaluator = MemoryRuleEvaluator((compiled,))
         op = _op()
         assert evaluator.before_op(
-            op, _ctx(op, view=MemoryView.AGENT_PRIVATE),
+            op,
+            _ctx(op, view=MemoryView.AGENT_PRIVATE),
         ).allowed
         assert evaluator.before_op(
-            op, _ctx(op, view=MemoryView.TEAM_SHARED),
+            op,
+            _ctx(op, view=MemoryView.TEAM_SHARED),
         ).denied
 
     def test_mode_filter(self) -> None:
@@ -315,10 +325,12 @@ class TestEvaluatorDeterministic:
         evaluator = MemoryRuleEvaluator((compiled,))
         op = _op()
         assert evaluator.before_op(
-            op, _ctx(op, mode=ExecutionMode.REPLAY),
+            op,
+            _ctx(op, mode=ExecutionMode.REPLAY),
         ).allowed
         assert evaluator.before_op(
-            op, _ctx(op, mode=ExecutionMode.LIVE),
+            op,
+            _ctx(op, mode=ExecutionMode.LIVE),
         ).denied
 
     def test_deterministic_repeated_calls(self) -> None:
@@ -338,8 +350,12 @@ class TestEvaluatorConflicting:
 
     def test_higher_priority_wins(self) -> None:
         compiler = MemoryRuleCompiler()
-        deny_rule = compiler.compile(_rule(rule_id="deny_all", priority=10, verdict="deny"))
-        allow_rule = compiler.compile(_rule(rule_id="allow_all", priority=100, verdict="allow"))
+        deny_rule = compiler.compile(
+            _rule(rule_id="deny_all", priority=10, verdict="deny")
+        )
+        allow_rule = compiler.compile(
+            _rule(rule_id="allow_all", priority=100, verdict="allow")
+        )
         evaluator = MemoryRuleEvaluator((deny_rule, allow_rule))
         assert evaluator.before_op(_op(), None).denied
 
@@ -384,10 +400,12 @@ class TestEvaluatorGovernorIntegration:
 
     def test_rule_count_property(self) -> None:
         compiler = MemoryRuleCompiler()
-        rules = compiler.compile_bundle([
-            _rule(rule_id="a", verdict="allow"),
-            _rule(rule_id="b", verdict="deny"),
-        ])
+        rules = compiler.compile_bundle(
+            [
+                _rule(rule_id="a", verdict="allow"),
+                _rule(rule_id="b", verdict="deny"),
+            ]
+        )
         evaluator = MemoryRuleEvaluator(rules)
         assert evaluator.rule_count == 2
 
@@ -439,9 +457,12 @@ class TestAdversarialCompiler:
 
     def test_after_op_is_noop(self) -> None:
         evaluator = MemoryRuleEvaluator()
-        evaluator.after_op(_op(), MemoryGovernanceDecision(
-            verdict=GovernanceVerdict.ALLOW,
-        ))
+        evaluator.after_op(
+            _op(),
+            MemoryGovernanceDecision(
+                verdict=GovernanceVerdict.ALLOW,
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -492,7 +513,9 @@ class TestAdversarialEvaluatorRound2:
         evaluator = MemoryRuleEvaluator((compiled,))
         op = _op()
         # Mode matches (replay), view is wrong (local_working) -> must deny
-        ctx_wrong_view = _ctx(op, view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY)
+        ctx_wrong_view = _ctx(
+            op, view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY
+        )
         assert evaluator.before_op(op, ctx_wrong_view).denied
 
     def test_combined_view_and_mode_constraint_correct_context_allows(self) -> None:
@@ -554,10 +577,12 @@ class TestAdversarialEvaluatorRound2:
         The first matching rule wins, so aaa's verdict is the result.
         """
         compiler = MemoryRuleCompiler()
-        rules = compiler.compile_bundle([
-            _rule(rule_id="zzz", priority=50, verdict="allow"),
-            _rule(rule_id="aaa", priority=50, verdict="deny"),
-        ])
+        rules = compiler.compile_bundle(
+            [
+                _rule(rule_id="zzz", priority=50, verdict="allow"),
+                _rule(rule_id="aaa", priority=50, verdict="deny"),
+            ]
+        )
         # Verify sort order: aaa before zzz
         assert rules[0].rule_id == "aaa"
         assert rules[1].rule_id == "zzz"
@@ -570,10 +595,12 @@ class TestAdversarialEvaluatorRound2:
     def test_priority_zero_is_evaluated_first(self) -> None:
         """priority=0 is the minimum and must sort before any positive priority."""
         compiler = MemoryRuleCompiler()
-        rules = compiler.compile_bundle([
-            _rule(rule_id="high", priority=1, verdict="allow"),
-            _rule(rule_id="zero", priority=0, verdict="deny"),
-        ])
+        rules = compiler.compile_bundle(
+            [
+                _rule(rule_id="high", priority=1, verdict="allow"),
+                _rule(rule_id="zero", priority=0, verdict="deny"),
+            ]
+        )
         assert rules[0].rule_id == "zero"
         evaluator = MemoryRuleEvaluator(rules)
         assert evaluator.before_op(_op(), None).denied
@@ -581,10 +608,12 @@ class TestAdversarialEvaluatorRound2:
     def test_very_large_priority_evaluated_last(self) -> None:
         """priority=999999 must sort after lower priority rules."""
         compiler = MemoryRuleCompiler()
-        rules = compiler.compile_bundle([
-            _rule(rule_id="giant", priority=999999, verdict="allow"),
-            _rule(rule_id="small", priority=1, action="read", verdict="deny"),
-        ])
+        rules = compiler.compile_bundle(
+            [
+                _rule(rule_id="giant", priority=999999, verdict="allow"),
+                _rule(rule_id="small", priority=1, action="read", verdict="deny"),
+            ]
+        )
         assert rules[0].rule_id == "small"
         evaluator = MemoryRuleEvaluator(rules)
         # READ op: small (p=1, deny) fires first; giant (p=999999, allow) never reached
@@ -716,11 +745,10 @@ class TestMissingBranchCoverage:
         evaluator = MemoryRuleEvaluator((compiled,))
         # UNKNOWN provenance -> verified_only check fails -> no match -> deny
         decision = evaluator.before_op(
-            _op(provenance=MemoryProvenance.UNKNOWN), None,
+            _op(provenance=MemoryProvenance.UNKNOWN),
+            None,
         )
-        assert decision.denied, (
-            "verified_only=True must deny non-VERIFIED provenance"
-        )
+        assert decision.denied, "verified_only=True must deny non-VERIFIED provenance"
 
     def test_verified_only_filter_allows_verified(self) -> None:
         """Rule with verified_only=True must match VERIFIED provenance."""
@@ -729,7 +757,8 @@ class TestMissingBranchCoverage:
         )
         evaluator = MemoryRuleEvaluator((compiled,))
         decision = evaluator.before_op(
-            _op(provenance=MemoryProvenance.VERIFIED), None,
+            _op(provenance=MemoryProvenance.VERIFIED),
+            None,
         )
         assert decision.allowed
 
@@ -750,5 +779,7 @@ class TestMissingBranchCoverage:
 
     def test_max_raw_replay_ratio_negative_rejected(self) -> None:
         """max_raw_replay_ratio=-0.1 (below 0.0 minimum) must raise ValueError."""
-        with pytest.raises(ValueError, match=r"max_raw_replay_ratio must be in \[0.0, 1.0\]"):
+        with pytest.raises(
+            ValueError, match=r"max_raw_replay_ratio must be in \[0.0, 1.0\]"
+        ):
             MemoryRuleCompiler().compile(_rule(max_raw_replay_ratio=-0.1))

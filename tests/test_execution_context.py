@@ -1245,9 +1245,7 @@ class TestSilentExceptsLogged:
             )
             ctx = ExecutionContext(config=config)
 
-            with caplog.at_level(
-                logging.DEBUG, logger="veronica_core.containment"
-            ):
+            with caplog.at_level(logging.DEBUG, logger="veronica_core.containment"):
                 ctx.wrap_llm_call(
                     fn=lambda: None, options=WrapOptions(cost_estimate_hint=0.0)
                 )

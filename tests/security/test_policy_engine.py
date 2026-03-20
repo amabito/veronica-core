@@ -783,9 +783,7 @@ class TestWindowsExeVariantsForDenyCommands:
         assert decision.verdict == "DENY"
         assert decision.rule_id == "SHELL_DENY_CMD"
 
-    @pytest.mark.parametrize(
-        "cmd", ["cmd", "cmd.exe", "CMD.EXE", "Cmd.Exe"]
-    )
+    @pytest.mark.parametrize("cmd", ["cmd", "cmd.exe", "CMD.EXE", "Cmd.Exe"])
     def test_cmd_variants_denied(self, cmd: str) -> None:
         """cmd in any .exe / case variant must be DENY (SHELL_DENY_CMD)."""
         engine = _engine()
@@ -869,9 +867,7 @@ class TestEvaluatorErrorFailClosed:
         decision = engine.evaluate(ctx)
         assert decision.risk_score_delta == 10
 
-    def test_evaluator_error_does_not_leak_exception_message(
-        self, monkeypatch
-    ) -> None:
+    def test_evaluator_error_does_not_leak_exception_message(self, monkeypatch) -> None:
         """Error message in EVALUATOR_ERROR must not contain exception details."""
         from veronica_core.security import policy_engine as _pe
 
@@ -973,9 +969,7 @@ class TestPolicyHook:
 
         hook = self._hook()
         net_ctx = ToolCallContext(request_id="egress-003", user_id="tester")
-        result = hook.before_egress(
-            net_ctx, "https://pypi.org/upload/", "POST"
-        )
+        result = hook.before_egress(net_ctx, "https://pypi.org/upload/", "POST")
         assert result == Decision.HALT
 
     def test_last_decision_is_none_before_any_call(self) -> None:

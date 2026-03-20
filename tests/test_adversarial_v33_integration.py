@@ -70,7 +70,9 @@ def _make_verdict_hook(verdict: GovernanceVerdict, policy_id: str = "test") -> A
                 operation=operation,
             )
 
-        def after_op(self, operation: Any, decision: Any, result: Any = None, error: Any = None) -> None:
+        def after_op(
+            self, operation: Any, decision: Any, result: Any = None, error: Any = None
+        ) -> None:
             pass
 
     return _VerdictHook()
@@ -111,7 +113,9 @@ def _make_raising_after_hook(exc: Exception) -> Any:
     return _RaisingAfterHook()
 
 
-def _make_context(memory_governor: MemoryGovernor | None = None, policy_view_holder: Any = None) -> ExecutionContext:
+def _make_context(
+    memory_governor: MemoryGovernor | None = None, policy_view_holder: Any = None
+) -> ExecutionContext:
     config = ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=10)
     return ExecutionContext(
         config=config,
@@ -125,7 +129,9 @@ def _valid_verification() -> VerificationResult:
 
 
 def _make_frozen_view(policy_id: str = "test-policy") -> FrozenPolicyView:
-    rule = PolicyRule(rule_id="r1", rule_type="budget", enabled=True, priority=100, parameters={})
+    rule = PolicyRule(
+        rule_id="r1", rule_type="budget", enabled=True, priority=100, parameters={}
+    )
     rules = (rule,)
     canonical = _canonical_rules_json(rules)
     h = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -171,6 +177,7 @@ class TestAdversarialV33HookPoisoning:
 
     def test_none_returning_hook_treated_as_deny(self) -> None:
         """before_op() returning None must be treated as DENY (fail-closed TypeError)."""
+
         class _NoneHook:
             def before_op(self, operation: Any, context: Any) -> Any:
                 return None  # type: ignore[return-value]
@@ -185,6 +192,7 @@ class TestAdversarialV33HookPoisoning:
 
     def test_none_returning_hook_halts_execution_context(self) -> None:
         """ExecutionContext with None-returning hook must halt the node."""
+
         class _NoneHook:
             def before_op(self, operation: Any, context: Any) -> Any:
                 return None  # type: ignore[return-value]
@@ -200,6 +208,7 @@ class TestAdversarialV33HookPoisoning:
 
     def test_garbage_verdict_unknown_string_is_denied(self) -> None:
         """Hook returning unknown verdict string must be fail-closed DENY."""
+
         class _GarbageVerdictHook:
             def before_op(self, operation: Any, context: Any) -> Any:
                 # Fabricate a decision with an unknown verdict value
@@ -223,6 +232,7 @@ class TestAdversarialV33HookPoisoning:
 
     def test_hook_that_raises_keyboard_interrupt_propagates(self) -> None:
         """KeyboardInterrupt from a hook must not be swallowed by BLE001 handler."""
+
         class _KillHook:
             def before_op(self, operation: Any, context: Any) -> Any:
                 raise KeyboardInterrupt("user abort")
@@ -411,7 +421,9 @@ class TestAdversarialV33PolicyViewCorruption:
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY))
 
         ctx = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=10),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=10
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -513,8 +525,11 @@ class TestAdversarialV33NotifyAfterFailure:
 
         The governor uses 'except Exception' so SystemExit escapes.
         """
+
         class _SystemExitAfterHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",
@@ -542,7 +557,9 @@ class TestAdversarialV33NotifyAfterFailure:
             def __init__(self, name: str) -> None:
                 self._name = name
 
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",
@@ -554,7 +571,9 @@ class TestAdversarialV33NotifyAfterFailure:
                 call_log.append(self._name)
 
         class _MiddleRaisingHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",
@@ -737,7 +756,9 @@ class TestAdversarialV33TOCTOU:
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY))
 
         ctx = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=50),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=100, max_retries_total=50
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -746,7 +767,9 @@ class TestAdversarialV33TOCTOU:
         def _deny_calls() -> None:
             for _ in range(10):
                 try:
-                    ctx.wrap_llm_call(fn=lambda: None, options=WrapOptions(operation_name="op"))
+                    ctx.wrap_llm_call(
+                        fn=lambda: None, options=WrapOptions(operation_name="op")
+                    )
                 except BaseException as exc:
                     errors.append(exc)
 
@@ -777,7 +800,9 @@ class TestAdversarialV33BoundaryAbuse:
         """99 ALLOW hooks followed by 1 DENY hook must return DENY."""
         gov = MemoryGovernor(fail_closed=True)
         for i in range(99):
-            gov.add_hook(_make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"allow-{i}"))
+            gov.add_hook(
+                _make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"allow-{i}")
+            )
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY, policy_id="final-deny"))
         decision = gov.evaluate(_op())
         assert decision.denied
@@ -786,7 +811,9 @@ class TestAdversarialV33BoundaryAbuse:
         """Exactly 100 ALLOW hooks must succeed evaluation."""
         gov = MemoryGovernor(fail_closed=True)
         for i in range(100):
-            gov.add_hook(_make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"h-{i}"))
+            gov.add_hook(
+                _make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"h-{i}")
+            )
         decision = gov.evaluate(_op())
         assert decision.allowed
 
@@ -794,7 +821,9 @@ class TestAdversarialV33BoundaryAbuse:
         """Adding hook 101 must raise RuntimeError (cap = 100)."""
         gov = MemoryGovernor(fail_closed=True)
         for i in range(100):
-            gov.add_hook(_make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"h-{i}"))
+            gov.add_hook(
+                _make_verdict_hook(GovernanceVerdict.ALLOW, policy_id=f"h-{i}")
+            )
         with pytest.raises(RuntimeError, match="hook count capped"):
             gov.add_hook(_make_verdict_hook(GovernanceVerdict.ALLOW))
 
@@ -806,7 +835,9 @@ class TestAdversarialV33BoundaryAbuse:
             def __init__(self, idx: int) -> None:
                 self._idx = idx
 
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 call_log.append(self._idx)
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
@@ -828,7 +859,9 @@ class TestAdversarialV33BoundaryAbuse:
         decision = gov.evaluate(_op())
         assert decision.denied
         # Hooks after the DENY must not be called
-        assert all(idx < 50 for idx in call_log), f"hooks after DENY were called: {call_log}"
+        assert all(idx < 50 for idx in call_log), (
+            f"hooks after DENY were called: {call_log}"
+        )
 
     def test_zero_hooks_fail_closed_denies(self) -> None:
         """Zero hooks with fail_closed=True must deny."""
@@ -917,8 +950,11 @@ class TestAdversarialV33AIContainerMemoryGovernor:
 
     def test_aicontainer_governor_returns_quarantine_allowed(self) -> None:
         """QUARANTINE verdict is treated as allowed by AIContainer (not denied)."""
+
         class _QuarantineHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.QUARANTINE,
                     reason="quarantine",
@@ -1031,7 +1067,9 @@ class TestAdversarialV33EmitPathUnification:
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY))
 
         ctx = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=10),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=10
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -1041,7 +1079,9 @@ class TestAdversarialV33EmitPathUnification:
         snap = ctx.get_snapshot()
         mg_events = [e for e in snap.events if "MEMORY_GOVERNANCE" in e.event_type]
         assert len(mg_events) >= 1
-        assert mg_events[0].metadata.get("policy", {}).get("policy_id") == "mg-deny-policy"
+        assert (
+            mg_events[0].metadata.get("policy", {}).get("policy_id") == "mg-deny-policy"
+        )
 
     def test_memory_governance_error_event_carries_policy_metadata(self) -> None:
         """Memory governor error (raising) event must still carry policy metadata."""
@@ -1051,7 +1091,9 @@ class TestAdversarialV33EmitPathUnification:
         gov.add_hook(_make_raising_hook(RuntimeError("governor explodes")))
 
         ctx = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=10),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=10
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -1061,7 +1103,10 @@ class TestAdversarialV33EmitPathUnification:
         snap = ctx.get_snapshot()
         mg_events = [e for e in snap.events if "MEMORY_GOVERNANCE" in e.event_type]
         assert len(mg_events) >= 1
-        assert mg_events[0].metadata.get("policy", {}).get("policy_id") == "mg-error-policy"
+        assert (
+            mg_events[0].metadata.get("policy", {}).get("policy_id")
+            == "mg-error-policy"
+        )
 
 
 # ===========================================================================
@@ -1089,7 +1134,10 @@ class TestAdversarialV33LimitExceededPolicyMetadata:
         snap = ctx.get_snapshot()
         step_events = [e for e in snap.events if "STEP" in e.event_type]
         if step_events:
-            assert step_events[0].metadata.get("policy", {}).get("policy_id") == "step-limit-policy"
+            assert (
+                step_events[0].metadata.get("policy", {}).get("policy_id")
+                == "step-limit-policy"
+            )
 
     def test_budget_limit_exceeded_event_has_policy_metadata(self) -> None:
         """Exceeding budget must emit event with policy metadata."""
@@ -1102,13 +1150,18 @@ class TestAdversarialV33LimitExceededPolicyMetadata:
         for _ in range(5):
             ctx.wrap_llm_call(
                 fn=lambda: None,
-                options=WrapOptions(operation_name="expensive", cost_estimate_hint=0.05),
+                options=WrapOptions(
+                    operation_name="expensive", cost_estimate_hint=0.05
+                ),
             )
 
         snap = ctx.get_snapshot()
         budget_events = [e for e in snap.events if "BUDGET" in e.event_type]
         if budget_events:
-            assert budget_events[0].metadata.get("policy", {}).get("policy_id") == "budget-limit-policy"
+            assert (
+                budget_events[0].metadata.get("policy", {}).get("policy_id")
+                == "budget-limit-policy"
+            )
 
     def test_limit_exceeded_with_broken_holder_does_not_crash(self) -> None:
         """Limit exceeded + broken PolicyViewHolder must not crash the callback."""
@@ -1177,7 +1230,9 @@ class TestAdversarialV33ConcurrentBuildMemoryOp:
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.DENY))
 
         ctx = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=100, max_retries_total=50),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=100, max_retries_total=50
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -1257,7 +1312,9 @@ class TestAdversarialV33ChildPropagation:
         gov.add_hook(_make_verdict_hook(GovernanceVerdict.ALLOW))
 
         parent = ExecutionContext(
-            config=ExecutionConfig(max_cost_usd=10.0, max_steps=50, max_retries_total=10),
+            config=ExecutionConfig(
+                max_cost_usd=10.0, max_steps=50, max_retries_total=10
+            ),
             memory_governor=gov,
             policy_view_holder=holder,
         )
@@ -1282,7 +1339,10 @@ class TestAdversarialV33ChildPropagation:
         snap = child.get_snapshot()
         aborted = [e for e in snap.events if e.event_type == "CHAIN_ABORTED"]
         assert len(aborted) == 1
-        assert aborted[0].metadata.get("policy", {}).get("policy_id") == "child-abort-policy"
+        assert (
+            aborted[0].metadata.get("policy", {}).get("policy_id")
+            == "child-abort-policy"
+        )
 
 
 # ===========================================================================
@@ -1299,7 +1359,9 @@ class TestAdversarialV33NotifyAfterBaseException:
         """SystemExit from after_op must not turn a successful call into an error."""
 
         class _SystemExitAfterHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",
@@ -1323,11 +1385,15 @@ class TestAdversarialV33NotifyAfterBaseException:
         assert len(snap.nodes) >= 1
         assert snap.nodes[-1].status == "ok"
 
-    def test_keyboard_interrupt_from_after_op_does_not_corrupt_successful_call(self) -> None:
+    def test_keyboard_interrupt_from_after_op_does_not_corrupt_successful_call(
+        self,
+    ) -> None:
         """KeyboardInterrupt from after_op must not corrupt a successful wrap result."""
 
         class _KBInterruptAfterHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",
@@ -1347,8 +1413,11 @@ class TestAdversarialV33NotifyAfterBaseException:
 
     def test_after_op_base_exception_cost_not_double_counted(self) -> None:
         """Even if after_op raises BaseException, cost must not be rolled back."""
+
         class _BaseExcAfterHook:
-            def before_op(self, operation: Any, context: Any) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: Any, context: Any
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(
                     verdict=GovernanceVerdict.ALLOW,
                     reason="allow",

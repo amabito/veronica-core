@@ -95,6 +95,7 @@ class RollbackGuard:
         # Accept the policy version
         if self._audit_log is not None:
             self._audit_log.log_policy_version_accepted(
-                policy_version, policy_path  # M-6: use actual path, not hardcoded default
+                policy_version,
+                policy_path,  # M-6: use actual path, not hardcoded default
             )
             self._audit_log.write_policy_checkpoint(policy_version)

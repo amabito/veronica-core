@@ -187,9 +187,14 @@ class VeronicaCrewAIListener(BaseEventListener):
         def on_llm_call_started(source: Any, event: LLMCallStartedEvent) -> None:
             """Pre-call hook: log policy state before the LLM is invoked.
 
-            Note: VeronicaHalt cannot be raised here because the CrewAI event
-            bus swallows handler exceptions. Instead, we set a _halt_pending flag
-            that check_or_raise() will detect on the next step_callback invocation.
+            Limitation (fail-open by framework constraint): CrewAI's event bus
+            catches all exceptions raised inside handlers, so VeronicaHalt cannot
+            propagate from here. The current LLM call proceeds even when a policy
+            denies. To enforce halting, pass ``check_or_raise`` as the Crew
+            ``step_callback`` -- it reads the ``_halt_pending`` flag set here and
+            raises VeronicaHalt on the next callback invocation after the denied
+            call. There is no CrewAI API to cancel an in-progress LLM call from
+            an event handler.
             """
             decision = self._container.check(cost_usd=0.0)
             if not decision.allowed:
@@ -221,8 +226,17 @@ class VeronicaCrewAIListener(BaseEventListener):
 
         @bus.on(LLMCallFailedEvent)
         def on_llm_call_failed(source: Any, event: LLMCallFailedEvent) -> None:
-            """Error hook: log error without charging budget."""
+            """Error hook: log error and record failure against retry budget."""
             logger.warning("[VERONICA_CREW] LLM call failed: %s", event.error)
+            if self._container.retry is not None:
+                err = event.error
+                if not isinstance(err, Exception):
+                    err = (
+                        RuntimeError(str(err))
+                        if err is not None
+                        else RuntimeError("LLM call failed")
+                    )
+                self._container.retry.record_failure(error=err)
 
     # ------------------------------------------------------------------
     # Explicit policy enforcement (for step_callback integration)
@@ -283,7 +297,9 @@ class VeronicaCrewAIListener(BaseEventListener):
             suggestion: Recommended degraded model or action.
         """
         logger.warning(
-            "[VERONICA_CREW] DEGRADE recommended: %s (suggestion: %s)", reason, suggestion
+            "[VERONICA_CREW] DEGRADE recommended: %s (suggestion: %s)",
+            reason,
+            suggestion,
         )
 
     # ------------------------------------------------------------------
@@ -312,6 +328,7 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
 
     Inspects the response object for token usage fields in common formats
     (OpenAI, Anthropic, etc.). Falls back to 0.0 if usage cannot be determined.
+    Logs a warning when usage data is present but in an unrecognised format.
     """
     try:
         response = event.response
@@ -341,6 +358,14 @@ def _estimate_cost(event: LLMCallCompletedEvent) -> float:
 
         total_raw = get_field(usage, "total_tokens")
         if total_raw is None:
+            # usage object present but no recognised token fields -- schema drift
+            logger.warning(
+                "[VERONICA_CREW] Cost extraction returned 0.0: usage object present "
+                "but no recognised token fields (prompt_tokens/input_tokens/"
+                "completion_tokens/output_tokens/total_tokens). "
+                "usage type=%s",
+                type(usage).__name__,
+            )
             return 0.0
 
         return cost_from_total_tokens(int(total_raw), model)

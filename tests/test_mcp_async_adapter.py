@@ -261,9 +261,9 @@ class TestCircuitBreaker:
             return await adapter.wrap_tool_call("search", {}, _echo_fn)
 
         result = asyncio.run(run())
-        if result.decision == "HALT":
-            assert result.error is not None
-            assert "circuit" in result.error.lower() or "Circuit" in result.error
+        assert result.decision == "HALT"
+        assert result.error is not None
+        assert "circuit" in result.error.lower() or "Circuit" in result.error
 
     def test_circuit_open_does_not_call_fn(self) -> None:
         call_count = [0]

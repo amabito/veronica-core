@@ -51,9 +51,7 @@ class FrozenPolicyView:
             )
         self._bundle = bundle
         self._verification = verification
-        self._rule_types: frozenset[str] = frozenset(
-            r.rule_type for r in bundle.rules
-        )
+        self._rule_types: frozenset[str] = frozenset(r.rule_type for r in bundle.rules)
 
     # ------------------------------------------------------------------
     # Core properties

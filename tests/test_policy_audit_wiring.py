@@ -24,7 +24,10 @@ from veronica_core.shield.types import Decision
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _cfg(max_cost: float = 10.0, max_steps: int = 50, max_retries: int = 10) -> ExecutionConfig:
+
+def _cfg(
+    max_cost: float = 10.0, max_steps: int = 50, max_retries: int = 10
+) -> ExecutionConfig:
     return ExecutionConfig(
         max_cost_usd=max_cost,
         max_steps=max_steps,
@@ -32,7 +35,9 @@ def _cfg(max_cost: float = 10.0, max_steps: int = 50, max_retries: int = 10) -> 
     )
 
 
-def _make_verified_bundle(policy_id: str = "test-policy") -> tuple[PolicyBundle, FrozenPolicyView]:
+def _make_verified_bundle(
+    policy_id: str = "test-policy",
+) -> tuple[PolicyBundle, FrozenPolicyView]:
     """Build a minimal valid PolicyBundle and its FrozenPolicyView."""
     bundle = PolicyBundle(
         metadata=PolicyMetadata(
@@ -40,9 +45,7 @@ def _make_verified_bundle(policy_id: str = "test-policy") -> tuple[PolicyBundle,
             version="1.0.0",
             issuer="test-issuer",
         ),
-        rules=(
-            PolicyRule(rule_id="r1", rule_type="budget"),
-        ),
+        rules=(PolicyRule(rule_id="r1", rule_type="budget"),),
     )
     result = PolicyVerifier().verify(bundle)
     view = FrozenPolicyView(bundle, result)
@@ -219,7 +222,9 @@ def test_execution_context_memory_governance_denied_event_enriched_with_policy_m
     assert decision == Decision.HALT
     snap = ctx.get_snapshot()
     mg_events = [
-        e for e in snap.events if "MEMORY" in e.event_type or "memory" in e.event_type.lower()
+        e
+        for e in snap.events
+        if "MEMORY" in e.event_type or "memory" in e.event_type.lower()
     ]
     assert len(mg_events) >= 1, "Expected at least one memory governance event"
     # The event emitted via _emit_chain_event() must carry policy_metadata.

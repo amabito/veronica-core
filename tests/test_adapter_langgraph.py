@@ -607,11 +607,15 @@ class TestDegradeWiringLangGraph:
         from veronica_core.runtime_policy import model_downgrade
 
         cb = VeronicaLangGraphCallback(GuardConfig(max_cost_usd=10.0, max_steps=5))
-        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="budget pressure")
+        degrade_decision = model_downgrade(
+            "gpt-4", "gpt-3.5-turbo", reason="budget pressure"
+        )
 
         with patch.object(cb._container, "check", return_value=degrade_decision):
             calls: list[tuple[str, str]] = []
-            cb.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            cb.handle_degrade = lambda reason, suggestion: calls.append(
+                (reason, suggestion)
+            )  # type: ignore[method-assign]
             cb.on_llm_start({}, ["Hello"])
             assert len(calls) == 1
             assert "budget pressure" in calls[0][0]
@@ -627,7 +631,9 @@ class TestDegradeWiringLangGraph:
 
         with patch.object(cb._container, "check", return_value=allow("budget")):
             calls: list[tuple[str, str]] = []
-            cb.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            cb.handle_degrade = lambda reason, suggestion: calls.append(
+                (reason, suggestion)
+            )  # type: ignore[method-assign]
             cb.on_llm_start({}, ["Hello"])
             assert len(calls) == 0
 
@@ -655,7 +661,9 @@ class TestDegradeWiringLangGraph:
         wrapped = veronica_node_wrapper(GuardConfig(max_cost_usd=10.0, max_steps=5))(
             _make_node({})
         )
-        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="over budget")
+        degrade_decision = model_downgrade(
+            "gpt-4", "gpt-3.5-turbo", reason="over budget"
+        )
 
         with patch.object(wrapped.container, "check", return_value=degrade_decision):
             with caplog.at_level(logging.WARNING):

@@ -24,7 +24,10 @@ import pytest
 
 from veronica_core.containment import ExecutionConfig, ExecutionContext
 from veronica_core.memory.governor import MemoryGovernor
-from veronica_core.memory.hooks import DefaultMemoryGovernanceHook, DenyAllMemoryGovernanceHook
+from veronica_core.memory.hooks import (
+    DefaultMemoryGovernanceHook,
+    DenyAllMemoryGovernanceHook,
+)
 from veronica_core.shield.pipeline import ShieldPipeline
 from veronica_core.shield.types import Decision
 
@@ -69,9 +72,7 @@ def test_memory_read_creates_graph_node_with_correct_kind() -> None:
 
     graph_snap = ctx.get_graph_snapshot()
     memory_nodes = [
-        n
-        for n in graph_snap["nodes"].values()
-        if n["kind"] == "memory_read"
+        n for n in graph_snap["nodes"].values() if n["kind"] == "memory_read"
     ]
     assert len(memory_nodes) == 1
     assert memory_nodes[0]["status"] == "success"
@@ -85,9 +86,7 @@ def test_memory_write_creates_graph_node_with_correct_kind() -> None:
 
     graph_snap = ctx.get_graph_snapshot()
     memory_nodes = [
-        n
-        for n in graph_snap["nodes"].values()
-        if n["kind"] == "memory_write"
+        n for n in graph_snap["nodes"].values() if n["kind"] == "memory_write"
     ]
     assert len(memory_nodes) == 1
     assert memory_nodes[0]["status"] == "success"
@@ -211,7 +210,9 @@ def test_memory_call_bypasses_shield_pipeline_before_tool_call() -> None:
     ctx.wrap_memory_call(fn=_noop, kind="memory_write")
     ctx.wrap_memory_call(fn=_noop, kind="memory_read")
 
-    assert before_tool_calls == [], "before_tool_call must not be invoked for memory calls"
+    assert before_tool_calls == [], (
+        "before_tool_call must not be invoked for memory calls"
+    )
 
 
 # ---------------------------------------------------------------------------

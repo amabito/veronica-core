@@ -293,11 +293,17 @@ class SecureExecutor:
                 return self._masker.mask(body)
             except URLError as exc:
                 err_msg = str(exc.reason) if hasattr(exc, "reason") else str(exc)
-                _redirect_match = _RE_REDIRECT_BLOCKED.search(err_msg) if "Redirect to " in err_msg else None
+                _redirect_match = (
+                    _RE_REDIRECT_BLOCKED.search(err_msg)
+                    if "Redirect to " in err_msg
+                    else None
+                )
                 if _redirect_match:
                     redirect_url = _redirect_match.group(1)
                     if redirect_url in visited:
-                        raise URLError(f"Redirect loop detected: {redirect_url}") from exc
+                        raise URLError(
+                            f"Redirect loop detected: {redirect_url}"
+                        ) from exc
                     visited.add(redirect_url)
                     current = redirect_url
                     continue

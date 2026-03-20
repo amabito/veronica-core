@@ -50,7 +50,11 @@ from veronica_core.adapters._a2a_base import (
     _STATS_WARN_LIMIT,
 )
 from veronica_core.memory.message_governance import MessageGovernanceHook
-from veronica_core.memory.types import GovernanceVerdict, MemoryProvenance, MessageContext
+from veronica_core.memory.types import (
+    GovernanceVerdict,
+    MemoryProvenance,
+    MessageContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +162,8 @@ class _RateLimiter:
                     logger.warning(
                         "_RateLimiter: cardinality cap (%d) reached, "
                         "denying key %r (fail-closed)",
-                        _STATS_WARN_LIMIT, key,
+                        _STATS_WARN_LIMIT,
+                        key,
                     )
                     return False
                 bucket = deque()
@@ -181,7 +186,10 @@ class _RateLimiter:
                 logger.warning(
                     "_RateLimiter: rate limit exceeded for key %r "
                     "(%d/%d in %.0fs window)",
-                    key, len(bucket), max_per_window, self._window,
+                    key,
+                    len(bucket),
+                    max_per_window,
+                    self._window,
                 )
                 return False
 
@@ -285,7 +293,9 @@ class A2AServerContainmentMiddleware:
 
         # Step 2: tenant rate limit
         tenant_key = f"T:{request.tenant_id}"
-        if not self._rate_limiter.is_allowed(tenant_key, config.max_requests_per_minute_per_tenant):
+        if not self._rate_limiter.is_allowed(
+            tenant_key, config.max_requests_per_minute_per_tenant
+        ):
             return A2AServerDecision(
                 verdict="DENY",
                 reason="tenant rate limit exceeded",
@@ -294,7 +304,9 @@ class A2AServerContainmentMiddleware:
 
         # Step 3: sender rate limit
         sender_key = f"S:{request.tenant_id}:{sender.agent_id}"
-        if not self._rate_limiter.is_allowed(sender_key, config.max_requests_per_minute_per_sender):
+        if not self._rate_limiter.is_allowed(
+            sender_key, config.max_requests_per_minute_per_sender
+        ):
             return A2AServerDecision(
                 verdict="DENY",
                 reason="sender rate limit exceeded",
@@ -469,7 +481,8 @@ class A2AServerContainmentMiddleware:
                 logger.warning(
                     "[A2AServer] stats cardinality cap (%d) reached, "
                     "dropping count for key %r",
-                    _STATS_WARN_LIMIT, key,
+                    _STATS_WARN_LIMIT,
+                    key,
                 )
                 return
             self._request_counts[key] = 1

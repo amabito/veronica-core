@@ -93,11 +93,13 @@ _COMPACTNESS_NAMES = frozenset({"CompactnessEvaluator"})
 _VIEW_POLICY_NAMES = frozenset({"ViewPolicyEvaluator"})
 _BOUNDARY_NAMES = frozenset({"MemoryBoundaryHook"})
 _RULE_EVALUATOR_NAMES = frozenset({"MemoryRuleEvaluator"})
-_DEGRADE_CAPABLE_NAMES = frozenset({
-    "CompactnessEvaluator",
-    "ViewPolicyEvaluator",
-    "MemoryRuleEvaluator",
-})
+_DEGRADE_CAPABLE_NAMES = frozenset(
+    {
+        "CompactnessEvaluator",
+        "ViewPolicyEvaluator",
+        "MemoryRuleEvaluator",
+    }
+)
 
 # Pre-computed enum value tuples (immutable, computed once).
 _SUPPORTED_VIEWS: tuple[str, ...] = tuple(sorted(v.value for v in MemoryView))
@@ -182,6 +184,7 @@ class MemoryGovernanceReadiness:
         """Check if ProvenanceLifecycle is importable."""
         try:
             from veronica_core.memory.lifecycle import ProvenanceLifecycle  # noqa: F401
+
             return True
         except ImportError:
             return False

@@ -30,7 +30,9 @@ def _make_bundle(
     signature: str = "",
     with_content_hash: bool = True,
 ) -> PolicyBundle:
-    return make_test_bundle(rules=rules, signature=signature, with_content_hash=with_content_hash)
+    return make_test_bundle(
+        rules=rules, signature=signature, with_content_hash=with_content_hash
+    )
 
 
 def _signed_bundle(

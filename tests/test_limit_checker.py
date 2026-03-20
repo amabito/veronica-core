@@ -548,7 +548,9 @@ class TestAdversarialLimitCheckerRace:
                     check_results.append(r)
 
         check_thread = threading.Thread(target=check_worker)
-        commit_threads = [threading.Thread(target=commit_worker) for _ in range(n_threads)]
+        commit_threads = [
+            threading.Thread(target=commit_worker) for _ in range(n_threads)
+        ]
 
         check_thread.start()
         for t in commit_threads:
@@ -587,8 +589,7 @@ class TestAdversarialLimitCheckerRace:
                 reasons_seen.append(reason)
 
         threads = [
-            threading.Thread(target=worker, args=(f"reason_{i}",))
-            for i in range(10)
+            threading.Thread(target=worker, args=(f"reason_{i}",)) for i in range(10)
         ]
         for t in threads:
             t.start()
@@ -723,21 +724,20 @@ class TestAdversarialLimitCheckerBoundary:
         reason = checker.check_limits(LocalBudgetBackend(), _noop_emit)
         assert reason == "retry_budget_exceeded"
 
-    def test_negative_cost_via_add_cost_underflows_accumulated(self) -> None:
-        """add_cost(-1.0) decrements the accumulator.
+    def test_negative_cost_via_add_cost_raises(self) -> None:
+        """add_cost(-1.0) must raise ValueError -- negative amounts are rejected.
 
-        This is a design-level concern: the production code does not guard
-        against negative amounts.  Verify the behavior is at least consistent
-        (no exception, deterministic value).
+        BudgetTracker.add() guards against negative amounts to prevent silent
+        state corruption.  _LimitChecker.add_cost() delegates to BudgetTracker.
         """
+        import pytest
+
         checker = _make_checker(max_cost_usd=10.0)
         checker.add_cost(2.0)
-        checker.add_cost(-1.0)
-        # Result should be 1.0 -- subtraction permitted by current design.
-        assert abs(checker.cost_usd_accumulated - 1.0) < 1e-9
-        # Must not trigger budget_exceeded (1.0 < 10.0).
-        reason = checker.check_limits(LocalBudgetBackend(), _noop_emit)
-        assert reason is None
+        with pytest.raises(ValueError, match="non-negative"):
+            checker.add_cost(-1.0)
+        # Cost must remain at 2.0 -- the rejected add must not change state.
+        assert abs(checker.cost_usd_accumulated - 2.0) < 1e-9
 
     def test_infinite_max_cost_rejected_by_config_guard(self) -> None:
         """ExecutionConfig must reject float('inf') as max_cost_usd.
@@ -761,29 +761,19 @@ class TestAdversarialLimitCheckerBoundary:
         with pytest.raises(ValueError, match="finite"):
             _make_checker(max_cost_usd=float("nan"), max_steps=10_000)
 
-    def test_nan_cost_via_add_cost_check_limits_does_not_crash(self) -> None:
-        """add_cost(NaN) injects NaN into the accumulator at runtime.
+    def test_nan_cost_via_add_cost_raises(self) -> None:
+        """add_cost(NaN) must raise ValueError -- NaN is rejected at the BudgetTracker level.
 
-        ExecutionConfig validates max_cost_usd at construction time, but it
-        does NOT validate amounts passed to add_cost().  Verify that
-        check_limits() at minimum does not raise an unhandled exception.
-
-        Document current behavior: NaN + _BUDGET_EPSILON >= finite_max is
-        False in CPython, so budget_exceeded may not fire.  If a runtime guard
-        is added to add_cost(), this test should be updated accordingly.
+        The runtime guard in BudgetTracker.add() prevents NaN from corrupting
+        the accumulator.  _LimitChecker.add_cost() delegates to it.
         """
+        import pytest
+
         checker = _make_checker(max_cost_usd=1.0, max_steps=10_000)
-        checker.add_cost(float("nan"))
-        try:
-            reason = checker.check_limits(LocalBudgetBackend(), _noop_emit)
-        except Exception as exc:
-            raise AssertionError(
-                f"check_limits() raised {type(exc).__name__} with NaN cost: {exc}"
-            ) from exc
-        # Accept either outcome -- the critical property is no crash.
-        assert reason in (None, "budget_exceeded"), (
-            f"Unexpected reason with NaN cost: {reason}"
-        )
+        with pytest.raises(ValueError, match="finite"):
+            checker.add_cost(float("nan"))
+        # Accumulator must remain at 0.0 -- the rejected call must not change state.
+        assert checker.cost_usd_accumulated == 0.0
 
     def test_max_steps_one_exactly_one_commit_allowed(self) -> None:
         """max_steps=1: first commit_success passes, second check_limits halts."""

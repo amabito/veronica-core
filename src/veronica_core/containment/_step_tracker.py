@@ -40,6 +40,18 @@ class StepTracker:
 
     def set(self, value: int) -> None:
         """Set step count to an absolute *value* (for test setup and compatibility)."""
+        if isinstance(value, bool):
+            raise TypeError(
+                f"StepTracker.set() value must be an int, not bool, got {value!r}"
+            )
+        if not isinstance(value, int):
+            raise TypeError(
+                f"StepTracker.set() value must be an int, got {type(value).__name__!r}"
+            )
+        if value < 0:
+            raise ValueError(
+                f"StepTracker.set() value must be non-negative, got {value!r}"
+            )
         with self._lock:
             self._count = value
 

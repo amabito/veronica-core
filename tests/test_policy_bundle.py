@@ -29,7 +29,9 @@ def _rule(
     enabled: bool = True,
     priority: int = 100,
 ) -> PolicyRule:
-    return PolicyRule(rule_id=rule_id, rule_type=rule_type, enabled=enabled, priority=priority)
+    return PolicyRule(
+        rule_id=rule_id, rule_type=rule_type, enabled=enabled, priority=priority
+    )
 
 
 def _bundle_with_hash(*rules: PolicyRule, policy_id: str = "p1") -> PolicyBundle:

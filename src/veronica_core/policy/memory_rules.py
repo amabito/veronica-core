@@ -39,26 +39,26 @@ from veronica_core.policy.bundle import PolicyRule
 _POLICY_ID = "memory_rule"
 
 # All parameters the compiler recognises.  Unknown keys are rejected.
-_KNOWN_PARAMETERS: frozenset[str] = frozenset({
-    "action",
-    "actions",
-    "allowed_views",
-    "allowed_modes",
-    "allowed_provenance",
-    "namespace",
-    "namespaces",
-    "verified_only",
-    "max_packet_tokens",
-    "max_raw_replay_ratio",
-    "require_compaction_if_over_budget",
-    "bridge_allow_archive",
-    "bridge_require_signature",
-    "verdict",
-})
+_KNOWN_PARAMETERS: frozenset[str] = frozenset(
+    {
+        "action",
+        "actions",
+        "allowed_views",
+        "allowed_modes",
+        "allowed_provenance",
+        "namespace",
+        "namespaces",
+        "verified_only",
+        "max_packet_tokens",
+        "max_raw_replay_ratio",
+        "require_compaction_if_over_budget",
+        "bridge_allow_archive",
+        "bridge_require_signature",
+        "verdict",
+    }
+)
 
-_VERDICT_MAP: dict[str, GovernanceVerdict] = {
-    v.value: v for v in GovernanceVerdict
-}
+_VERDICT_MAP: dict[str, GovernanceVerdict] = {v.value: v for v in GovernanceVerdict}
 
 # Derived from _VERDICT_MAP to avoid duplication.
 _VALID_VERDICTS: frozenset[str] = frozenset(_VERDICT_MAP)
@@ -143,33 +143,56 @@ class MemoryRuleCompiler:
 
         actions = self._parse_string_set(params, "actions", "action", _VALID_ACTIONS)
         allowed_views = self._parse_string_set(
-            params, "allowed_views", None, _VALID_VIEWS,
+            params,
+            "allowed_views",
+            None,
+            _VALID_VIEWS,
         )
         allowed_modes = self._parse_string_set(
-            params, "allowed_modes", None, _VALID_MODES,
+            params,
+            "allowed_modes",
+            None,
+            _VALID_MODES,
         )
         allowed_provenance = self._parse_string_set(
-            params, "allowed_provenance", None, _VALID_PROVENANCE,
+            params,
+            "allowed_provenance",
+            None,
+            _VALID_PROVENANCE,
         )
         namespaces = self._parse_string_set(
-            params, "namespaces", "namespace", valid=None,
+            params,
+            "namespaces",
+            "namespace",
+            valid=None,
         )
 
         verified_only = self._parse_bool(params, "verified_only", default=False)
         max_packet_tokens = self._parse_int(
-            params, "max_packet_tokens", default=0, minimum=0,
+            params,
+            "max_packet_tokens",
+            default=0,
+            minimum=0,
         )
         max_raw_replay_ratio = self._parse_float(
-            params, "max_raw_replay_ratio", default=1.0, minimum=0.0, maximum=1.0,
+            params,
+            "max_raw_replay_ratio",
+            default=1.0,
+            minimum=0.0,
+            maximum=1.0,
         )
         require_compaction = self._parse_bool(
-            params, "require_compaction_if_over_budget", default=False,
+            params,
+            "require_compaction_if_over_budget",
+            default=False,
         )
         bridge_allow_archive = self._parse_bool(
-            params, "bridge_allow_archive",
+            params,
+            "bridge_allow_archive",
         )
         bridge_require_signature = self._parse_bool(
-            params, "bridge_require_signature",
+            params,
+            "bridge_require_signature",
         )
         verdict = self._parse_verdict(params)
 
@@ -191,7 +214,8 @@ class MemoryRuleCompiler:
         )
 
     def compile_bundle(
-        self, rules: list[PolicyRule] | tuple[PolicyRule, ...],
+        self,
+        rules: list[PolicyRule] | tuple[PolicyRule, ...],
     ) -> tuple[CompiledMemoryRule, ...]:
         """Compile multiple PolicyRules, returning sorted by priority.
 
@@ -206,15 +230,18 @@ class MemoryRuleCompiler:
             if rule.rule_type != "memory" or not rule.enabled:
                 continue
             compiled.append(self.compile(rule))
+
         # Sort by priority (ascending), then deny-first at equal priority so
         # restrictive rules always win ties (security-conservative tiebreak).
         # Within the same priority and deny/allow tier, rule_id provides a stable
         # lexicographic order so output is deterministic across Python versions.
         def _sort_key(r: CompiledMemoryRule) -> tuple[int, int, str]:
             # 0 = denies (DENY/QUARANTINE), 1 = allows (ALLOW/DEGRADE)
-            is_permissive = 0 if r.verdict in (
-                GovernanceVerdict.DENY, GovernanceVerdict.QUARANTINE
-            ) else 1
+            is_permissive = (
+                0
+                if r.verdict in (GovernanceVerdict.DENY, GovernanceVerdict.QUARANTINE)
+                else 1
+            )
             return (r.priority, is_permissive, r.rule_id)
 
         compiled.sort(key=_sort_key)
@@ -270,7 +297,10 @@ class MemoryRuleCompiler:
 
     @staticmethod
     def _parse_bool(
-        params: dict[str, Any], key: str, *, default: bool | None = None,
+        params: dict[str, Any],
+        key: str,
+        *,
+        default: bool | None = None,
     ) -> bool | None:
         if key not in params:
             return default
@@ -281,7 +311,11 @@ class MemoryRuleCompiler:
 
     @staticmethod
     def _parse_int(
-        params: dict[str, Any], key: str, *, default: int, minimum: int,
+        params: dict[str, Any],
+        key: str,
+        *,
+        default: int,
+        minimum: int,
     ) -> int:
         if key not in params:
             return default
@@ -423,7 +457,10 @@ class MemoryRuleEvaluator:
             return False
 
         # Provenance filter.
-        if rule.allowed_provenance and op.provenance.value not in rule.allowed_provenance:
+        if (
+            rule.allowed_provenance
+            and op.provenance.value not in rule.allowed_provenance
+        ):
             return False
 
         # verified_only filter.

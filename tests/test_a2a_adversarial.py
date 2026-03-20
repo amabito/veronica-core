@@ -83,7 +83,9 @@ class TestConcurrentAccess:
 
     def test_concurrent_success_recording_same_agent(self) -> None:
         """10 threads record success on same agent -- no crash, trust is valid."""
-        policy = TrustPolicy(promotion_threshold=5, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=5, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
         results: list[TrustLevel] = []
         errors: list[Exception] = []
@@ -125,7 +127,9 @@ class TestConcurrentAccess:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [threading.Thread(target=succeed if i % 2 == 0 else fail) for i in range(20)]
+        threads = [
+            threading.Thread(target=succeed if i % 2 == 0 else fail) for i in range(20)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -191,7 +195,9 @@ class TestStateCorruption:
     """Invalid state transitions and rapid promote/demote cycles."""
 
     def test_promote_then_immediate_failure_returns_untrusted(self) -> None:
-        policy = TrustPolicy(promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         tracker.record_success("agent")
@@ -204,7 +210,9 @@ class TestStateCorruption:
 
     def test_rapid_promote_demote_cycle(self) -> None:
         """Repeated promotion followed by immediate demotion must leave agent UNTRUSTED."""
-        policy = TrustPolicy(promotion_threshold=1, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=1, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         for _ in range(20):
@@ -223,7 +231,9 @@ class TestStateCorruption:
             assert level == TrustLevel.UNTRUSTED
 
     def test_stats_consistency_after_promote_then_demote(self) -> None:
-        policy = TrustPolicy(promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         for _ in range(3):
@@ -241,18 +251,24 @@ class TestBoundaryConditions:
 
     def test_exact_threshold_promotion(self) -> None:
         """Promotion triggers on exactly the Nth success, not N-1."""
-        policy = TrustPolicy(promotion_threshold=5, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=5, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         for i in range(1, 5):
             level = tracker.record_success("agent")
-            assert level == TrustLevel.UNTRUSTED, f"Should not promote before threshold (step {i})"
+            assert level == TrustLevel.UNTRUSTED, (
+                f"Should not promote before threshold (step {i})"
+            )
 
         level = tracker.record_success("agent")
         assert level == TrustLevel.PROVISIONAL
 
     def test_single_success_with_threshold_one(self) -> None:
-        policy = TrustPolicy(promotion_threshold=1, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=1, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
         level = tracker.record_success("agent")
         assert level == TrustLevel.PROVISIONAL
@@ -286,7 +302,9 @@ class TestBoundaryConditions:
 
     def test_promotion_ceiling_allow_trusted(self) -> None:
         """With allow_promotion_to=TRUSTED, agent can reach TRUSTED but not PRIVILEGED."""
-        policy = TrustPolicy(promotion_threshold=2, allow_promotion_to=TrustLevel.TRUSTED)
+        policy = TrustPolicy(
+            promotion_threshold=2, allow_promotion_to=TrustLevel.TRUSTED
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         # First promotion: UNTRUSTED -> PROVISIONAL
@@ -388,7 +406,9 @@ class TestRouterEdgeCases:
         def route_all() -> None:
             try:
                 for level in TrustLevel:
-                    agent = AgentIdentity(agent_id="x", origin="local", trust_level=level)
+                    agent = AgentIdentity(
+                        agent_id="x", origin="local", trust_level=level
+                    )
                     router.route(agent)
             except Exception as exc:
                 errors.append(exc)

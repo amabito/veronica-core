@@ -268,7 +268,9 @@ class TestUnknownAuthority:
 
     def test_unknown_authority_unrecognised_cmd_denied(self) -> None:
         engine = _engine()
-        ctx = _ctx("shell", ["suspicious_binary", "--exploit"], authority=UNKNOWN_AUTHORITY)
+        ctx = _ctx(
+            "shell", ["suspicious_binary", "--exploit"], authority=UNKNOWN_AUTHORITY
+        )
         decision = engine.evaluate(ctx)
         assert decision.verdict == "DENY"
 
@@ -463,9 +465,7 @@ class TestAllSourcesDoNotRaise:
     """Smoke test: every AuthoritySource can flow through evaluation."""
 
     @pytest.mark.parametrize("source", list(AuthoritySource))
-    def test_source_does_not_raise_on_evaluation(
-        self, source: AuthoritySource
-    ) -> None:
+    def test_source_does_not_raise_on_evaluation(self, source: AuthoritySource) -> None:
         engine = _engine()
         auth = AuthorityClaim(source=source)
         ctx = _ctx("shell", ["pytest", "--version"], authority=auth)

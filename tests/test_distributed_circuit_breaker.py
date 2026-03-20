@@ -1454,7 +1454,9 @@ class TestAdversarialSlotTimeout:
                 failure_threshold=1,
                 recovery_timeout=0.0,
                 half_open_slot_timeout=slot_timeout,
-            ).check(_ctx()).allowed,
+            )
+            .check(_ctx())
+            .allowed,
             timeout=3.0,
             msg="Expected stale slot to be auto-releasable before starting TOCTOU race",
         )

@@ -20,7 +20,10 @@ from typing import Any
 from veronica_core.container.aicontainer import AIContainer
 from veronica_core.containment import ExecutionConfig, ExecutionContext
 from veronica_core.memory.governor import MemoryGovernor
-from veronica_core.memory.hooks import DefaultMemoryGovernanceHook, DenyAllMemoryGovernanceHook
+from veronica_core.memory.hooks import (
+    DefaultMemoryGovernanceHook,
+    DenyAllMemoryGovernanceHook,
+)
 from veronica_core.memory.types import (
     GovernanceVerdict,
     MemoryAction,
@@ -36,7 +39,10 @@ from veronica_core.shield.types import Decision
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _cfg(max_cost: float = 10.0, max_steps: int = 50, max_retries: int = 10) -> ExecutionConfig:
+
+def _cfg(
+    max_cost: float = 10.0, max_steps: int = 50, max_retries: int = 10
+) -> ExecutionConfig:
     return ExecutionConfig(
         max_cost_usd=max_cost,
         max_steps=max_steps,

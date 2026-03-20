@@ -33,7 +33,9 @@ from veronica_core.policy.verifier import PolicyVerifier, VerificationResult
 # ---------------------------------------------------------------------------
 
 
-def _meta(policy_id: str = "p1", content_hash: str = "", epoch: int = 0) -> PolicyMetadata:
+def _meta(
+    policy_id: str = "p1", content_hash: str = "", epoch: int = 0
+) -> PolicyMetadata:
     return PolicyMetadata(policy_id=policy_id, content_hash=content_hash, epoch=epoch)
 
 
@@ -53,7 +55,9 @@ def _rule(
     )
 
 
-def _bundle_with_correct_hash(*rules: PolicyRule, policy_id: str = "p1") -> PolicyBundle:
+def _bundle_with_correct_hash(
+    *rules: PolicyRule, policy_id: str = "p1"
+) -> PolicyBundle:
     r_tuple = tuple(rules)
     canonical = _canonical_rules_json(r_tuple)
     h = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -127,14 +131,18 @@ class TestAdversarialPolicyBundle:
         mutable_tags: dict[str, str] = {"k": "v1"}
         meta = PolicyMetadata(policy_id="p1", tags=mutable_tags)
         mutable_tags["k"] = "v2"  # mutate after construction
-        assert meta.tags["k"] == "v1", "Stored tags must not reflect post-construction mutation"
+        assert meta.tags["k"] == "v1", (
+            "Stored tags must not reflect post-construction mutation"
+        )
 
     def test_rule_parameters_original_dict_mutation_does_not_propagate(self) -> None:
         """Mutating the original dict passed to PolicyRule must not affect stored parameters."""
         params: dict[str, Any] = {"limit": 10}
         rule = PolicyRule(rule_id="r1", rule_type="budget", parameters=params)
         params["limit"] = 9999  # mutate after construction
-        assert rule.parameters["limit"] == 10, "Stored parameters must not reflect later mutation"
+        assert rule.parameters["limit"] == 10, (
+            "Stored parameters must not reflect later mutation"
+        )
 
     # -----------------------------------------------------------------------
     # Category 2: Content hash tampering -- various attack vectors
@@ -186,8 +194,12 @@ class TestAdversarialPolicyBundle:
 
     def test_content_hash_changes_when_parameter_value_differs(self) -> None:
         """Parameter values are part of canonical JSON."""
-        b1 = PolicyBundle(metadata=_meta(), rules=(_rule("r1", parameters={"limit": 10}),))
-        b2 = PolicyBundle(metadata=_meta(), rules=(_rule("r1", parameters={"limit": 20}),))
+        b1 = PolicyBundle(
+            metadata=_meta(), rules=(_rule("r1", parameters={"limit": 10}),)
+        )
+        b2 = PolicyBundle(
+            metadata=_meta(), rules=(_rule("r1", parameters={"limit": 20}),)
+        )
         assert b1.content_hash() != b2.content_hash()
 
     # -----------------------------------------------------------------------
@@ -222,7 +234,9 @@ class TestAdversarialPolicyBundle:
     def test_concurrent_active_rules_all_return_same_tuple(self) -> None:
         """20 threads reading active_rules on the same bundle must all see the same tuple."""
         rules = tuple(
-            PolicyRule(rule_id=f"r{i}", rule_type="budget", priority=i, enabled=(i % 2 == 0))
+            PolicyRule(
+                rule_id=f"r{i}", rule_type="budget", priority=i, enabled=(i % 2 == 0)
+            )
             for i in range(30)
         )
         bundle = PolicyBundle(metadata=_meta(), rules=rules)
@@ -253,10 +267,10 @@ class TestAdversarialPolicyBundle:
     @pytest.mark.parametrize(
         "bad_id",
         [
-            "",          # empty string
-            None,        # None
-            123,         # int
-            [],          # list
+            "",  # empty string
+            None,  # None
+            123,  # int
+            [],  # list
         ],
     )
     def test_metadata_invalid_policy_id_rejected(self, bad_id: Any) -> None:
@@ -364,24 +378,32 @@ class TestAdversarialPolicyVerifier:
 
     def test_signer_present_bundle_unsigned_emits_warning_not_error(self) -> None:
         """signer provided + bundle unsigned + require_signature=False must warn, not error."""
+
         class NoopSigner:
             def verify_bundle(self, bundle: PolicyBundle) -> bool:
                 return True
 
         bundle = _bundle_with_correct_hash(_rule("r1"))
         result = PolicyVerifier(signer=NoopSigner()).verify(bundle)
-        assert result.valid is True, "Unsigned bundle with signer (not required) must still be valid"
-        assert any("unsigned" in w.lower() or "skipped" in w.lower() for w in result.warnings)
+        assert result.valid is True, (
+            "Unsigned bundle with signer (not required) must still be valid"
+        )
+        assert any(
+            "unsigned" in w.lower() or "skipped" in w.lower() for w in result.warnings
+        )
 
     def test_require_signature_unsigned_bundle_is_invalid(self) -> None:
         """require_signature=True with unsigned bundle must be invalid."""
         bundle = _bundle_with_correct_hash(_rule("r1"))
         result = PolicyVerifier(require_signature=True).verify(bundle)
         assert result.valid is False
-        assert any("unsigned" in e.lower() or "require" in e.lower() for e in result.errors)
+        assert any(
+            "unsigned" in e.lower() or "require" in e.lower() for e in result.errors
+        )
 
     def test_signer_raises_exception_produces_error(self) -> None:
         """A signer that raises must be caught and reported as an error."""
+
         class ExplodingSigner:
             def verify_bundle(self, bundle: PolicyBundle) -> bool:
                 raise RuntimeError("signer exploded")
@@ -399,6 +421,7 @@ class TestAdversarialPolicyVerifier:
 
     def test_signer_without_verify_bundle_method_fails_closed(self) -> None:
         """signer without verify_bundle() must produce an error (fail-closed)."""
+
         class BadSigner:
             pass
 
@@ -502,7 +525,10 @@ class TestAdversarialPolicyVerifier:
         result = PolicyVerifier().verify(bundle)
         # valid is True because no declared hash is not an error
         assert result.valid is True
-        assert any("tamper" in w.lower() or "content_hash" in w.lower() for w in result.warnings)
+        assert any(
+            "tamper" in w.lower() or "content_hash" in w.lower()
+            for w in result.warnings
+        )
 
     # -----------------------------------------------------------------------
     # Category 5: Accumulated errors -- multiple failures at once
@@ -561,7 +587,9 @@ class TestAdversarialFrozenView:
     def test_invalid_verification_error_messages_included_in_exception(self) -> None:
         """Error messages from VerificationResult must appear in the ValueError text."""
         bundle = _bundle_with_correct_hash(_rule("r1"))
-        bad_result = VerificationResult(valid=False, errors=("unique_error_sentinel_xyz",))
+        bad_result = VerificationResult(
+            valid=False, errors=("unique_error_sentinel_xyz",)
+        )
         with pytest.raises(ValueError, match="unique_error_sentinel_xyz"):
             FrozenPolicyView(bundle, bad_result)
 
@@ -604,14 +632,16 @@ class TestAdversarialFrozenView:
     @pytest.mark.parametrize(
         "query",
         [
-            "",              # empty string
-            "BUDGET",        # wrong case
-            "nonexistent",   # absent type
-            " budget",       # leading space
-            "budget ",       # trailing space
+            "",  # empty string
+            "BUDGET",  # wrong case
+            "nonexistent",  # absent type
+            " budget",  # leading space
+            "budget ",  # trailing space
         ],
     )
-    def test_rules_for_type_returns_empty_for_non_matching_queries(self, query: str) -> None:
+    def test_rules_for_type_returns_empty_for_non_matching_queries(
+        self, query: str
+    ) -> None:
         """Non-matching rule_type queries must return empty tuple, never crash."""
         view = _make_frozen_view(_rule("r1", "budget"))
         result = view.rules_for_type(query)
@@ -636,7 +666,9 @@ class TestAdversarialFrozenView:
     # Category 4: PolicyViewHolder TOCTOU -- concurrent load_bundle
     # -----------------------------------------------------------------------
 
-    def test_holder_concurrent_load_bundle_different_epochs_only_valid_installed(self) -> None:
+    def test_holder_concurrent_load_bundle_different_epochs_only_valid_installed(
+        self,
+    ) -> None:
         """20 threads racing to load bundles must all see a valid view at the end."""
         holder = PolicyViewHolder()
         errors: list[Exception] = []
@@ -661,7 +693,9 @@ class TestAdversarialFrozenView:
         # Holder must have a valid view (one of the 20 threads won the race)
         assert holder.current is not None
 
-    def test_holder_concurrent_load_invalid_bundle_never_replaces_valid_view(self) -> None:
+    def test_holder_concurrent_load_invalid_bundle_never_replaces_valid_view(
+        self,
+    ) -> None:
         """Invalid bundles must never evict a valid existing view under concurrency."""
         valid_view = _make_frozen_view(_rule("stable"))
         holder = PolicyViewHolder(initial=valid_view)
@@ -685,7 +719,9 @@ class TestAdversarialFrozenView:
 
         assert errors == [], f"Unexpected problems: {errors}"
         # The valid view must still be current
-        assert holder.current is valid_view, "Valid view must survive concurrent invalid load attempts"
+        assert holder.current is valid_view, (
+            "Valid view must survive concurrent invalid load attempts"
+        )
 
     def test_holder_concurrent_swap_none_and_valid_view(self) -> None:
         """Concurrent swap(None) and swap(view) must leave holder in a consistent state."""
@@ -706,10 +742,9 @@ class TestAdversarialFrozenView:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=swap_none) for _ in range(10)]
-            + [threading.Thread(target=swap_valid) for _ in range(10)]
-        )
+        threads = [threading.Thread(target=swap_none) for _ in range(10)] + [
+            threading.Thread(target=swap_valid) for _ in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -727,7 +762,10 @@ class TestAdversarialFrozenView:
     def test_audit_dict_does_not_contain_rule_parameters(self) -> None:
         """to_audit_dict must not include raw rule parameters (potential secrets)."""
         view = _make_frozen_view(
-            _rule("r1", parameters={"secret_key": "supersecret123", "api_token": "tok_abc"})
+            _rule(
+                "r1",
+                parameters={"secret_key": "supersecret123", "api_token": "tok_abc"},
+            )
         )
         audit = view.to_audit_dict()
         audit_str = str(audit)
@@ -739,9 +777,15 @@ class TestAdversarialFrozenView:
         view = _make_frozen_view(_rule("r1", "budget"))
         audit = view.to_audit_dict()
         required_keys = {
-            "policy_id", "version", "epoch", "issuer",
-            "content_hash", "is_signed", "rule_count",
-            "rule_types", "verified_at",
+            "policy_id",
+            "version",
+            "epoch",
+            "issuer",
+            "content_hash",
+            "is_signed",
+            "rule_count",
+            "rule_types",
+            "verified_at",
         }
         assert required_keys <= set(audit.keys())
 

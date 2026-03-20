@@ -464,14 +464,20 @@ class MemoryBoundaryHook:
 
         if is_write:
             if best.allow_write:
-                return (True, f"rule matched: write allowed (agent={agent_id!r}, ns={namespace!r})")
+                return (
+                    True,
+                    f"rule matched: write allowed (agent={agent_id!r}, ns={namespace!r})",
+                )
             return (
                 False,
                 f"rule matched: write denied for agent={agent_id!r} namespace={namespace!r}",
             )
 
         if best.allow_read:
-            return (True, f"rule matched: read allowed (agent={agent_id!r}, ns={namespace!r})")
+            return (
+                True,
+                f"rule matched: read allowed (agent={agent_id!r}, ns={namespace!r})",
+            )
         return (
             False,
             f"rule matched: read denied for agent={agent_id!r} namespace={namespace!r}",

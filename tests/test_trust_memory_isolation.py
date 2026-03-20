@@ -81,13 +81,17 @@ class TestTrustLevelEnforcement:
         tracker = TrustEscalationTracker(policy=_policy())
         hook = _make_hook(tracker=tracker)
         # New agent starts UNTRUSTED by default.
-        decision = hook.before_op(_op(MemoryAction.READ, agent_id="untrusted-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.READ, agent_id="untrusted-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.DENY
 
     def test_untrusted_cannot_write_trusted_namespace(self) -> None:
         tracker = TrustEscalationTracker(policy=_policy())
         hook = _make_hook(tracker=tracker)
-        decision = hook.before_op(_op(MemoryAction.WRITE, agent_id="untrusted-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.WRITE, agent_id="untrusted-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.DENY
 
     def test_trusted_agent_can_read_trusted_namespace(self) -> None:
@@ -98,7 +102,9 @@ class TestTrustLevelEnforcement:
         )
         tracker = TrustEscalationTracker(policy=policy)
         hook = _make_hook(tracker=tracker)
-        decision = hook.before_op(_op(MemoryAction.READ, agent_id="trusted-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.READ, agent_id="trusted-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_trusted_agent_can_write_trusted_namespace(self) -> None:
@@ -109,7 +115,9 @@ class TestTrustLevelEnforcement:
         )
         tracker = TrustEscalationTracker(policy=policy)
         hook = _make_hook(tracker=tracker)
-        decision = hook.before_op(_op(MemoryAction.WRITE, agent_id="trusted-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.WRITE, agent_id="trusted-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_provisional_agent_can_read_trusted_namespace(self) -> None:
@@ -121,7 +129,9 @@ class TestTrustLevelEnforcement:
         )
         tracker = TrustEscalationTracker(policy=policy)
         hook = _make_hook(tracker=tracker)
-        decision = hook.before_op(_op(MemoryAction.READ, agent_id="provisional-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.READ, agent_id="provisional-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_provisional_agent_cannot_write_trusted_namespace(self) -> None:
@@ -133,7 +143,9 @@ class TestTrustLevelEnforcement:
         )
         tracker = TrustEscalationTracker(policy=policy)
         hook = _make_hook(tracker=tracker)
-        decision = hook.before_op(_op(MemoryAction.WRITE, agent_id="provisional-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.WRITE, agent_id="provisional-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.DENY
 
     def test_non_trusted_namespace_bypasses_trust_check(self) -> None:
@@ -169,11 +181,15 @@ class TestTrustLevelTransitions:
 
         # After first promotion: PROVISIONAL -- write still denied.
         assert tracker.get_trust_level(agent_id) == TrustLevel.PROVISIONAL
-        dec_provisional_write = hook.before_op(_op(MemoryAction.WRITE, agent_id=agent_id), None)
+        dec_provisional_write = hook.before_op(
+            _op(MemoryAction.WRITE, agent_id=agent_id), None
+        )
         assert dec_provisional_write.verdict is GovernanceVerdict.DENY
 
         # PROVISIONAL read: allowed.
-        dec_provisional_read = hook.before_op(_op(MemoryAction.READ, agent_id=agent_id), None)
+        dec_provisional_read = hook.before_op(
+            _op(MemoryAction.READ, agent_id=agent_id), None
+        )
         assert dec_provisional_read.verdict is GovernanceVerdict.ALLOW
 
         # 3 more successes: promote to TRUSTED.
@@ -182,7 +198,9 @@ class TestTrustLevelTransitions:
         assert tracker.get_trust_level(agent_id) == TrustLevel.TRUSTED
 
         # TRUSTED: both read and write allowed.
-        dec_trusted_write = hook.before_op(_op(MemoryAction.WRITE, agent_id=agent_id), None)
+        dec_trusted_write = hook.before_op(
+            _op(MemoryAction.WRITE, agent_id=agent_id), None
+        )
         assert dec_trusted_write.verdict is GovernanceVerdict.ALLOW
 
     def test_demotion_revokes_access(self) -> None:
@@ -284,7 +302,9 @@ class TestAdversarialTrustInputs:
             trusted_namespaces=_TRUSTED_NS,
         )
         # Trust check requires tracker; without it, falls through to default_allow=True.
-        decision = hook.before_op(_op(MemoryAction.READ, agent_id="mystery-agent"), None)
+        decision = hook.before_op(
+            _op(MemoryAction.READ, agent_id="mystery-agent"), None
+        )
         assert decision.verdict is GovernanceVerdict.ALLOW
 
     def test_unknown_agent_not_in_tracker_denied_on_trusted_ns(self) -> None:
@@ -329,7 +349,9 @@ class TestAdversarialTrustInputs:
         )
         tracker = TrustEscalationTracker(policy=policy)
         # Even though agent is TRUSTED, an explicit deny rule blocks write.
-        rule = MemoryAccessRule(agent_id="constrained-trusted", namespace="trusted-vault", allow_write=False)
+        rule = MemoryAccessRule(
+            agent_id="constrained-trusted", namespace="trusted-vault", allow_write=False
+        )
         hook = MemoryBoundaryHook(
             config=MemoryBoundaryConfig(rules=[rule], default_allow=True),
             trust_router=TrustBasedPolicyRouter(),

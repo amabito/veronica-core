@@ -124,7 +124,9 @@ class TestLocalWorkingView:
         for trust in ("untrusted", "provisional", "trusted", "privileged"):
             op = _write_op()
             result = _eval(ev, op, view=MemoryView.LOCAL_WORKING, trust=trust)
-            assert result.verdict is GovernanceVerdict.ALLOW, f"Failed for trust={trust}"
+            assert result.verdict is GovernanceVerdict.ALLOW, (
+                f"Failed for trust={trust}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +182,8 @@ class TestVerifiedArchiveView:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.LIVE,
             trust="untrusted",
@@ -197,7 +200,8 @@ class TestVerifiedArchiveView:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.LIVE,
             trust="trusted",
@@ -221,7 +225,8 @@ class TestQuarantinedView:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.QUARANTINED,
             mode=ExecutionMode.LIVE,
             trust="trusted",
@@ -252,7 +257,8 @@ class TestReplayMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.LOCAL_WORKING,
             mode=ExecutionMode.REPLAY,
             trust="privileged",
@@ -263,7 +269,8 @@ class TestReplayMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.LOCAL_WORKING,
             mode=ExecutionMode.REPLAY,
             trust="trusted",
@@ -274,7 +281,8 @@ class TestReplayMode:
         ev = ViewPolicyEvaluator()
         op = MemoryOperation(action=MemoryAction.ARCHIVE)
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.PROVISIONAL_ARCHIVE,
             mode=ExecutionMode.REPLAY,
             trust="trusted",
@@ -292,7 +300,8 @@ class TestAuditReviewMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.LOCAL_WORKING,
             mode=ExecutionMode.AUDIT_REVIEW,
             trust="privileged",
@@ -303,7 +312,8 @@ class TestAuditReviewMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.QUARANTINED,
             mode=ExecutionMode.AUDIT_REVIEW,
             trust="trusted",
@@ -314,7 +324,8 @@ class TestAuditReviewMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.QUARANTINED,
             mode=ExecutionMode.AUDIT_REVIEW,
             trust="provisional",
@@ -325,7 +336,8 @@ class TestAuditReviewMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.LOCAL_WORKING,
             mode=ExecutionMode.AUDIT_REVIEW,
             trust="trusted",
@@ -343,7 +355,8 @@ class TestSimulationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.SIMULATION,
             trust="privileged",
@@ -354,7 +367,8 @@ class TestSimulationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.SESSION_STATE,
             mode=ExecutionMode.SIMULATION,
             trust="privileged",
@@ -365,7 +379,8 @@ class TestSimulationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.PROVISIONAL_ARCHIVE,
             mode=ExecutionMode.SIMULATION,
             trust="trusted",
@@ -383,7 +398,8 @@ class TestConsolidationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.CONSOLIDATION,
             trust="trusted",
@@ -394,7 +410,8 @@ class TestConsolidationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.CONSOLIDATION,
             trust="provisional",
@@ -405,7 +422,8 @@ class TestConsolidationMode:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.SESSION_STATE,
             mode=ExecutionMode.CONSOLIDATION,
             trust="trusted",
@@ -423,7 +441,8 @@ class TestLiveMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.LIVE,
             trust="untrusted",
@@ -434,7 +453,8 @@ class TestLiveMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.LIVE,
             trust="trusted",
@@ -445,7 +465,8 @@ class TestLiveMode:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.TEAM_SHARED,
             mode=ExecutionMode.LIVE,
             trust="provisional",
@@ -470,7 +491,8 @@ class TestDenyHasThreatContext:
         ev = ViewPolicyEvaluator()
         op = _write_op()
         result = _eval(
-            ev, op,
+            ev,
+            op,
             view=MemoryView.VERIFIED_ARCHIVE,
             mode=ExecutionMode.LIVE,
             trust="trusted",
@@ -496,6 +518,7 @@ class TestAfterOpNoOp:
         ev = ViewPolicyEvaluator()
         op = _read_op()
         from veronica_core.memory.types import MemoryGovernanceDecision
+
         decision = MemoryGovernanceDecision(
             verdict=GovernanceVerdict.ALLOW,
             policy_id="view_policy",

@@ -61,9 +61,7 @@ def check_and_halt(
     """
     decision = container.check(cost_usd=0.0)
     if not decision.allowed:
-        (_logger or logger).debug(
-            "%s policy denied: %s", tag, decision.reason
-        )
+        (_logger or logger).debug("%s policy denied: %s", tag, decision.reason)
         safe_emit(metrics, "record_decision", agent_id, "HALT")
         raise VeronicaHalt(decision.reason, decision)
     safe_emit(metrics, "record_decision", agent_id, "ALLOW")
@@ -105,7 +103,8 @@ def extract_llm_result_cost(response: Any) -> float:
     Handles both LangChain (langchain.py) and LangGraph (langgraph.py) usage
     patterns since both pass LLMResult objects to their on_llm_end callbacks.
     Tries prompt+completion token split first; falls back to 75/25 heuristic.
-    Returns 0.0 if usage cannot be determined.
+    Returns 0.0 if usage cannot be determined. Logs a warning when usage data
+    is present but in an unrecognised format (schema drift).
     """
     try:
         if response is None:
@@ -135,6 +134,14 @@ def extract_llm_result_cost(response: Any) -> float:
 
         total_raw = usage.get("total_tokens")
         if total_raw is None:
+            # usage dict present but no recognised token fields -- schema drift
+            logger.warning(
+                "[VERONICA] Cost extraction returned 0.0: usage dict present "
+                "but no recognised token fields (prompt_tokens/input_tokens/"
+                "completion_tokens/output_tokens/total_tokens). "
+                "usage keys=%s",
+                list(usage.keys()) if hasattr(usage, "keys") else type(usage).__name__,
+            )
             return 0.0
         return cost_from_total_tokens(int(total_raw), model)
     except (
@@ -378,7 +385,9 @@ def get_field(obj: Any, *keys: str) -> Any:
     return None
 
 
-def emit_llm_result_tokens(metrics: Optional[Any], agent_id: str, response: Any) -> None:
+def emit_llm_result_tokens(
+    metrics: Optional[Any], agent_id: str, response: Any
+) -> None:
     """Extract token counts from a LangChain/LangGraph LLMResult and emit via metrics.
 
     No-op when *metrics* is None or token counts cannot be extracted.
@@ -395,7 +404,9 @@ def emit_llm_result_tokens(metrics: Optional[Any], agent_id: str, response: Any)
             if completion is None:
                 completion = usage.get("output_tokens")
             if prompt is not None and completion is not None:
-                safe_emit(metrics, "record_tokens", agent_id, int(prompt), int(completion))
+                safe_emit(
+                    metrics, "record_tokens", agent_id, int(prompt), int(completion)
+                )
     except Exception:
         pass
 
@@ -420,6 +431,4 @@ def safe_emit(metrics: Optional[Any], method: str, *args: Any) -> None:
     try:
         fn(*args)
     except Exception:
-        logger.debug(
-            "[VERONICA] safe_emit(%s) raised; ignoring", method, exc_info=True
-        )
+        logger.debug("[VERONICA] safe_emit(%s) raised; ignoring", method, exc_info=True)

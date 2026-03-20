@@ -25,7 +25,12 @@ from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.policy.verifier import VerificationResult
 from veronica_core.security.policy_signing import PolicySigner
 
-from .conftest import make_signed_bundle, make_test_audit_log, make_test_signer, read_jsonl
+from .conftest import (
+    make_signed_bundle,
+    make_test_audit_log,
+    make_test_signer,
+    read_jsonl,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +387,9 @@ class TestAdversarialStartupAuditFailure:
             """Stub that panics if any write method is called."""
 
             def write_governance_event(self, **kwargs: Any) -> None:
-                raise AssertionError("write_governance_event must NOT be called on success")
+                raise AssertionError(
+                    "write_governance_event must NOT be called on success"
+                )
 
         signer = _make_signer()
         bundle = _make_signed_bundle(signer, rules=(_BUDGET_RULE,))

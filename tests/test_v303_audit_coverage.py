@@ -132,11 +132,15 @@ class TestComplianceExporterHTTPS:
     def test_http_non_local_raises_value_error(self) -> None:
         """http://remote.example.com must be rejected."""
         with pytest.raises(ValueError, match="HTTPS"):
-            ComplianceExporter(api_key="test-key", endpoint="http://remote.example.com/ingest")
+            ComplianceExporter(
+                api_key="test-key", endpoint="http://remote.example.com/ingest"
+            )
 
     def test_https_accepted(self) -> None:
         """https:// endpoint must be accepted."""
-        exporter = ComplianceExporter(api_key="test-key", endpoint="https://secure.example.com/ingest")
+        exporter = ComplianceExporter(
+            api_key="test-key", endpoint="https://secure.example.com/ingest"
+        )
         try:
             assert exporter._endpoint == "https://secure.example.com/ingest"
         finally:
@@ -144,7 +148,9 @@ class TestComplianceExporterHTTPS:
 
     def test_http_localhost_accepted(self) -> None:
         """http://localhost is allowed without allow_insecure_http."""
-        exporter = ComplianceExporter(api_key="test-key", endpoint="http://localhost:8080/ingest")
+        exporter = ComplianceExporter(
+            api_key="test-key", endpoint="http://localhost:8080/ingest"
+        )
         try:
             assert exporter._endpoint == "http://localhost:8080/ingest"
         finally:
@@ -152,7 +158,9 @@ class TestComplianceExporterHTTPS:
 
     def test_http_127_0_0_1_accepted(self) -> None:
         """http://127.0.0.1 is allowed without allow_insecure_http."""
-        exporter = ComplianceExporter(api_key="test-key", endpoint="http://127.0.0.1:8080/ingest")
+        exporter = ComplianceExporter(
+            api_key="test-key", endpoint="http://127.0.0.1:8080/ingest"
+        )
         try:
             assert "127.0.0.1" in exporter._endpoint
         finally:
@@ -177,7 +185,9 @@ class TestComplianceExporterHTTPS:
 
     def test_api_key_redacted_in_repr(self) -> None:
         """API key must not appear in repr."""
-        exporter = ComplianceExporter(api_key="sk-supersecretkey123", endpoint="https://x.com/ingest")
+        exporter = ComplianceExporter(
+            api_key="sk-supersecretkey123", endpoint="https://x.com/ingest"
+        )
         try:
             r = repr(exporter)
             assert "supersecretkey123" not in r
@@ -226,7 +236,11 @@ class TestAsyncMCPBudgetDispatch:
 
         adapter = AsyncMCPContainmentAdapter(
             execution_context=ctx,
-            tool_costs={"expensive_tool": MCPToolCost(tool_name="expensive_tool", cost_per_call=0.5)},
+            tool_costs={
+                "expensive_tool": MCPToolCost(
+                    tool_name="expensive_tool", cost_per_call=0.5
+                )
+            },
         )
 
         async def _tool(**kwargs: Any) -> str:
@@ -269,7 +283,11 @@ class TestAsyncMCPBudgetDispatch:
 
         adapter = AsyncMCPContainmentAdapter(
             execution_context=ctx,
-            tool_costs={"expensive_tool": MCPToolCost(tool_name="expensive_tool", cost_per_call=0.5)},
+            tool_costs={
+                "expensive_tool": MCPToolCost(
+                    tool_name="expensive_tool", cost_per_call=0.5
+                )
+            },
         )
 
         async def _tool(**kwargs: Any) -> str:
@@ -309,7 +327,9 @@ class TestAsyncMCPBudgetDispatch:
 
         adapter = AsyncMCPContainmentAdapter(
             execution_context=ctx,
-            tool_costs={"fail_tool": MCPToolCost(tool_name="fail_tool", cost_per_call=0.5)},
+            tool_costs={
+                "fail_tool": MCPToolCost(tool_name="fail_tool", cost_per_call=0.5)
+            },
         )
 
         async def _failing_tool(**kwargs: Any) -> str:
@@ -329,7 +349,9 @@ class TestWSGIIterableCloseOnHalt:
     """WSGI iterable must be closed when context is halted post-flight."""
 
     def _make_config(self, *, max_steps: int = 100) -> ExecutionConfig:
-        return ExecutionConfig(max_cost_usd=100.0, max_steps=max_steps, max_retries_total=10)
+        return ExecutionConfig(
+            max_cost_usd=100.0, max_steps=max_steps, max_retries_total=10
+        )
 
     def test_iterable_close_called_on_halt(self) -> None:
         """When app returns iterable and context is aborted, close() must be called."""

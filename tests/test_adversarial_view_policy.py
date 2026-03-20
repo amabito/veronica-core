@@ -96,7 +96,9 @@ class TestAdversarialGarbageTrustLevels:
         """trust_level='TRUSTED' must match 'trusted' via .lower() -- rank 2."""
         # Arrange
         op = _op(action=MemoryAction.READ)
-        ctx = _ctx(view=MemoryView.VERIFIED_ARCHIVE, mode=ExecutionMode.LIVE, trust="TRUSTED")
+        ctx = _ctx(
+            view=MemoryView.VERIFIED_ARCHIVE, mode=ExecutionMode.LIVE, trust="TRUSTED"
+        )
 
         # Act
         decision = self.evaluator.before_op(op, ctx)
@@ -108,13 +110,17 @@ class TestAdversarialGarbageTrustLevels:
         """trust_level='admin' is not in _TRUST_RANK -- defaults to rank 0."""
         # Arrange
         op = _op(action=MemoryAction.READ)
-        ctx = _ctx(view=MemoryView.VERIFIED_ARCHIVE, mode=ExecutionMode.LIVE, trust="admin")
+        ctx = _ctx(
+            view=MemoryView.VERIFIED_ARCHIVE, mode=ExecutionMode.LIVE, trust="admin"
+        )
 
         # Act
         decision = self.evaluator.before_op(op, ctx)
 
         # Assert
-        assert decision.denied, "'admin' is not a recognised trust level -- must be rank 0"
+        assert decision.denied, (
+            "'admin' is not a recognised trust level -- must be rank 0"
+        )
 
     def test_null_byte_injection_in_trust_treated_as_untrusted(self) -> None:
         """Null byte injection must not bypass trust parsing."""
@@ -130,13 +136,17 @@ class TestAdversarialGarbageTrustLevels:
         decision = self.evaluator.before_op(op, ctx)
 
         # Assert
-        assert decision.denied, "null byte injected trust must not grant privileged rank"
+        assert decision.denied, (
+            "null byte injected trust must not grant privileged rank"
+        )
 
     def test_whitespace_around_trust_treated_as_untrusted(self) -> None:
         """Leading/trailing whitespace must not cause 'trusted' match."""
         # Arrange
         op = _op(action=MemoryAction.READ)
-        ctx = _ctx(view=MemoryView.SESSION_STATE, mode=ExecutionMode.LIVE, trust=" trusted ")
+        ctx = _ctx(
+            view=MemoryView.SESSION_STATE, mode=ExecutionMode.LIVE, trust=" trusted "
+        )
 
         # Act
         decision = self.evaluator.before_op(op, ctx)
@@ -192,26 +202,34 @@ class TestAdversarialWriteActionClassification:
         """Every write action must be denied in REPLAY mode."""
         # Arrange
         op = _op(action=action)
-        ctx = _ctx(view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY, trust="privileged")
+        ctx = _ctx(
+            view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY, trust="privileged"
+        )
 
         # Act
         decision = self.evaluator.before_op(op, ctx)
 
         # Assert
-        assert decision.denied, f"{action.value} must be classified as a write (denied in REPLAY)"
+        assert decision.denied, (
+            f"{action.value} must be classified as a write (denied in REPLAY)"
+        )
 
     @pytest.mark.parametrize("action", READ_ACTIONS)
     def test_read_action_allowed_in_replay_mode(self, action: MemoryAction) -> None:
         """READ and RETRIEVE must NOT be classified as writes -- allowed in REPLAY."""
         # Arrange
         op = _op(action=action)
-        ctx = _ctx(view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY, trust="untrusted")
+        ctx = _ctx(
+            view=MemoryView.LOCAL_WORKING, mode=ExecutionMode.REPLAY, trust="untrusted"
+        )
 
         # Act
         decision = self.evaluator.before_op(op, ctx)
 
         # Assert
-        assert decision.allowed, f"{action.value} must NOT be a write -- must be allowed in REPLAY"
+        assert decision.allowed, (
+            f"{action.value} must NOT be a write -- must be allowed in REPLAY"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +353,9 @@ class TestAdversarialNullContext:
         """None context defaults to LOCAL_WORKING -- write allowed (no restriction)."""
         op = _op(action=MemoryAction.WRITE)
         decision = self.evaluator.before_op(op, None)
-        assert decision.allowed, "None context -> LOCAL_WORKING -> write allowed for any trust"
+        assert decision.allowed, (
+            "None context -> LOCAL_WORKING -> write allowed for any trust"
+        )
 
     def test_none_context_defaults_to_live_mode(self) -> None:
         """Verify that None context does NOT grant REPLAY/AUDIT_REVIEW/CONSOLIDATION privileges.
@@ -384,22 +404,75 @@ class TestAdversarialConcurrentAccess:
         """No thread should raise or return an invalid verdict under concurrent load."""
         # Arrange
         scenarios = [
-            (MemoryAction.READ, MemoryView.LOCAL_WORKING, ExecutionMode.LIVE, "untrusted"),
+            (
+                MemoryAction.READ,
+                MemoryView.LOCAL_WORKING,
+                ExecutionMode.LIVE,
+                "untrusted",
+            ),
             (MemoryAction.WRITE, MemoryView.TEAM_SHARED, ExecutionMode.LIVE, "trusted"),
-            (MemoryAction.READ, MemoryView.VERIFIED_ARCHIVE, ExecutionMode.LIVE, "trusted"),
-            (MemoryAction.WRITE, MemoryView.VERIFIED_ARCHIVE, ExecutionMode.CONSOLIDATION, "trusted"),
-            (MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "trusted"),
-            (MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "privileged"),
-            (MemoryAction.READ, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "provisional"),
-            (MemoryAction.READ, MemoryView.QUARANTINED, ExecutionMode.AUDIT_REVIEW, "trusted"),
-            (MemoryAction.READ, MemoryView.VERIFIED_ARCHIVE, ExecutionMode.LIVE, "untrusted"),
-            (MemoryAction.WRITE, MemoryView.LOCAL_WORKING, ExecutionMode.REPLAY, "privileged"),
+            (
+                MemoryAction.READ,
+                MemoryView.VERIFIED_ARCHIVE,
+                ExecutionMode.LIVE,
+                "trusted",
+            ),
+            (
+                MemoryAction.WRITE,
+                MemoryView.VERIFIED_ARCHIVE,
+                ExecutionMode.CONSOLIDATION,
+                "trusted",
+            ),
+            (
+                MemoryAction.READ,
+                MemoryView.SESSION_STATE,
+                ExecutionMode.LIVE,
+                "trusted",
+            ),
+            (
+                MemoryAction.WRITE,
+                MemoryView.SESSION_STATE,
+                ExecutionMode.LIVE,
+                "privileged",
+            ),
+            (
+                MemoryAction.READ,
+                MemoryView.PROVISIONAL_ARCHIVE,
+                ExecutionMode.LIVE,
+                "provisional",
+            ),
+            (
+                MemoryAction.READ,
+                MemoryView.QUARANTINED,
+                ExecutionMode.AUDIT_REVIEW,
+                "trusted",
+            ),
+            (
+                MemoryAction.READ,
+                MemoryView.VERIFIED_ARCHIVE,
+                ExecutionMode.LIVE,
+                "untrusted",
+            ),
+            (
+                MemoryAction.WRITE,
+                MemoryView.LOCAL_WORKING,
+                ExecutionMode.REPLAY,
+                "privileged",
+            ),
         ]
         assert len(scenarios) == self.NUM_THREADS
 
-        results: list[MemoryGovernanceDecision | BaseException] = [None] * self.NUM_THREADS  # type: ignore[list-item]
+        results: list[MemoryGovernanceDecision | BaseException] = [
+            None
+        ] * self.NUM_THREADS  # type: ignore[list-item]
 
-        def run(index: int, action: MemoryAction, view: MemoryView, mode: ExecutionMode, trust: str) -> None:
+        def run(
+            index: int,
+            action: MemoryAction,
+            view: MemoryView,
+            mode: ExecutionMode,
+            trust: str,
+        ) -> None:
             try:
                 results[index] = _eval(self.evaluator, action, view, mode, trust)
             except BaseException as exc:  # noqa: BLE001
@@ -440,7 +513,9 @@ class TestAdversarialConcurrentAccess:
                 "untrusted",
             )
 
-        threads = [threading.Thread(target=run, args=(i,)) for i in range(self.NUM_THREADS)]
+        threads = [
+            threading.Thread(target=run, args=(i,)) for i in range(self.NUM_THREADS)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -465,74 +540,158 @@ class TestAdversarialSessionStateMatrix:
     # --- Read matrix ---
 
     def test_session_state_read_untrusted_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "untrusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "untrusted",
+        )
         assert decision.denied
 
     def test_session_state_read_provisional_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "provisional",
+        )
         assert decision.denied
 
     def test_session_state_read_trusted_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "trusted",
+        )
         assert decision.allowed
 
     def test_session_state_read_privileged_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "privileged",
+        )
         assert decision.allowed
 
     # --- Write matrix (LIVE mode) ---
 
     def test_session_state_write_untrusted_live_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "untrusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "untrusted",
+        )
         assert decision.denied
 
     def test_session_state_write_provisional_live_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "provisional",
+        )
         assert decision.denied
 
     def test_session_state_write_trusted_live_denied(self) -> None:
         """In LIVE mode, SESSION_STATE write requires 'privileged' -- trusted is not enough."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "trusted",
+        )
         assert decision.denied
 
     def test_session_state_write_privileged_live_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.LIVE, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.LIVE,
+            "privileged",
+        )
         assert decision.allowed
 
     # --- Write matrix (CONSOLIDATION mode) ---
 
     def test_session_state_write_trusted_consolidation_allowed(self) -> None:
         """In CONSOLIDATION mode, trusted+ may write SESSION_STATE."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.CONSOLIDATION, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.CONSOLIDATION,
+            "trusted",
+        )
         assert decision.allowed
 
     def test_session_state_write_provisional_consolidation_denied(self) -> None:
         """Provisional (rank 1) cannot write SESSION_STATE even in CONSOLIDATION."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.CONSOLIDATION, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.CONSOLIDATION,
+            "provisional",
+        )
         assert decision.denied
 
     # --- SIMULATION mode override ---
 
     def test_session_state_write_privileged_simulation_denied(self) -> None:
         """SIMULATION mode forbids writes to SESSION_STATE regardless of trust."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.SIMULATION, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.SIMULATION,
+            "privileged",
+        )
         assert decision.denied
 
     def test_session_state_write_trusted_simulation_denied(self) -> None:
         """SIMULATION mode forbids writes to SESSION_STATE regardless of trust."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.SIMULATION, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.SIMULATION,
+            "trusted",
+        )
         assert decision.denied
 
     # --- REPLAY mode ---
 
     def test_session_state_write_privileged_replay_denied(self) -> None:
         """REPLAY mode denies all writes, including SESSION_STATE for privileged."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.SESSION_STATE, ExecutionMode.REPLAY, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.REPLAY,
+            "privileged",
+        )
         assert decision.denied
 
     def test_session_state_read_trusted_replay_allowed(self) -> None:
         """REPLAY mode only blocks writes -- reads still follow trust matrix."""
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.SESSION_STATE, ExecutionMode.REPLAY, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.SESSION_STATE,
+            ExecutionMode.REPLAY,
+            "trusted",
+        )
         assert decision.allowed
 
 
@@ -550,55 +709,121 @@ class TestAdversarialProvisionalArchiveAccess:
     # --- Read ---
 
     def test_provisional_archive_read_untrusted_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "untrusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "untrusted",
+        )
         assert decision.denied
 
     def test_provisional_archive_read_provisional_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "provisional",
+        )
         assert decision.allowed
 
     def test_provisional_archive_read_trusted_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "trusted",
+        )
         assert decision.allowed
 
     def test_provisional_archive_read_privileged_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.READ, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.READ,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "privileged",
+        )
         assert decision.allowed
 
     # --- Write ---
 
     def test_provisional_archive_write_untrusted_denied(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "untrusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "untrusted",
+        )
         assert decision.denied
 
     def test_provisional_archive_write_provisional_denied(self) -> None:
         """Provisional (rank 1) cannot write PROVISIONAL_ARCHIVE -- requires trusted (rank 2)."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "provisional",
+        )
         assert decision.denied
 
     def test_provisional_archive_write_trusted_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "trusted",
+        )
         assert decision.allowed
 
     def test_provisional_archive_write_privileged_allowed(self) -> None:
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "privileged")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "privileged",
+        )
         assert decision.allowed
 
     # --- ARCHIVE and DELETE are also write actions ---
 
     def test_provisional_archive_archive_action_provisional_denied(self) -> None:
         """ARCHIVE is a write action -- provisional must be denied."""
-        decision = _eval(self.evaluator, MemoryAction.ARCHIVE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "provisional")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.ARCHIVE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "provisional",
+        )
         assert decision.denied
 
     def test_provisional_archive_delete_action_trusted_allowed(self) -> None:
         """DELETE is a write action -- trusted must be allowed."""
-        decision = _eval(self.evaluator, MemoryAction.DELETE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.LIVE, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.DELETE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.LIVE,
+            "trusted",
+        )
         assert decision.allowed
 
     # --- REPLAY blocks all writes ---
 
     def test_provisional_archive_write_trusted_replay_denied(self) -> None:
         """REPLAY mode denies all writes to PROVISIONAL_ARCHIVE regardless of trust."""
-        decision = _eval(self.evaluator, MemoryAction.WRITE, MemoryView.PROVISIONAL_ARCHIVE, ExecutionMode.REPLAY, "trusted")
+        decision = _eval(
+            self.evaluator,
+            MemoryAction.WRITE,
+            MemoryView.PROVISIONAL_ARCHIVE,
+            ExecutionMode.REPLAY,
+            "trusted",
+        )
         assert decision.denied

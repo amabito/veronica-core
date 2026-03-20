@@ -249,11 +249,15 @@ class TestDegradeWiring:
         from veronica_core.runtime_policy import model_downgrade
 
         handler = VeronicaCallbackHandler(GuardConfig(max_cost_usd=10.0, max_steps=5))
-        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="budget pressure")
+        degrade_decision = model_downgrade(
+            "gpt-4", "gpt-3.5-turbo", reason="budget pressure"
+        )
 
         with patch.object(handler._container, "check", return_value=degrade_decision):
             calls: list[tuple[str, str]] = []
-            handler.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            handler.handle_degrade = lambda reason, suggestion: calls.append(
+                (reason, suggestion)
+            )  # type: ignore[method-assign]
             handler.on_llm_start({}, ["Hello"])
             assert len(calls) == 1
             assert "budget pressure" in calls[0][0]
@@ -270,11 +274,15 @@ class TestDegradeWiring:
 
         with patch.object(handler._container, "check", return_value=allow_decision):
             calls: list[tuple[str, str]] = []
-            handler.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+            handler.handle_degrade = lambda reason, suggestion: calls.append(
+                (reason, suggestion)
+            )  # type: ignore[method-assign]
             handler.on_llm_start({}, ["Hello"])
             assert len(calls) == 0
 
-    def test_handle_degrade_default_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_handle_degrade_default_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """handle_degrade() default implementation logs a warning without raising."""
         import logging
 

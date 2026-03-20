@@ -274,7 +274,9 @@ class A2AClientContainmentAdapter:
                 call_error,
             )
             if self._circuit_breaker is not None:
-                if self._failure_predicate is None or self._failure_predicate(call_error):
+                if self._failure_predicate is None or self._failure_predicate(
+                    call_error
+                ):
                     self._circuit_breaker.record_failure(error=call_error)
             await self._increment_error_count(agent_id, cost_usd=cost_estimate)
             return A2AResult(

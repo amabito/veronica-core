@@ -405,10 +405,13 @@ class TestAfterOpNoOp:
         ev = CompactnessEvaluator()
         op = _op()
         from veronica_core.memory.types import MemoryGovernanceDecision
+
         decision = MemoryGovernanceDecision(
             verdict=GovernanceVerdict.ALLOW,
             policy_id="compactness",
             operation=op,
         )
         ev.after_op(op, decision)  # must not raise
-        ev.after_op(op, decision, result="ok", error=ValueError("boom"))  # must not raise
+        ev.after_op(
+            op, decision, result="ok", error=ValueError("boom")
+        )  # must not raise

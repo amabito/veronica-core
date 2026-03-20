@@ -64,12 +64,14 @@ class TestCorruptedInput:
 
     def test_log_non_dict_entries_skipped(self) -> None:
         """Non-dict items in the entries list are silently skipped."""
-        content = json.dumps([
-            {"timestamp": 1.0, "agent_id": "a", "action": "llm_call"},
-            "not a dict",
-            42,
-            None,
-        ])
+        content = json.dumps(
+            [
+                {"timestamp": 1.0, "agent_id": "a", "action": "llm_call"},
+                "not a dict",
+                42,
+                None,
+            ]
+        )
         log = ExecutionLog.from_string(content)
         assert len(log) == 1  # Only the valid dict entry
 
@@ -144,7 +146,9 @@ class TestBoundaryConditions:
         pipeline = ShieldPipeline()
         sim = PolicySimulator(pipeline)
         entries = [
-            ExecutionLogEntry(timestamp=0.0, agent_id="a", action="llm_call", cost_usd=1.0)
+            ExecutionLogEntry(
+                timestamp=0.0, agent_id="a", action="llm_call", cost_usd=1.0
+            )
         ]
         report = sim.simulate(entries)
         assert report.total_entries == 1
@@ -229,7 +233,9 @@ class TestConcurrentSimulation:
             results.append(report)
 
         entries = [
-            ExecutionLogEntry(timestamp=float(i), agent_id="a", action="llm_call", cost_usd=0.01)
+            ExecutionLogEntry(
+                timestamp=float(i), agent_id="a", action="llm_call", cost_usd=0.01
+            )
             for i in range(100)
         ]
 
@@ -285,7 +291,9 @@ class TestPipelineEdgeCases:
         pipeline = ShieldPipeline(pre_dispatch=_DegradeHook())
         sim = PolicySimulator(pipeline)
         entries = [
-            ExecutionLogEntry(timestamp=0.0, agent_id="a", action="llm_call", cost_usd=0.1),
+            ExecutionLogEntry(
+                timestamp=0.0, agent_id="a", action="llm_call", cost_usd=0.1
+            ),
         ]
         report = sim.simulate(entries)
         assert report.degraded_count == 1

@@ -161,6 +161,27 @@ class RetryContainer:
             )
         return PolicyDecision(allowed=True, policy_type=self.policy_type)
 
+    def record_failure(self, error: Optional[Exception] = None) -> None:
+        """Record a single failure without calling execute().
+
+        Called by framework adapter error hooks (on_llm_error, LLMCallFailedEvent)
+        to increment the retry counter and set last_error so that subsequent
+        check() calls reflect the failure state. Use reset() to clear.
+
+        Args:
+            error: The exception to record, or None for a generic failure.
+        """
+        sentinel = (
+            error if error is not None else RuntimeError("adapter-recorded failure")
+        )
+        with self._lock:
+            self._total_retries += 1
+            if self._total_retries >= self.max_retries:
+                self._last_error = sentinel
+        logger.debug(
+            "[VERONICA_RETRY] record_failure(): total_retries=%d", self._total_retries
+        )
+
     def reset(self) -> None:
         """Reset retry state for reuse."""
         with self._lock:

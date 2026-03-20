@@ -197,7 +197,9 @@ class TestA2AIncomingRequest:
             req.tenant_id = "t2"  # type: ignore[misc]
 
     # Adversarial: garbage operation must not produce silent success
-    @pytest.mark.parametrize("bad_op", ["", "sendmessage", "SEND_MESSAGE", "\x00", None])
+    @pytest.mark.parametrize(
+        "bad_op", ["", "sendmessage", "SEND_MESSAGE", "\x00", None]
+    )
     def test_corrupted_operation_raises(self, bad_op: object) -> None:
         with pytest.raises((ValueError, TypeError)):
             A2AIncomingRequest(
@@ -378,11 +380,14 @@ class TestNaNInfValidation:
         with pytest.raises(ValueError):
             A2AMessageCost(agent_id="a", cost_per_token=-0.001)
 
-    @pytest.mark.parametrize("field,kwargs", [
-        ("cost_per_message", {"agent_id": "a", "cost_per_message": True}),
-        ("cost_per_message", {"agent_id": "a", "cost_per_message": False}),
-        ("cost_per_token", {"agent_id": "a", "cost_per_token": True}),
-    ])
+    @pytest.mark.parametrize(
+        "field,kwargs",
+        [
+            ("cost_per_message", {"agent_id": "a", "cost_per_message": True}),
+            ("cost_per_message", {"agent_id": "a", "cost_per_message": False}),
+            ("cost_per_token", {"agent_id": "a", "cost_per_token": True}),
+        ],
+    )
     def test_a2a_message_cost_bool_rejected(self, field: str, kwargs: dict) -> None:
         """bool is subclass of int but must not be accepted as a cost value."""
         with pytest.raises(TypeError, match="finite"):
@@ -408,12 +413,15 @@ class TestNaNInfValidation:
         with pytest.raises(ValueError, match="finite"):
             A2AClientConfig(max_stream_duration_s=val)
 
-    @pytest.mark.parametrize("field,kwargs", [
-        ("timeout_seconds", {"timeout_seconds": True}),
-        ("timeout_seconds", {"timeout_seconds": False}),
-        ("max_stream_duration_s", {"max_stream_duration_s": True}),
-        ("max_stream_duration_s", {"max_stream_duration_s": False}),
-    ])
+    @pytest.mark.parametrize(
+        "field,kwargs",
+        [
+            ("timeout_seconds", {"timeout_seconds": True}),
+            ("timeout_seconds", {"timeout_seconds": False}),
+            ("max_stream_duration_s", {"max_stream_duration_s": True}),
+            ("max_stream_duration_s", {"max_stream_duration_s": False}),
+        ],
+    )
     def test_client_config_bool_float_fields_rejected(
         self, field: str, kwargs: dict
     ) -> None:
@@ -519,7 +527,9 @@ class TestServerDecisionVerdictValidation:
 
     def test_valid_verdicts_accepted(self) -> None:
         for v in ("ALLOW", "DENY", "DEGRADE"):
-            d = A2AServerDecision(verdict=v, reason="test", sender_trust=TrustLevel.TRUSTED)
+            d = A2AServerDecision(
+                verdict=v, reason="test", sender_trust=TrustLevel.TRUSTED
+            )
             assert d.verdict == v
 
     def test_degrade_with_directive(self) -> None:
@@ -540,13 +550,16 @@ class TestServerDecisionVerdictValidation:
 class TestBoolAsIntTypeConfusion:
     """bool is subclass of int -- must be rejected for int-typed config fields."""
 
-    @pytest.mark.parametrize("field,val", [
-        ("max_poll_attempts", True),
-        ("max_state_transitions", False),
-        ("max_stream_chunks", True),
-        ("max_stream_bytes", False),
-        ("stats_cap", True),
-    ])
+    @pytest.mark.parametrize(
+        "field,val",
+        [
+            ("max_poll_attempts", True),
+            ("max_state_transitions", False),
+            ("max_stream_chunks", True),
+            ("max_stream_bytes", False),
+            ("stats_cap", True),
+        ],
+    )
     def test_client_config_bool_rejected(self, field: str, val: object) -> None:
         with pytest.raises(TypeError, match="int"):
             A2AClientConfig(**{field: val})
@@ -567,11 +580,14 @@ class TestBoolAsIntTypeConfusion:
 
 
 class TestClientConfigStatsCap:
-    @pytest.mark.parametrize("cap,should_raise", [
-        (0, True),    # at boundary -- rejected
-        (1, False),   # boundary + 1 -- accepted
-        (2, False),   # above boundary -- accepted
-    ])
+    @pytest.mark.parametrize(
+        "cap,should_raise",
+        [
+            (0, True),  # at boundary -- rejected
+            (1, False),  # boundary + 1 -- accepted
+            (2, False),  # above boundary -- accepted
+        ],
+    )
     def test_stats_cap_boundary_triple(self, cap: int, should_raise: bool) -> None:
         if should_raise:
             with pytest.raises(ValueError):
@@ -589,20 +605,26 @@ class TestClientConfigStatsCap:
 class TestA2AServerConfigTypeGuards:
     """A2AServerConfig int fields must reject bool, float, NaN."""
 
-    @pytest.mark.parametrize("field", [
-        "max_message_size_bytes",
-        "max_requests_per_minute_per_tenant",
-        "max_requests_per_minute_per_sender",
-    ])
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "max_message_size_bytes",
+            "max_requests_per_minute_per_tenant",
+            "max_requests_per_minute_per_sender",
+        ],
+    )
     def test_bool_rejected(self, field: str) -> None:
         with pytest.raises(TypeError, match="int"):
             A2AServerConfig(**{field: True})
 
-    @pytest.mark.parametrize("field", [
-        "max_message_size_bytes",
-        "max_requests_per_minute_per_tenant",
-        "max_requests_per_minute_per_sender",
-    ])
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "max_message_size_bytes",
+            "max_requests_per_minute_per_tenant",
+            "max_requests_per_minute_per_sender",
+        ],
+    )
     @pytest.mark.parametrize("val", [float("nan"), float("inf"), 3.14])
     def test_float_nan_inf_rejected(self, field: str, val: float) -> None:
         with pytest.raises(TypeError, match="int"):

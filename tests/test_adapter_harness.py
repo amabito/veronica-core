@@ -18,7 +18,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from veronica_core.adapter_capabilities import AdapterCapabilities, UNCONSTRAINED_VERSIONS
+from veronica_core.adapter_capabilities import (
+    AdapterCapabilities,
+    UNCONSTRAINED_VERSIONS,
+)
 from veronica_core.inject import GuardConfig, VeronicaHalt
 
 
@@ -343,9 +346,7 @@ def _make_llamaindex_fixture() -> AdapterFixture:
     CBEventType = sys.modules["llama_index.core.callbacks.schema"].CBEventType
 
     def make(config: GuardConfig, metrics: Any = None) -> Any:
-        return VeronicaLlamaIndexHandler(
-            config, metrics=metrics, agent_id="harness-li"
-        )
+        return VeronicaLlamaIndexHandler(config, metrics=metrics, agent_id="harness-li")
 
     def invoke_allow(adapter: Any) -> None:
         adapter.on_event_start(CBEventType.LLM, {})
@@ -499,9 +500,7 @@ class TestAdapterHarness:
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("fixture", _FIXTURES, ids=_FIXTURE_IDS)
-    def test_capabilities_framework_name_is_set(
-        self, fixture: AdapterFixture
-    ) -> None:
+    def test_capabilities_framework_name_is_set(self, fixture: AdapterFixture) -> None:
         """capabilities().framework_name must be a non-empty string."""
         adapter = fixture.make(_unlimited_config())
         caps = adapter.capabilities()
@@ -607,9 +606,7 @@ class TestAdapterHarness:
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("fixture", _FIXTURES, ids=_FIXTURE_IDS)
-    def test_is_version_compatible_min_boundary(
-        self, fixture: AdapterFixture
-    ) -> None:
+    def test_is_version_compatible_min_boundary(self, fixture: AdapterFixture) -> None:
         """is_version_compatible(min_version) must return True."""
         adapter = fixture.make(_unlimited_config())
         caps = adapter.capabilities()
@@ -624,9 +621,7 @@ class TestAdapterHarness:
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("fixture", _FIXTURES, ids=_FIXTURE_IDS)
-    def test_is_version_compatible_max_boundary(
-        self, fixture: AdapterFixture
-    ) -> None:
+    def test_is_version_compatible_max_boundary(self, fixture: AdapterFixture) -> None:
         """is_version_compatible(max_version) must return True."""
         adapter = fixture.make(_unlimited_config())
         caps = adapter.capabilities()
@@ -651,7 +646,9 @@ class TestAdapterHarness:
         min_ver, _ = caps.supported_versions
         # Only test this when min_ver is actually > 0.0.0
         if min_ver == "0.0.0":
-            pytest.skip(f"{fixture.name} has min_version=0.0.0 -- cannot test below-min")
+            pytest.skip(
+                f"{fixture.name} has min_version=0.0.0 -- cannot test below-min"
+            )
         assert not caps.is_version_compatible("0.0.0"), (
             f"{fixture.name}: is_version_compatible('0.0.0') should be False "
             f"because min_version is {min_ver!r}."

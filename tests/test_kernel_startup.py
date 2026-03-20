@@ -21,7 +21,13 @@ from veronica_core.kernel.startup import load_and_verify, verify_policy_or_halt
 from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.security.policy_signing import PolicySigner
 
-from .conftest import make_signed_bundle, make_test_audit_log, make_test_bundle, make_test_signer, read_jsonl
+from .conftest import (
+    make_signed_bundle,
+    make_test_audit_log,
+    make_test_bundle,
+    make_test_signer,
+    read_jsonl,
+)
 
 
 # ---------------------------------------------------------------------------

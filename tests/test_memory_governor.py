@@ -38,7 +38,9 @@ def _make_verdict_hook(verdict: GovernanceVerdict, policy_id: str = "test") -> A
     """Return a hook that always returns the given verdict."""
 
     class _VerdictHook:
-        def before_op(self, operation: MemoryOperation, context: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+        def before_op(
+            self, operation: MemoryOperation, context: MemoryPolicyContext | None
+        ) -> MemoryGovernanceDecision:
             return MemoryGovernanceDecision(
                 verdict=verdict,
                 reason=f"forced {verdict.value}",
@@ -46,7 +48,13 @@ def _make_verdict_hook(verdict: GovernanceVerdict, policy_id: str = "test") -> A
                 operation=operation,
             )
 
-        def after_op(self, operation: MemoryOperation, decision: MemoryGovernanceDecision, result=None, error=None) -> None:
+        def after_op(
+            self,
+            operation: MemoryOperation,
+            decision: MemoryGovernanceDecision,
+            result=None,
+            error=None,
+        ) -> None:
             pass
 
     return _VerdictHook()
@@ -56,10 +64,18 @@ def _make_raising_hook() -> Any:
     """Return a hook whose before_op raises an exception."""
 
     class _RaisingHook:
-        def before_op(self, operation: MemoryOperation, context: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+        def before_op(
+            self, operation: MemoryOperation, context: MemoryPolicyContext | None
+        ) -> MemoryGovernanceDecision:
             raise RuntimeError("hook exploded")
 
-        def after_op(self, operation: MemoryOperation, decision: MemoryGovernanceDecision, result=None, error=None) -> None:
+        def after_op(
+            self,
+            operation: MemoryOperation,
+            decision: MemoryGovernanceDecision,
+            result=None,
+            error=None,
+        ) -> None:
             pass
 
     return _RaisingHook()
@@ -69,10 +85,20 @@ def _make_raising_after_hook() -> Any:
     """Return a hook whose after_op raises -- used for notify_after swallow tests."""
 
     class _RaisingAfterHook:
-        def before_op(self, operation: MemoryOperation, context: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
-            return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="ok")
+        def before_op(
+            self, operation: MemoryOperation, context: MemoryPolicyContext | None
+        ) -> MemoryGovernanceDecision:
+            return MemoryGovernanceDecision(
+                verdict=GovernanceVerdict.ALLOW, policy_id="ok"
+            )
 
-        def after_op(self, operation: MemoryOperation, decision: MemoryGovernanceDecision, result=None, error=None) -> None:
+        def after_op(
+            self,
+            operation: MemoryOperation,
+            decision: MemoryGovernanceDecision,
+            result=None,
+            error=None,
+        ) -> None:
             raise RuntimeError("after_op exploded")
 
     return _RaisingAfterHook()
@@ -150,9 +176,13 @@ class TestVerdictAggregation:
                 self._name = name
                 self._verdict = verdict
 
-            def before_op(self, operation: MemoryOperation, context: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: MemoryOperation, context: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 call_log.append(self._name)
-                return MemoryGovernanceDecision(verdict=self._verdict, policy_id=self._name)
+                return MemoryGovernanceDecision(
+                    verdict=self._verdict, policy_id=self._name
+                )
 
             def after_op(self, *args: Any, **kwargs: Any) -> None:
                 pass
@@ -259,10 +289,20 @@ class TestNotifyAfter:
         call_count: list[int] = [0]
 
         class _CountingHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
-                return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="ok")
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
+                return MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.ALLOW, policy_id="ok"
+                )
 
-            def after_op(self, op: MemoryOperation, decision: MemoryGovernanceDecision, result=None, error=None) -> None:
+            def after_op(
+                self,
+                op: MemoryOperation,
+                decision: MemoryGovernanceDecision,
+                result=None,
+                error=None,
+            ) -> None:
                 call_count[0] += 1
 
         gov = MemoryGovernor()
@@ -270,7 +310,9 @@ class TestNotifyAfter:
             gov.add_hook(_CountingHook())
 
         op = _op()
-        decision = MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="ok")
+        decision = MemoryGovernanceDecision(
+            verdict=GovernanceVerdict.ALLOW, policy_id="ok"
+        )
         gov.notify_after(op, decision)
         assert call_count[0] == 3
 
@@ -279,7 +321,9 @@ class TestNotifyAfter:
         gov = MemoryGovernor()
         gov.add_hook(_make_raising_after_hook())
         op = _op()
-        decision = MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="ok")
+        decision = MemoryGovernanceDecision(
+            verdict=GovernanceVerdict.ALLOW, policy_id="ok"
+        )
         gov.notify_after(op, decision)  # must not raise
 
 
@@ -302,10 +346,14 @@ class TestEvaluateContextDefault:
         received_context: list[MemoryPolicyContext] = []
 
         class _CapturingHook:
-            def before_op(self, op: MemoryOperation, ctx: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, op: MemoryOperation, ctx: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 if ctx is not None:
                     received_context.append(ctx)
-                return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="ok")
+                return MemoryGovernanceDecision(
+                    verdict=GovernanceVerdict.ALLOW, policy_id="ok"
+                )
 
             def after_op(self, *args: Any, **kwargs: Any) -> None:
                 pass

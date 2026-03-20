@@ -7,6 +7,7 @@ Coverage:
 - MessageContext: validation edge cases
 - BridgePolicy: evaluation order (short-circuit semantics)
 """
+
 from __future__ import annotations
 
 import sys
@@ -95,7 +96,9 @@ class _NoneHook:
 
 
 def _allow_decision(policy_id: str = "stub") -> MemoryGovernanceDecision:
-    return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id=policy_id)
+    return MemoryGovernanceDecision(
+        verdict=GovernanceVerdict.ALLOW, policy_id=policy_id
+    )
 
 
 def _degrade_decision(
@@ -215,7 +218,9 @@ class TestAdversarialDenyOversizedMessageHook:
         assert decision.degrade_directive is not None
 
         # Size max_bytes -- DENY (boundary-inclusive).
-        assert hook.before_message(_ctx(size=max_bytes)).verdict is GovernanceVerdict.DENY
+        assert (
+            hook.before_message(_ctx(size=max_bytes)).verdict is GovernanceVerdict.DENY
+        )
 
     def test_invalid_max_bytes_zero_raises(self) -> None:
         """max_bytes=0 must raise ValueError at construction."""
@@ -555,7 +560,11 @@ class TestAdversarialGovernorDegradeMerging:
         merged = _merge_directives(d1, d2)
 
         assert merged is not None
-        assert set(merged.allowed_provenance) == {"verified", "unverified", "quarantined"}
+        assert set(merged.allowed_provenance) == {
+            "verified",
+            "unverified",
+            "quarantined",
+        }
         # Check sorted determinism.
         assert merged.allowed_provenance == tuple(sorted(merged.allowed_provenance))
 
@@ -765,10 +774,9 @@ class TestAdversarialGovernorThreadSafety:
                 with lock:
                     errors.append(exc)
 
-        threads = (
-            [threading.Thread(target=adder) for _ in range(3)]
-            + [threading.Thread(target=evaluator) for _ in range(3)]
-        )
+        threads = [threading.Thread(target=adder) for _ in range(3)] + [
+            threading.Thread(target=evaluator) for _ in range(3)
+        ]
         for t in threads:
             t.start()
         for t in threads:

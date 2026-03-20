@@ -313,7 +313,9 @@ class TestThreadSafety:
             try:
                 barrier.wait()
                 for i in range(20):
-                    log.emit_chain_event("timeout", f"detail-{tid}-{i}", f"req-{tid}-{i}")
+                    log.emit_chain_event(
+                        "timeout", f"detail-{tid}-{i}", f"req-{tid}-{i}"
+                    )
             except Exception as exc:
                 errors.append(exc)
 
@@ -374,12 +376,18 @@ class TestDedupDimensions:
     def test_same_event_different_decision_stored_separately(self) -> None:
         log = _ChainEventLog()
         e1 = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r",
-            hook="h", request_id="req",
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="h",
+            request_id="req",
         )
         e2 = SafetyEvent(
-            event_type="T", decision=Decision.ALLOW, reason="r",
-            hook="h", request_id="req",
+            event_type="T",
+            decision=Decision.ALLOW,
+            reason="r",
+            hook="h",
+            request_id="req",
         )
         log.append(e1)
         log.append(e2)
@@ -388,12 +396,18 @@ class TestDedupDimensions:
     def test_same_event_different_hook_stored_separately(self) -> None:
         log = _ChainEventLog()
         e1 = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r",
-            hook="hook_a", request_id="req",
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="hook_a",
+            request_id="req",
         )
         e2 = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r",
-            hook="hook_b", request_id="req",
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="hook_b",
+            request_id="req",
         )
         log.append(e1)
         log.append(e2)
@@ -402,12 +416,18 @@ class TestDedupDimensions:
     def test_none_request_id_deduped_correctly(self) -> None:
         log = _ChainEventLog()
         e1 = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r",
-            hook="h", request_id=None,
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="h",
+            request_id=None,
         )
         e2 = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r",
-            hook="h", request_id=None,
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="h",
+            request_id=None,
         )
         log.append(e1)
         log.append(e2)
@@ -508,7 +528,9 @@ class TestAdversarialChainEventLogRace:
                     )
                 )
 
-        threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(n_threads)]
+        threads = [
+            threading.Thread(target=worker, args=(tid,)) for tid in range(n_threads)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -663,10 +685,18 @@ class TestAdversarialChainEventLogCorrupted:
         """None request_id and non-None request_id are distinct dedup keys."""
         log = _ChainEventLog()
         e_none = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r", hook="h", request_id=None
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="h",
+            request_id=None,
         )
         e_str = SafetyEvent(
-            event_type="T", decision=Decision.HALT, reason="r", hook="h", request_id="req-1"
+            event_type="T",
+            decision=Decision.HALT,
+            reason="r",
+            hook="h",
+            request_id="req-1",
         )
         log.append(e_none)
         log.append(e_str)
@@ -696,7 +726,11 @@ class TestAdversarialChainEventLogCorrupted:
         for _ in range(5):
             log.append(
                 SafetyEvent(
-                    event_type="", decision=Decision.HALT, reason="", hook="", request_id=""
+                    event_type="",
+                    decision=Decision.HALT,
+                    reason="",
+                    hook="",
+                    request_id="",
                 )
             )
         assert len(log) == 1
@@ -739,7 +773,9 @@ class TestAdversarialChainEventLogCorrupted:
         log.append(ev2)
         assert len(log) == 1
 
-    def test_safety_event_long_event_type_vs_slightly_different_not_deduped(self) -> None:
+    def test_safety_event_long_event_type_vs_slightly_different_not_deduped(
+        self,
+    ) -> None:
         """Two 10K event_type strings that differ by 1 char are distinct dedup keys."""
         log = _ChainEventLog()
         base = "Y" * 9_999

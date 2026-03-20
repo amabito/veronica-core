@@ -32,7 +32,9 @@ from veronica_core.shield.types import Decision
 
 def _make_ctx(max_cost: float = 100.0) -> ExecutionContext:
     return ExecutionContext(
-        config=ExecutionConfig(max_cost_usd=max_cost, max_steps=1000, max_retries_total=10)
+        config=ExecutionConfig(
+            max_cost_usd=max_cost, max_steps=1000, max_retries_total=10
+        )
     )
 
 
@@ -196,7 +198,9 @@ class TestBudgetExceeded:
 
         async def _run() -> None:
             ctx = ExecutionContext(
-                config=ExecutionConfig(max_cost_usd=0.0, max_steps=1000, max_retries_total=10)
+                config=ExecutionConfig(
+                    max_cost_usd=0.0, max_steps=1000, max_retries_total=10
+                )
             )
             adapter = A2AClientContainmentAdapter(execution_context=ctx)
             client = _make_client()
@@ -228,7 +232,9 @@ class TestTimeout:
             client = MagicMock()
             client.send_message = slow_send
             cfg = A2AClientConfig(timeout_seconds=0.05)
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(), config=cfg)
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(), config=cfg
+            )
             result = await adapter.send_message(
                 agent_id="agent-1",
                 message={},
@@ -273,7 +279,9 @@ class TestStatsCap:
 
         async def _run() -> None:
             cfg = A2AClientConfig(stats_cap=3)
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(), config=cfg)
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(), config=cfg
+            )
             client = _make_client()
             for i in range(10):
                 await adapter.send_message(
@@ -297,7 +305,9 @@ class TestStatsCap:
 class TestConcurrentSendMessage:
     def test_concurrent_calls_all_succeed(self) -> None:
         async def _run() -> None:
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(max_cost=500.0))
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(max_cost=500.0)
+            )
             client = _make_client()
 
             async def one_call(i: int) -> A2AResult:
@@ -437,17 +447,26 @@ class TestPerTokenCostDelta:
     def test_token_delta_charged_to_budget(self) -> None:
         """When cost_per_token > 0 and response has tokens, delta must be
         added to ExecutionContext._budget_backend and _limits."""
+
         async def _run() -> None:
             ctx = _make_ctx(max_cost=100.0)
-            costs = {"agent-1": A2AMessageCost("agent-1", cost_per_message=0.01, cost_per_token=0.001)}
+            costs = {
+                "agent-1": A2AMessageCost(
+                    "agent-1", cost_per_message=0.01, cost_per_token=0.001
+                )
+            }
             adapter = A2AClientContainmentAdapter(
-                execution_context=ctx, message_costs=costs,
+                execution_context=ctx,
+                message_costs=costs,
             )
             # Client returns response with token_count
             client = _make_client({"status": "ok", "token_count": 100})
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.success is True
             # cost = 0.01 + 100 * 0.001 = 0.11
@@ -460,13 +479,17 @@ class TestPerTokenCostDelta:
 
     def test_no_token_delta_when_zero_per_token(self) -> None:
         """No delta charged when cost_per_token is 0 (default)."""
+
         async def _run() -> None:
             ctx = _make_ctx(max_cost=100.0)
             adapter = A2AClientContainmentAdapter(execution_context=ctx)
             client = _make_client({"status": "ok", "token_count": 500})
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.success is True
             assert result.cost_usd == pytest.approx(0.01, abs=0.001)
@@ -484,34 +507,42 @@ class TestExtractTokenCount:
 
     def test_nested_usage_dict(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"usage": {"total_tokens": 200}}) == 200
 
     def test_usage_dict_non_int(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"usage": {"total_tokens": "not_int"}}) == 0
 
     def test_string_token_count(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"token_count": "not_a_number"}) == 0
 
     def test_negative_token_count(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"token_count": -5}) == 0
 
     def test_none_response(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count(None) == 0
 
     def test_zero_token_count(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"token_count": 0}) == 0
 
     def test_float_token_count_ignored(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         assert _extract_token_count({"token_count": 3.14}) == 0
 
     def test_bool_token_count_rejected(self) -> None:
         from veronica_core.adapters.a2a_client import _extract_token_count
+
         # bool is subclass of int but must be rejected (consistent with config guards)
         assert _extract_token_count({"token_count": True}) == 0
         assert _extract_token_count({"token_count": False}) == 0
@@ -557,13 +588,16 @@ class TestTaskResponseBranch:
 
     def test_task_response_sets_task_field(self) -> None:
         """Response with .id and .status is classified as a task."""
+
         async def _run() -> None:
             class TaskResponse:
                 id = "task-123"
                 status = "completed"
                 token_count = 5
 
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(max_cost=10.0))
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(max_cost=10.0)
+            )
             result = await adapter.send_message(
                 agent_id="a1",
                 message={"text": "hi"},
@@ -580,8 +614,11 @@ class TestTaskResponseBranch:
 
     def test_dict_response_sets_message_field(self) -> None:
         """Dict response (no .id/.status) is classified as a message."""
+
         async def _run() -> None:
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(max_cost=10.0))
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(max_cost=10.0)
+            )
             result = await adapter.send_message(
                 agent_id="a1",
                 message={"text": "hi"},
@@ -606,20 +643,29 @@ class TestStatsCapGuardAfter:
 
     def test_send_message_succeeds_after_stats_cap(self) -> None:
         """Calls beyond stats cap still succeed (just not tracked)."""
+
         async def _run() -> None:
             cfg = A2AClientConfig(stats_cap=2)
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(), config=cfg)
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(), config=cfg
+            )
             client = _make_client()
             # Fill stats cap
             for i in range(3):
                 await adapter.send_message(
-                    agent_id=f"agent-{i}", message={}, tenant_id="t1",
-                    identity=_make_identity(), client=client,
+                    agent_id=f"agent-{i}",
+                    message={},
+                    tenant_id="t1",
+                    identity=_make_identity(),
+                    client=client,
                 )
             # 4th agent should still succeed
             result = await adapter.send_message(
-                agent_id="agent-99", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-99",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.success is True
             assert "agent-99" not in adapter.get_stats()
@@ -628,20 +674,29 @@ class TestStatsCapGuardAfter:
 
     def test_error_after_stats_cap_does_not_crash(self) -> None:
         """Error on over-cap agent must not crash (no-op on missing stats)."""
+
         async def _run() -> None:
             cfg = A2AClientConfig(stats_cap=1)
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(), config=cfg)
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(), config=cfg
+            )
             ok_client = _make_client()
             # Fill cap
             await adapter.send_message(
-                agent_id="agent-0", message={}, tenant_id="t1",
-                identity=_make_identity(), client=ok_client,
+                agent_id="agent-0",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=ok_client,
             )
             # Over-cap agent with error
             err_client = _make_client(raises=RuntimeError("fail"))
             result = await adapter.send_message(
-                agent_id="agent-over-cap", message={}, tenant_id="t1",
-                identity=_make_identity(), client=err_client,
+                agent_id="agent-over-cap",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=err_client,
             )
             assert result.success is False
             assert "agent-over-cap" not in adapter.get_stats()
@@ -661,12 +716,16 @@ class TestCostTrackedInStatsDetailed:
         async def _run() -> None:
             costs = {"agent-1": A2AMessageCost("agent-1", cost_per_message=0.05)}
             adapter = A2AClientContainmentAdapter(
-                execution_context=_make_ctx(), message_costs=costs,
+                execution_context=_make_ctx(),
+                message_costs=costs,
             )
             client = _make_client()
             await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             stats = adapter.get_stats()
             assert stats["agent-1"].total_cost_usd == pytest.approx(0.05, abs=0.001)
@@ -682,19 +741,26 @@ class TestCostTrackedInStatsDetailed:
 class TestCompoundState:
     def test_cb_open_plus_budget_exhausted(self) -> None:
         """CB check happens before budget -- CB error message wins."""
+
         async def _run() -> None:
             cb = CircuitBreaker(failure_threshold=1)
             cb.record_failure(error=RuntimeError("fail"))
             ctx = ExecutionContext(
-                config=ExecutionConfig(max_cost_usd=0.0, max_steps=1000, max_retries_total=10)
+                config=ExecutionConfig(
+                    max_cost_usd=0.0, max_steps=1000, max_retries_total=10
+                )
             )
             adapter = A2AClientContainmentAdapter(
-                execution_context=ctx, circuit_breaker=cb,
+                execution_context=ctx,
+                circuit_breaker=cb,
             )
             client = _make_client()
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.decision == Decision.HALT
             assert result.error == "Agent unavailable"  # CB wins, not budget
@@ -711,6 +777,7 @@ class TestCompoundState:
 class TestConcurrentStatsConsistency:
     def test_concurrent_calls_stats_count_correct(self) -> None:
         """10 concurrent calls must yield message_count == 10."""
+
         async def _run() -> None:
             adapter = A2AClientContainmentAdapter(
                 execution_context=_make_ctx(max_cost=500.0),
@@ -719,8 +786,11 @@ class TestConcurrentStatsConsistency:
 
             async def one_call(i: int) -> A2AResult:
                 return await adapter.send_message(
-                    agent_id="agent-1", message={"seq": i}, tenant_id="t1",
-                    identity=_make_identity(), client=client,
+                    agent_id="agent-1",
+                    message={"seq": i},
+                    tenant_id="t1",
+                    identity=_make_identity(),
+                    client=client,
                 )
 
             results = await asyncio.gather(*[one_call(i) for i in range(10)])
@@ -740,15 +810,20 @@ class TestConcurrentStatsConsistency:
 class TestBoundAdapterFailurePaths:
     def test_bound_adapter_cb_open(self) -> None:
         """BoundA2AAdapter must correctly propagate CB HALT."""
+
         async def _run() -> None:
             cb = CircuitBreaker(failure_threshold=1)
             cb.record_failure(error=RuntimeError("fail"))
             client = _make_client()
             adapter = wrap_a2a_agent(
-                client=client, execution_context=_make_ctx(), circuit_breaker=cb,
+                client=client,
+                execution_context=_make_ctx(),
+                circuit_breaker=cb,
             )
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
                 identity=_make_identity(),
             )
             assert result.decision == Decision.HALT
@@ -758,14 +833,19 @@ class TestBoundAdapterFailurePaths:
 
     def test_bound_adapter_budget_exhausted(self) -> None:
         """BoundA2AAdapter must correctly propagate budget HALT."""
+
         async def _run() -> None:
             ctx = ExecutionContext(
-                config=ExecutionConfig(max_cost_usd=0.0, max_steps=1000, max_retries_total=10)
+                config=ExecutionConfig(
+                    max_cost_usd=0.0, max_steps=1000, max_retries_total=10
+                )
             )
             client = _make_client()
             adapter = wrap_a2a_agent(client=client, execution_context=ctx)
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
                 identity=_make_identity(),
             )
             assert result.decision == Decision.HALT
@@ -789,10 +869,15 @@ class TestTimeoutErrorLeakage:
             client = MagicMock()
             client.send_message = slow_send
             cfg = A2AClientConfig(timeout_seconds=0.05)
-            adapter = A2AClientContainmentAdapter(execution_context=_make_ctx(), config=cfg)
+            adapter = A2AClientContainmentAdapter(
+                execution_context=_make_ctx(), config=cfg
+            )
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.success is False
             assert result.error is not None
@@ -813,8 +898,11 @@ class TestGetStatsAsync:
             adapter = A2AClientContainmentAdapter(execution_context=_make_ctx())
             client = _make_client()
             await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             stats = await adapter.get_stats_async()
             assert "agent-1" in stats
@@ -839,8 +927,11 @@ class TestWhitespaceValidation:
             client = _make_client()
             with pytest.raises(ValueError, match="agent_id"):
                 await adapter.send_message(
-                    agent_id="   ", message={}, tenant_id="t1",
-                    identity=_make_identity(), client=client,
+                    agent_id="   ",
+                    message={},
+                    tenant_id="t1",
+                    identity=_make_identity(),
+                    client=client,
                 )
 
         asyncio.run(_run())
@@ -851,8 +942,11 @@ class TestWhitespaceValidation:
             client = _make_client()
             with pytest.raises(ValueError, match="tenant_id"):
                 await adapter.send_message(
-                    agent_id="agent-1", message={}, tenant_id="  \t  ",
-                    identity=_make_identity(), client=client,
+                    agent_id="agent-1",
+                    message={},
+                    tenant_id="  \t  ",
+                    identity=_make_identity(),
+                    client=client,
                 )
 
         asyncio.run(_run())
@@ -866,15 +960,20 @@ class TestWhitespaceValidation:
 class TestErrorPathCostTracking:
     def test_error_cost_added_to_stats(self) -> None:
         """Failed calls must still accumulate cost in stats.total_cost_usd."""
+
         async def _run() -> None:
             costs = {"agent-1": A2AMessageCost("agent-1", cost_per_message=0.05)}
             adapter = A2AClientContainmentAdapter(
-                execution_context=_make_ctx(), message_costs=costs,
+                execution_context=_make_ctx(),
+                message_costs=costs,
             )
             client = _make_client(raises=ConnectionError("down"))
             await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             stats = adapter.get_stats()
             assert stats["agent-1"].total_cost_usd == pytest.approx(0.05, abs=0.001)
@@ -891,6 +990,7 @@ class TestErrorPathCostTracking:
 class TestFailurePredicate:
     def test_predicate_false_does_not_trip_cb(self) -> None:
         """failure_predicate returning False must prevent CB from recording failure."""
+
         async def _run() -> None:
             from veronica_core.runtime_policy import PolicyContext
 
@@ -902,8 +1002,11 @@ class TestFailurePredicate:
             )
             client = _make_client(raises=ConnectionError("net"))
             result = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert result.success is False
             # CB must still be CLOSED -- predicate blocked the failure record
@@ -914,6 +1017,7 @@ class TestFailurePredicate:
 
     def test_predicate_true_trips_cb(self) -> None:
         """failure_predicate returning True must trip the CB."""
+
         async def _run() -> None:
             from veronica_core.runtime_policy import PolicyContext
 
@@ -925,8 +1029,11 @@ class TestFailurePredicate:
             )
             client = _make_client(raises=ConnectionError("net"))
             await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             cb_decision = cb.check(PolicyContext())
             assert cb_decision.allowed is False
@@ -942,6 +1049,7 @@ class TestFailurePredicate:
 class TestAvgLatencyMsCorrectness:
     def test_cb_blocked_calls_do_not_dilute_latency(self) -> None:
         """CB-blocked calls must not inflate the avg_latency_ms denominator."""
+
         async def _run() -> None:
             cb = CircuitBreaker(failure_threshold=1)
             adapter = A2AClientContainmentAdapter(
@@ -951,8 +1059,11 @@ class TestAvgLatencyMsCorrectness:
             client = _make_client()
             # 1st call: success (records latency)
             r1 = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert r1.success is True
 
@@ -961,8 +1072,11 @@ class TestAvgLatencyMsCorrectness:
 
             # 2nd call: CB-blocked (no latency)
             r2 = await adapter.send_message(
-                agent_id="agent-1", message={}, tenant_id="t1",
-                identity=_make_identity(), client=client,
+                agent_id="agent-1",
+                message={},
+                tenant_id="t1",
+                identity=_make_identity(),
+                client=client,
             )
             assert r2.decision == Decision.HALT
 

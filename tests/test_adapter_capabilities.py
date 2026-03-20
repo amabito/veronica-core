@@ -190,11 +190,13 @@ class TestAdversarialAdapterCapabilities:
 
     def test_extra_with_non_serializable_values(self) -> None:
         """extra dict accepts arbitrary objects without error."""
-        caps = AdapterCapabilities(extra={
-            "lambda": lambda: None,
-            "set": {1, 2, 3},
-            "bytes": b"\xff\x00",
-        })
+        caps = AdapterCapabilities(
+            extra={
+                "lambda": lambda: None,
+                "set": {1, 2, 3},
+                "bytes": b"\xff\x00",
+            }
+        )
         assert callable(caps.extra["lambda"])
         assert isinstance(caps.extra["set"], set)
 

@@ -118,7 +118,9 @@ def _merge_directives(
 
     return DegradeDirective(
         mode=merged_mode,
-        max_packet_tokens=_merge_limit(existing.max_packet_tokens, new.max_packet_tokens),
+        max_packet_tokens=_merge_limit(
+            existing.max_packet_tokens, new.max_packet_tokens
+        ),
         allowed_provenance=tuple(
             sorted(set(existing.allowed_provenance) | set(new.allowed_provenance))
         ),
@@ -319,7 +321,8 @@ class MemoryGovernor:
             policy_id=accumulated_policy_id,
             degrade_directive=(
                 accumulated_directive
-                if accumulated_verdict in (
+                if accumulated_verdict
+                in (
                     GovernanceVerdict.DEGRADE,
                     GovernanceVerdict.QUARANTINE,
                 )
@@ -452,7 +455,10 @@ class MemoryGovernor:
                 accumulated_threat = decision.threat_context
 
             # Merge DegradeDirective from every DEGRADE hook encountered.
-            if decision.verdict is GovernanceVerdict.DEGRADE and decision.degrade_directive is not None:
+            if (
+                decision.verdict is GovernanceVerdict.DEGRADE
+                and decision.degrade_directive is not None
+            ):
                 accumulated_directive = _merge_directives(
                     accumulated_directive, decision.degrade_directive
                 )
@@ -467,7 +473,8 @@ class MemoryGovernor:
         # directive still carries valid content-transformation instructions.
         final_directive = (
             accumulated_directive
-            if accumulated_verdict in (
+            if accumulated_verdict
+            in (
                 GovernanceVerdict.DEGRADE,
                 GovernanceVerdict.QUARANTINE,
             )

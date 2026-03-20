@@ -1,4 +1,5 @@
 """Compactness policy evaluator for memory operations."""
+
 from __future__ import annotations
 
 __all__ = ["CompactnessEvaluator"]
@@ -119,10 +120,15 @@ class CompactnessEvaluator:
         # Fail-closed for NaN/Inf: non-finite ratio is treated as maximum
         # (triggers DEGRADE rather than silently passing all comparisons).
         raw_replay_ratio: float = (
-            raw_replay_ratio_raw if math.isfinite(raw_replay_ratio_raw) else float("inf")
+            raw_replay_ratio_raw
+            if math.isfinite(raw_replay_ratio_raw)
+            else float("inf")
         )
 
-        if constraints.max_packet_tokens > 0 and packet_tokens > constraints.max_packet_tokens:
+        if (
+            constraints.max_packet_tokens > 0
+            and packet_tokens > constraints.max_packet_tokens
+        ):
             degrade_reasons.append(
                 f"packet_tokens {packet_tokens} > max_packet_tokens "
                 f"{constraints.max_packet_tokens}"
@@ -156,6 +162,7 @@ class CompactnessEvaluator:
 
         if constraints.prefer_verified_summary:
             from veronica_core.memory.types import MemoryProvenance
+
             if operation.provenance is not MemoryProvenance.VERIFIED:
                 degrade_reasons.append(
                     f"prefer_verified_summary: provenance is {operation.provenance.value!r}"

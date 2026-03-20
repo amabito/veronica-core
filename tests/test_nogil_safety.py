@@ -221,7 +221,9 @@ class TestNogilSafety:
         for t in all_threads:
             t.join()
 
-        assert errors == [], f"VeronicaIntegration concurrent access raised: {errors[0]}"
+        assert errors == [], (
+            f"VeronicaIntegration concurrent access raised: {errors[0]}"
+        )
         # State must still be readable without crashing
         stats = integration.get_stats()
         assert isinstance(stats, dict)
@@ -248,7 +250,9 @@ class TestAdversarialRaceConditions:
 
         def worker() -> None:
             barrier.wait()  # Both threads start simultaneously
-            result = budget.spend(0.2)  # Each tries to spend 0.2 (total 0.4, over limit)
+            result = budget.spend(
+                0.2
+            )  # Each tries to spend 0.2 (total 0.4, over limit)
             with lock:
                 results.append(result)
 
@@ -346,7 +350,9 @@ class TestAdversarialRaceConditions:
         for t in adder_threads:
             t.join()
 
-        assert errors == [], f"LocalBudgetBackend concurrent add/get raised: {errors[0]}"
+        assert errors == [], (
+            f"LocalBudgetBackend concurrent add/get raised: {errors[0]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -380,17 +386,14 @@ class TestAdversarialResourceExhaustion:
                     errors.append(exc)
 
         threads = [
-            threading.Thread(target=worker, args=(f"agent_{i}",))
-            for i in range(100)
+            threading.Thread(target=worker, args=(f"agent_{i}",)) for i in range(100)
         ]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
 
-        assert errors == [], (
-            f"create_child raised under 100-thread load: {errors[0]}"
-        )
+        assert errors == [], f"create_child raised under 100-thread load: {errors[0]}"
         assert len(children) == 100
 
     def test_execution_graph_100_concurrent_nodes(self) -> None:
@@ -405,7 +408,9 @@ class TestAdversarialResourceExhaustion:
         def worker() -> None:
             try:
                 barrier.wait()
-                nid = graph.begin_node(parent_id=root_id, kind="tool", name="worker_node")
+                nid = graph.begin_node(
+                    parent_id=root_id, kind="tool", name="worker_node"
+                )
                 with lock:
                     node_ids.append(nid)
             except Exception as exc:
@@ -502,7 +507,9 @@ class TestAdversarialAdapterInterleave:
             except Exception as exc:
                 errors.append(exc)
 
-        proxy_threads = [threading.Thread(target=proxy_worker) for _ in range(n_threads)]
+        proxy_threads = [
+            threading.Thread(target=proxy_worker) for _ in range(n_threads)
+        ]
         wrap_threads = [threading.Thread(target=wrap_worker) for _ in range(n_threads)]
         all_threads = proxy_threads + wrap_threads
         for t in all_threads:
@@ -560,7 +567,9 @@ class TestAdversarialAdapterInterleave:
             except Exception as exc:
                 errors.append(exc)
 
-        proxy_threads = [threading.Thread(target=proxy_worker) for _ in range(n_threads)]
+        proxy_threads = [
+            threading.Thread(target=proxy_worker) for _ in range(n_threads)
+        ]
         wrap_threads = [threading.Thread(target=wrap_worker) for _ in range(n_threads)]
         all_threads = proxy_threads + wrap_threads
         for t in all_threads:
@@ -674,9 +683,13 @@ class TestRedTeamBudgetBypass:
     and concurrent commit_success racing against _add_cost_returning.
     """
 
-    def test_negative_amount_does_not_refill_budget(self) -> None:
-        """_add_cost_returning with a negative amount must NOT reduce the
-        accumulated cost below zero (potential credit injection attack)."""
+    def test_negative_amount_raises(self) -> None:
+        """_add_cost_returning with a negative amount must raise ValueError.
+
+        BudgetTracker.add() rejects negative amounts -- no silent credit injection.
+        """
+        import pytest
+
         config = _make_config(max_cost_usd=1.0, max_steps=100)
         ctx = ExecutionContext(config=config)
         # Pre-spend $0.50.
@@ -684,16 +697,11 @@ class TestRedTeamBudgetBypass:
         cost_before = ctx._cost_usd_accumulated
         assert cost_before == 0.50
 
-        # Attempt credit injection: subtract $0.30.
-        ctx._add_cost_returning(-0.30)
-        cost_after = ctx._cost_usd_accumulated
-
-        # The implementation adds the amount unconditionally (0.50 + -0.30 = 0.20).
-        # That is the defined behaviour: callers must not pass negative values.
-        # What we guard here is that the result is NOT less than zero.
-        assert cost_after >= 0.0, (
-            f"Budget went negative after negative spend: {cost_after}"
-        )
+        # Attempt credit injection: must be rejected.
+        with pytest.raises(ValueError, match="non-negative"):
+            ctx._add_cost_returning(-0.30)
+        # Cost must remain at 0.50 -- the rejected call must not change state.
+        assert ctx._cost_usd_accumulated == 0.50
 
     def test_set_cost_zero_race_cannot_reset_budget(self) -> None:
         """A thread calling set_cost(0.0) while another calls _add_cost_returning()
@@ -734,9 +742,13 @@ class TestRedTeamBudgetBypass:
         # negative and the context must still be internally consistent.
         assert ctx._cost_usd_accumulated >= 0.0
 
-    def test_infinity_cost_does_not_break_check_limits(self) -> None:
-        """_add_cost_returning(float('inf')) must not crash check_limits or
-        leave the context in an unqueryable state."""
+    def test_infinity_cost_add_cost_returning_raises(self) -> None:
+        """_add_cost_returning(float('inf')) must raise ValueError.
+
+        BudgetTracker.add_returning() rejects non-finite amounts to prevent
+        infinity from corrupting the accumulator.
+        """
+        import pytest
         from veronica_core.containment._limit_checker import _LimitChecker
         from veronica_core.containment.types import CancellationToken
 
@@ -744,27 +756,10 @@ class TestRedTeamBudgetBypass:
         token = CancellationToken()
         checker = _LimitChecker(config=config, cancellation_token=token)
 
-        # Inject infinity via the internal mutator.
-        checker.add_cost_returning(float("inf"))
-
-        # check_limits() must not raise; it must return a stop-reason string.
-        events: list[tuple[str, str]] = []
-
-        def emit(reason: str, detail: str) -> None:
-            events.append((reason, detail))
-
-        from veronica_core.distributed import LocalBudgetBackend
-
-        backend = LocalBudgetBackend()
-        stop_reason = checker.check_limits(budget_backend=backend, emit_fn=emit)
-
-        # With inf cost >= any finite limit, budget_exceeded must be triggered.
-        assert stop_reason == "budget_exceeded", (
-            f"Expected budget_exceeded, got: {stop_reason}"
-        )
-        # Snapshot must also be readable without raising.
-        snap = checker.snapshot_counters()
-        assert snap["cost_usd_accumulated"] == float("inf")
+        with pytest.raises(ValueError, match="finite"):
+            checker.add_cost_returning(float("inf"))
+        # Accumulator must remain at 0.0.
+        assert checker.cost_usd_accumulated == 0.0
 
     def test_concurrent_commit_success_and_add_cost_returning_sum(self) -> None:
         """10 threads calling commit_success(cost) while 10 threads call
@@ -798,8 +793,12 @@ class TestRedTeamBudgetBypass:
             except Exception as exc:
                 errors.append(exc)
 
-        commit_threads = [threading.Thread(target=commit_worker) for _ in range(n_threads)]
-        add_cost_threads = [threading.Thread(target=add_cost_worker) for _ in range(n_threads)]
+        commit_threads = [
+            threading.Thread(target=commit_worker) for _ in range(n_threads)
+        ]
+        add_cost_threads = [
+            threading.Thread(target=add_cost_worker) for _ in range(n_threads)
+        ]
         all_threads = commit_threads + add_cost_threads
         for t in all_threads:
             t.start()
@@ -859,9 +858,7 @@ class TestAdversarialPropertyShims:
                     val = ctx._step_count
                     with observed_lock:
                         observed.append(val)
-                    assert val >= prev, (
-                        f"_step_count decreased: {val} < {prev}"
-                    )
+                    assert val >= prev, f"_step_count decreased: {val} < {prev}"
                     prev = val
             except AssertionError as exc:
                 errors.append(exc)

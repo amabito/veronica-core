@@ -1,4 +1,5 @@
 """Tests for message governance hooks and bridge policy."""
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ from veronica_core.memory.types import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ctx(
     *,
     content_size_bytes: int = 100,
@@ -44,6 +46,7 @@ def _ctx(
 # DefaultMessageGovernanceHook
 # ---------------------------------------------------------------------------
 
+
 class TestDefaultMessageGovernanceHook:
     def test_allows_all_messages(self) -> None:
         hook = DefaultMessageGovernanceHook()
@@ -61,7 +64,9 @@ class TestDefaultMessageGovernanceHook:
         decision = hook.before_message(_ctx())
         assert decision.policy_id == "message_default"
 
-    def test_after_message_no_error_silent(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_after_message_no_error_silent(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         hook = DefaultMessageGovernanceHook()
         ctx = _ctx()
         dec = hook.before_message(ctx)
@@ -69,7 +74,9 @@ class TestDefaultMessageGovernanceHook:
             hook.after_message(ctx, dec, result="ok", error=None)
         assert caplog.text == ""
 
-    def test_after_message_logs_error_no_raise(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_after_message_logs_error_no_raise(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         hook = DefaultMessageGovernanceHook()
         ctx = _ctx()
         dec = hook.before_message(ctx)
@@ -89,6 +96,7 @@ class TestDefaultMessageGovernanceHook:
 # ---------------------------------------------------------------------------
 # DenyOversizedMessageHook
 # ---------------------------------------------------------------------------
+
 
 class TestDenyOversizedMessageHook:
     def test_small_message_allows(self) -> None:
@@ -190,6 +198,7 @@ class TestDenyOversizedMessageHook:
 # MessageBridgeHook
 # ---------------------------------------------------------------------------
 
+
 class TestMessageBridgeHook:
     def test_no_archive_denies(self) -> None:
         hook = MessageBridgeHook(policy=BridgePolicy(allow_archive=False))
@@ -283,7 +292,9 @@ class TestMessageBridgeHook:
             policy=policy,
             allowed_message_types=frozenset({"tool_result"}),
         )
-        decision = hook.before_message(_ctx(message_type="agent_to_agent", trust_level="trusted"))
+        decision = hook.before_message(
+            _ctx(message_type="agent_to_agent", trust_level="trusted")
+        )
         assert decision.verdict == GovernanceVerdict.DENY
         assert "not in allowed types" in decision.reason
 
@@ -297,7 +308,9 @@ class TestMessageBridgeHook:
             policy=policy,
             allowed_message_types=frozenset({"agent_to_agent", "tool_result"}),
         )
-        decision = hook.before_message(_ctx(message_type="agent_to_agent", trust_level="trusted"))
+        decision = hook.before_message(
+            _ctx(message_type="agent_to_agent", trust_level="trusted")
+        )
         assert decision.verdict == GovernanceVerdict.ALLOW
 
     def test_allowed_types_none_skips_filter(self) -> None:
@@ -308,7 +321,9 @@ class TestMessageBridgeHook:
             quarantine_untrusted=False,
         )
         hook = MessageBridgeHook(policy=policy, allowed_message_types=None)
-        decision = hook.before_message(_ctx(message_type="exotic_type", trust_level="trusted"))
+        decision = hook.before_message(
+            _ctx(message_type="exotic_type", trust_level="trusted")
+        )
         assert decision.verdict == GovernanceVerdict.ALLOW
 
     def test_quarantine_has_threat_context(self) -> None:
@@ -346,7 +361,10 @@ class TestMessageBridgeHook:
         )
         assert decision.threat_context is not None
         assert "unsigned" in decision.threat_context.threat_hypothesis
-        assert decision.threat_context.source_provenance == MemoryProvenance.UNVERIFIED.value
+        assert (
+            decision.threat_context.source_provenance
+            == MemoryProvenance.UNVERIFIED.value
+        )
 
     def test_deny_no_archive_has_threat_context(self) -> None:
         hook = MessageBridgeHook(policy=BridgePolicy(allow_archive=False))
@@ -410,6 +428,7 @@ class TestMessageBridgeHook:
 # Protocol conformance
 # ---------------------------------------------------------------------------
 
+
 class TestMessageGovernanceHookProtocol:
     def test_default_hook_satisfies_protocol(self) -> None:
         assert isinstance(DefaultMessageGovernanceHook(), MessageGovernanceHook)
@@ -464,9 +483,18 @@ class TestDegradeZoneMeaning:
         """
         hook = DenyOversizedMessageHook(max_bytes=2, degrade_threshold=0.8)
 
-        assert hook.before_message(_ctx(content_size_bytes=0)).verdict == GovernanceVerdict.ALLOW
-        assert hook.before_message(_ctx(content_size_bytes=1)).verdict == GovernanceVerdict.ALLOW
-        assert hook.before_message(_ctx(content_size_bytes=2)).verdict == GovernanceVerdict.DENY
+        assert (
+            hook.before_message(_ctx(content_size_bytes=0)).verdict
+            == GovernanceVerdict.ALLOW
+        )
+        assert (
+            hook.before_message(_ctx(content_size_bytes=1)).verdict
+            == GovernanceVerdict.ALLOW
+        )
+        assert (
+            hook.before_message(_ctx(content_size_bytes=2)).verdict
+            == GovernanceVerdict.DENY
+        )
 
     def test_max_bytes_ten_degrade_zone_reachable(self) -> None:
         """With max_bytes=10 and threshold=0.8, _degrade_at=8 creates a real degrade zone.
@@ -478,6 +506,15 @@ class TestDegradeZoneMeaning:
         """
         hook = DenyOversizedMessageHook(max_bytes=10, degrade_threshold=0.8)
 
-        assert hook.before_message(_ctx(content_size_bytes=8)).verdict == GovernanceVerdict.ALLOW
-        assert hook.before_message(_ctx(content_size_bytes=9)).verdict == GovernanceVerdict.DEGRADE
-        assert hook.before_message(_ctx(content_size_bytes=10)).verdict == GovernanceVerdict.DENY
+        assert (
+            hook.before_message(_ctx(content_size_bytes=8)).verdict
+            == GovernanceVerdict.ALLOW
+        )
+        assert (
+            hook.before_message(_ctx(content_size_bytes=9)).verdict
+            == GovernanceVerdict.DEGRADE
+        )
+        assert (
+            hook.before_message(_ctx(content_size_bytes=10)).verdict
+            == GovernanceVerdict.DENY
+        )

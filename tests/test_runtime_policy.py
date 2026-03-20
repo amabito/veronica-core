@@ -286,6 +286,7 @@ def test_circuit_breaker_state_transitions(
     # When
     if when_event == "success_after_timeout":
         from tests.conftest import wait_for
+
         time.sleep(0.05)
         wait_for(
             lambda: cb.state == CircuitState.HALF_OPEN,
@@ -294,6 +295,7 @@ def test_circuit_breaker_state_transitions(
         cb.record_success()
     elif when_event == "failure_after_timeout":
         from tests.conftest import wait_for
+
         time.sleep(0.05)
         wait_for(
             lambda: cb.state == CircuitState.HALF_OPEN,
@@ -332,6 +334,7 @@ class TestCircuitBreaker:
 
     def test_half_open_after_recovery_timeout(self):
         from tests.conftest import wait_for
+
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.001)
         cb.record_failure()
         # Access internal _state directly to avoid triggering the half-open
@@ -346,6 +349,7 @@ class TestCircuitBreaker:
 
     def test_closes_on_success_from_half_open(self):
         from tests.conftest import wait_for
+
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.001)
         cb.record_failure()
         time.sleep(0.05)

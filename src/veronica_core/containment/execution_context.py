@@ -1025,16 +1025,12 @@ class ExecutionContext:
                 raise TypeError("MemoryGovernor.evaluate() returned None")
         except Exception as exc:  # noqa: BLE001
             # Fail-closed: governor error -> deny.
-            logger.error(
-                "ExecutionContext: MemoryGovernor.evaluate() raised: %s", exc
-            )
+            logger.error("ExecutionContext: MemoryGovernor.evaluate() raised: %s", exc)
             self._emit_chain_event(
                 self._MG_DENIED,
                 "memory governor error",
             )
-            return self._halt_node(
-                node, stack, graph_node_id, self._MG_DENIED
-            )
+            return self._halt_node(node, stack, graph_node_id, self._MG_DENIED)
 
         if decision.denied:
             self._emit_chain_event(
@@ -1042,9 +1038,7 @@ class ExecutionContext:
                 f"memory governance denied: {decision.reason} "
                 f"(policy={decision.policy_id})",
             )
-            return self._halt_node(
-                node, stack, graph_node_id, self._MG_DENIED
-            )
+            return self._halt_node(node, stack, graph_node_id, self._MG_DENIED)
         # Stash the real decision on the node so
         # _notify_memory_governance_after can pass it to hooks instead of
         # a synthetic ALLOW.  Per-node storage avoids shared-state bugs
@@ -1223,7 +1217,9 @@ class ExecutionContext:
                 self._nodes.append(node)
         stack.pop()
         logger.debug(
-            "[execution_context] step %s failed: %s", graph_node_id, type(exc).__name__,
+            "[execution_context] step %s failed: %s",
+            graph_node_id,
+            type(exc).__name__,
         )
 
         # Re-raise signal-class exceptions (KeyboardInterrupt, SystemExit) after
@@ -1691,7 +1687,9 @@ class ExecutionContext:
         """
         policy_metadata = self._get_policy_audit_metadata()
         self._event_log.emit_chain_event(
-            stop_reason, detail, self._metadata.request_id,
+            stop_reason,
+            detail,
+            self._metadata.request_id,
             policy_metadata=policy_metadata,
         )
 
@@ -1715,4 +1713,3 @@ class ExecutionContext:
                 exc_info=True,
             )
             return None
-

@@ -703,10 +703,14 @@ class TestDegradeWiringCrewAI:
         from veronica_core.runtime_policy import model_downgrade
 
         listener = _make_listener(max_cost_usd=10.0, max_steps=5)
-        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="cost pressure")
+        degrade_decision = model_downgrade(
+            "gpt-4", "gpt-3.5-turbo", reason="cost pressure"
+        )
 
         calls: list[tuple[str, str]] = []
-        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+        listener.handle_degrade = lambda reason, suggestion: calls.append(
+            (reason, suggestion)
+        )  # type: ignore[method-assign]
 
         with patch.object(listener._container, "check", return_value=degrade_decision):
             _fake_event_bus.emit(None, FakeLLMCallStartedEvent(call_id="test"))
@@ -722,10 +726,14 @@ class TestDegradeWiringCrewAI:
         from veronica_core.runtime_policy import model_downgrade
 
         listener = _make_listener(max_cost_usd=10.0, max_steps=5)
-        degrade_decision = model_downgrade("gpt-4", "gpt-3.5-turbo", reason="budget low")
+        degrade_decision = model_downgrade(
+            "gpt-4", "gpt-3.5-turbo", reason="budget low"
+        )
 
         calls: list[tuple[str, str]] = []
-        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+        listener.handle_degrade = lambda reason, suggestion: calls.append(
+            (reason, suggestion)
+        )  # type: ignore[method-assign]
 
         with patch.object(listener._container, "check", return_value=degrade_decision):
             listener.check_or_raise()  # must not raise
@@ -742,7 +750,9 @@ class TestDegradeWiringCrewAI:
 
         listener = _make_listener(max_cost_usd=10.0, max_steps=5)
         calls: list[tuple[str, str]] = []
-        listener.handle_degrade = lambda reason, suggestion: calls.append((reason, suggestion))  # type: ignore[method-assign]
+        listener.handle_degrade = lambda reason, suggestion: calls.append(
+            (reason, suggestion)
+        )  # type: ignore[method-assign]
 
         with patch.object(listener._container, "check", return_value=allow("budget")):
             _fake_event_bus.emit(None, FakeLLMCallStartedEvent(call_id="test"))

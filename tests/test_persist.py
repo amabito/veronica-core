@@ -39,7 +39,9 @@ def _make_state(
     return sm
 
 
-def _make_persistence(tmp_path: Path, filename: str = "state.json") -> VeronicaPersistence:
+def _make_persistence(
+    tmp_path: Path, filename: str = "state.json"
+) -> VeronicaPersistence:
     """Create a VeronicaPersistence pointing at tmp_path, suppressing DeprecationWarning."""
     with pytest.warns(DeprecationWarning):
         return VeronicaPersistence(path=tmp_path / filename)
@@ -159,7 +161,9 @@ class TestVeronicaPersistence:
         assert p.save(state) is True
         assert p.load() is not None
 
-    def test_default_path_used_when_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_path_used_when_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When path=None, DEFAULT_PATH is used (after monkeypatching cwd)."""
         monkeypatch.chdir(tmp_path)
         with pytest.warns(DeprecationWarning):
@@ -255,4 +259,6 @@ class TestAdversarialPersistence:
 
         p.backup()
         all_backups = list(tmp_path.glob("state_backup_*.json"))
-        assert len(all_backups) == 2, f"Expected 2 backups, found {len(all_backups)}: {all_backups}"
+        assert len(all_backups) == 2, (
+            f"Expected 2 backups, found {len(all_backups)}: {all_backups}"
+        )

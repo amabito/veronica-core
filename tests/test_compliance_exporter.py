@@ -1065,7 +1065,7 @@ class TestAdversarialAttach:
             exporter.attach(ctx)
             exporter.attach(ctx)
 
-        assert len(exporter._attached) == 2  # Both refs stored
+        assert len(exporter._attached) == 1  # Dedup: same context stored once
         exporter.close()  # Must not crash
 
     # -- Partial failure: drain with mixed live/dead/broken refs --
@@ -1107,9 +1107,10 @@ class TestAdversarialAttach:
         broken = BrokenCtx()
         exporter.attach(broken)  # type: ignore[arg-type]
 
-        assert len(exporter._attached) == 3
+        # Dead ref pruned on attach(broken), so 2 remain (live + broken)
+        assert len(exporter._attached) == 2
 
-        # drain should handle all three gracefully: live exports, dead skips, broken catches
+        # drain should handle all gracefully: live exports, broken catches
         exporter._drain_attached()
 
         # _attached is cleared after drain
@@ -1136,8 +1137,9 @@ class TestAdversarialAttach:
             def get_graph_snapshot(self):
                 return None
 
-        for _ in range(100):
-            exporter.attach(FakeCtx())  # type: ignore[arg-type]
+        contexts = [FakeCtx() for _ in range(100)]
+        for ctx in contexts:
+            exporter.attach(ctx)  # type: ignore[arg-type]
 
         assert len(exporter._attached) == 100
         exporter.close()  # drain 100 contexts -- must not crash or hang

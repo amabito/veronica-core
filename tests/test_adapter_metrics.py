@@ -128,9 +128,7 @@ class TestLangChainAdapterMetrics:
         m = _make_metrics()
         handler = self.HandlerClass(_unlimited_config(), metrics=m, agent_id="lc-test")
         response = self.FakeLLMResult(
-            llm_output={
-                "token_usage": {"prompt_tokens": 120, "completion_tokens": 80}
-            }
+            llm_output={"token_usage": {"prompt_tokens": 120, "completion_tokens": 80}}
         )
         handler.on_llm_end(response)
         m.record_tokens.assert_called_once_with("lc-test", 120, 80)
@@ -224,12 +222,12 @@ def _build_fake_ag2_stubs() -> None:
         def __init__(self, name: str, **kwargs: Any) -> None:
             self.name = name
 
-        def generate_reply(
-            self, messages=None, sender=None, **kwargs: Any
-        ) -> str:
+        def generate_reply(self, messages=None, sender=None, **kwargs: Any) -> str:
             return "reply"
 
-        def register_reply(self, trigger: Any, reply_func: Any, position: int = 0) -> None:
+        def register_reply(
+            self, trigger: Any, reply_func: Any, position: int = 0
+        ) -> None:
             pass
 
     autogen.ConversableAgent = FakeConversableAgent
@@ -247,13 +245,17 @@ class TestAG2AdapterMetrics:
 
     def test_allow_emits_record_decision(self) -> None:
         m = _make_metrics()
-        agent = self.AgentClass("bot", _unlimited_config(), metrics=m, agent_id="ag2-test")
+        agent = self.AgentClass(
+            "bot", _unlimited_config(), metrics=m, agent_id="ag2-test"
+        )
         agent.generate_reply()
         m.record_decision.assert_called_once_with("ag2-test", "ALLOW")
 
     def test_halt_emits_record_decision(self) -> None:
         m = _make_metrics()
-        agent = self.AgentClass("bot", _exhausted_config(), metrics=m, agent_id="ag2-test")
+        agent = self.AgentClass(
+            "bot", _exhausted_config(), metrics=m, agent_id="ag2-test"
+        )
         with pytest.raises(VeronicaHalt):
             agent.generate_reply()
         m.record_decision.assert_called_once_with("ag2-test", "HALT")

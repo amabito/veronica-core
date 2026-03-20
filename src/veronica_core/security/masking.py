@@ -145,7 +145,9 @@ class SecretMasker:
         """Replace detected secrets in *text* with ``[REDACTED:<type>]``."""
         for pattern, redacted_tag, has_group in self._compiled:
 
-            def _replace(m: re.Match[str], _tag: str = redacted_tag, _has_group: bool = has_group) -> str:  # noqa: E731
+            def _replace(
+                m: re.Match[str], _tag: str = redacted_tag, _has_group: bool = has_group
+            ) -> str:  # noqa: E731
                 # If the pattern has a capture group, replace only the group
                 if _has_group and m.lastindex:
                     full = m.group(0)

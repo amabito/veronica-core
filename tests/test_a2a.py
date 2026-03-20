@@ -40,7 +40,9 @@ class TestAgentIdentity:
         assert agent.trust_level == TrustLevel.UNTRUSTED
 
     def test_valid_a2a_origin(self) -> None:
-        agent = AgentIdentity(agent_id="agent-2", origin="a2a", trust_level=TrustLevel.PROVISIONAL)
+        agent = AgentIdentity(
+            agent_id="agent-2", origin="a2a", trust_level=TrustLevel.PROVISIONAL
+        )
         assert agent.trust_level == TrustLevel.PROVISIONAL
 
     def test_valid_mcp_origin(self) -> None:
@@ -65,7 +67,9 @@ class TestAgentIdentity:
         assert agent.metadata == {}
 
     def test_metadata_custom(self) -> None:
-        agent = AgentIdentity(agent_id="agent-1", origin="a2a", metadata={"key": "value"})
+        agent = AgentIdentity(
+            agent_id="agent-1", origin="a2a", metadata={"key": "value"}
+        )
         assert agent.metadata["key"] == "value"
 
 
@@ -109,8 +113,12 @@ class TestTrustBasedPolicyRouter:
                 TrustLevel.TRUSTED: trusted_pipeline,
             }
         )
-        untrusted_agent = AgentIdentity(agent_id="u", origin="a2a", trust_level=TrustLevel.UNTRUSTED)
-        trusted_agent = AgentIdentity(agent_id="t", origin="a2a", trust_level=TrustLevel.TRUSTED)
+        untrusted_agent = AgentIdentity(
+            agent_id="u", origin="a2a", trust_level=TrustLevel.UNTRUSTED
+        )
+        trusted_agent = AgentIdentity(
+            agent_id="t", origin="a2a", trust_level=TrustLevel.TRUSTED
+        )
 
         assert router.route(untrusted_agent) is untrusted_pipeline
         assert router.route(trusted_agent) is trusted_pipeline
@@ -120,7 +128,9 @@ class TestTrustBasedPolicyRouter:
 
         default_pipeline = ShieldPipeline()
         router = TrustBasedPolicyRouter(default_policy=default_pipeline)
-        agent = AgentIdentity(agent_id="x", origin="local", trust_level=TrustLevel.PROVISIONAL)
+        agent = AgentIdentity(
+            agent_id="x", origin="local", trust_level=TrustLevel.PROVISIONAL
+        )
         assert router.route(agent) is default_pipeline
 
     def test_missing_level_uses_default(self) -> None:
@@ -128,7 +138,9 @@ class TestTrustBasedPolicyRouter:
 
         default_pipeline = ShieldPipeline()
         router = TrustBasedPolicyRouter(default_policy=default_pipeline)
-        agent = AgentIdentity(agent_id="x", origin="local", trust_level=TrustLevel.PRIVILEGED)
+        agent = AgentIdentity(
+            agent_id="x", origin="local", trust_level=TrustLevel.PRIVILEGED
+        )
         assert router.route(agent) is default_pipeline
 
     def test_get_policy_for(self) -> None:
@@ -155,7 +167,9 @@ class TestTrustEscalationTracker:
         assert tracker.get_trust_level("unknown-agent") == TrustLevel.UNTRUSTED
 
     def test_record_success_promotes_after_threshold(self) -> None:
-        policy = TrustPolicy(promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         for _ in range(2):
@@ -166,7 +180,9 @@ class TestTrustEscalationTracker:
         assert level == TrustLevel.PROVISIONAL
 
     def test_record_failure_demotes_to_untrusted(self) -> None:
-        policy = TrustPolicy(promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         tracker.record_success("agent-1")
@@ -178,7 +194,9 @@ class TestTrustEscalationTracker:
 
     def test_promotion_cap_not_exceeded(self) -> None:
         # allow_promotion_to=PROVISIONAL means auto-promo stops at PROVISIONAL
-        policy = TrustPolicy(promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=3, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         # Promote to PROVISIONAL
@@ -213,7 +231,9 @@ class TestTrustEscalationTracker:
         assert stats["promoted_at"] is None
 
     def test_success_count_resets_after_promotion(self) -> None:
-        policy = TrustPolicy(promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL)
+        policy = TrustPolicy(
+            promotion_threshold=2, allow_promotion_to=TrustLevel.PROVISIONAL
+        )
         tracker = TrustEscalationTracker(policy=policy)
 
         tracker.record_success("agent-1")

@@ -118,8 +118,16 @@ class DecisionEnvelope:
 
     # Fields that must not appear as metadata keys (prevents overwrite in to_audit_dict).
     _RESERVED_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"decision", "policy_hash", "reason_code", "reason", "audit_id",
-         "timestamp", "policy_epoch", "issuer"}
+        {
+            "decision",
+            "policy_hash",
+            "reason_code",
+            "reason",
+            "audit_id",
+            "timestamp",
+            "policy_epoch",
+            "issuer",
+        }
     )
 
     def __post_init__(self) -> None:

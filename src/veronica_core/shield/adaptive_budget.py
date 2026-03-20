@@ -212,7 +212,9 @@ class AdaptiveBudgetHook:
         self._lock = threading.Lock()
         # Compute event buffer capacity based on window. Assume at most 100
         # events per second sustained, with a floor of 10,000.
-        self._event_buffer_maxlen: int = min(max(int(window_seconds * 100), 10_000), 1_000_000)
+        self._event_buffer_maxlen: int = min(
+            max(int(window_seconds * 100), 10_000), 1_000_000
+        )
         self._initialize_anomaly_state()
 
     # -- Init helpers --------------------------------------------------------

@@ -97,9 +97,7 @@ class A2AMessageCost:
                 f"cost_per_token must be a finite number, got {self.cost_per_token!r}"
             )
         if self.cost_per_token < 0:
-            raise ValueError(
-                f"cost_per_token must be >= 0, got {self.cost_per_token}"
-            )
+            raise ValueError(f"cost_per_token must be >= 0, got {self.cost_per_token}")
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +142,9 @@ class A2AClientConfig:
                 f"default_cost_per_message must be a finite number, "
                 f"got {self.default_cost_per_message!r}"
             )
-        if not isinstance(self.default_cost_per_message, (int, float)) or not math.isfinite(
-            self.default_cost_per_message
-        ):
+        if not isinstance(
+            self.default_cost_per_message, (int, float)
+        ) or not math.isfinite(self.default_cost_per_message):
             raise ValueError(
                 f"default_cost_per_message must be a finite number, "
                 f"got {self.default_cost_per_message!r}"
@@ -172,7 +170,9 @@ class A2AClientConfig:
                 raise ValueError(
                     f"timeout_seconds must be > 0 or None, got {self.timeout_seconds}"
                 )
-        if not isinstance(self.max_poll_attempts, int) or isinstance(self.max_poll_attempts, bool):
+        if not isinstance(self.max_poll_attempts, int) or isinstance(
+            self.max_poll_attempts, bool
+        ):
             raise TypeError(
                 f"max_poll_attempts must be int, got {type(self.max_poll_attempts).__name__}"
             )
@@ -190,7 +190,9 @@ class A2AClientConfig:
             raise ValueError(
                 f"max_state_transitions must be > 0, got {self.max_state_transitions}"
             )
-        if not isinstance(self.max_stream_chunks, int) or isinstance(self.max_stream_chunks, bool):
+        if not isinstance(self.max_stream_chunks, int) or isinstance(
+            self.max_stream_chunks, bool
+        ):
             raise TypeError(
                 f"max_stream_chunks must be int, got {type(self.max_stream_chunks).__name__}"
             )
@@ -198,7 +200,9 @@ class A2AClientConfig:
             raise ValueError(
                 f"max_stream_chunks must be > 0, got {self.max_stream_chunks}"
             )
-        if not isinstance(self.max_stream_bytes, int) or isinstance(self.max_stream_bytes, bool):
+        if not isinstance(self.max_stream_bytes, int) or isinstance(
+            self.max_stream_bytes, bool
+        ):
             raise TypeError(
                 f"max_stream_bytes must be int, got {type(self.max_stream_bytes).__name__}"
             )
@@ -211,9 +215,9 @@ class A2AClientConfig:
                 f"max_stream_duration_s must be a finite number, "
                 f"got {self.max_stream_duration_s!r}"
             )
-        if not isinstance(self.max_stream_duration_s, (int, float)) or not math.isfinite(
-            self.max_stream_duration_s
-        ):
+        if not isinstance(
+            self.max_stream_duration_s, (int, float)
+        ) or not math.isfinite(self.max_stream_duration_s):
             raise ValueError(
                 f"max_stream_duration_s must be a finite number, "
                 f"got {self.max_stream_duration_s!r}"
@@ -227,9 +231,7 @@ class A2AClientConfig:
                 f"stats_cap must be int, got {type(self.stats_cap).__name__}"
             )
         if self.stats_cap <= 0:
-            raise ValueError(
-                f"stats_cap must be > 0, got {self.stats_cap}"
-            )
+            raise ValueError(f"stats_cap must be > 0, got {self.stats_cap}")
 
 
 # ---------------------------------------------------------------------------
@@ -379,14 +381,16 @@ class A2AIncomingRequest:
     content_size_bytes: int = 0
 
     _VALID_OPERATIONS: frozenset[str] = field(
-        default=frozenset({
-            "SendMessage",
-            "SendStreamingMessage",
-            "GetTask",
-            "CancelTask",
-            "ListTasks",
-            "SubscribeToTask",
-        }),
+        default=frozenset(
+            {
+                "SendMessage",
+                "SendStreamingMessage",
+                "GetTask",
+                "CancelTask",
+                "ListTasks",
+                "SubscribeToTask",
+            }
+        ),
         init=False,
         repr=False,
         compare=False,
@@ -404,7 +408,9 @@ class A2AIncomingRequest:
                 f"valid: {sorted(self._VALID_OPERATIONS)}"
             )
         if not self.tenant_id or not self.tenant_id.strip():
-            raise ValueError("A2AIncomingRequest.tenant_id must not be empty or whitespace")
+            raise ValueError(
+                "A2AIncomingRequest.tenant_id must not be empty or whitespace"
+            )
         if not isinstance(self.content_size_bytes, int) or isinstance(
             self.content_size_bytes, bool
         ):

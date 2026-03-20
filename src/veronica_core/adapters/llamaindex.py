@@ -253,10 +253,16 @@ class VeronicaLlamaIndexHandler(_BaseCallbackHandler):  # type: ignore[valid-typ
         )
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
-        """Error hook: log error and record circuit breaker failure."""
+        """Error hook: log error, record circuit breaker failure, and update retry budget."""
         logger.warning("[VERONICA_LI] LLM error: %s", error)
         if self._circuit_breaker is not None:
             self._circuit_breaker.record_failure(error=error)
+        if self._container.retry is not None:
+            self._container.retry.record_failure(
+                error=error
+                if isinstance(error, Exception)
+                else RuntimeError(str(error))
+            )
 
     # ------------------------------------------------------------------
     # Introspection
@@ -315,21 +321,30 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
             raw = getattr(response, "raw", None)
             if isinstance(raw, dict):
                 usage = raw.get("usage") or {}
-                prompt_tokens = usage.get("prompt_tokens")
-                if prompt_tokens is None:
-                    prompt_tokens = usage.get("input_tokens")
-                completion_tokens = usage.get("completion_tokens")
-                if completion_tokens is None:
-                    completion_tokens = usage.get("output_tokens")
-                if prompt_tokens is not None and completion_tokens is not None:
-                    model_from_raw = raw.get("model") or raw.get("model_name") or model
-                    return estimate_cost_usd(
-                        model_from_raw, int(prompt_tokens), int(completion_tokens)
+                if isinstance(usage, dict) and usage:
+                    prompt_tokens = usage.get("prompt_tokens")
+                    if prompt_tokens is None:
+                        prompt_tokens = usage.get("input_tokens")
+                    completion_tokens = usage.get("completion_tokens")
+                    if completion_tokens is None:
+                        completion_tokens = usage.get("output_tokens")
+                    if prompt_tokens is not None and completion_tokens is not None:
+                        model_from_raw = (
+                            raw.get("model") or raw.get("model_name") or model
+                        )
+                        return estimate_cost_usd(
+                            model_from_raw, int(prompt_tokens), int(completion_tokens)
+                        )
+                    # usage dict present but no recognised token fields
+                    logger.warning(
+                        "[VERONICA_LI] Cost extraction returned 0.0: response.raw.usage "
+                        "present but no recognised token fields. usage keys=%s",
+                        list(usage.keys()),
                     )
 
         # Fallback: look for token counts directly in payload
         usage = payload.get("usage") or {}
-        if isinstance(usage, dict):
+        if isinstance(usage, dict) and usage:
             prompt_tokens = usage.get("prompt_tokens")
             if prompt_tokens is None:
                 prompt_tokens = usage.get("input_tokens")
@@ -340,6 +355,13 @@ def _extract_cost_from_payload(payload: Optional[Dict[str, Any]]) -> float:
                 return estimate_cost_usd(
                     model, int(prompt_tokens), int(completion_tokens)
                 )
+            # usage dict present but no recognised token fields -- schema drift
+            logger.warning(
+                "[VERONICA_LI] Cost extraction returned 0.0: usage dict present "
+                "but no recognised token fields (prompt_tokens/input_tokens/"
+                "completion_tokens/output_tokens). usage keys=%s",
+                list(usage.keys()),
+            )
 
         return 0.0
     except Exception:

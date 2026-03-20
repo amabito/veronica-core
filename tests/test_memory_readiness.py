@@ -33,13 +33,20 @@ class _StubHook:
     """Minimal hook for testing."""
 
     def before_op(
-        self, operation: MemoryOperation, context: MemoryPolicyContext | None,
+        self,
+        operation: MemoryOperation,
+        context: MemoryPolicyContext | None,
     ) -> MemoryGovernanceDecision:
-        return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW, policy_id="stub")
+        return MemoryGovernanceDecision(
+            verdict=GovernanceVerdict.ALLOW, policy_id="stub"
+        )
 
     def after_op(
-        self, operation: MemoryOperation, decision: MemoryGovernanceDecision,
-        result: Any = None, error: BaseException | None = None,
+        self,
+        operation: MemoryOperation,
+        decision: MemoryGovernanceDecision,
+        result: Any = None,
+        error: BaseException | None = None,
     ) -> None:
         pass
 
@@ -129,10 +136,12 @@ class TestFullStack:
     """Governor with full memory governance stack."""
 
     def test_full_stack(self) -> None:
-        governor = MemoryGovernor(hooks=[
-            CompactnessEvaluator(),
-            ViewPolicyEvaluator(),
-        ])
+        governor = MemoryGovernor(
+            hooks=[
+                CompactnessEvaluator(),
+                ViewPolicyEvaluator(),
+            ]
+        )
         snapshot = MemoryGovernanceReadiness().check(governor)
         assert snapshot.governance_enabled
         assert snapshot.hook_count == 2
@@ -156,11 +165,13 @@ class TestFullStack:
         compiled = MemoryRuleCompiler().compile(rule)
         evaluator = MemoryRuleEvaluator((compiled,))
 
-        governor = MemoryGovernor(hooks=[
-            CompactnessEvaluator(),
-            ViewPolicyEvaluator(),
-            evaluator,
-        ])
+        governor = MemoryGovernor(
+            hooks=[
+                CompactnessEvaluator(),
+                ViewPolicyEvaluator(),
+                evaluator,
+            ]
+        )
         snapshot = MemoryGovernanceReadiness().check(governor)
         assert snapshot.memory_rule_evaluator_present
         assert snapshot.hook_count == 3
@@ -204,11 +215,18 @@ class TestSerialization:
         snapshot = MemoryGovernanceReadiness().check(None)
         d = snapshot.to_dict()
         expected_keys = {
-            "governance_enabled", "fail_closed", "hook_count",
-            "registered_hooks", "compactness_evaluator_present",
-            "view_policy_evaluator_present", "boundary_hook_present",
-            "memory_rule_evaluator_present", "supported_views",
-            "supported_modes", "degrade_support", "lifecycle_support",
+            "governance_enabled",
+            "fail_closed",
+            "hook_count",
+            "registered_hooks",
+            "compactness_evaluator_present",
+            "view_policy_evaluator_present",
+            "boundary_hook_present",
+            "memory_rule_evaluator_present",
+            "supported_views",
+            "supported_modes",
+            "degrade_support",
+            "lifecycle_support",
             "audit_schema_version",
         }
         assert set(d.keys()) == expected_keys
@@ -245,6 +263,7 @@ class TestSideEffectFree:
 
     def test_governor_still_functional(self) -> None:
         from veronica_core.memory.types import MemoryAction, MemoryOperation
+
         governor = MemoryGovernor(hooks=[DefaultMemoryGovernanceHook()])
         MemoryGovernanceReadiness().check(governor)
         op = MemoryOperation(action=MemoryAction.READ, resource_id="r")

@@ -17,7 +17,10 @@ import pytest
 from veronica_core.audit.log import AuditLog
 from veronica_core.containment import ExecutionConfig, ExecutionContext, WrapOptions
 from veronica_core.memory.governor import MemoryGovernor
-from veronica_core.memory.hooks import DefaultMemoryGovernanceHook, DenyAllMemoryGovernanceHook
+from veronica_core.memory.hooks import (
+    DefaultMemoryGovernanceHook,
+    DenyAllMemoryGovernanceHook,
+)
 from veronica_core.memory.types import MemoryAction, MemoryOperation
 from veronica_core.policy.bundle import PolicyBundle, PolicyMetadata, PolicyRule
 from veronica_core.policy.frozen_view import FrozenPolicyView, PolicyViewHolder

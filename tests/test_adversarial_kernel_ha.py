@@ -80,7 +80,9 @@ class TestAdversarialReservationStateChains:
         rolled = r.rollback()
         assert rolled.state == ReservationState.ROLLED_BACK
 
-        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+        with pytest.raises(
+            ValueError, match="only PENDING reservations can be committed"
+        ):
             rolled.commit()
 
     def test_pending_commit_commit_raises(self) -> None:
@@ -88,7 +90,9 @@ class TestAdversarialReservationStateChains:
         r = _pending()
         committed = r.commit()
 
-        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+        with pytest.raises(
+            ValueError, match="only PENDING reservations can be committed"
+        ):
             committed.commit()
 
     def test_double_rollback_raises(self) -> None:
@@ -110,7 +114,9 @@ class TestAdversarialReservationStateChains:
         """EXPIRED -> commit() must raise -- EXPIRED is not PENDING."""
         r = _pending(state=ReservationState.EXPIRED)
 
-        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+        with pytest.raises(
+            ValueError, match="only PENDING reservations can be committed"
+        ):
             r.commit()
 
     def test_original_unchanged_after_full_chain(self) -> None:

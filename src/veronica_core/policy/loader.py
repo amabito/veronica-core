@@ -223,10 +223,40 @@ class PolicyLoader:
     """Loads policy files and builds LoadedPolicy (ShieldPipeline) instances.
 
     Supports JSON (stdlib) and YAML (pyyaml optional).
+
+    Parameters
+    ----------
+    registry:
+        Custom rule registry. Defaults to PolicyRegistry.default().
+    policy_root:
+        If set, all file paths passed to load() / validate() / watch()
+        are resolved and checked to be within this directory. Prevents
+        path traversal when file paths originate from untrusted input.
     """
 
-    def __init__(self, registry: PolicyRegistry | None = None) -> None:
+    def __init__(
+        self,
+        registry: PolicyRegistry | None = None,
+        policy_root: Path | None = None,
+    ) -> None:
         self._registry = registry or PolicyRegistry.default()
+        self._policy_root = policy_root.resolve() if policy_root is not None else None
+
+    def _check_path(self, path: str | Path) -> Path:
+        """Resolve *path* and verify it stays within policy_root (if set)."""
+        resolved = Path(path).resolve()
+        if self._policy_root is not None:
+            try:
+                resolved.relative_to(self._policy_root)
+            except ValueError:
+                raise PolicyValidationError(
+                    [
+                        f"Path traversal denied: {path!s} resolves outside "
+                        f"policy_root {self._policy_root}"
+                    ],
+                    field_name="path",
+                ) from None
+        return resolved
 
     def load(self, path: str | Path) -> LoadedPolicy:
         """Load a policy from *path* and return a LoadedPolicy.
@@ -235,7 +265,8 @@ class PolicyLoader:
           .json        -> JSON (stdlib)
           .yaml / .yml -> YAML (requires pyyaml)
         """
-        schema = _parse_to_schema(path)
+        checked = self._check_path(path)
+        schema = _parse_to_schema(checked)
         return _build_pipeline(schema, self._registry)
 
     def load_from_string(
@@ -274,7 +305,8 @@ class PolicyLoader:
         """
         errors: list[PolicyValidationError] = []
         try:
-            schema = _parse_to_schema(path)
+            checked = self._check_path(path)
+            schema = _parse_to_schema(checked)
             # Also validate that all rule types are known.
             for rule in schema.rules:
                 try:
@@ -308,7 +340,7 @@ class PolicyLoader:
         Returns:
             WatchHandle -- call handle.cancel() to stop watching.
         """
-        file_path = Path(path)
+        file_path = self._check_path(path)
         handle = WatchHandle()
 
         try:

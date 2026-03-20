@@ -106,7 +106,9 @@ class TestValidTransitions:
 class TestForbiddenTransitions:
     """Transitions that are structurally not allowed."""
 
-    def test_unknown_to_verified_forbidden(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_unknown_to_verified_forbidden(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         """Cannot skip UNVERIFIED and go directly to VERIFIED."""
         result = lifecycle.validate_transition(
             MemoryProvenance.UNKNOWN,
@@ -116,7 +118,9 @@ class TestForbiddenTransitions:
         assert not result.allowed
         assert result.reason == "forbidden"
 
-    def test_verified_to_unverified_forbidden(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_verified_to_unverified_forbidden(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         """Verified content cannot be demoted to unverified (use quarantine)."""
         result = lifecycle.validate_transition(
             MemoryProvenance.VERIFIED,
@@ -126,7 +130,9 @@ class TestForbiddenTransitions:
         assert not result.allowed
         assert result.reason == "forbidden"
 
-    def test_verified_to_unknown_forbidden(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_verified_to_unknown_forbidden(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.VERIFIED,
             MemoryProvenance.UNKNOWN,
@@ -134,7 +140,9 @@ class TestForbiddenTransitions:
         )
         assert not result.allowed
 
-    def test_quarantined_to_unknown_forbidden(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_quarantined_to_unknown_forbidden(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.QUARANTINED,
             MemoryProvenance.UNKNOWN,
@@ -151,7 +159,9 @@ class TestForbiddenTransitions:
 class TestTrustRequirements:
     """Transitions require minimum trust levels."""
 
-    def test_unverified_to_verified_needs_trusted(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_unverified_to_verified_needs_trusted(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.UNVERIFIED,
             MemoryProvenance.VERIFIED,
@@ -161,7 +171,9 @@ class TestTrustRequirements:
         assert result.reason == "trust_insufficient"
         assert "trusted" in result.message
 
-    def test_quarantined_to_verified_needs_privileged(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_quarantined_to_verified_needs_privileged(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.QUARANTINED,
             MemoryProvenance.VERIFIED,
@@ -170,7 +182,9 @@ class TestTrustRequirements:
         assert not result.allowed
         assert result.reason == "trust_insufficient"
 
-    def test_quarantined_to_unverified_needs_trusted(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_quarantined_to_unverified_needs_trusted(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.QUARANTINED,
             MemoryProvenance.UNVERIFIED,
@@ -178,7 +192,9 @@ class TestTrustRequirements:
         )
         assert not result.allowed
 
-    def test_unknown_to_unverified_needs_provisional(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_unknown_to_unverified_needs_provisional(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.UNKNOWN,
             MemoryProvenance.UNVERIFIED,
@@ -186,7 +202,9 @@ class TestTrustRequirements:
         )
         assert not result.allowed
 
-    def test_empty_trust_treated_as_untrusted(self, lifecycle: ProvenanceLifecycle) -> None:
+    def test_empty_trust_treated_as_untrusted(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
         result = lifecycle.validate_transition(
             MemoryProvenance.UNKNOWN,
             MemoryProvenance.UNVERIFIED,
@@ -204,17 +222,37 @@ class TestTrustRequirements:
 class TestDegradeTightening:
     """DEGRADE verdict tightens provenance (never loosens)."""
 
-    def test_verified_degrades_to_unverified(self, lifecycle: ProvenanceLifecycle) -> None:
-        assert lifecycle.degrade_provenance(MemoryProvenance.VERIFIED) is MemoryProvenance.UNVERIFIED
+    def test_verified_degrades_to_unverified(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        assert (
+            lifecycle.degrade_provenance(MemoryProvenance.VERIFIED)
+            is MemoryProvenance.UNVERIFIED
+        )
 
-    def test_unverified_degrades_to_quarantined(self, lifecycle: ProvenanceLifecycle) -> None:
-        assert lifecycle.degrade_provenance(MemoryProvenance.UNVERIFIED) is MemoryProvenance.QUARANTINED
+    def test_unverified_degrades_to_quarantined(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        assert (
+            lifecycle.degrade_provenance(MemoryProvenance.UNVERIFIED)
+            is MemoryProvenance.QUARANTINED
+        )
 
-    def test_quarantined_stays_quarantined(self, lifecycle: ProvenanceLifecycle) -> None:
-        assert lifecycle.degrade_provenance(MemoryProvenance.QUARANTINED) is MemoryProvenance.QUARANTINED
+    def test_quarantined_stays_quarantined(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        assert (
+            lifecycle.degrade_provenance(MemoryProvenance.QUARANTINED)
+            is MemoryProvenance.QUARANTINED
+        )
 
-    def test_unknown_degrades_to_quarantined(self, lifecycle: ProvenanceLifecycle) -> None:
-        assert lifecycle.degrade_provenance(MemoryProvenance.UNKNOWN) is MemoryProvenance.QUARANTINED
+    def test_unknown_degrades_to_quarantined(
+        self, lifecycle: ProvenanceLifecycle
+    ) -> None:
+        assert (
+            lifecycle.degrade_provenance(MemoryProvenance.UNKNOWN)
+            is MemoryProvenance.QUARANTINED
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +265,12 @@ class TestConvenienceMethods:
 
     def test_can_promote_to_verified(self, lifecycle: ProvenanceLifecycle) -> None:
         assert lifecycle.can_promote_to_verified(MemoryProvenance.UNVERIFIED, "trusted")
-        assert not lifecycle.can_promote_to_verified(MemoryProvenance.UNVERIFIED, "provisional")
-        assert not lifecycle.can_promote_to_verified(MemoryProvenance.UNKNOWN, "privileged")
+        assert not lifecycle.can_promote_to_verified(
+            MemoryProvenance.UNVERIFIED, "provisional"
+        )
+        assert not lifecycle.can_promote_to_verified(
+            MemoryProvenance.UNKNOWN, "privileged"
+        )
 
     def test_quarantine_entry_conditions(self, lifecycle: ProvenanceLifecycle) -> None:
         conditions = lifecycle.quarantine_entry_conditions()
@@ -239,7 +281,12 @@ class TestConvenienceMethods:
 
     def test_all_transitions(self, lifecycle: ProvenanceLifecycle) -> None:
         matrix = lifecycle.all_transitions()
-        assert set(matrix.keys()) == {"unknown", "unverified", "quarantined", "verified"}
+        assert set(matrix.keys()) == {
+            "unknown",
+            "unverified",
+            "quarantined",
+            "verified",
+        }
         assert "quarantined" in matrix["unknown"]
         assert "unverified" in matrix["unknown"]
         assert "verified" not in matrix["unknown"]
@@ -308,9 +355,7 @@ class TestAdversarialLifecycleRound2:
         to_state = MemoryProvenance.UNVERIFIED
 
         # Act -- "  ".lower().strip() == "" -> falls back to "untrusted"
-        result = lifecycle.validate_transition(
-            from_state, to_state, trust_level="   "
-        )
+        result = lifecycle.validate_transition(from_state, to_state, trust_level="   ")
 
         # Assert -- "untrusted" rank (0) < required "provisional" rank (1) -> deny
         assert not result.allowed
@@ -619,9 +664,7 @@ class TestAdversarialLifecycleRound2:
                 trust_level="untrusted",
             )
 
-    def test_none_as_from_state_raises(
-        self, lifecycle: ProvenanceLifecycle
-    ) -> None:
+    def test_none_as_from_state_raises(self, lifecycle: ProvenanceLifecycle) -> None:
         """None from_state must raise TypeError, not AttributeError or silent bypass."""
         with pytest.raises(TypeError, match="from_state must be MemoryProvenance"):
             lifecycle.validate_transition(
@@ -630,9 +673,7 @@ class TestAdversarialLifecycleRound2:
                 trust_level="privileged",
             )
 
-    def test_none_as_to_state_raises(
-        self, lifecycle: ProvenanceLifecycle
-    ) -> None:
+    def test_none_as_to_state_raises(self, lifecycle: ProvenanceLifecycle) -> None:
         """None to_state must raise TypeError."""
         with pytest.raises(TypeError, match="to_state must be MemoryProvenance"):
             lifecycle.validate_transition(
@@ -674,9 +715,7 @@ class TestAdversarialLifecycleRound2:
         with pytest.raises(TypeError, match="current must be MemoryProvenance"):
             lifecycle.degrade_provenance(None)  # type: ignore[arg-type]
 
-    def test_integer_as_from_state_raises(
-        self, lifecycle: ProvenanceLifecycle
-    ) -> None:
+    def test_integer_as_from_state_raises(self, lifecycle: ProvenanceLifecycle) -> None:
         """Integer from_state (e.g. 0) must raise TypeError rather than indexing the matrix."""
         with pytest.raises(TypeError, match="from_state must be MemoryProvenance"):
             lifecycle.validate_transition(

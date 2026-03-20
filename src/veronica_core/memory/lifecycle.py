@@ -60,21 +60,29 @@ class TransitionResult:
 
 # Permitted transitions: from_state -> frozenset of valid to_states.
 _ALLOWED_TRANSITIONS: dict[MemoryProvenance, frozenset[MemoryProvenance]] = {
-    MemoryProvenance.UNKNOWN: frozenset({
-        MemoryProvenance.UNVERIFIED,
-        MemoryProvenance.QUARANTINED,
-    }),
-    MemoryProvenance.UNVERIFIED: frozenset({
-        MemoryProvenance.VERIFIED,
-        MemoryProvenance.QUARANTINED,
-    }),
-    MemoryProvenance.QUARANTINED: frozenset({
-        MemoryProvenance.UNVERIFIED,
-        MemoryProvenance.VERIFIED,
-    }),
-    MemoryProvenance.VERIFIED: frozenset({
-        MemoryProvenance.QUARANTINED,
-    }),
+    MemoryProvenance.UNKNOWN: frozenset(
+        {
+            MemoryProvenance.UNVERIFIED,
+            MemoryProvenance.QUARANTINED,
+        }
+    ),
+    MemoryProvenance.UNVERIFIED: frozenset(
+        {
+            MemoryProvenance.VERIFIED,
+            MemoryProvenance.QUARANTINED,
+        }
+    ),
+    MemoryProvenance.QUARANTINED: frozenset(
+        {
+            MemoryProvenance.UNVERIFIED,
+            MemoryProvenance.VERIFIED,
+        }
+    ),
+    MemoryProvenance.VERIFIED: frozenset(
+        {
+            MemoryProvenance.QUARANTINED,
+        }
+    ),
 }
 
 # Minimum trust levels required for each transition.
@@ -193,7 +201,8 @@ class ProvenanceLifecycle:
             )
 
         required = _TRUST_REQUIREMENTS.get(
-            (from_state, to_state), "privileged",
+            (from_state, to_state),
+            "privileged",
         )
         if _TRUST_RANK[trust] < _TRUST_RANK[required]:
             return TransitionResult(
@@ -216,7 +225,8 @@ class ProvenanceLifecycle:
         )
 
     def degrade_provenance(
-        self, current: MemoryProvenance,
+        self,
+        current: MemoryProvenance,
     ) -> MemoryProvenance:
         """Return the tightened provenance after a DEGRADE verdict.
 
@@ -242,7 +252,9 @@ class ProvenanceLifecycle:
         Convenience method wrapping validate_transition().
         """
         result = self.validate_transition(
-            current, MemoryProvenance.VERIFIED, trust_level=trust_level,
+            current,
+            MemoryProvenance.VERIFIED,
+            trust_level=trust_level,
         )
         return result.allowed
 

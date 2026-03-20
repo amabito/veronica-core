@@ -100,7 +100,8 @@ class TestAgentStepResultPreservation:
         g = AgentStepGuard(max_steps=3)
         payload = {"output": [1, 2, 3], "tokens": 42}
         g.step(result=payload)
-        assert g.last_result is payload  # Same object reference
+        assert g.last_result == payload  # Equal value (deepcopy)
+        assert g.last_result is not payload  # Distinct object (aliasing safe)
 
     def test_reset_clears_last_result(self) -> None:
         g = AgentStepGuard(max_steps=3)
@@ -219,7 +220,6 @@ class TestAgentStepCheckConcurrency:
             t.join()
 
         assert errors == []
-
 
 
 class TestAgentStepGuardValidation:

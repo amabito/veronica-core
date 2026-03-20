@@ -255,7 +255,9 @@ class TestAdversarialBoundaryAbuse:
         decision = ev.before_op(op, _ctx(constraints))
         assert decision.verdict is GovernanceVerdict.ALLOW
 
-    def test_negative_max_packet_tokens_in_constraints_treated_as_no_limit(self) -> None:
+    def test_negative_max_packet_tokens_in_constraints_treated_as_no_limit(
+        self,
+    ) -> None:
         """Negative max_packet_tokens: condition 'constraints.max_packet_tokens > 0' is False.
 
         Result: no token limit applied -- large packet_tokens must ALLOW.
@@ -287,7 +289,9 @@ class TestAdversarialBoundaryAbuse:
         assert decision.degrade_directive is not None
         assert decision.degrade_directive.raw_replay_blocked is True
 
-    def test_require_compaction_false_with_over_budget_does_not_force_summary(self) -> None:
+    def test_require_compaction_false_with_over_budget_does_not_force_summary(
+        self,
+    ) -> None:
         """require_compaction_if_over_budget=False must not set summary_required even if over."""
         constraints = CompactnessConstraints(
             max_packet_tokens=10,
@@ -300,7 +304,9 @@ class TestAdversarialBoundaryAbuse:
         # max_packet_tokens branch (summary_required=True) not from compaction flag.
         assert decision.verdict is GovernanceVerdict.DEGRADE
 
-    def test_all_soft_limits_simultaneously_triggered_merges_into_one_directive(self) -> None:
+    def test_all_soft_limits_simultaneously_triggered_merges_into_one_directive(
+        self,
+    ) -> None:
         """All soft limits triggered at once must produce a single merged DegradeDirective."""
         constraints = CompactnessConstraints(
             max_packet_tokens=1,
@@ -456,7 +462,9 @@ class TestAdversarialTypeImmutability:
 
     def test_threat_context_is_frozen(self) -> None:
         """Direct field assignment on ThreatContext must raise."""
-        t = ThreatContext(threat_hypothesis="oversize payload", compactness_enforced=True)
+        t = ThreatContext(
+            threat_hypothesis="oversize payload", compactness_enforced=True
+        )
         with pytest.raises((AttributeError, TypeError)):
             t.threat_hypothesis = "injected"  # type: ignore[misc]
 
@@ -565,7 +573,9 @@ class TestAdversarialMemoryOperationValidation:
             MemoryOperation(action=None)  # type: ignore[arg-type]
 
     @pytest.mark.parametrize("negative", [-1, -1000, -(2**31)])
-    def test_negative_content_size_bytes_raises_value_error(self, negative: int) -> None:
+    def test_negative_content_size_bytes_raises_value_error(
+        self, negative: int
+    ) -> None:
         """Parametrized: all negative content_size_bytes values must raise ValueError."""
         with pytest.raises(ValueError, match="content_size_bytes"):
             MemoryOperation(action=MemoryAction.WRITE, content_size_bytes=negative)
@@ -592,7 +602,9 @@ class TestAdversarialMemoryOperationValidation:
         assert decision is not None
         assert decision.verdict in (GovernanceVerdict.ALLOW, GovernanceVerdict.DEGRADE)
 
-    def test_evaluator_with_inf_packet_tokens_triggers_overflow_or_degrade(self) -> None:
+    def test_evaluator_with_inf_packet_tokens_triggers_overflow_or_degrade(
+        self,
+    ) -> None:
         """Inf as packet_tokens: int(float('inf')) raises OverflowError.
 
         The evaluator does int() conversion -- this documents that callers must

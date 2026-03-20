@@ -466,13 +466,17 @@ class TestReservationCommit:
     def test_commit_from_committed_raises(self) -> None:
         """COMMITTED -> COMMITTED is invalid."""
         r = self._make(state=ReservationState.COMMITTED)
-        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+        with pytest.raises(
+            ValueError, match="only PENDING reservations can be committed"
+        ):
             r.commit()
 
     def test_commit_from_rolled_back_raises(self) -> None:
         """ROLLED_BACK -> COMMITTED is invalid."""
         r = self._make(state=ReservationState.ROLLED_BACK)
-        with pytest.raises(ValueError, match="only PENDING reservations can be committed"):
+        with pytest.raises(
+            ValueError, match="only PENDING reservations can be committed"
+        ):
             r.commit()
 
     def test_commit_expired_raises(self) -> None:

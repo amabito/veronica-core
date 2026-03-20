@@ -53,7 +53,9 @@ class TestCheckAndHaltBasic:
 class TestCheckAndHaltTagAndLogger:
     """Tag and logger arguments."""
 
-    def test_custom_tag_logged_on_denial(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_custom_tag_logged_on_denial(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         container = _make_container(allowed=False, reason="step limit")
         with caplog.at_level(logging.DEBUG, logger="veronica_core.adapters._shared"):
             with pytest.raises(VeronicaHalt):

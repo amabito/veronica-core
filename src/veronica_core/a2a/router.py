@@ -33,7 +33,9 @@ class TrustBasedPolicyRouter:
         from veronica_core.shield.pipeline import ShieldPipeline
 
         self._policies: dict[TrustLevel, ShieldPipeline] = dict(policies or {})
-        self._default: ShieldPipeline = default_policy if default_policy is not None else ShieldPipeline()
+        self._default: ShieldPipeline = (
+            default_policy if default_policy is not None else ShieldPipeline()
+        )
 
     def route(self, identity: AgentIdentity) -> "ShieldPipeline":
         """Return the ShieldPipeline for the given agent identity."""

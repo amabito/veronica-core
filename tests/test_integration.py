@@ -204,7 +204,12 @@ class TestVeronicaIntegration:
             veronica.cleanup_expired()
             return len(veronica.state.cooldowns) == 0
 
-        wait_for(_cleanup_and_check, timeout=3.0, interval=0.02, msg="Cooldowns did not expire")
+        wait_for(
+            _cleanup_and_check,
+            timeout=3.0,
+            interval=0.02,
+            msg="Cooldowns did not expire",
+        )
 
     def test_get_stats(self):
         """Test get_stats returns complete data."""

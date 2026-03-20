@@ -60,7 +60,9 @@ def verify_policy_or_halt(
         else:
             reason_code = ReasonCode.POLICY_HASH_MISMATCH
 
-        reason_text = "; ".join(result.errors) if result.errors else "Policy verification failed"
+        reason_text = (
+            "; ".join(result.errors) if result.errors else "Policy verification failed"
+        )
 
         envelope = make_envelope(
             decision="HALT",

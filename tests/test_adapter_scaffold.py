@@ -28,7 +28,8 @@ def _ruff_available() -> bool:
         return True
     result = subprocess.run(
         [sys.executable, "-m", "ruff", "--version"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return result.returncode == 0
 
@@ -49,9 +50,7 @@ def _ruff_check(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-_SKIP_NO_RUFF = pytest.mark.skipif(
-    not _ruff_available(), reason="ruff not installed"
-)
+_SKIP_NO_RUFF = pytest.mark.skipif(not _ruff_available(), reason="ruff not installed")
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +102,7 @@ class TestGenerateAdapter:
             f"ruff reported errors in generated test file:\n{result.stdout}\n{result.stderr}"
         )
 
-    def test_generated_adapter_is_importable_via_compile(
-        self, tmp_path: Path
-    ) -> None:
+    def test_generated_adapter_is_importable_via_compile(self, tmp_path: Path) -> None:
         """The generated adapter source must compile without SyntaxError."""
         generate_adapter("execfw", tmp_path)
         source = (tmp_path / "adapters" / "execfw.py").read_text(encoding="utf-8")
@@ -113,9 +110,7 @@ class TestGenerateAdapter:
         compiled = compile(source, "<generated>", "exec")
         assert compiled is not None
 
-    def test_invalid_framework_name_raises_value_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_invalid_framework_name_raises_value_error(self, tmp_path: Path) -> None:
         """Names starting with a digit or containing spaces must raise ValueError."""
         with pytest.raises(ValueError, match="Invalid framework_name"):
             generate_adapter("123invalid", tmp_path)

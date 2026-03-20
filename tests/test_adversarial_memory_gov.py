@@ -294,7 +294,9 @@ class TestAdversarialHookPoisoning:
             ) -> MemoryGovernanceDecision:
                 # Construct decision with a non-enum verdict via object.__setattr__
                 d = object.__new__(MemoryGovernanceDecision)
-                object.__setattr__(d, "verdict", "allow_everything")  # not a GovernanceVerdict
+                object.__setattr__(
+                    d, "verdict", "allow_everything"
+                )  # not a GovernanceVerdict
                 object.__setattr__(d, "reason", "poisoned")
                 object.__setattr__(d, "policy_id", "evil")
                 object.__setattr__(d, "operation", operation)
@@ -535,27 +537,62 @@ class TestAdversarialVerdictAggregation:
         "hook_verdicts, expected",
         [
             # QUARANTINE always wins over ALLOW and DEGRADE
-            ([GovernanceVerdict.ALLOW, GovernanceVerdict.QUARANTINE], GovernanceVerdict.QUARANTINE),
-            ([GovernanceVerdict.DEGRADE, GovernanceVerdict.QUARANTINE], GovernanceVerdict.QUARANTINE),
-            ([GovernanceVerdict.QUARANTINE, GovernanceVerdict.DEGRADE], GovernanceVerdict.QUARANTINE),
-            ([GovernanceVerdict.QUARANTINE, GovernanceVerdict.ALLOW], GovernanceVerdict.QUARANTINE),
-            # DEGRADE wins over ALLOW
-            ([GovernanceVerdict.ALLOW, GovernanceVerdict.DEGRADE], GovernanceVerdict.DEGRADE),
-            ([GovernanceVerdict.DEGRADE, GovernanceVerdict.ALLOW], GovernanceVerdict.DEGRADE),
-            # All ALLOW stays ALLOW
-            ([GovernanceVerdict.ALLOW, GovernanceVerdict.ALLOW], GovernanceVerdict.ALLOW),
-            # DENY at any position short-circuits to DENY
-            ([GovernanceVerdict.DENY, GovernanceVerdict.ALLOW], GovernanceVerdict.DENY),
-            ([GovernanceVerdict.ALLOW, GovernanceVerdict.DENY], GovernanceVerdict.DENY),
-            ([GovernanceVerdict.QUARANTINE, GovernanceVerdict.DENY], GovernanceVerdict.DENY),
-            ([GovernanceVerdict.DEGRADE, GovernanceVerdict.DENY], GovernanceVerdict.DENY),
-            # 3-way mix
             (
-                [GovernanceVerdict.ALLOW, GovernanceVerdict.DEGRADE, GovernanceVerdict.QUARANTINE],
+                [GovernanceVerdict.ALLOW, GovernanceVerdict.QUARANTINE],
                 GovernanceVerdict.QUARANTINE,
             ),
             (
-                [GovernanceVerdict.QUARANTINE, GovernanceVerdict.DEGRADE, GovernanceVerdict.ALLOW],
+                [GovernanceVerdict.DEGRADE, GovernanceVerdict.QUARANTINE],
+                GovernanceVerdict.QUARANTINE,
+            ),
+            (
+                [GovernanceVerdict.QUARANTINE, GovernanceVerdict.DEGRADE],
+                GovernanceVerdict.QUARANTINE,
+            ),
+            (
+                [GovernanceVerdict.QUARANTINE, GovernanceVerdict.ALLOW],
+                GovernanceVerdict.QUARANTINE,
+            ),
+            # DEGRADE wins over ALLOW
+            (
+                [GovernanceVerdict.ALLOW, GovernanceVerdict.DEGRADE],
+                GovernanceVerdict.DEGRADE,
+            ),
+            (
+                [GovernanceVerdict.DEGRADE, GovernanceVerdict.ALLOW],
+                GovernanceVerdict.DEGRADE,
+            ),
+            # All ALLOW stays ALLOW
+            (
+                [GovernanceVerdict.ALLOW, GovernanceVerdict.ALLOW],
+                GovernanceVerdict.ALLOW,
+            ),
+            # DENY at any position short-circuits to DENY
+            ([GovernanceVerdict.DENY, GovernanceVerdict.ALLOW], GovernanceVerdict.DENY),
+            ([GovernanceVerdict.ALLOW, GovernanceVerdict.DENY], GovernanceVerdict.DENY),
+            (
+                [GovernanceVerdict.QUARANTINE, GovernanceVerdict.DENY],
+                GovernanceVerdict.DENY,
+            ),
+            (
+                [GovernanceVerdict.DEGRADE, GovernanceVerdict.DENY],
+                GovernanceVerdict.DENY,
+            ),
+            # 3-way mix
+            (
+                [
+                    GovernanceVerdict.ALLOW,
+                    GovernanceVerdict.DEGRADE,
+                    GovernanceVerdict.QUARANTINE,
+                ],
+                GovernanceVerdict.QUARANTINE,
+            ),
+            (
+                [
+                    GovernanceVerdict.QUARANTINE,
+                    GovernanceVerdict.DEGRADE,
+                    GovernanceVerdict.ALLOW,
+                ],
                 GovernanceVerdict.QUARANTINE,
             ),
         ],
@@ -590,7 +627,9 @@ class TestAdversarialVerdictAggregation:
                 context: MemoryPolicyContext | None,
             ) -> MemoryGovernanceDecision:
                 call_log.append(self._name)
-                return MemoryGovernanceDecision(verdict=self._verdict, policy_id=self._name)
+                return MemoryGovernanceDecision(
+                    verdict=self._verdict, policy_id=self._name
+                )
 
             def after_op(self, *args: Any, **kwargs: Any) -> None:
                 pass

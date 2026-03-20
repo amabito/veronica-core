@@ -248,10 +248,21 @@ class HeartbeatSnapshot:
 
     # Fields that must not appear as metadata keys (prevents overwrite in to_audit_dict).
     _RESERVED_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"kernel_id", "sequence", "active_reservations", "active_chains",
-         "total_decisions", "uptime_seconds", "timestamp", "breaker_count",
-         "breakers", "epoch_epoch", "epoch_policy_hash", "epoch_issuer",
-         "epoch_timestamp"}
+        {
+            "kernel_id",
+            "sequence",
+            "active_reservations",
+            "active_chains",
+            "total_decisions",
+            "uptime_seconds",
+            "timestamp",
+            "breaker_count",
+            "breakers",
+            "epoch_epoch",
+            "epoch_policy_hash",
+            "epoch_issuer",
+            "epoch_timestamp",
+        }
     )
 
     def __post_init__(self) -> None:

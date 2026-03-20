@@ -62,12 +62,18 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "CircuitBreaker": ("veronica_core.circuit_breaker", "CircuitBreaker"),
     "CircuitState": ("veronica_core.circuit_breaker", "CircuitState"),
     "FailurePredicate": ("veronica_core.circuit_breaker", "FailurePredicate"),
-    "ignore_exception_types": ("veronica_core.circuit_breaker", "ignore_exception_types"),
+    "ignore_exception_types": (
+        "veronica_core.circuit_breaker",
+        "ignore_exception_types",
+    ),
     "count_exception_types": ("veronica_core.circuit_breaker", "count_exception_types"),
     "ignore_status_codes": ("veronica_core.circuit_breaker", "ignore_status_codes"),
     # Integration API
     "VeronicaIntegration": ("veronica_core.integration", "VeronicaIntegration"),
-    "get_veronica_integration": ("veronica_core.integration", "get_veronica_integration"),
+    "get_veronica_integration": (
+        "veronica_core.integration",
+        "get_veronica_integration",
+    ),
     # Execution Shield (v0.3)
     "ShieldConfig": ("veronica_core.shield", "ShieldConfig"),
     "PostDispatchHook": ("veronica_core.shield", "PostDispatchHook"),
@@ -83,8 +89,14 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "TimeAwarePolicyConfig": ("veronica_core.shield.config", "TimeAwarePolicyConfig"),
     "BudgetWindowHook": ("veronica_core.shield.budget_window", "BudgetWindowHook"),
     "TokenBudgetHook": ("veronica_core.shield.token_budget", "TokenBudgetHook"),
-    "InputCompressionHook": ("veronica_core.shield.input_compression", "InputCompressionHook"),
-    "AdaptiveBudgetHook": ("veronica_core.shield.adaptive_budget", "AdaptiveBudgetHook"),
+    "InputCompressionHook": (
+        "veronica_core.shield.input_compression",
+        "InputCompressionHook",
+    ),
+    "AdaptiveBudgetHook": (
+        "veronica_core.shield.adaptive_budget",
+        "AdaptiveBudgetHook",
+    ),
     "AdjustmentResult": ("veronica_core.shield.adaptive_budget", "AdjustmentResult"),
     "TimeAwarePolicy": ("veronica_core.shield.time_policy", "TimeAwarePolicy"),
     "TimeResult": ("veronica_core.shield.time_policy", "TimeResult"),
@@ -93,7 +105,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Trimmer": ("veronica_core.shield.degradation", "Trimmer"),
     "NoOpTrimmer": ("veronica_core.shield.degradation", "NoOpTrimmer"),
     # Runtime Policies (v0.4.3)
-    "MinimalResponsePolicy": ("veronica_core.policies.minimal_response", "MinimalResponsePolicy"),
+    "MinimalResponsePolicy": (
+        "veronica_core.policies.minimal_response",
+        "MinimalResponsePolicy",
+    ),
     # Execution Containment extras (v0.9.0)
     "CancellationToken": ("veronica_core.containment", "CancellationToken"),
     "ChainMetadata": ("veronica_core.containment", "ChainMetadata"),
@@ -101,7 +116,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ExecutionGraph": ("veronica_core.containment", "ExecutionGraph"),
     "NodeEvent": ("veronica_core.containment", "NodeEvent"),
     "NodeRecord": ("veronica_core.containment", "NodeRecord"),
-    "get_current_partial_buffer": ("veronica_core.containment", "get_current_partial_buffer"),
+    "get_current_partial_buffer": (
+        "veronica_core.containment",
+        "get_current_partial_buffer",
+    ),
     "attach_partial_buffer": ("veronica_core.containment", "attach_partial_buffer"),
     # BudgetAllocator (v1.6.0)
     "AllocationResult": ("veronica_core.containment", "AllocationResult"),
@@ -127,7 +145,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "estimate_cost_usd": ("veronica_core.pricing", "estimate_cost_usd"),
     "resolve_model_pricing": ("veronica_core.pricing", "resolve_model_pricing"),
     "Pricing": ("veronica_core.pricing", "Pricing"),
-    "extract_usage_from_response": ("veronica_core.pricing", "extract_usage_from_response"),
+    "extract_usage_from_response": (
+        "veronica_core.pricing",
+        "extract_usage_from_response",
+    ),
     # Distributed Budget (v0.10.0)
     "BudgetBackend": ("veronica_core.distributed", "BudgetBackend"),
     "ReservableBudgetBackend": ("veronica_core.distributed", "ReservableBudgetBackend"),
@@ -135,8 +156,14 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "RedisBudgetBackend": ("veronica_core.distributed", "RedisBudgetBackend"),
     "get_default_backend": ("veronica_core.distributed", "get_default_backend"),
     "CircuitSnapshot": ("veronica_core.distributed", "CircuitSnapshot"),
-    "DistributedCircuitBreaker": ("veronica_core.distributed", "DistributedCircuitBreaker"),
-    "get_default_circuit_breaker": ("veronica_core.distributed", "get_default_circuit_breaker"),
+    "DistributedCircuitBreaker": (
+        "veronica_core.distributed",
+        "DistributedCircuitBreaker",
+    ),
+    "get_default_circuit_breaker": (
+        "veronica_core.distributed",
+        "get_default_circuit_breaker",
+    ),
     # OpenTelemetry (v0.10.0)
     "enable_otel": ("veronica_core.otel", "enable_otel"),
     "disable_otel": ("veronica_core.otel", "disable_otel"),
@@ -145,19 +172,28 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "enable_otel_with_tracer": ("veronica_core.otel", "enable_otel_with_tracer"),
     "OTelExecutionGraphObserver": ("veronica_core.otel", "OTelExecutionGraphObserver"),
     # AG2 AgentCapability-compatible adapters (v0.11.0)
-    "CircuitBreakerCapability": ("veronica_core.adapters.ag2_capability", "CircuitBreakerCapability"),
+    "CircuitBreakerCapability": (
+        "veronica_core.adapters.ag2_capability",
+        "CircuitBreakerCapability",
+    ),
     # MCP containment adapter (v1.6.0)
     "MCPContainmentAdapter": ("veronica_core.adapters.mcp", "MCPContainmentAdapter"),
     "MCPToolCost": ("veronica_core.adapters.mcp", "MCPToolCost"),
     "MCPToolResult": ("veronica_core.adapters.mcp", "MCPToolResult"),
     "MCPToolStats": ("veronica_core.adapters.mcp", "MCPToolStats"),
     # Async MCP containment (v1.7.0)
-    "AsyncMCPContainmentAdapter": ("veronica_core.adapters.mcp_async", "AsyncMCPContainmentAdapter"),
+    "AsyncMCPContainmentAdapter": (
+        "veronica_core.adapters.mcp_async",
+        "AsyncMCPContainmentAdapter",
+    ),
     "wrap_mcp_server": ("veronica_core.adapters.mcp_async", "wrap_mcp_server"),
     # ASGI/WSGI Middleware (v0.11.0)
     "VeronicaASGIMiddleware": ("veronica_core.middleware", "VeronicaASGIMiddleware"),
     "VeronicaWSGIMiddleware": ("veronica_core.middleware", "VeronicaWSGIMiddleware"),
-    "get_current_execution_context": ("veronica_core.middleware", "get_current_execution_context"),
+    "get_current_execution_context": (
+        "veronica_core.middleware",
+        "get_current_execution_context",
+    ),
     # Compliance Export (v1.4.0)
     "ComplianceExporter": ("veronica_core.compliance", "ComplianceExporter"),
     # Audit Chain (v3.0.0)
@@ -172,11 +208,20 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "FrameworkAdapterProtocol": ("veronica_core.protocols", "FrameworkAdapterProtocol"),
     "PlannerProtocol": ("veronica_core.protocols", "PlannerProtocol"),
     "ExecutionGraphObserver": ("veronica_core.protocols", "ExecutionGraphObserver"),
-    "ContainmentMetricsProtocol": ("veronica_core.protocols", "ContainmentMetricsProtocol"),
-    "AsyncBudgetBackendProtocol": ("veronica_core.protocols", "AsyncBudgetBackendProtocol"),
+    "ContainmentMetricsProtocol": (
+        "veronica_core.protocols",
+        "ContainmentMetricsProtocol",
+    ),
+    "AsyncBudgetBackendProtocol": (
+        "veronica_core.protocols",
+        "AsyncBudgetBackendProtocol",
+    ),
     "ReconciliationCallback": ("veronica_core.protocols", "ReconciliationCallback"),
     # Adapter capabilities (v3.0.0)
-    "AdapterCapabilities": ("veronica_core.adapter_capabilities", "AdapterCapabilities"),
+    "AdapterCapabilities": (
+        "veronica_core.adapter_capabilities",
+        "AdapterCapabilities",
+    ),
     # Metrics implementations (v1.6.0)
     "LoggingContainmentMetrics": ("veronica_core.metrics", "LoggingContainmentMetrics"),
     # OTel Feedback Loop (v2.4)
@@ -213,15 +258,30 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MemoryOperation": ("veronica_core.memory.types", "MemoryOperation"),
     "MemoryPolicyContext": ("veronica_core.memory.types", "MemoryPolicyContext"),
     "GovernanceVerdict": ("veronica_core.memory.types", "GovernanceVerdict"),
-    "MemoryGovernanceDecision": ("veronica_core.memory.types", "MemoryGovernanceDecision"),
+    "MemoryGovernanceDecision": (
+        "veronica_core.memory.types",
+        "MemoryGovernanceDecision",
+    ),
     "MemoryGovernanceHook": ("veronica_core.memory.hooks", "MemoryGovernanceHook"),
-    "DefaultMemoryGovernanceHook": ("veronica_core.memory.hooks", "DefaultMemoryGovernanceHook"),
-    "DenyAllMemoryGovernanceHook": ("veronica_core.memory.hooks", "DenyAllMemoryGovernanceHook"),
+    "DefaultMemoryGovernanceHook": (
+        "veronica_core.memory.hooks",
+        "DefaultMemoryGovernanceHook",
+    ),
+    "DenyAllMemoryGovernanceHook": (
+        "veronica_core.memory.hooks",
+        "DenyAllMemoryGovernanceHook",
+    ),
     "MemoryGovernor": ("veronica_core.memory.governor", "MemoryGovernor"),
     # Memory Boundary Hook (v3.4.0)
     "MemoryAccessRule": ("veronica_core.shield.memory_boundary", "MemoryAccessRule"),
-    "MemoryBoundaryConfig": ("veronica_core.shield.memory_boundary", "MemoryBoundaryConfig"),
-    "MemoryBoundaryHook": ("veronica_core.shield.memory_boundary", "MemoryBoundaryHook"),
+    "MemoryBoundaryConfig": (
+        "veronica_core.shield.memory_boundary",
+        "MemoryBoundaryConfig",
+    ),
+    "MemoryBoundaryHook": (
+        "veronica_core.shield.memory_boundary",
+        "MemoryBoundaryHook",
+    ),
     # Kernel Decision Envelope (v3.2+, exported v3.7.0)
     "DecisionEnvelope": ("veronica_core.kernel.decision", "DecisionEnvelope"),
     "ReasonCode": ("veronica_core.kernel.decision", "ReasonCode"),
@@ -236,7 +296,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "verify_policy_or_halt": ("veronica_core.kernel.startup", "verify_policy_or_halt"),
     "load_and_verify": ("veronica_core.kernel.startup", "load_and_verify"),
     # Kernel Audit Bridge (v3.7.0)
-    "emit_governance_event": ("veronica_core.kernel.audit_bridge", "emit_governance_event"),
+    "emit_governance_event": (
+        "veronica_core.kernel.audit_bridge",
+        "emit_governance_event",
+    ),
     "should_emit": ("veronica_core.kernel.audit_bridge", "should_emit"),
     # Memory View / Execution Mode / DEGRADE (v3.6.0)
     "MemoryView": ("veronica_core.memory.types", "MemoryView"),
@@ -247,13 +310,28 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "BridgePolicy": ("veronica_core.memory.types", "BridgePolicy"),
     "ThreatContext": ("veronica_core.memory.types", "ThreatContext"),
     # Memory Evaluators (v3.6.0)
-    "CompactnessEvaluator": ("veronica_core.memory.compactness", "CompactnessEvaluator"),
+    "CompactnessEvaluator": (
+        "veronica_core.memory.compactness",
+        "CompactnessEvaluator",
+    ),
     "ViewPolicyEvaluator": ("veronica_core.memory.view_policy", "ViewPolicyEvaluator"),
     # Message Governance (v3.6.0)
-    "MessageGovernanceHook": ("veronica_core.memory.message_governance", "MessageGovernanceHook"),
-    "DefaultMessageGovernanceHook": ("veronica_core.memory.message_governance", "DefaultMessageGovernanceHook"),
-    "DenyOversizedMessageHook": ("veronica_core.memory.message_governance", "DenyOversizedMessageHook"),
-    "MessageBridgeHook": ("veronica_core.memory.message_governance", "MessageBridgeHook"),
+    "MessageGovernanceHook": (
+        "veronica_core.memory.message_governance",
+        "MessageGovernanceHook",
+    ),
+    "DefaultMessageGovernanceHook": (
+        "veronica_core.memory.message_governance",
+        "DefaultMessageGovernanceHook",
+    ),
+    "DenyOversizedMessageHook": (
+        "veronica_core.memory.message_governance",
+        "DenyOversizedMessageHook",
+    ),
+    "MessageBridgeHook": (
+        "veronica_core.memory.message_governance",
+        "MessageBridgeHook",
+    ),
     # Scoped execution mode context manager (v3.7.0)
     "scoped_execution_mode": ("veronica_core.memory.types", "scoped_execution_mode"),
     # Memory Lifecycle (v3.7.0)
@@ -264,7 +342,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "CompiledMemoryRule": ("veronica_core.policy.memory_rules", "CompiledMemoryRule"),
     "MemoryRuleEvaluator": ("veronica_core.policy.memory_rules", "MemoryRuleEvaluator"),
     # Diagnostics (v3.7.0)
-    "MemoryGovernanceReadiness": ("veronica_core.diagnostics.readiness", "MemoryGovernanceReadiness"),
+    "MemoryGovernanceReadiness": (
+        "veronica_core.diagnostics.readiness",
+        "MemoryGovernanceReadiness",
+    ),
     "ReadinessSnapshot": ("veronica_core.diagnostics.readiness", "ReadinessSnapshot"),
 }
 

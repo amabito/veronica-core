@@ -117,7 +117,9 @@ def _entry_from_otel_span(span: dict[str, Any]) -> ExecutionLogEntry | None:
 
         # Determine success from status
         status = span.get("status") or {}
-        status_code = status.get("status_code", "OK") if isinstance(status, dict) else "OK"
+        status_code = (
+            status.get("status_code", "OK") if isinstance(status, dict) else "OK"
+        )
         success = status_code != "ERROR"
 
         model = str(attrs.get("gen_ai.request.model", ""))
@@ -135,7 +137,10 @@ def _entry_from_otel_span(span: dict[str, Any]) -> ExecutionLogEntry | None:
             latency_ms=latency_ms,
             success=success,
             model=model,
-            metadata={"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
+            metadata={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+            },
         )
     except Exception:
         logger.debug("Failed to parse OTel span: %s", span, exc_info=True)
@@ -176,8 +181,13 @@ class ExecutionLog:
         entries = [_entry_from_dict(r) for r in raw_entries if isinstance(r, dict)]
         return cls(entries)
 
+    #: Default maximum file size for from_file() (50 MB).
+    _DEFAULT_MAX_SIZE_BYTES: int = 50 * 1024 * 1024
+
     @classmethod
-    def from_file(cls, path: str | Path) -> "ExecutionLog":
+    def from_file(
+        cls, path: str | Path, *, max_size_bytes: int | None = None
+    ) -> "ExecutionLog":
         """Load entries from a JSON file.
 
         Expected format::
@@ -190,8 +200,20 @@ class ExecutionLog:
             }
 
         Or a bare list of entry dicts.
+
+        Args:
+            path: Path to the JSON log file.
+            max_size_bytes: Maximum allowed file size in bytes. Defaults to
+                50 MB. Pass 0 to disable the size check.
         """
         file_path = Path(path)
+        limit = max_size_bytes if max_size_bytes is not None else cls._DEFAULT_MAX_SIZE_BYTES
+        if limit > 0:
+            size = file_path.stat().st_size
+            if size > limit:
+                raise ValueError(
+                    f"File {file_path} is {size} bytes, exceeds max_size_bytes={limit}"
+                )
         content = file_path.read_text(encoding="utf-8")
         return cls._from_parsed(json.loads(content))
 

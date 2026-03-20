@@ -27,6 +27,7 @@ _PROMOTION_INDEX: dict[TrustLevel, int] = {
 @dataclass
 class _AgentRecord:
     """Internal mutable record for a tracked agent."""
+
     success_count: int = 0
     failure_count: int = 0
     current_trust: TrustLevel = TrustLevel.UNTRUSTED
@@ -74,7 +75,8 @@ class TrustEscalationTracker:
                 logger.warning(
                     "TrustEscalationTracker: cardinality cap (%d) reached, "
                     "rejecting agent %r",
-                    self._max_agents, agent_id,
+                    self._max_agents,
+                    agent_id,
                 )
                 return None
             record = _AgentRecord(current_trust=self._policy.default_trust)

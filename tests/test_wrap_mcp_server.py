@@ -170,6 +170,7 @@ class TestWrapMCPServerCreation:
 
     def test_allowed_tools_filters_discovered(self) -> None:
         """Only tools in allowed_tools should be registered."""
+
         async def run() -> dict:
             session = _make_session(tools=["search", "browse", "execute"])
             ctx = _make_ctx()
@@ -187,6 +188,7 @@ class TestWrapMCPServerCreation:
 
     def test_allowed_tools_none_allows_all(self) -> None:
         """When allowed_tools is None (default), all discovered tools are registered."""
+
         async def run() -> dict:
             session = _make_session(tools=["search", "browse", "execute"])
             ctx = _make_ctx()
@@ -202,6 +204,7 @@ class TestWrapMCPServerCreation:
 
     def test_allowed_tools_empty_set_blocks_all(self) -> None:
         """Empty allowed_tools set should block all discovered tools."""
+
         async def run() -> dict:
             session = _make_session(tools=["search", "browse"])
             ctx = _make_ctx()

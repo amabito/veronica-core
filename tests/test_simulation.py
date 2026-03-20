@@ -62,11 +62,15 @@ class TestExecutionLogEntry:
 
     def test_negative_cost_raises(self) -> None:
         with pytest.raises(ValueError, match="non-negative"):
-            ExecutionLogEntry(timestamp=0.0, agent_id="x", action="llm_call", cost_usd=-1.0)
+            ExecutionLogEntry(
+                timestamp=0.0, agent_id="x", action="llm_call", cost_usd=-1.0
+            )
 
     def test_negative_tokens_raises(self) -> None:
         with pytest.raises(ValueError, match="non-negative"):
-            ExecutionLogEntry(timestamp=0.0, agent_id="x", action="llm_call", tokens=-10)
+            ExecutionLogEntry(
+                timestamp=0.0, agent_id="x", action="llm_call", tokens=-10
+            )
 
     def test_frozen(self) -> None:
         entry = ExecutionLogEntry(timestamp=0.0, agent_id="x", action="llm_call")
@@ -83,7 +87,12 @@ class TestExecutionLog:
     def test_from_file_object_format(self, tmp_path: Path) -> None:
         data = {
             "entries": [
-                {"timestamp": 2.0, "agent_id": "b", "action": "llm_call", "cost_usd": 0.1},
+                {
+                    "timestamp": 2.0,
+                    "agent_id": "b",
+                    "action": "llm_call",
+                    "cost_usd": 0.1,
+                },
                 {"timestamp": 1.0, "agent_id": "a", "action": "tool_call"},
             ]
         }
@@ -105,9 +114,11 @@ class TestExecutionLog:
         assert len(log) == 1
 
     def test_from_string(self) -> None:
-        content = json.dumps([
-            {"timestamp": 1.0, "agent_id": "a", "action": "reply"},
-        ])
+        content = json.dumps(
+            [
+                {"timestamp": 1.0, "agent_id": "a", "action": "reply"},
+            ]
+        )
         log = ExecutionLog.from_string(content)
         assert len(log) == 1
 
@@ -353,9 +364,15 @@ class TestPolicySimulator:
         pipeline = ShieldPipeline()
         sim = PolicySimulator(pipeline)
         entries = [
-            ExecutionLogEntry(timestamp=1.0, agent_id="agent-a", action="llm_call", cost_usd=0.1),
-            ExecutionLogEntry(timestamp=2.0, agent_id="agent-b", action="llm_call", cost_usd=0.2),
-            ExecutionLogEntry(timestamp=3.0, agent_id="agent-a", action="llm_call", cost_usd=0.3),
+            ExecutionLogEntry(
+                timestamp=1.0, agent_id="agent-a", action="llm_call", cost_usd=0.1
+            ),
+            ExecutionLogEntry(
+                timestamp=2.0, agent_id="agent-b", action="llm_call", cost_usd=0.2
+            ),
+            ExecutionLogEntry(
+                timestamp=3.0, agent_id="agent-a", action="llm_call", cost_usd=0.3
+            ),
         ]
         report = sim.simulate(entries)
         assert "agent-a" in report.agent_breakdown
@@ -385,9 +402,15 @@ class TestPolicySimulator:
         pipeline = ShieldPipeline()
         sim = PolicySimulator(pipeline)
         entries = [
-            ExecutionLogEntry(timestamp=1.0, agent_id="a", action="llm_call", cost_usd=0.01),
-            ExecutionLogEntry(timestamp=2.0, agent_id="a", action="tool_call", cost_usd=0.02),
-            ExecutionLogEntry(timestamp=3.0, agent_id="a", action="reply", cost_usd=0.0),
+            ExecutionLogEntry(
+                timestamp=1.0, agent_id="a", action="llm_call", cost_usd=0.01
+            ),
+            ExecutionLogEntry(
+                timestamp=2.0, agent_id="a", action="tool_call", cost_usd=0.02
+            ),
+            ExecutionLogEntry(
+                timestamp=3.0, agent_id="a", action="reply", cost_usd=0.0
+            ),
         ]
         report = sim.simulate(entries)
         assert report.total_entries == 3

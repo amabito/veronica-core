@@ -76,9 +76,7 @@ _SANDBOX_IGNORE_SUFFIXES: tuple[str, ...] = (
     ".secret",
 )
 
-_SANDBOX_IGNORE_PREFIXES: tuple[str, ...] = (
-    ".env.",
-)
+_SANDBOX_IGNORE_PREFIXES: tuple[str, ...] = (".env.",)
 
 
 def _is_junction(path: str) -> bool:

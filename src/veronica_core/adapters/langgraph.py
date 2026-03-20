@@ -211,8 +211,14 @@ class VeronicaLangGraphCallback:
         emit_llm_result_tokens(self._metrics, self._agent_id, response)
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
-        """Error hook: log error without charging budget."""
+        """Error hook: log error and record failure against retry budget."""
         logger.warning("[VERONICA_LG] LLM error: %s", error)
+        if self._container.retry is not None:
+            self._container.retry.record_failure(
+                error=error
+                if isinstance(error, Exception)
+                else RuntimeError(str(error))
+            )
 
     # ------------------------------------------------------------------
     # Introspection

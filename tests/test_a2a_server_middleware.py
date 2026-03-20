@@ -96,8 +96,12 @@ class _DegradeHook:
     """Governance hook that returns DEGRADE with a directive."""
 
     def __init__(self, directive: DegradeDirective | None = None) -> None:
-        self._directive = directive if directive is not None else DegradeDirective(
-            max_packet_tokens=100,
+        self._directive = (
+            directive
+            if directive is not None
+            else DegradeDirective(
+                max_packet_tokens=100,
+            )
         )
 
     def before_message(self, context: MessageContext) -> MemoryGovernanceDecision:
@@ -190,11 +194,15 @@ class TestSizeLimit:
         asyncio.run(_run())
 
     # Boundary triple around max_message_size_bytes=50
-    @pytest.mark.parametrize("size,expected_deny", [(49, False), (50, True), (51, True)])
+    @pytest.mark.parametrize(
+        "size,expected_deny", [(49, False), (50, True), (51, True)]
+    )
     def test_size_boundary_triple(self, size: int, expected_deny: bool) -> None:
         async def _run() -> None:
             cfg = A2AServerConfig(max_message_size_bytes=50, fail_closed=False)
-            mw = A2AServerContainmentMiddleware(config=cfg, governance_hooks=[_AllowHook()])
+            mw = A2AServerContainmentMiddleware(
+                config=cfg, governance_hooks=[_AllowHook()]
+            )
             req = _make_request(content_size_bytes=size)
             decision = await mw.process_incoming(req)
             is_size_deny = decision.verdict == "DENY" and "large" in decision.reason
@@ -215,7 +223,9 @@ class TestRateLimit:
                 max_requests_per_minute_per_tenant=2,
                 max_requests_per_minute_per_sender=1000,
             )
-            mw = A2AServerContainmentMiddleware(config=cfg, governance_hooks=[_AllowHook()])
+            mw = A2AServerContainmentMiddleware(
+                config=cfg, governance_hooks=[_AllowHook()]
+            )
             req = _make_request()
             # First 2 should pass
             r1 = await mw.process_incoming(req)
@@ -235,7 +245,9 @@ class TestRateLimit:
                 max_requests_per_minute_per_tenant=1000,
                 max_requests_per_minute_per_sender=2,
             )
-            mw = A2AServerContainmentMiddleware(config=cfg, governance_hooks=[_AllowHook()])
+            mw = A2AServerContainmentMiddleware(
+                config=cfg, governance_hooks=[_AllowHook()]
+            )
             req = _make_request()
             r1 = await mw.process_incoming(req)
             r2 = await mw.process_incoming(req)
@@ -253,7 +265,9 @@ class TestRateLimit:
                 max_requests_per_minute_per_tenant=1000,
                 max_requests_per_minute_per_sender=1,
             )
-            mw = A2AServerContainmentMiddleware(config=cfg, governance_hooks=[_AllowHook()])
+            mw = A2AServerContainmentMiddleware(
+                config=cfg, governance_hooks=[_AllowHook()]
+            )
             r1 = await mw.process_incoming(_make_request(sender_id="sender-A"))
             r2 = await mw.process_incoming(_make_request(sender_id="sender-B"))
             assert r1.verdict == "ALLOW"
@@ -351,7 +365,9 @@ class TestCardVerification:
             mw = A2AServerContainmentMiddleware(
                 config=A2AServerConfig(fail_closed=False),
             )
-            req = _make_request(agent_card={"name": "agent-1", "signature": "valid-sig"})
+            req = _make_request(
+                agent_card={"name": "agent-1", "signature": "valid-sig"}
+            )
             # Should not crash and should allow (fail_closed=False, no hooks)
             decision = await mw.process_incoming(req)
             assert decision.verdict == "ALLOW"
@@ -530,7 +546,9 @@ class TestAdversarialServerMiddleware:
 
     def test_extremely_large_tenant_id_no_crash(self) -> None:
         async def _run() -> None:
-            mw = A2AServerContainmentMiddleware(config=A2AServerConfig(fail_closed=False))
+            mw = A2AServerContainmentMiddleware(
+                config=A2AServerConfig(fail_closed=False)
+            )
             long_tenant_id = "t" * 10_000
             req = A2AIncomingRequest(
                 operation="SendMessage",
@@ -706,10 +724,9 @@ class TestRateLimiterThreadSafety:
             with lock:
                 results[key].append(allowed)
 
-        threads = (
-            [threading.Thread(target=check, args=("k1",)) for _ in range(10)]
-            + [threading.Thread(target=check, args=("k2",)) for _ in range(10)]
-        )
+        threads = [threading.Thread(target=check, args=("k1",)) for _ in range(10)] + [
+            threading.Thread(target=check, args=("k2",)) for _ in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -767,15 +784,20 @@ class TestDefaultCardVerifierAdversarial:
 
 
 class TestLogOutputVerification:
-    def test_rate_limit_denial_produces_log(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_rate_limit_denial_produces_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         async def _run() -> None:
             config = A2AServerConfig(
-                max_requests_per_minute_per_sender=1, fail_closed=False,
+                max_requests_per_minute_per_sender=1,
+                fail_closed=False,
             )
             mw = A2AServerContainmentMiddleware(config=config)
             req = _make_request()
             await mw.process_incoming(req)  # 1st: ALLOW
-            with caplog.at_level(logging.DEBUG, logger="veronica_core.adapters.a2a_server"):
+            with caplog.at_level(
+                logging.DEBUG, logger="veronica_core.adapters.a2a_server"
+            ):
                 await mw.process_incoming(req)  # 2nd: DENY
 
         asyncio.run(_run())
@@ -783,14 +805,19 @@ class TestLogOutputVerification:
         combined = caplog.text.lower()
         assert "rate limit" in combined
 
-    def test_hook_failure_warning_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_hook_failure_warning_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         async def _run() -> None:
             config = A2AServerConfig(fail_closed=True)
             mw = A2AServerContainmentMiddleware(
-                config=config, governance_hooks=[_RaisingHook()],
+                config=config,
+                governance_hooks=[_RaisingHook()],
             )
             req = _make_request()
-            with caplog.at_level(logging.WARNING, logger="veronica_core.adapters.a2a_server"):
+            with caplog.at_level(
+                logging.WARNING, logger="veronica_core.adapters.a2a_server"
+            ):
                 decision = await mw.process_incoming(req)
             assert decision.verdict == "DENY"
             assert "hook" in decision.reason
@@ -804,7 +831,9 @@ class TestLogOutputVerification:
             config = A2AServerConfig(max_message_size_bytes=10, fail_closed=False)
             mw = A2AServerContainmentMiddleware(config=config)
             req = _make_request(content_size_bytes=999)
-            with caplog.at_level(logging.DEBUG, logger="veronica_core.adapters.a2a_server"):
+            with caplog.at_level(
+                logging.DEBUG, logger="veronica_core.adapters.a2a_server"
+            ):
                 decision = await mw.process_incoming(req)
             assert decision.verdict == "DENY"
             assert "large" in decision.reason
@@ -867,7 +896,9 @@ class TestReentrancy:
             class _ReentrantHook:
                 count_seen: int | None = None
 
-                def before_message(self, ctx: MessageContext) -> MemoryGovernanceDecision:
+                def before_message(
+                    self, ctx: MessageContext
+                ) -> MemoryGovernanceDecision:
                     if container:
                         # This re-enters the middleware to read stats while
                         # process_incoming is still on the call stack.
@@ -898,7 +929,9 @@ class TestReentrancy:
             seen: list[str] = []
 
             class _CapHook:
-                def before_message(self, ctx: MessageContext) -> MemoryGovernanceDecision:
+                def before_message(
+                    self, ctx: MessageContext
+                ) -> MemoryGovernanceDecision:
                     if container:
                         caps = container[0].capabilities()
                         seen.append(caps.framework_name)
@@ -924,7 +957,9 @@ class TestReentrancy:
 
 
 class TestRateLimiterCardinalityCap:
-    def test_cardinality_cap_denies_new_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_cardinality_cap_denies_new_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Once cardinality cap is reached, new keys are denied (fail-closed)."""
         import veronica_core.adapters.a2a_server as srv_mod
 
@@ -935,7 +970,9 @@ class TestRateLimiterCardinalityCap:
         # 3rd distinct key exceeds cap
         assert limiter.is_allowed("key3", 100) is False
 
-    def test_existing_key_still_allowed_after_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_existing_key_still_allowed_after_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Existing keys keep working even when cap is reached."""
         import veronica_core.adapters.a2a_server as srv_mod
 
@@ -970,6 +1007,7 @@ class TestDegradeHook:
 
     def test_degrade_then_deny_short_circuits_on_deny(self) -> None:
         """DENY after DEGRADE must win (DENY short-circuits)."""
+
         async def _run() -> None:
             mw = A2AServerContainmentMiddleware(
                 config=A2AServerConfig(fail_closed=True),
@@ -982,6 +1020,7 @@ class TestDegradeHook:
 
     def test_allow_then_degrade_yields_degrade(self) -> None:
         """ALLOW followed by DEGRADE: final must be DEGRADE."""
+
         async def _run() -> None:
             mw = A2AServerContainmentMiddleware(
                 config=A2AServerConfig(fail_closed=True),
@@ -995,6 +1034,7 @@ class TestDegradeHook:
 
     def test_last_degrade_directive_wins(self) -> None:
         """When multiple DEGRADE hooks exist, last directive wins."""
+
         async def _run() -> None:
             d1 = DegradeDirective(max_packet_tokens=50)
             d2 = DegradeDirective(max_packet_tokens=200)
@@ -1019,7 +1059,10 @@ class TestTrustTrackerResolution:
         async def _run() -> None:
             import threading
 
-            from veronica_core.a2a.escalation import TrustEscalationTracker, _AgentRecord
+            from veronica_core.a2a.escalation import (
+                TrustEscalationTracker,
+                _AgentRecord,
+            )
             from veronica_core.a2a.types import TrustPolicy
 
             policy = TrustPolicy(default_trust=TrustLevel.UNTRUSTED)
@@ -1042,6 +1085,7 @@ class TestTrustTrackerResolution:
 
     def test_trust_tracker_default_returns_untrusted(self) -> None:
         """Unknown sender via tracker defaults to UNTRUSTED."""
+
         async def _run() -> None:
             from veronica_core.a2a.escalation import TrustEscalationTracker
             from veronica_core.a2a.types import TrustPolicy

@@ -150,7 +150,9 @@ class TestEmitGovernanceEventGovernanceDecisions:
         events = _read_audit_events(audit_log)
         assert len(events) == 1
 
-    def test_quarantine_event_type_is_governance_quarantine(self, tmp_path: Path) -> None:
+    def test_quarantine_event_type_is_governance_quarantine(
+        self, tmp_path: Path
+    ) -> None:
         """QUARANTINE decision writes event_type='GOVERNANCE_QUARANTINE'."""
         envelope = _make_envelope(decision="QUARANTINE")
         audit_log = _make_audit_log(tmp_path)
@@ -333,9 +335,7 @@ class TestEmitGovernanceEventFieldVerification:
 
 
 class TestAdversarialAuditBridge:
-    def test_multiple_governance_events_written_in_order(
-        self, tmp_path: Path
-    ) -> None:
+    def test_multiple_governance_events_written_in_order(self, tmp_path: Path) -> None:
         """Multiple emit calls write sequential audit events."""
         audit_log = _make_audit_log(tmp_path)
         envelopes = [
@@ -368,11 +368,13 @@ class TestAdversarialAuditBridge:
         # Only HALT, DEGRADE, QUARANTINE should have been written.
         assert len(events) == 3
         written_types = {e["event_type"] for e in events}
-        assert written_types == {"GOVERNANCE_HALT", "GOVERNANCE_DEGRADE", "GOVERNANCE_QUARANTINE"}
+        assert written_types == {
+            "GOVERNANCE_HALT",
+            "GOVERNANCE_DEGRADE",
+            "GOVERNANCE_QUARANTINE",
+        }
 
-    def test_audit_id_in_event_matches_envelope_audit_id(
-        self, tmp_path: Path
-    ) -> None:
+    def test_audit_id_in_event_matches_envelope_audit_id(self, tmp_path: Path) -> None:
         """The audit_id in the written event is identical to the envelope's audit_id."""
         envelope = _make_envelope(decision="HALT")
         audit_log = _make_audit_log(tmp_path)

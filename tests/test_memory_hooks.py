@@ -44,9 +44,12 @@ class TestDefaultMemoryGovernanceHook:
         decision = hook.before_op(op, None)
         assert decision.allowed is True
 
-    def test_default_hook_after_op_with_error(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_default_hook_after_op_with_error(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """DefaultMemoryGovernanceHook.after_op() must log errors and not raise."""
         import logging
+
         hook = DefaultMemoryGovernanceHook()
         op = _make_op()
         decision = MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW)
@@ -97,10 +100,18 @@ class TestHookProtocol:
         """Any object with before_op and after_op satisfies MemoryGovernanceHook."""
 
         class MyHook:
-            def before_op(self, operation: MemoryOperation, context: MemoryPolicyContext | None) -> MemoryGovernanceDecision:
+            def before_op(
+                self, operation: MemoryOperation, context: MemoryPolicyContext | None
+            ) -> MemoryGovernanceDecision:
                 return MemoryGovernanceDecision(verdict=GovernanceVerdict.ALLOW)
 
-            def after_op(self, operation: MemoryOperation, decision: MemoryGovernanceDecision, result=None, error=None) -> None:
+            def after_op(
+                self,
+                operation: MemoryOperation,
+                decision: MemoryGovernanceDecision,
+                result=None,
+                error=None,
+            ) -> None:
                 pass
 
         assert isinstance(MyHook(), MemoryGovernanceHook)

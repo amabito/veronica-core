@@ -34,7 +34,9 @@ from veronica_core.adapters._shared import extract_llm_result_cost
 # ---------------------------------------------------------------------------
 
 
-def _make_execution_context(max_cost_usd: float = 10.0, max_steps: int = 100) -> ExecutionContext:
+def _make_execution_context(
+    max_cost_usd: float = 10.0, max_steps: int = 100
+) -> ExecutionContext:
     config = ExecutionConfig(
         max_cost_usd=max_cost_usd,
         max_steps=max_steps,
@@ -70,6 +72,7 @@ def _merge(
     new: Optional[DegradeDirective],
 ) -> Optional[DegradeDirective]:
     from veronica_core.memory.governor import _merge_directives
+
     return _merge_directives(existing, new)
 
 
@@ -100,13 +103,19 @@ class TestMergeInvariant:
     @pytest.mark.parametrize(
         "existing_tokens,new_tokens,expected",
         [
-            (0, 0, 0),        # both no-limit -> no-limit
-            (0, 500, 500),    # no-limit + limit -> limit enforced
-            (500, 0, 500),    # limit + no-limit -> limit enforced
+            (0, 0, 0),  # both no-limit -> no-limit
+            (0, 500, 500),  # no-limit + limit -> limit enforced
+            (500, 0, 500),  # limit + no-limit -> limit enforced
             (100, 200, 100),  # both limited -> stricter wins
             (200, 100, 100),  # both limited -> stricter wins (reversed)
         ],
-        ids=["both-zero", "existing-zero", "new-zero", "existing-stricter", "new-stricter"],
+        ids=[
+            "both-zero",
+            "existing-zero",
+            "new-zero",
+            "existing-stricter",
+            "new-stricter",
+        ],
     )
     def test_merge_never_weakens_packet_tokens(
         self, existing_tokens: int, new_tokens: int, expected: int
@@ -130,7 +139,13 @@ class TestMergeInvariant:
             (100, 200, 100),
             (200, 100, 100),
         ],
-        ids=["both-zero", "existing-zero", "new-zero", "existing-stricter", "new-stricter"],
+        ids=[
+            "both-zero",
+            "existing-zero",
+            "new-zero",
+            "existing-stricter",
+            "new-stricter",
+        ],
     )
     def test_merge_never_weakens_content_size(
         self, existing_bytes: int, new_bytes: int, expected: int
@@ -186,7 +201,9 @@ class TestCheckSpendConsistency:
 
     @pytest.mark.parametrize("limit_usd", [0.0, 0.001, 1.0])
     @pytest.mark.parametrize("amount", [0.0, 0.001, 1.0, 100.0])
-    def test_check_deny_implies_spend_deny(self, limit_usd: float, amount: float) -> None:
+    def test_check_deny_implies_spend_deny(
+        self, limit_usd: float, amount: float
+    ) -> None:
         """When check() denies, spending that amount should also be rejected."""
         b = BudgetEnforcer(limit_usd=limit_usd)
         ctx = PolicyContext(cost_usd=amount)
@@ -212,7 +229,7 @@ class TestCheckSpendConsistency:
         This is the operationally meaningful invariant: the budget ceiling holds.
         """
         b = BudgetEnforcer(limit_usd=5.0)
-        b.spend(4.0)   # spent_usd = 4.0
+        b.spend(4.0)  # spent_usd = 4.0
         r1 = b.spend(3.0)  # projected = 7 > 5 -> False, is_exceeded = True
         assert r1 is False
         assert b.is_exceeded
@@ -243,7 +260,9 @@ class TestCheckSpendConsistency:
         decision_zero = b.check(PolicyContext(cost_usd=0.0))
         decision_small = b.check(PolicyContext(cost_usd=0.001))
         decision_large = b.check(PolicyContext(cost_usd=100.0))
-        assert not decision_zero.allowed, "check() must deny cost_usd=0.0 after exceeded"
+        assert not decision_zero.allowed, (
+            "check() must deny cost_usd=0.0 after exceeded"
+        )
         assert not decision_small.allowed
         assert not decision_large.allowed
 
@@ -402,7 +421,9 @@ class TestCircuitBreakerStateMatrix:
 class TestGuardAfterLimit:
     """Guard code paths must not crash after stats-limit saturation."""
 
-    def test_mcp_tool_call_succeeds_after_stats_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mcp_tool_call_succeeds_after_stats_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tool calls must succeed even after _STATS_WARN_LIMIT distinct tool names.
 
         Saturate the stats dict to the warn limit, then verify subsequent
@@ -486,6 +507,7 @@ class TestErrorMessageSecurity:
 
     def test_mcp_error_does_not_leak_credential_message(self) -> None:
         """Exception message containing credentials must not appear in MCPToolResult.error."""
+
         def _credential_raise(**kwargs: Any) -> Any:
             raise Exception("token=sk-xxx secret credential leaked")
 
@@ -500,13 +522,17 @@ class TestErrorMessageSecurity:
             f"Exception message leaked into error: {result.error!r}"
         )
 
-    def test_mcp_debug_log_contains_exc_details(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_mcp_debug_log_contains_exc_details(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Debug log must contain exception details for debugging (not suppressed)."""
         adapter = _make_adapter()
         with caplog.at_level(logging.DEBUG, logger="veronica_core.adapters.mcp"):
             adapter.wrap_tool_call("debug_tool", {}, _raise_runtime)
         # At least one debug record should mention the exception
-        debug_text = " ".join(r.message for r in caplog.records if r.levelno <= logging.DEBUG)
+        debug_text = " ".join(
+            r.message for r in caplog.records if r.levelno <= logging.DEBUG
+        )
         assert "RuntimeError" in debug_text or "tool exploded" in debug_text, (
             "Debug log must contain exception details, but got: "
             + repr([r.message for r in caplog.records])
@@ -531,7 +557,10 @@ class TestZeroTokenNotMasked:
 
         class FakeLLMResult:
             def __init__(self, token_usage: dict) -> None:
-                self.llm_output = {"token_usage": token_usage, "model_name": "gpt-3.5-turbo"}
+                self.llm_output = {
+                    "token_usage": token_usage,
+                    "model_name": "gpt-3.5-turbo",
+                }
 
         return FakeLLMResult(usage)
 
@@ -542,8 +571,8 @@ class TestZeroTokenNotMasked:
         producing a cost as if 500 prompt tokens were used. This test catches that bug.
         """
         usage = {
-            "prompt_tokens": 0,       # explicit zero -- must be respected
-            "input_tokens": 500,       # fallback -- must NOT be used
+            "prompt_tokens": 0,  # explicit zero -- must be respected
+            "input_tokens": 500,  # fallback -- must NOT be used
             "completion_tokens": 10,
         }
         result = self._make_llm_result(usage)
@@ -566,8 +595,8 @@ class TestZeroTokenNotMasked:
         """completion_tokens=0 must be used as-is, not replaced by output_tokens fallback."""
         usage = {
             "prompt_tokens": 100,
-            "completion_tokens": 0,    # explicit zero -- must be respected
-            "output_tokens": 500,      # fallback -- must NOT be used
+            "completion_tokens": 0,  # explicit zero -- must be respected
+            "output_tokens": 500,  # fallback -- must NOT be used
         }
         result = self._make_llm_result(usage)
         cost_with_zero_completion = extract_llm_result_cost(result)

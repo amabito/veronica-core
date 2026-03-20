@@ -252,15 +252,31 @@ class ShieldConfig:
         )
 
     @classmethod
-    def from_yaml(cls, path: str) -> ShieldConfig:
+    def from_yaml(
+        cls, path: str, *, config_root: Path | None = None
+    ) -> ShieldConfig:
         """Load configuration from a YAML or JSON file.
 
         Accepts ``.json`` files natively.  For ``.yaml`` / ``.yml`` files,
         PyYAML must be installed (optional dependency).
-        """
-        file_path = Path(path)
 
-        if file_path.suffix == ".json":
+        Args:
+            path: Path to the config file.
+            config_root: If set, *path* must resolve within this directory.
+                Prevents path traversal when *path* comes from untrusted input.
+        """
+        file_path = Path(path).resolve()
+        if config_root is not None:
+            resolved_root = Path(config_root).resolve()
+            try:
+                file_path.relative_to(resolved_root)
+            except ValueError:
+                raise ValueError(
+                    f"Path traversal denied: {path!s} resolves outside "
+                    f"config_root {resolved_root}"
+                ) from None
+
+        if file_path.suffix.lower() == ".json":
             with open(file_path) as fh:
                 data = json.load(fh)
             return cls.from_dict(data)

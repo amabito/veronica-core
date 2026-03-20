@@ -102,7 +102,9 @@ class PolicySimulator:
         report.agent_breakdown = agent_stats
         return report
 
-    def _evaluate(self, entry: ExecutionLogEntry, ctx: ToolCallContext, idx: int = 0) -> Decision:
+    def _evaluate(
+        self, entry: ExecutionLogEntry, ctx: ToolCallContext, idx: int = 0
+    ) -> Decision:
         """Run the appropriate pipeline hook for this entry type."""
         try:
             if entry.action == "tool_call":
@@ -135,7 +137,8 @@ class PolicySimulator:
             return Decision.ALLOW
         except Exception:
             logger.debug(
-                "Simulator: pipeline evaluation failed for entry %s", idx,
+                "Simulator: pipeline evaluation failed for entry %s",
+                idx,
                 exc_info=True,
             )
             return Decision.HALT
@@ -145,7 +148,9 @@ def _build_context(entry: ExecutionLogEntry) -> ToolCallContext:
     """Build a ToolCallContext from a log entry."""
     return ToolCallContext(
         request_id=str(uuid4()),
-        tool_name=entry.metadata.get("tool_name") if entry.action == "tool_call" else None,
+        tool_name=entry.metadata.get("tool_name")
+        if entry.action == "tool_call"
+        else None,
         model=entry.model or None,
         tokens_in=entry.metadata.get("prompt_tokens"),
         tokens_out=entry.metadata.get("completion_tokens"),

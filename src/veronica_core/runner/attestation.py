@@ -195,7 +195,9 @@ class SandboxProbe:
         except Exception as exc:  # noqa: BLE001
             # Non-OSError exceptions (e.g. ValueError, TypeError) are not
             # evidence of sandbox blocking -- treat as inconclusive.
-            logger.debug("[attestation] probe_net error: %s: %s", type(exc).__name__, exc)
+            logger.debug(
+                "[attestation] probe_net error: %s: %s", type(exc).__name__, exc
+            )
             actual = "ERROR:exception"
             passed = False
         return ProbeResult(name=name, expected=expected, actual=actual, passed=passed)

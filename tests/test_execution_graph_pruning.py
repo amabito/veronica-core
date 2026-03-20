@@ -57,9 +57,7 @@ def test_no_pruning_when_unlimited():
     """max_nodes=0 -- no eviction regardless of node count."""
     graph = _make_graph(max_nodes=0)
     root_id = graph.create_root("root")
-    node_ids = [
-        graph.begin_node(root_id, "llm", f"step-{i}") for i in range(50)
-    ]
+    node_ids = [graph.begin_node(root_id, "llm", f"step-{i}") for i in range(50)]
     for nid in node_ids:
         _complete_node(graph, nid)
     # Create 50 more -- still no pruning

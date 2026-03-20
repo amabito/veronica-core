@@ -81,7 +81,9 @@ class TestDistributedReexports:
         """Bulk check: every expected symbol is present on the distributed module."""
         import veronica_core.distributed as m
 
-        missing = [name for name in self.EXPECTED_FROM_DISTRIBUTED if not hasattr(m, name)]
+        missing = [
+            name for name in self.EXPECTED_FROM_DISTRIBUTED if not hasattr(m, name)
+        ]
         assert missing == [], f"Missing re-exports from distributed.py: {missing}"
 
     def test_circuit_snapshot_is_same_object_either_import_path(self) -> None:
@@ -96,7 +98,9 @@ class TestDistributedReexports:
 
     def test_distributed_cb_same_object_either_path(self) -> None:
         from veronica_core.distributed import DistributedCircuitBreaker as DCB1
-        from veronica_core.distributed_circuit_breaker import DistributedCircuitBreaker as DCB2
+        from veronica_core.distributed_circuit_breaker import (
+            DistributedCircuitBreaker as DCB2,
+        )
 
         assert DCB1 is DCB2
 
@@ -264,14 +268,20 @@ class TestPolicyEngineReexports:
 
     def test_policy_context_alias_preserved(self) -> None:
         """PolicyContext must be the backward-compatible alias for ExecPolicyContext."""
-        from veronica_core.security.policy_engine import ExecPolicyContext, PolicyContext
+        from veronica_core.security.policy_engine import (
+            ExecPolicyContext,
+            PolicyContext,
+        )
 
         assert PolicyContext is ExecPolicyContext, (
             "PolicyContext alias in policy_engine.py must be ExecPolicyContext"
         )
 
     def test_policy_decision_alias_preserved(self) -> None:
-        from veronica_core.security.policy_engine import ExecPolicyDecision, PolicyDecision
+        from veronica_core.security.policy_engine import (
+            ExecPolicyDecision,
+            PolicyDecision,
+        )
 
         assert PolicyDecision is ExecPolicyDecision
 
@@ -281,8 +291,13 @@ class TestPolicyEngineReexports:
         from veronica_core.security import policy_rules as pr
 
         for name in self.PUBLIC_SYMBOLS:
-            if name in ("ActionLiteral", "PolicyContext", "PolicyDecision",
-                        "ExecPolicyContext", "ExecPolicyDecision"):
+            if name in (
+                "ActionLiteral",
+                "PolicyContext",
+                "PolicyDecision",
+                "ExecPolicyContext",
+                "ExecPolicyDecision",
+            ):
                 # These are type aliases; identity may differ but the target must match
                 continue
             pe_obj = getattr(pe, name, None)
@@ -327,7 +342,8 @@ class TestPolicyEngineReexports:
 
         # These are truly internal to policy_rules and were NOT re-exported
         leaked = [
-            name for name in (
+            name
+            for name in (
                 "_PYTHON_MODULE_PKG_MANAGERS",
                 "_RE_BASE64",
                 "_RE_HEX",
@@ -373,9 +389,7 @@ class TestContainmentTypesReexports:
         import veronica_core.containment as pkg
 
         missing = [name for name in self.TYPES_ALL if not hasattr(pkg, name)]
-        assert missing == [], (
-            f"Types missing from containment/__init__.py: {missing}"
-        )
+        assert missing == [], f"Types missing from containment/__init__.py: {missing}"
 
     def test_types_same_object_via_both_paths(self) -> None:
         """Same class object whether imported from types or execution_context."""
@@ -477,7 +491,9 @@ class TestCrossReferenceIntegrity:
         # If this import succeeds, the cross-reference worked.
         import veronica_core.distributed_circuit_breaker  # noqa: F401
 
-    def test_distributed_cb_uses_circuit_breaker_from_circuit_breaker_module(self) -> None:
+    def test_distributed_cb_uses_circuit_breaker_from_circuit_breaker_module(
+        self,
+    ) -> None:
         """DistributedCircuitBreaker._fallback is a local CircuitBreaker instance."""
         from veronica_core.distributed_circuit_breaker import DistributedCircuitBreaker
         from veronica_core.circuit_breaker import CircuitBreaker

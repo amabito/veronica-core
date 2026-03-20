@@ -128,9 +128,7 @@ class AuditChain:
             The newly created AuditEntry with computed hash.
         """
         with self._lock:
-            prev_hash = (
-                self._entries[-1].entry_hash if self._entries else GENESIS_HASH
-            )
+            prev_hash = self._entries[-1].entry_hash if self._entries else GENESIS_HASH
             seq = len(self._entries)
             ts = self._clock()
             entry_hash = _compute_hash(seq, ts, prev_hash, data)
@@ -185,9 +183,7 @@ class AuditChain:
             return [asdict(e) for e in self._entries]
 
     @classmethod
-    def from_json(
-        cls, raw: list[dict[str, Any]], *, clock: Any = None
-    ) -> "AuditChain":
+    def from_json(cls, raw: list[dict[str, Any]], *, clock: Any = None) -> "AuditChain":
         """Reconstruct an AuditChain from exported JSON.
 
         Raises ValueError if the imported chain fails verification.

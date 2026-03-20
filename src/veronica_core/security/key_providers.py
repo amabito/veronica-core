@@ -132,7 +132,9 @@ class VaultKeyProvider:
             )
         except Exception as exc:
             logger.debug(
-                "Vault key fetch raised %s: %s", type(exc).__name__, exc,
+                "Vault key fetch raised %s: %s",
+                type(exc).__name__,
+                exc,
             )
             raise RuntimeError(
                 f"Failed to fetch key '{self._key_name}' from Vault"
