@@ -78,6 +78,38 @@ class TestShieldConfig:
 
         assert veronica.shield.safe_mode.enabled
 
+    def test_from_yaml_config_root_allows_valid_path(self, tmp_path) -> None:
+        config_file = tmp_path / "shield.json"
+        config_file.write_text('{"safe_mode": {"enabled": true}}')
+        result = ShieldConfig.from_yaml(str(config_file), config_root=tmp_path)
+        assert result.safe_mode.enabled is True
+
+    def test_from_yaml_config_root_blocks_traversal(self, tmp_path) -> None:
+        config_file = tmp_path / "shield.json"
+        config_file.write_text('{"safe_mode": {"enabled": true}}')
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        with pytest.raises(ValueError, match="Path traversal denied"):
+            ShieldConfig.from_yaml(str(config_file), config_root=subdir)
+
+    def test_from_yaml_traversal_error_no_path_leak(self, tmp_path) -> None:
+        """Error must not contain absolute filesystem paths."""
+        config_file = tmp_path / "shield.json"
+        config_file.write_text("{}")
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        with pytest.raises(ValueError) as exc_info:
+            ShieldConfig.from_yaml(str(config_file), config_root=subdir)
+        error_str = str(exc_info.value)
+        assert str(subdir) not in error_str
+        assert str(config_file) not in error_str
+
+    def test_from_yaml_case_insensitive_suffix(self, tmp_path) -> None:
+        config_file = tmp_path / "shield.JSON"
+        config_file.write_text('{"safe_mode": {"enabled": true}}')
+        result = ShieldConfig.from_yaml(str(config_file))
+        assert result.safe_mode.enabled is True
+
     def test_integration_without_shield_unchanged(self):
         """VeronicaIntegration works identically without shield (backward compat)."""
         backend = MemoryBackend()

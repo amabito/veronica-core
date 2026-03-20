@@ -201,6 +201,38 @@ class TestAdversarialExecutionConfig:
         cfg = ExecutionConfig(max_cost_usd=1.0, max_steps=10, max_retries_total=3)
         assert cfg.max_cost_usd == 1.0
 
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("max_steps", True),
+            ("max_steps", False),
+            ("max_retries_total", True),
+            ("timeout_ms", True),
+        ],
+    )
+    def test_bool_rejected_for_int_fields(self, field: str, value: object) -> None:
+        """bool is int subclass but must be rejected for int-typed config fields."""
+        kwargs = {"max_cost_usd": 1.0, "max_steps": 10, "max_retries_total": 3}
+        kwargs[field] = value
+        with pytest.raises(TypeError, match="must be an int"):
+            ExecutionConfig(**kwargs)
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("max_steps", 3.0),
+            ("max_steps", 3.5),
+            ("max_retries_total", 1.0),
+            ("timeout_ms", 100.0),
+        ],
+    )
+    def test_float_rejected_for_int_fields(self, field: str, value: object) -> None:
+        """float values must be rejected for int-typed config fields."""
+        kwargs = {"max_cost_usd": 1.0, "max_steps": 10, "max_retries_total": 3}
+        kwargs[field] = value
+        with pytest.raises(TypeError, match="must be an int"):
+            ExecutionConfig(**kwargs)
+
 
 class TestAdversarialH3BackendOutsideLock:
     """H3: backend.add() must not block other threads during its execution."""

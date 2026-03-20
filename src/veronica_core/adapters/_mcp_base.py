@@ -140,10 +140,19 @@ class _MCPAdapterBase:
     ) -> None:
         if default_cost_per_call < 0:
             raise ValueError("default_cost_per_call must be >= 0")
-        if timeout_seconds is not None and timeout_seconds < 0:
-            raise ValueError(
-                f"timeout_seconds must be non-negative, got {timeout_seconds}"
-            )
+        if timeout_seconds is not None:
+            if not isinstance(timeout_seconds, (int, float)) or isinstance(
+                timeout_seconds, bool
+            ):
+                raise TypeError(
+                    f"timeout_seconds must be a number, got {type(timeout_seconds).__name__}"
+                )
+            import math as _math
+
+            if not _math.isfinite(timeout_seconds) or timeout_seconds < 0:
+                raise ValueError(
+                    f"timeout_seconds must be a finite non-negative number, got {timeout_seconds}"
+                )
         self._ctx = execution_context
         self._tool_costs: dict[str, MCPToolCost] = tool_costs or {}
         self._circuit_breaker = circuit_breaker

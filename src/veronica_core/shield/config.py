@@ -272,8 +272,7 @@ class ShieldConfig:
                 file_path.relative_to(resolved_root)
             except ValueError:
                 raise ValueError(
-                    f"Path traversal denied: {path!s} resolves outside "
-                    f"config_root {resolved_root}"
+                    "Path traversal denied: path resolves outside config_root"
                 ) from None
 
         if file_path.suffix.lower() == ".json":

@@ -134,13 +134,15 @@ class ExecutionConfig:
             raise ValueError(
                 f"max_cost_usd must be non-negative, got {self.max_cost_usd!r}"
             )
-        if isinstance(self.max_steps, bool):
+        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, int):
             raise TypeError(
                 f"max_steps must be an int, got {type(self.max_steps).__name__}"
             )
         if self.max_steps < 0:
             raise ValueError(f"max_steps must be non-negative, got {self.max_steps!r}")
-        if isinstance(self.max_retries_total, bool):
+        if isinstance(self.max_retries_total, bool) or not isinstance(
+            self.max_retries_total, int
+        ):
             raise TypeError(
                 f"max_retries_total must be an int, got {type(self.max_retries_total).__name__}"
             )
@@ -148,7 +150,7 @@ class ExecutionConfig:
             raise ValueError(
                 f"max_retries_total must be non-negative, got {self.max_retries_total!r}"
             )
-        if isinstance(self.timeout_ms, bool):
+        if isinstance(self.timeout_ms, bool) or not isinstance(self.timeout_ms, int):
             raise TypeError(
                 f"timeout_ms must be an int, got {type(self.timeout_ms).__name__}"
             )

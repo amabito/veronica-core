@@ -340,3 +340,62 @@ class TestWatchHandle:
         time.sleep(0.35)
         assert call_count == 0, f"Callback fired {call_count} times after cancel"
         tmp_path.unlink(missing_ok=True)
+
+
+class TestPolicyLoaderPathTraversal:
+    """Tests for PolicyLoader.policy_root path traversal prevention."""
+
+    def test_load_within_policy_root_succeeds(self, tmp_path: Path) -> None:
+        policy_file = tmp_path / "test.json"
+        policy_file.write_text(_MINIMAL_JSON, encoding="utf-8")
+        loader = PolicyLoader(policy_root=tmp_path)
+        result = loader.load(policy_file)
+        assert isinstance(result, LoadedPolicy)
+
+    def test_load_outside_policy_root_raises(self, tmp_path: Path) -> None:
+        policy_file = tmp_path / "test.json"
+        policy_file.write_text(_MINIMAL_JSON, encoding="utf-8")
+        other_root = tmp_path / "subdir"
+        other_root.mkdir()
+        loader = PolicyLoader(policy_root=other_root)
+        with pytest.raises(PolicyValidationError, match="Path traversal denied"):
+            loader.load(policy_file)
+
+    def test_traversal_with_dotdot_raises(self, tmp_path: Path) -> None:
+        subdir = tmp_path / "policies"
+        subdir.mkdir()
+        policy_file = tmp_path / "secret.json"
+        policy_file.write_text(_MINIMAL_JSON, encoding="utf-8")
+        loader = PolicyLoader(policy_root=subdir)
+        with pytest.raises(PolicyValidationError, match="Path traversal denied"):
+            loader.load(subdir / ".." / "secret.json")
+
+    def test_validate_outside_policy_root_returns_error(self, tmp_path: Path) -> None:
+        policy_file = tmp_path / "test.json"
+        policy_file.write_text(_MINIMAL_JSON, encoding="utf-8")
+        other_root = tmp_path / "subdir"
+        other_root.mkdir()
+        loader = PolicyLoader(policy_root=other_root)
+        errors = loader.validate(policy_file)
+        assert len(errors) >= 1
+        assert "traversal" in str(errors[0]).lower()
+
+    def test_no_policy_root_allows_any_path(self, tmp_path: Path) -> None:
+        policy_file = tmp_path / "test.json"
+        policy_file.write_text(_MINIMAL_JSON, encoding="utf-8")
+        loader = PolicyLoader()  # no policy_root
+        result = loader.load(policy_file)
+        assert isinstance(result, LoadedPolicy)
+
+    def test_error_message_does_not_leak_paths(self, tmp_path: Path) -> None:
+        """Error message must not contain absolute paths (info disclosure)."""
+        subdir = tmp_path / "policies"
+        subdir.mkdir()
+        outside = tmp_path / "secret.json"
+        outside.write_text(_MINIMAL_JSON, encoding="utf-8")
+        loader = PolicyLoader(policy_root=subdir)
+        with pytest.raises(PolicyValidationError) as exc_info:
+            loader.load(outside)
+        error_str = str(exc_info.value)
+        assert str(subdir) not in error_str
+        assert str(outside) not in error_str

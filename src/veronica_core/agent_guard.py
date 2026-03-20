@@ -53,7 +53,10 @@ class AgentStepGuard:
         with self._lock:
             self._current_step += 1
             if result is not None:
-                self._last_result = copy.deepcopy(result)
+                try:
+                    self._last_result = copy.deepcopy(result)
+                except Exception:
+                    self._last_result = result
             if self._current_step >= self.max_steps:
                 logger.warning(
                     f"[VERONICA_AGENT] Step limit reached: "

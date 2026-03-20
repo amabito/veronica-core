@@ -463,3 +463,25 @@ rules:
         # With a token_budget hook as pre_dispatch, all entries should be processed
         assert report.total_entries == 10
         assert report.total_cost == pytest.approx(0.10, abs=1e-9)
+
+
+class TestExecutionLogFileSizeGuard:
+    """Tests for ExecutionLog.from_file max_size_bytes parameter."""
+
+    def test_file_under_limit_loads(self, tmp_path: Path) -> None:
+        log_file = tmp_path / "small.json"
+        log_file.write_text('{"entries": []}', encoding="utf-8")
+        log = ExecutionLog.from_file(log_file, max_size_bytes=1024)
+        assert len(log) == 0
+
+    def test_file_over_limit_raises(self, tmp_path: Path) -> None:
+        log_file = tmp_path / "big.json"
+        log_file.write_text('{"entries": []}' + " " * 2000, encoding="utf-8")
+        with pytest.raises(ValueError, match="exceeds max_size_bytes"):
+            ExecutionLog.from_file(log_file, max_size_bytes=100)
+
+    def test_max_size_zero_disables_check(self, tmp_path: Path) -> None:
+        log_file = tmp_path / "any.json"
+        log_file.write_text('{"entries": []}' + " " * 2000, encoding="utf-8")
+        log = ExecutionLog.from_file(log_file, max_size_bytes=0)
+        assert len(log) == 0

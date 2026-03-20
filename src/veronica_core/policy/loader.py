@@ -250,10 +250,7 @@ class PolicyLoader:
                 resolved.relative_to(self._policy_root)
             except ValueError:
                 raise PolicyValidationError(
-                    [
-                        f"Path traversal denied: {path!s} resolves outside "
-                        f"policy_root {self._policy_root}"
-                    ],
+                    ["Path traversal denied: path resolves outside policy_root"],
                     field_name="path",
                 ) from None
         return resolved

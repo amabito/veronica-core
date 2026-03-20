@@ -973,3 +973,35 @@ class TestIsErrorHandling:
         adapter.wrap_tool_call("tool", {}, error_result_fn)
         # CB should still be CLOSED -- isError is not an exception
         assert cb.state == CircuitState.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# Timeout seconds validation
+# ---------------------------------------------------------------------------
+
+
+class TestTimeoutSecondsValidation:
+    def test_negative_timeout_raises(self) -> None:
+        ctx = _make_ctx()
+        with pytest.raises(ValueError, match="non-negative"):
+            MCPContainmentAdapter(ctx, timeout_seconds=-1.0)
+
+    def test_nan_timeout_raises(self) -> None:
+        ctx = _make_ctx()
+        with pytest.raises(ValueError, match="finite"):
+            MCPContainmentAdapter(ctx, timeout_seconds=float("nan"))
+
+    def test_inf_timeout_raises(self) -> None:
+        ctx = _make_ctx()
+        with pytest.raises(ValueError, match="finite"):
+            MCPContainmentAdapter(ctx, timeout_seconds=float("inf"))
+
+    def test_zero_timeout_accepted(self) -> None:
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(ctx, timeout_seconds=0.0)
+        assert adapter._timeout_seconds == 0.0
+
+    def test_none_timeout_accepted(self) -> None:
+        ctx = _make_ctx()
+        adapter = MCPContainmentAdapter(ctx, timeout_seconds=None)
+        assert adapter._timeout_seconds is None

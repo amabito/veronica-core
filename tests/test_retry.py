@@ -58,3 +58,55 @@ class TestRetryJitterRandomizesDelays:
         assert (
             len(set(delays)) >= 1
         )  # With jitter they should differ; small samples may collide
+
+
+class TestRecordFailure:
+    """Tests for RetryContainer.record_failure() threshold behavior."""
+
+    def test_single_failure_below_threshold_allows(self) -> None:
+        """1 failure with max_retries=3 must not block check()."""
+        rc = RetryContainer(max_retries=3)
+        rc.record_failure(RuntimeError("err"))
+        decision = rc.check(
+            __import__("veronica_core.runtime_policy", fromlist=["PolicyContext"]).PolicyContext()
+        )
+        assert decision.allowed is True
+        assert rc.total_retries == 1
+
+    def test_failures_at_threshold_allows(self) -> None:
+        """max_retries failures must still allow (execute() allows max_retries+1 attempts)."""
+        rc = RetryContainer(max_retries=3)
+        for _ in range(3):
+            rc.record_failure(RuntimeError("err"))
+        decision = rc.check(
+            __import__("veronica_core.runtime_policy", fromlist=["PolicyContext"]).PolicyContext()
+        )
+        assert decision.allowed is True
+
+    def test_failures_exceed_threshold_denies(self) -> None:
+        """max_retries+1 failures must block check()."""
+        rc = RetryContainer(max_retries=3)
+        for _ in range(4):
+            rc.record_failure(RuntimeError("err"))
+        decision = rc.check(
+            __import__("veronica_core.runtime_policy", fromlist=["PolicyContext"]).PolicyContext()
+        )
+        assert decision.allowed is False
+
+    def test_record_failure_none_error_uses_sentinel(self) -> None:
+        """error=None should create a RuntimeError sentinel after threshold."""
+        rc = RetryContainer(max_retries=1)
+        rc.record_failure()
+        rc.record_failure()
+        assert rc.last_error is not None
+        assert isinstance(rc.last_error, RuntimeError)
+
+    def test_reset_clears_record_failure_state(self) -> None:
+        """reset() must clear state from record_failure() calls."""
+        rc = RetryContainer(max_retries=1)
+        rc.record_failure()
+        rc.record_failure()
+        assert rc.last_error is not None
+        rc.reset()
+        assert rc.last_error is None
+        assert rc.total_retries == 0
