@@ -245,7 +245,7 @@ class PolicyLoader:
     def _check_path(self, path: str | Path) -> Path:
         """Resolve *path* and verify it stays within policy_root (if set)."""
         if self._policy_root is None:
-            return Path(path)
+            return Path(path).resolve()
         from veronica_core._utils import check_path_within_root
 
         try:
