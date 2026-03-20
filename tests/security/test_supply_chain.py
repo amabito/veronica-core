@@ -260,3 +260,28 @@ def test_generate_sbom_writes_file(tmp_path: Path) -> None:
 
     loaded = json.loads(out.read_text())
     assert loaded["packages"] == sbom["packages"]
+
+
+# ---------------------------------------------------------------------------
+# Test: uv with global --python option should still detect subcommand
+# ---------------------------------------------------------------------------
+
+
+def test_uv_add_with_global_python_option_requires_approval() -> None:
+    """--python consumes its value; 'add' after it must still be detected."""
+    engine = _engine()
+    ctx = _shell_ctx(["uv", "--python", "3.11", "add", "requests"])
+    decision = engine.evaluate(ctx)
+    assert decision.verdict == "REQUIRE_APPROVAL"
+    assert decision.rule_id == "SHELL_PKG_INSTALL"
+
+
+def test_uv_run_with_global_project_option_detects_inline_exec() -> None:
+    """--project consumes its value; 'run -c' after it must still be detected."""
+    engine = _engine()
+    ctx = _shell_ctx(
+        ["uv", "--project", "/workspace", "run", "--eval", "print('hi')"]
+    )
+    decision = engine.evaluate(ctx)
+    assert decision.verdict == "DENY"
+    assert decision.rule_id == "SHELL_DENY_INLINE_EXEC"

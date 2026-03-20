@@ -178,6 +178,9 @@ _UV_OPTS_WITH_VALUE: frozenset[str] = frozenset(
         "--python-preference",
         "--python-fetch",
         "--color",
+        "--python",
+        "--python-version",
+        "-p",
     }
 )
 
@@ -472,15 +475,15 @@ def _check_python_exec_flags(argv0: str, args: list[str]) -> PolicyDecision | No
     return None
 
 
-def _find_uv_subcmd(args: list[str]) -> str | None:
-    """Return the first non-option token after ``args[0]`` (the uv executable).
+def _find_uv_subcmd(args: list[str]) -> tuple[str, int] | None:
+    """Return ``(subcommand, index)`` for the first non-option token after ``args[0]``.
 
     Skips tokens in ``_UV_OPTS_WITH_VALUE`` (each consumes the next token as
     its value) and bare flags starting with ``-``.  Returns ``None`` if no
-    subcommand is found.
+    subcommand is found.  The index is the position in *args* (not offset).
     """
     skip_val = False
-    for tok in args[1:]:
+    for i, tok in enumerate(args[1:], start=1):
         if skip_val:
             skip_val = False
             continue
@@ -489,7 +492,7 @@ def _find_uv_subcmd(args: list[str]) -> str | None:
             continue
         if tok.startswith("-"):
             continue
-        return tok.lower()
+        return tok.lower(), i
     return None
 
 
@@ -513,11 +516,9 @@ def _check_pkg_install(
     # DENY: uv run wrapping inline code execution or wrapped commands.
     # Skip global options (e.g. --project, --no-config) to find "run" subcommand.
     if argv0 == "uv":
-        uv_subcmd = _find_uv_subcmd(args)
-        uv_subcmd_idx = next(
-            (i for i, tok in enumerate(args[1:], start=1) if tok.lower() == uv_subcmd),
-            -1,
-        ) if uv_subcmd else -1
+        _uv_result = _find_uv_subcmd(args)
+        uv_subcmd = _uv_result[0] if _uv_result else None
+        uv_subcmd_idx = _uv_result[1] if _uv_result else -1
 
         if uv_subcmd == "run" and uv_subcmd_idx > 0:
             rest = args[uv_subcmd_idx + 1 :]
@@ -590,11 +591,9 @@ def _check_pkg_install(
     # Reuse _UV_OPTS_WITH_VALUE to skip global options for all uv subcommands.
     if argv0 == "uv":
         # Find effective subcommand (skip global options)
-        uv_sub = _find_uv_subcmd(args)
-        uv_sub_idx = next(
-            (i for i, tok in enumerate(args[1:], start=1) if tok.lower() == uv_sub),
-            -1,
-        ) if uv_sub else -1
+        _uv_sub_result = _find_uv_subcmd(args)
+        uv_sub = _uv_sub_result[0] if _uv_sub_result else None
+        uv_sub_idx = _uv_sub_result[1] if _uv_sub_result else -1
         if uv_sub == "add":
             return PolicyDecision(
                 verdict="REQUIRE_APPROVAL",

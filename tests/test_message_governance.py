@@ -518,3 +518,35 @@ class TestDegradeZoneMeaning:
             hook.before_message(_ctx(content_size_bytes=10)).verdict
             == GovernanceVerdict.DENY
         )
+
+
+# ---------------------------------------------------------------------------
+# MemoryGovernor public properties (added for readiness.py decoupling)
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryGovernorPublicAPI:
+    def test_get_hooks_returns_copy(self) -> None:
+        """get_hooks() must return a copy; mutation must not affect internals."""
+        from veronica_core.memory.governor import MemoryGovernor
+
+        gov = MemoryGovernor(hooks=[], fail_closed=False)
+        snapshot = gov.get_hooks()
+        snapshot.append(None)  # type: ignore[arg-type]
+        assert gov.hook_count == 0
+
+    def test_fail_closed_property(self) -> None:
+        from veronica_core.memory.governor import MemoryGovernor
+
+        gov_closed = MemoryGovernor(hooks=[], fail_closed=True)
+        gov_open = MemoryGovernor(hooks=[], fail_closed=False)
+        assert gov_closed.fail_closed is True
+        assert gov_open.fail_closed is False
+
+    def test_hook_count(self) -> None:
+        from veronica_core.memory.governor import MemoryGovernor
+        from veronica_core.memory.message_governance import DenyOversizedMessageHook
+
+        hook = DenyOversizedMessageHook(max_bytes=100)
+        gov = MemoryGovernor(hooks=[hook], fail_closed=False)
+        assert gov.hook_count == 1
