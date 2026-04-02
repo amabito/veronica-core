@@ -742,3 +742,297 @@ class TestAdversarialRecovery:
         result = orch.on_call(FakeCtx())
         assert result == RecoveryAction.CONTINUE
         assert orch.is_healthy
+
+    def test_nonce_burn_dos_prevented(self, signing_key: bytes) -> None:
+        """Forged heartbeat must NOT consume the nonce (sig check before nonce)."""
+        proto = HeartbeatProtocol(signing_key, timeout_ms=60000)
+        real_hb = proto.create_heartbeat({"status": "ok"})
+
+        # Attacker sends forged heartbeat with same nonce but bad signature
+        forged = SignedHeartbeat(
+            timestamp=real_hb.timestamp,
+            nonce=real_hb.nonce,
+            state_hash=real_hb.state_hash,
+            signature="deadbeef" * 8,
+        )
+        assert proto.verify_heartbeat(forged) == HeartbeatVerdict.INVALID_SIGNATURE
+
+        # Real heartbeat with same nonce must still be accepted
+        assert proto.verify_heartbeat(real_hb) == HeartbeatVerdict.VALID
+
+    def test_quarantined_verdict_goes_straight_to_quarantine_all(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """QUARANTINED (second+ detection) must not attempt restore."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr, checkpoint_interval=1)
+
+        # Capture a checkpoint, then trigger tamper
+        ctx = FakeCtx()
+        assert orch.on_call(ctx) == RecoveryAction.CONTINUE
+        monitor._original_hash = "deadbeef" * 8  # type: ignore[assignment]
+
+        # First tamper detection -> RESTORED (checkpoint exists)
+        assert orch.on_call(ctx) == RecoveryAction.RESTORED
+
+        # Second call: monitor returns QUARANTINED -> immediate QUARANTINE_ALL
+        assert orch.on_call(ctx) == RecoveryAction.QUARANTINE_ALL
+        assert not orch.is_healthy
+
+    def test_all_checkpoints_corrupted_quarantines(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """When all checkpoints have bad signatures, latest_valid()=None -> QUARANTINE_ALL."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr, checkpoint_interval=1)
+
+        # Capture checkpoint, then corrupt it in the ring buffer
+        ctx = FakeCtx()
+        orch.on_call(ctx)  # captures checkpoint
+
+        # Corrupt all checkpoints in the buffer
+        with mgr._lock:
+            for i, cp in enumerate(mgr._checkpoints):
+                mgr._checkpoints[i] = ContainmentCheckpoint(
+                    policy_hash=cp.policy_hash,
+                    policy_epoch=cp.policy_epoch,
+                    budget_remaining=cp.budget_remaining,
+                    circuit_states=cp.circuit_states,
+                    risk_score=cp.risk_score,
+                    timestamp=cp.timestamp,
+                    signature="corrupted",
+                )
+
+        # Trigger tamper -- latest_valid() returns None (all sigs bad)
+        monitor._original_hash = "deadbeef" * 8  # type: ignore[assignment]
+        result = orch.on_call(ctx)
+        assert result == RecoveryAction.QUARANTINE_ALL
+
+    def test_content_hash_exception_triggers_tamper(
+        self, simple_bundle: PolicyBundle
+    ) -> None:
+        """If content_hash() raises, fail-closed to TAMPERED."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+
+        # Monkeypatch the bundle's content_hash via the class
+        original = PolicyBundle.content_hash
+
+        def exploding_hash(self: Any) -> str:
+            raise RuntimeError("corrupted bundle")
+
+        PolicyBundle.content_hash = exploding_hash  # type: ignore[assignment]
+        try:
+            result = monitor.on_call()
+            assert result == IntegrityVerdict.TAMPERED
+            assert monitor.is_quarantined
+        finally:
+            PolicyBundle.content_hash = original  # type: ignore[assignment]
+
+    def test_invalid_signature_receive_does_not_reset_timeout(
+        self, signing_key: bytes
+    ) -> None:
+        """Forged heartbeat must NOT reset the timeout timer."""
+        proto = HeartbeatProtocol(signing_key, timeout_ms=200)
+        sentinel = SentinelMonitor(proto)
+
+        time.sleep(0.10)
+
+        # Receive a forged heartbeat
+        forged = SignedHeartbeat(
+            timestamp=time.time(),
+            nonce="fake-nonce",
+            state_hash="fake-hash",
+            signature="bad-sig",
+        )
+        verdict = sentinel.receive(forged)
+        assert verdict == HeartbeatVerdict.INVALID_SIGNATURE
+
+        # Timeout should still fire (forged receive did NOT reset timer)
+        time.sleep(0.15)
+        assert sentinel.check_timeout()
+
+    def test_invalid_budget_remaining_type_rejected(self) -> None:
+        """ContainmentCheckpoint must reject non-numeric budget_remaining."""
+        with pytest.raises(ValueError, match="budget_remaining"):
+            ContainmentCheckpoint(
+                policy_hash="",
+                policy_epoch=0,
+                budget_remaining="not_a_number",  # type: ignore[arg-type]
+                circuit_states={},
+                risk_score=0.0,
+                timestamp=0.0,
+                signature="",
+            )
+
+    def test_invalid_circuit_states_type_rejected(self) -> None:
+        """ContainmentCheckpoint must reject non-dict circuit_states."""
+        with pytest.raises(ValueError, match="circuit_states"):
+            ContainmentCheckpoint(
+                policy_hash="",
+                policy_epoch=0,
+                budget_remaining=0.0,
+                circuit_states=[("a", "b")],  # type: ignore[arg-type]
+                risk_score=0.0,
+                timestamp=0.0,
+                signature="",
+            )
+
+    def test_is_healthy_false_via_integrity_quarantined(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """is_healthy returns False when integrity is quarantined but orch is not."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr, checkpoint_interval=1)
+        ctx = FakeCtx()
+        orch.on_call(ctx)  # capture checkpoint
+        monitor._original_hash = "deadbeef" * 8  # type: ignore[assignment]
+        result = orch.on_call(ctx)
+        assert result == RecoveryAction.RESTORED
+        # orch._quarantined is False, but monitor.is_quarantined is True
+        assert not orch.is_healthy
+
+    def test_is_healthy_false_via_sentinel_timeout_without_on_call(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """is_healthy returns False via sentinel timeout without on_call()."""
+        proto = HeartbeatProtocol(signing_key, timeout_ms=50)
+        sentinel = SentinelMonitor(proto)
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1000)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr, sentinel=sentinel)
+        time.sleep(0.1)
+        assert not orch.is_healthy
+
+    def test_on_call_exception_triggers_quarantine(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """Any exception in on_call() must trigger QUARANTINE_ALL (fail-closed)."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1000)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr)
+
+        # Make sentinel.check_timeout() raise
+        class BrokenSentinel:
+            def check_timeout(self) -> bool:
+                raise RuntimeError("sentinel crashed")
+
+        orch._sentinel = BrokenSentinel()  # type: ignore[assignment]
+        result = orch.on_call()
+        assert result == RecoveryAction.QUARANTINE_ALL
+        assert not orch.is_healthy
+
+    def test_nan_budget_coerced_to_zero_in_checkpoint(
+        self, signing_key: bytes
+    ) -> None:
+        """NaN budget_remaining must be coerced to 0.0 in capture()."""
+        mgr = CheckpointManager(signing_key)
+        ctx = FakeCtx(budget_remaining=float("nan"))
+        cp = mgr.capture(ctx)
+        assert cp.budget_remaining == 0.0
+        assert mgr.restore(cp) == RestoreResult.SUCCESS
+
+    # -------------------------------------------------------------------
+    # Rule 25: Idempotency tests
+    # -------------------------------------------------------------------
+
+    def test_integrity_on_call_idempotent_clean(
+        self, simple_bundle: PolicyBundle
+    ) -> None:
+        """Consecutive on_call() with no tamper returns CLEAN each time."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+        r1 = monitor.on_call()
+        r2 = monitor.on_call()
+        r3 = monitor.on_call()
+        assert r1 == r2 == r3 == IntegrityVerdict.CLEAN
+
+    def test_orchestrator_on_call_idempotent_continue(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """Consecutive on_call() with no tamper returns CONTINUE each time."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1000)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr)
+        results = [orch.on_call() for _ in range(10)]
+        assert all(r == RecoveryAction.CONTINUE for r in results)
+
+    def test_orchestrator_quarantine_idempotent(
+        self, simple_bundle: PolicyBundle, signing_key: bytes
+    ) -> None:
+        """Once quarantined, on_call() returns QUARANTINE_ALL every time."""
+        monitor = IntegrityMonitor(simple_bundle, check_interval=1)
+        mgr = CheckpointManager(signing_key)
+        orch = RecoveryOrchestrator(monitor, mgr, checkpoint_interval=100)
+        monitor._original_hash = "deadbeef" * 8  # type: ignore[assignment]
+        orch.on_call()  # triggers quarantine
+        results = [orch.on_call() for _ in range(10)]
+        assert all(r == RecoveryAction.QUARANTINE_ALL for r in results)
+
+    # -------------------------------------------------------------------
+    # Rule 26: Serialization round-trip tests
+    # -------------------------------------------------------------------
+
+    def test_checkpoint_capture_restore_round_trip(
+        self, signing_key: bytes
+    ) -> None:
+        """Captured checkpoint must survive restore (signature round-trip)."""
+        mgr = CheckpointManager(signing_key)
+        ctx = FakeCtx(
+            policy_hash="hash-abc",
+            policy_epoch=5,
+            budget_remaining=42.5,
+            risk_score=0.3,
+            circuit_states={"svc-a": "CLOSED", "svc-b": "OPEN"},
+        )
+        cp = mgr.capture(ctx)
+        assert mgr.restore(cp) == RestoreResult.SUCCESS
+        assert cp.policy_hash == "hash-abc"
+        assert cp.policy_epoch == 5
+        assert cp.budget_remaining == 42.5
+        assert cp.risk_score == 0.3
+        assert cp.circuit_states == {"svc-a": "CLOSED", "svc-b": "OPEN"}
+
+    def test_heartbeat_create_verify_round_trip(
+        self, signing_key: bytes
+    ) -> None:
+        """Created heartbeat must pass verification (signature round-trip)."""
+        proto = HeartbeatProtocol(signing_key, timeout_ms=60000)
+        state = {"agent": "mark-1", "healthy": True, "score": 0.95}
+        hb = proto.create_heartbeat(state)
+        assert proto.verify_heartbeat(hb) == HeartbeatVerdict.VALID
+        assert hb.nonce != ""
+        assert hb.state_hash != ""
+        assert hb.signature != ""
+
+    # -------------------------------------------------------------------
+    # Rule 9: Frozen dataclass mutable field mutation
+    # -------------------------------------------------------------------
+
+    def test_frozen_checkpoint_circuit_states_mutation_invalidates_sig(
+        self, signing_key: bytes
+    ) -> None:
+        """Mutating circuit_states dict after capture invalidates HMAC."""
+        mgr = CheckpointManager(signing_key)
+        ctx = FakeCtx(circuit_states={"svc": "CLOSED"})
+        cp = mgr.capture(ctx)
+        assert mgr.restore(cp) == RestoreResult.SUCCESS
+
+        # Mutate the dict in-place (frozen only prevents attribute reassignment)
+        cp.circuit_states["svc"] = "OPEN"
+        assert mgr.restore(cp) == RestoreResult.SIGNATURE_INVALID
+
+    # -------------------------------------------------------------------
+    # Boundary: max_checkpoints=1
+    # -------------------------------------------------------------------
+
+    def test_checkpoint_ring_buffer_size_one(self, signing_key: bytes) -> None:
+        """Ring buffer with max_checkpoints=1 keeps only latest."""
+        mgr = CheckpointManager(signing_key, max_checkpoints=1)
+        mgr.capture(FakeCtx(policy_epoch=1))
+        mgr.capture(FakeCtx(policy_epoch=2))
+        mgr.capture(FakeCtx(policy_epoch=3))
+        latest = mgr.latest_valid()
+        assert latest is not None
+        assert latest.policy_epoch == 3

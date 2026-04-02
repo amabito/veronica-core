@@ -24,7 +24,6 @@ class HeartbeatVerdict(Enum):
     VALID = "VALID"
     INVALID_SIGNATURE = "INVALID_SIGNATURE"
     STALE = "STALE"
-    TIMEOUT = "TIMEOUT"
 
 
 @dataclass(frozen=True)
@@ -66,6 +65,11 @@ class HeartbeatProtocol:
         self._nonce_set: set[str] = set()
         self._lock = threading.Lock()
 
+    @property
+    def timeout_seconds(self) -> float:
+        """Heartbeat timeout in seconds."""
+        return self._timeout_s
+
     def create_heartbeat(self, state_summary: dict) -> SignedHeartbeat:
         """Create HMAC-signed heartbeat with current state."""
         ts = time.time()
@@ -88,6 +92,13 @@ class HeartbeatProtocol:
         if age > self._freshness_window or age < 0:
             return HeartbeatVerdict.STALE
 
+        # Signature verification BEFORE nonce registration to prevent
+        # nonce-burn DoS (attacker consuming valid nonces with forged sigs)
+        sig_data = f"{hb.timestamp}:{hb.nonce}:{hb.state_hash}"
+        expected = hmac.new(self._key, sig_data.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, hb.signature):
+            return HeartbeatVerdict.INVALID_SIGNATURE
+
         # Replay prevention: nonce must not have been seen before
         with self._lock:
             if hb.nonce in self._nonce_set:
@@ -98,12 +109,6 @@ class HeartbeatProtocol:
                 self._nonce_set.discard(oldest)
             self._seen_nonces.append(hb.nonce)
             self._nonce_set.add(hb.nonce)
-
-        # Signature verification
-        sig_data = f"{hb.timestamp}:{hb.nonce}:{hb.state_hash}"
-        expected = hmac.new(self._key, sig_data.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, hb.signature):
-            return HeartbeatVerdict.INVALID_SIGNATURE
 
         return HeartbeatVerdict.VALID
 
@@ -119,6 +124,7 @@ class SentinelMonitor:
 
     def __init__(self, protocol: HeartbeatProtocol) -> None:
         self._protocol = protocol
+        self._timeout_s = protocol.timeout_seconds
         self._last_received_at: float = time.time()
         self._last_heartbeat: SignedHeartbeat | None = None
         self._lock = threading.Lock()
@@ -144,7 +150,7 @@ class SentinelMonitor:
         """Return True if peer heartbeat is overdue (timeout exceeded)."""
         with self._lock:
             elapsed = time.time() - self._last_received_at
-        return elapsed > self._protocol._timeout_s
+        return elapsed > self._timeout_s
 
     @property
     def last_heartbeat(self) -> SignedHeartbeat | None:

@@ -67,16 +67,15 @@ class IntegrityMonitor:
 
     def _verify_locked(self) -> IntegrityVerdict:
         """Re-compute content_hash and compare. Must be called with lock held."""
-        current = self._bundle.content_hash()
-        if hmac.compare_digest(current, self._original_hash):
-            return IntegrityVerdict.CLEAN
+        try:
+            current = self._bundle.content_hash()
+            if hmac.compare_digest(current, self._original_hash):
+                return IntegrityVerdict.CLEAN
+        except Exception:
+            pass
+        # Fail-closed: any failure or mismatch -> quarantine
         self._quarantined = True
         return IntegrityVerdict.TAMPERED
-
-    def _verify(self) -> IntegrityVerdict:
-        """Re-compute content_hash with lock acquisition."""
-        with self._lock:
-            return self._verify_locked()
 
     @property
     def is_quarantined(self) -> bool:

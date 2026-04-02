@@ -8,10 +8,11 @@ Decision logic on each on_call():
   1. If already quarantined, return QUARANTINE_ALL immediately.
   2. If sentinel timeout detected, quarantine and return QUARANTINE_ALL.
   3. Run IntegrityMonitor.on_call().
-  4. If TAMPERED or QUARANTINED: attempt checkpoint restore.
-     - No valid checkpoint -> QUARANTINE_ALL.
-     - Restore signature invalid -> QUARANTINE_ALL.
-     - Restore succeeded -> return RESTORED.
+  4a. If QUARANTINED (prior tamper): immediate QUARANTINE_ALL (no restore).
+  4b. If TAMPERED (first detection): attempt one-time checkpoint restore.
+      - No valid checkpoint -> QUARANTINE_ALL.
+      - Restore signature invalid -> QUARANTINE_ALL.
+      - Restore succeeded -> return RESTORED.
   5. Periodically capture a new checkpoint (every checkpoint_interval calls).
   6. Return CONTINUE.
 """
@@ -22,13 +23,16 @@ import threading
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from veronica_core.recovery.checkpoint import RestoreResult
+from veronica_core.recovery.integrity import IntegrityVerdict
+
 if TYPE_CHECKING:
     from veronica_core.recovery.checkpoint import CheckpointManager
     from veronica_core.recovery.integrity import IntegrityMonitor
     from veronica_core.recovery.sentinel import SentinelMonitor
 
 
-class RecoveryAction(str, Enum):
+class RecoveryAction(Enum):
     """Action returned by RecoveryOrchestrator.on_call()."""
 
     CONTINUE = "continue"  # All subsystems clean
@@ -73,10 +77,16 @@ class RecoveryOrchestrator:
         Returns:
             RecoveryAction indicating CONTINUE, RESTORED, or QUARANTINE_ALL.
         """
-        # Deferred imports to avoid circular import at module load time
-        from veronica_core.recovery.checkpoint import RestoreResult
-        from veronica_core.recovery.integrity import IntegrityVerdict
+        try:
+            return self._on_call_inner(ctx)
+        except Exception:
+            # Fail-closed: any unexpected exception -> quarantine
+            with self._lock:
+                self._quarantined = True
+            return RecoveryAction.QUARANTINE_ALL
 
+    def _on_call_inner(self, ctx: Any | None) -> RecoveryAction:
+        """Core logic for on_call(). Exceptions propagate to caller."""
         with self._lock:
             if self._quarantined:
                 return RecoveryAction.QUARANTINE_ALL
@@ -84,17 +94,21 @@ class RecoveryOrchestrator:
             call_count = self._call_count
             checkpoint_interval = self._checkpoint_interval
 
-        # Step 1: Sentinel timeout is a hard fail
         if self._sentinel is not None and self._sentinel.check_timeout():
             with self._lock:
                 self._quarantined = True
             return RecoveryAction.QUARANTINE_ALL
 
-        # Step 2: Integrity check
         verdict = self._integrity.on_call()
 
-        if verdict in (IntegrityVerdict.TAMPERED, IntegrityVerdict.QUARANTINED):
-            # Attempt restore from most recent valid checkpoint
+        if verdict == IntegrityVerdict.QUARANTINED:
+            # Already quarantined from a prior tamper -- no second chance
+            with self._lock:
+                self._quarantined = True
+            return RecoveryAction.QUARANTINE_ALL
+
+        if verdict == IntegrityVerdict.TAMPERED:
+            # First detection -- attempt one-time restore from checkpoint
             latest = self._checkpoint_mgr.latest_valid()
             if latest is None:
                 with self._lock:
@@ -109,7 +123,8 @@ class RecoveryOrchestrator:
                 self._quarantined = True
             return RecoveryAction.QUARANTINE_ALL
 
-        # Step 3: Periodic checkpoint capture (non-fatal on failure)
+        # Checkpoint capture failures are intentionally swallowed -- a missed
+        # snapshot is preferable to quarantining on non-security failures.
         if ctx is not None and call_count % checkpoint_interval == 0:
             try:
                 self._checkpoint_mgr.capture(ctx)
@@ -120,7 +135,7 @@ class RecoveryOrchestrator:
 
     @property
     def is_healthy(self) -> bool:
-        """True if all subsystems report clean (no quarantine active)."""
+        """Best-effort health snapshot -- not atomic with on_call()."""
         with self._lock:
             if self._quarantined:
                 return False

@@ -1,8 +1,8 @@
 """Immutable checkpoint and recovery for VERONICA containment state.
 
 Snapshots critical containment state, signs with HMAC-SHA256, and allows
-restoration on integrity failure. Fail-closed: no valid checkpoint returns
-NO_CHECKPOINT so the caller must quarantine.
+restoration on integrity failure. Fail-closed: if no valid checkpoint exists
+the caller must quarantine.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import threading
 import time
 from collections import deque
@@ -23,7 +24,6 @@ class RestoreResult(Enum):
 
     SUCCESS = "SUCCESS"
     SIGNATURE_INVALID = "SIGNATURE_INVALID"
-    NO_CHECKPOINT = "NO_CHECKPOINT"
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,6 @@ class CheckpointManager:
     Uses HMAC-SHA256 with a caller-supplied signing key.
     Ring buffer of max_checkpoints snapshots -- oldest dropped when full.
     restore() verifies signature before accepting the checkpoint.
-    If no valid checkpoint exists, returns NO_CHECKPOINT (caller must quarantine).
 
     Thread-safe: all mutable state protected by threading.Lock.
     """
@@ -87,6 +86,8 @@ class CheckpointManager:
         policy_hash = str(getattr(ctx, "policy_hash", ""))
         policy_epoch = int(getattr(ctx, "policy_epoch", 0))
         budget_remaining = float(getattr(ctx, "budget_remaining", 0.0))
+        if not math.isfinite(budget_remaining):
+            budget_remaining = 0.0
 
         circuit_states: dict[str, str] = {}
         raw_cs = getattr(ctx, "circuit_states", None)
@@ -94,18 +95,12 @@ class CheckpointManager:
             circuit_states = {str(k): str(v) for k, v in raw_cs.items()}
 
         risk_score = float(getattr(ctx, "risk_score", 0.0))
+        if not math.isfinite(risk_score):
+            risk_score = 0.0
         ts = time.time()
 
-        payload: dict[str, Any] = {
-            "policy_hash": policy_hash,
-            "policy_epoch": policy_epoch,
-            "budget_remaining": budget_remaining,
-            "circuit_states": circuit_states,
-            "risk_score": risk_score,
-            "timestamp": ts,
-        }
+        payload = self._build_payload(policy_hash, policy_epoch, budget_remaining, circuit_states, risk_score, ts)
         sig = self._sign(payload)
-
         cp = ContainmentCheckpoint(
             policy_hash=policy_hash,
             policy_epoch=policy_epoch,
@@ -120,10 +115,10 @@ class CheckpointManager:
         return cp
 
     def restore(self, checkpoint: ContainmentCheckpoint) -> RestoreResult:
-        """Verify signature, return result.
+        """Verify checkpoint signature.
 
-        Does not mutate ctx directly -- returns RestoreResult so the
-        orchestrator decides how to apply state changes.
+        Returns SUCCESS if the signature is valid, SIGNATURE_INVALID otherwise.
+        State application is the caller's responsibility.
         """
         if not self._verify_signature(checkpoint):
             return RestoreResult.SIGNATURE_INVALID
@@ -138,6 +133,25 @@ class CheckpointManager:
                 return cp
         return None
 
+    @staticmethod
+    def _build_payload(
+        policy_hash: str,
+        policy_epoch: int,
+        budget_remaining: float,
+        circuit_states: dict[str, str],
+        risk_score: float,
+        timestamp: float,
+    ) -> dict[str, Any]:
+        """Build the canonical signing payload from checkpoint fields."""
+        return {
+            "policy_hash": policy_hash,
+            "policy_epoch": policy_epoch,
+            "budget_remaining": budget_remaining,
+            "circuit_states": circuit_states,
+            "risk_score": risk_score,
+            "timestamp": timestamp,
+        }
+
     def _sign(self, data: dict[str, Any]) -> str:
         """Compute HMAC-SHA256 over canonical JSON of data."""
         canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
@@ -145,13 +159,13 @@ class CheckpointManager:
 
     def _verify_signature(self, checkpoint: ContainmentCheckpoint) -> bool:
         """Return True if checkpoint.signature matches expected HMAC."""
-        payload: dict[str, Any] = {
-            "policy_hash": checkpoint.policy_hash,
-            "policy_epoch": checkpoint.policy_epoch,
-            "budget_remaining": checkpoint.budget_remaining,
-            "circuit_states": checkpoint.circuit_states,
-            "risk_score": checkpoint.risk_score,
-            "timestamp": checkpoint.timestamp,
-        }
+        payload = self._build_payload(
+            checkpoint.policy_hash,
+            checkpoint.policy_epoch,
+            checkpoint.budget_remaining,
+            checkpoint.circuit_states,
+            checkpoint.risk_score,
+            checkpoint.timestamp,
+        )
         expected = self._sign(payload)
         return hmac.compare_digest(expected, checkpoint.signature)
