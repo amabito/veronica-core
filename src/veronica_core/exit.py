@@ -30,6 +30,12 @@ class ExitTier(IntEnum):
 class VeronicaExit:
     """Exit handler for VERONICA state persistence."""
 
+    # Class-level registry: only the most recent instance runs atexit.
+    # Prevents N instances from spamming N atexit handlers during tests.
+    _active_instance: Optional["VeronicaExit"] = None
+    _atexit_registered: bool = False
+    _cls_lock = threading.Lock()
+
     def __init__(
         self,
         state_machine: VeronicaStateMachine,
@@ -54,19 +60,33 @@ class VeronicaExit:
 
     def _register_handlers(self) -> None:
         """Register signal handlers and atexit."""
-        # signal.signal() raises ValueError when called from a non-main thread.
-        # Only register signal handlers from the main thread; atexit is always
-        # registered as the fallback path for all threads.
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._signal_handler)
             signal.signal(signal.SIGINT, self._signal_handler)
 
-        # Atexit as fallback
-        atexit.register(self._atexit_handler)
+        # Register atexit callback once at the class level.
+        # Subsequent instances replace _active_instance so only the
+        # most recent handler fires.
+        with VeronicaExit._cls_lock:
+            VeronicaExit._active_instance = self
+            if not VeronicaExit._atexit_registered:
+                atexit.register(VeronicaExit._class_atexit_handler)
+                VeronicaExit._atexit_registered = True
 
         logger.info(
             "[VERONICA_EXIT] Exit handlers registered (SIGTERM, SIGINT, atexit)"
         )
+
+    @staticmethod
+    def _class_atexit_handler() -> None:
+        """Single atexit callback shared across all instances."""
+        try:
+            instance = VeronicaExit._active_instance
+            if instance is not None:
+                instance._atexit_handler()
+        except Exception:
+            # Never let atexit handler crash the process
+            pass
 
     def _signal_handler(self, signum: int, frame) -> None:
         """Handle SIGTERM/SIGINT.
