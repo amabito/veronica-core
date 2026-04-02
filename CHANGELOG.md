@@ -6,6 +6,29 @@ Each release entry includes a **Breaking changes** line. Entries marked `none` a
 
 ---
 
+## [3.10.0] -- 2026-04-02 -- Self-Healing Containment Layer
+
+**Breaking changes:** none
+
+### Added
+
+- `recovery` subpackage -- self-healing containment layer for post-compromise recovery
+- `IntegrityMonitor` -- runtime PolicyBundle content_hash re-verification (sampled, timing-safe)
+- `CheckpointManager` -- HMAC-SHA256 signed containment state snapshots with ring buffer
+- `HeartbeatProtocol` + `SentinelMonitor` -- mutual watchdog with signed heartbeats, nonce replay prevention
+- `RecoveryOrchestrator` -- coordinates all recovery subsystems, fail-closed on any exception
+- 72 tests for recovery module (99% coverage)
+
+### Fixed
+
+- Nonce-burn DoS in heartbeat protocol (signature verification before nonce registration)
+- Infinite RESTORED loop (QUARANTINED verdict goes directly to QUARANTINE_ALL)
+- Fail-open on `content_hash()` exception (now fail-closed)
+- Fail-open on `hmac.compare_digest` type error (extended try/except scope)
+- NaN/Inf values in checkpoint capture (coerced to 0.0 via `math.isfinite`)
+
+---
+
 ## [3.9.0] -- 2026-03-20 -- Codebase Hardening + Full Simplify
 
 **Breaking changes:** none

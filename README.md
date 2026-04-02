@@ -1,7 +1,7 @@
 # VERONICA-core
 
 ![PyPI](https://img.shields.io/pypi/v/veronica-core?label=PyPI&cacheSeconds=60)
-![CI](https://img.shields.io/badge/tests-6697%20passing-brightgreen)
+![CI](https://img.shields.io/badge/tests-6776%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
@@ -16,7 +16,7 @@ It is an execution enforcement kernel.
 pip install veronica-core
 ```
 
-Zero required dependencies. Operationally stable at v3.9.0. Python 3.10+. Works with any LLM provider.
+Zero required dependencies. Operationally stable at v3.10.0. Python 3.10+. Works with any LLM provider.
 
 ---
 
